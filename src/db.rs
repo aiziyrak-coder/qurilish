@@ -2323,6 +2323,152 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(kj.used_pct > 0.0 && kj.used_pct < 100.0);
     }
 
+    /// TZ IX.9: marshrut ariza summasiga qarab uzayadi.
+    #[test]
+    fn approval_route_grows_with_the_amount() {
+        use crate::checks::{approval_route, APPROVAL_LIMIT_1, APPROVAL_LIMIT_2};
+        use crate::roles::Role;
+
+        assert_eq!(approval_route(0.0), vec![Role::Foreman]);
+        assert_eq!(approval_route(APPROVAL_LIMIT_1), vec![Role::Foreman]);
+        assert_eq!(
+            approval_route(APPROVAL_LIMIT_1 + 1.0),
+            vec![Role::Foreman, Role::ProjectManager]
+        );
+        assert_eq!(
+            approval_route(APPROVAL_LIMIT_2 + 1.0),
+            vec![Role::Foreman, Role::ProjectManager, Role::Director]
+        );
+        // Har bir marshrutda bosqichlar takrorlanmaydi.
+        for amount in [1.0, 50_000_000.0, 500_000_000.0] {
+            let r = approval_route(amount);
+            let mut sorted = r.clone();
+            sorted.sort_by_key(|x| x.code());
+            sorted.dedup();
+            assert_eq!(sorted.len(), r.len(), "takroriy bosqich: {amount}");
+        }
+    }
+
+    /// TZ IX.8: bosqichlar tartib bilan o'tiladi, bitta rad hammasini to'xtatadi.
+    #[test]
+    fn route_state_follows_the_steps_in_order() {
+        use crate::checks::{route_state, RouteState};
+        use crate::domain::{Approval, ApprovalDecision};
+        use crate::roles::Role;
+
+        let today = chrono::Local::now().date_naive();
+        let mk = |step: i64, role: Role, decision: ApprovalDecision| Approval {
+            id: step,
+            project_id: 1,
+            request_id: 7,
+            step,
+            role: role.code().into(),
+            approver: String::new(),
+            decision,
+            decided_at: None,
+            comment: String::new(),
+        };
+        let _ = today;
+
+        assert_eq!(route_state(7, &[]), RouteState::None);
+
+        let mut list = vec![
+            mk(1, Role::Foreman, ApprovalDecision::Pending),
+            mk(2, Role::ProjectManager, ApprovalDecision::Pending),
+        ];
+        assert_eq!(
+            route_state(7, &list),
+            RouteState::Waiting {
+                step: 1,
+                role: Role::Foreman
+            }
+        );
+
+        list[0].decision = ApprovalDecision::Approved;
+        assert_eq!(
+            route_state(7, &list),
+            RouteState::Waiting {
+                step: 2,
+                role: Role::ProjectManager
+            }
+        );
+
+        list[1].decision = ApprovalDecision::Approved;
+        assert_eq!(route_state(7, &list), RouteState::Approved);
+
+        // Rad etish keyingi bosqichlarga qaramay marshrutni to'xtatadi.
+        list[0].decision = ApprovalDecision::Rejected;
+        assert_eq!(
+            route_state(7, &list),
+            RouteState::Rejected {
+                step: 1,
+                role: Role::Foreman
+            }
+        );
+
+        // Boshqa arizaning bosqichlari aralashmaydi.
+        let mut other = mk(1, Role::Director, ApprovalDecision::Pending);
+        other.request_id = 8;
+        list.push(other);
+        assert_eq!(
+            route_state(8, &list),
+            RouteState::Waiting {
+                step: 1,
+                role: Role::Director
+            }
+        );
+    }
+
+    /// TZ IX.10: ariza bo'lim byudjetiga solishtiriladi.
+    #[test]
+    fn request_is_checked_against_the_section_budget() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let materials = t.db.materials(pid);
+        let budgets = t.db.purchase_budgets(pid);
+        let purchases = t.db.purchases(pid);
+
+        // Namunada VK byudjeti ataylab kam — u yerdagi ariza oshib ketadi.
+        let vk = materials
+            .iter()
+            .find(|m| m.section == crate::model::Section::Vk)
+            .expect("VK materiali");
+        let mut q = t.db.requests(pid).into_iter().next().expect("ariza");
+        q.material_id = Some(vk.id);
+        q.qty = 1.0;
+        let left = crate::checks::request_budget_left(&q, &materials, &budgets, &purchases)
+            .expect("byudjet bor");
+        assert!(
+            left < 0.0,
+            "byudjeti kam bo'limda ariza oshib ketishi kerak"
+        );
+
+        // Materiali yo'q arizada tekshiradigan narsa yo'q.
+        q.material_id = None;
+        assert!(crate::checks::request_budget_left(&q, &materials, &budgets, &purchases).is_none());
+    }
+
+    /// Namunada kelishuv marshrutlari ikki xil holatda ko'rinadi.
+    #[test]
+    fn demo_shows_a_finished_and_a_waiting_route() {
+        use crate::checks::{route_state, RouteState};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let approvals = t.db.approvals(pid);
+        assert!(!approvals.is_empty(), "namunada marshrut yo'q");
+
+        let states: Vec<RouteState> =
+            t.db.requests(pid)
+                .iter()
+                .map(|q| route_state(q.id, &approvals))
+                .collect();
+        assert!(states.contains(&RouteState::Approved));
+        assert!(states
+            .iter()
+            .any(|s| matches!(s, RouteState::Waiting { .. })));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

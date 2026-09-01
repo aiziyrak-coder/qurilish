@@ -23,7 +23,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VI. Prorab (mobil) | 37 | 8 | 7 | 22 |
 | VII. Texnik nazorat | 38 | 8 | 7 | 23 |
 | VIII. Buyurtmachi | 37 | 9 | 6 | 22 |
-| IX. Arizalar | 42 | 14 | 8 | 20 |
+| IX. Arizalar | 42 | 19 | 8 | 15 |
 | X. Xaridlar | 48 | 16 | 15 | 17 |
 | XI. Ombor | 48 | 25 | 6 | 17 |
 | XII. Materiallar | 41 | 12 | 6 | 23 |
@@ -33,7 +33,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 10 | 7 | 33 |
 | XVII. AI analitika | 51 | 12 | 9 | 30 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **187** | **124** | **371** |
+| **Jami** | **682** | **192** | **124** | **366** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -331,9 +331,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 5. AI o'zi ariza taklif qilishi — *zaxira bo'yicha*
 - [x] 6. Ariza muddatni hisobga olishi
 - [x] 7. Shoshilinchlik
-- [ ] 8. Kelishuv marshruti
-- [ ] 9. Avtomatik limitlar
-- [ ] 10. Byudjetni tekshirish
+- [x] 8. Kelishuv marshruti — *bosqichlar tartib bilan, rol bo'yicha*
+- [x] 9. Avtomatik limitlar — *summa marshrut uzunligini belgilaydi*
+- [x] 10. Byudjetni tekshirish — *bo'lim byudjeti bilan*
 - [~] 11. Dublikatni tekshirish — *ochiq ariza bo'lsa takrorlamaydi*
 - [ ] 12. Smetani tekshirish
 - [ ] 13. Loyihaga muvofiqlikni tekshirish
@@ -354,8 +354,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 28. Foto va hujjatlar
 - [ ] 🔒 29. Ovozli arizalar
 - [x] 30. Ijroni nazorat qilish — *qoplanish*
-- [ ] 31. Ariza tarixi
-- [ ] 32. Rad etish sababi
+- [x] 31. Ariza tarixi — *kim, qachon, qanday qaror qildi*
+- [x] 32. Rad etish sababi — *sababsiz rad ogohlantiriladi*
 - [~] 33. Arizalarni AI tahlili
 - [~] 34. Rahbar paneli
 - [~] 35. AI-panel
@@ -823,7 +823,7 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 2. ~~Normativ sarf va ortiqcha sarf nazorati~~ (XI.14–15, XII.21–22, III.28) — **bajarildi**
 3. ~~Tabel: brigadalar, smenalar, yo'qliklar, bo'sh turish, tannarx~~ (XIII.8–31) — **bajarildi**
 4. ~~Xaridlar: KP, yetkazib beruvchilar, qisman yetkazish, byudjet~~ (X.7–16, 30, 34–35, 40) — **bajarildi**
-5. **Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi** (IX.8–10, 31–32)
+5. ~~Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi~~ (IX.8–10, 31–32) — **bajarildi**
 6. **Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili** (XIV.8, 10, 30–35)
 7. **Xavfsizlik: naryad-dopusk, SIZ, ruxsatlar matritsasi, Safety Score** (XV.4–12, 33)
 8. **Mashinalar: yo'l varaqalari, TX rejasi, tannarx, foydalanish koeffitsiyenti** (XVI.19–27, 34–38)

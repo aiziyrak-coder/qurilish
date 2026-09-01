@@ -402,6 +402,19 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
 
+            CREATE TABLE IF NOT EXISTS approval (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                request_id INTEGER NOT NULL REFERENCES request(id) ON DELETE CASCADE,
+                step INTEGER NOT NULL DEFAULT 1,
+                role TEXT NOT NULL DEFAULT '',
+                approver TEXT NOT NULL DEFAULT '',
+                decision TEXT NOT NULL DEFAULT 'pending',
+                decided_at TEXT,
+                comment TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_appr_req ON approval(request_id);
+
             CREATE TABLE IF NOT EXISTS supplier (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -490,6 +503,7 @@ impl Db {
             "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
             "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE request ADD COLUMN reject_reason TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE purchase ADD COLUMN section TEXT NOT NULL DEFAULT 'none'",
             "ALTER TABLE timesheet ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'",
             "ALTER TABLE timesheet ADD COLUMN shift TEXT NOT NULL DEFAULT 'day'",
@@ -1065,6 +1079,73 @@ impl Db {
             "UPDATE inventory_line SET material_id=?2,book=?3,fact=?4,note=?5 WHERE id=?1",
             params![l.id, l.material_id, l.book, l.fact, l.note],
         )
+    }
+
+    // ---------- IX.8-10. Kelishuv marshruti ----------
+
+    pub fn approvals(&self, pid: i64) -> Vec<Approval> {
+        self.list(
+            "SELECT id,project_id,request_id,step,role,approver,decision,decided_at,comment
+             FROM approval WHERE project_id=?1 ORDER BY request_id,step",
+            pid,
+            |r| {
+                Ok(Approval {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    request_id: r.get(2)?,
+                    step: r.get(3)?,
+                    role: r.get(4)?,
+                    approver: r.get(5)?,
+                    decision: ApprovalDecision::parse(&r.get::<_, String>(6)?),
+                    decided_at: odate(r.get(7)?),
+                    comment: r.get(8)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_approval(&self, a: &Approval) -> i64 {
+        self.ins(
+            "INSERT INTO approval (project_id,request_id,step,role,approver,decision,decided_at,
+                                   comment)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![
+                a.project_id,
+                a.request_id,
+                a.step,
+                a.role,
+                a.approver,
+                a.decision.code(),
+                a.decided_at.map(|d| d.to_string()),
+                a.comment
+            ],
+        )
+    }
+
+    pub fn update_approval(&self, a: &Approval) -> bool {
+        self.upd(
+            "UPDATE approval SET step=?2,role=?3,approver=?4,decision=?5,decided_at=?6,comment=?7
+             WHERE id=?1",
+            params![
+                a.id,
+                a.step,
+                a.role,
+                a.approver,
+                a.decision.code(),
+                a.decided_at.map(|d| d.to_string()),
+                a.comment
+            ],
+        )
+    }
+
+    /// Arizaning barcha kelishuv bosqichlarini o'chiradi — marshrut qayta quriladi.
+    pub fn clear_approvals(&self, request_id: i64) -> bool {
+        self.conn()
+            .execute(
+                "DELETE FROM approval WHERE request_id=?1",
+                params![request_id],
+            )
+            .is_ok()
     }
 
     // ---------- X.7-15, 34-35. Yetkazib beruvchilar, KP, byudjet ----------
@@ -1829,7 +1910,7 @@ impl Db {
     pub fn requests(&self, pid: i64) -> Vec<Request> {
         self.list(
             "SELECT id,project_id,number,date,kind,title,material_id,qty,unit,requester,need_date,
-                    priority,status,task_id,note
+                    priority,status,task_id,reject_reason,note
              FROM request WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -1848,7 +1929,8 @@ impl Db {
                     priority: Priority::parse(&r.get::<_, String>(11)?),
                     status: RequestStatus::parse(&r.get::<_, String>(12)?),
                     task_id: r.get(13)?,
-                    note: r.get(14)?,
+                    reject_reason: r.get(14)?,
+                    note: r.get(15)?,
                 })
             },
         )
@@ -1857,8 +1939,8 @@ impl Db {
     pub fn insert_request(&self, q: &Request) -> i64 {
         self.ins(
             "INSERT INTO request (project_id,number,date,kind,title,material_id,qty,unit,requester,
-                                  need_date,priority,status,task_id,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                                  need_date,priority,status,task_id,reject_reason,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 q.project_id,
                 q.number,
@@ -1873,6 +1955,7 @@ impl Db {
                 q.priority.code(),
                 q.status.code(),
                 q.task_id,
+                q.reject_reason,
                 q.note
             ],
         )
@@ -1881,11 +1964,24 @@ impl Db {
     pub fn update_request(&self, q: &Request) -> bool {
         self.upd(
             "UPDATE request SET number=?2,date=?3,kind=?4,title=?5,material_id=?6,qty=?7,unit=?8,
-                    requester=?9,need_date=?10,priority=?11,status=?12,task_id=?13,note=?14 WHERE id=?1",
+                    requester=?9,need_date=?10,priority=?11,status=?12,task_id=?13,
+                    reject_reason=?14,note=?15 WHERE id=?1",
             params![
-                q.id, q.number, q.date.to_string(), q.kind.code(), q.title, q.material_id, q.qty,
-                q.unit, q.requester, q.need_date.to_string(), q.priority.code(), q.status.code(),
-                q.task_id, q.note
+                q.id,
+                q.number,
+                q.date.to_string(),
+                q.kind.code(),
+                q.title,
+                q.material_id,
+                q.qty,
+                q.unit,
+                q.requester,
+                q.need_date.to_string(),
+                q.priority.code(),
+                q.status.code(),
+                q.task_id,
+                q.reject_reason,
+                q.note
             ],
         )
     }
@@ -3654,6 +3750,7 @@ impl Db {
                 priority,
                 status,
                 task_id,
+                reject_reason: String::new(),
                 note: String::new(),
             })
         };
@@ -3773,6 +3870,83 @@ impl Db {
         } else {
             "«MetallSnab» MChJ"
         };
+
+        // Kelishuv marshrutlari (TZ IX.8): birinchisi to'liq kelishilgan,
+        // ikkinchisi loyiha rahbarini kutmoqda — bosqichlar tartibi ko'rinsin.
+        let step = |request_id: i64,
+                    step: i64,
+                    role: Role,
+                    approver: &str,
+                    decision: ApprovalDecision,
+                    days_ago: Option<i64>| {
+            self.insert_approval(&Approval {
+                id: 0,
+                project_id: pid,
+                request_id,
+                step,
+                role: role.code().into(),
+                approver: approver.into(),
+                decision,
+                decided_at: days_ago.map(|d| today - chrono::Duration::days(d)),
+                comment: String::new(),
+            });
+        };
+        let foreman = if ru {
+            "Юсупов Б.Р."
+        } else {
+            "Yusupov B.R."
+        };
+        let manager = if ru {
+            "Саидова М.И."
+        } else {
+            "Saidova M.I."
+        };
+        let director = if ru {
+            "Ахмедов Р.С."
+        } else {
+            "Ahmedov R.S."
+        };
+        step(
+            z1,
+            1,
+            Role::Foreman,
+            foreman,
+            ApprovalDecision::Approved,
+            Some(31),
+        );
+        step(
+            z1,
+            2,
+            Role::ProjectManager,
+            manager,
+            ApprovalDecision::Approved,
+            Some(30),
+        );
+        step(
+            z2,
+            1,
+            Role::Foreman,
+            foreman,
+            ApprovalDecision::Approved,
+            Some(9),
+        );
+        step(
+            z1,
+            3,
+            Role::Director,
+            director,
+            ApprovalDecision::Approved,
+            Some(30),
+        );
+        step(
+            z2,
+            2,
+            Role::ProjectManager,
+            "",
+            ApprovalDecision::Pending,
+            None,
+        );
+        step(z2, 3, Role::Director, "", ApprovalDecision::Pending, None);
 
         // Z-001 uchun xarid: hujjat raqami TTN-1150 — ombor kirimi bilan bir xil,
         // shuning uchun «kirim qilingan» deb ko'rsatiladi.

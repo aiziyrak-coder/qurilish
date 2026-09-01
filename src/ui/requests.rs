@@ -59,7 +59,31 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             );
         });
     } else {
-        table(ui, app, &supply);
+        // Kelishuv paneli o'ng tomonda turadi — jadvalni bosib qolmasin.
+        let open = app
+            .request_open
+            .filter(|id| app.requests.iter().any(|q| q.id == *id));
+        if open.is_some() && ui.available_width() > 980.0 {
+            egui::SidePanel::right("rq_route")
+                .resizable(false)
+                .exact_width(360.0)
+                .frame(egui::Frame::NONE)
+                .show_inside(ui, |ui| {
+                    ui.add_space(2.0);
+                    route_panel(ui, app, pid);
+                });
+            table(ui, app, &supply);
+        } else {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    if open.is_some() {
+                        route_panel(ui, app, pid);
+                        ui.add_space(10.0);
+                    }
+                    table(ui, app, &supply);
+                });
+        }
     }
 
     if add {
@@ -92,6 +116,7 @@ fn new_request(pid: i64, today: chrono::NaiveDate, number: String) -> Request {
         priority: Priority::Normal,
         status: RequestStatus::New,
         task_id: None,
+        reject_reason: String::new(),
         note: String::new(),
     }
 }
@@ -216,13 +241,14 @@ fn priority_color(p: Priority) -> Color32 {
 fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
     let mut edited: Option<Request> = None;
     let mut removed: Option<i64> = None;
+    let mut open_route: Option<i64> = None;
     let today = app.today;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("requests_grid")
-                .num_columns(13)
+                .num_columns(14)
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -231,6 +257,7 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                     head_l(ui, 76.0, t("col_number"));
                     head_l(ui, 104.0, t("col_date"));
                     head_l(ui, 124.0, t("col_status"));
+                    head_l(ui, 150.0, t("col_route"));
                     head_l(ui, 96.0, t("col_priority"));
                     head_l(ui, 150.0, t("col_coverage"));
                     head_l(ui, 100.0, t("col_kind"));
@@ -264,6 +291,20 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                                         ui.selectable_value(&mut q.status, *s, s.label()).changed();
                                 }
                             });
+                        // Kelishuv holati — bosilsa o'ng panel ochiladi.
+                        let (text, color) = route_label(app, q.id);
+                        if ui
+                            .add_sized(
+                                [150.0, 22.0],
+                                egui::Button::new(RichText::new(text).size(11.5).color(color))
+                                    .frame(app.request_open == Some(q.id)),
+                            )
+                            .on_hover_text(t("route_open_hint"))
+                            .clicked()
+                        {
+                            open_route = Some(q.id);
+                        }
+
                         egui::ComboBox::from_id_salt(("rq_pri", q.id))
                             .selected_text(
                                 RichText::new(q.priority.label()).color(priority_color(q.priority)),
@@ -373,6 +414,333 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
     if let Some(id) = removed {
         app.db.del("request", id);
         app.reload_modules();
+    }
+    if let Some(id) = open_route {
+        // Qayta bosilsa panel yopiladi.
+        app.request_open = (app.request_open != Some(id)).then_some(id);
+    }
+}
+
+// ================================================================ Kelishuv
+
+/// Jadvaldagi qisqa holat: kim kutilmoqda yoki natija.
+fn route_label(app: &App, request_id: i64) -> (String, Color32) {
+    match crate::checks::route_state(request_id, &app.approvals) {
+        crate::checks::RouteState::None => (t("route_none").to_string(), theme::muted()),
+        crate::checks::RouteState::Waiting { step, role } => (
+            format!("{step}. {} {}", role.label(), t("route_waiting")),
+            theme::warn(),
+        ),
+        crate::checks::RouteState::Approved => (t("route_approved").to_string(), theme::ok()),
+        crate::checks::RouteState::Rejected { role, .. } => (
+            format!("{} {}", t("route_rejected"), role.label()),
+            theme::danger(),
+        ),
+    }
+}
+
+/// Kelishuv marshruti paneli: bosqichlar, qaror tugmalari va tarix (TZ IX.8, 31–32).
+fn route_panel(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let Some(rid) = app.request_open else { return };
+    let Some(q) = app.requests.iter().find(|q| q.id == rid).cloned() else {
+        return;
+    };
+    let amount = crate::checks::request_amount(&q, &app.materials);
+    let route = crate::checks::approval_route(amount);
+
+    let mut build = false;
+    let mut clear = false;
+    let mut close = false;
+    // (bosqich id, qaror)
+    let mut decide: Option<(i64, crate::domain::ApprovalDecision)> = None;
+    let mut edited: Option<Request> = None;
+
+    egui::Frame::group(ui.style())
+        .fill(theme::card())
+        .inner_margin(12.0)
+        .show(ui, |ui| {
+            ui.set_min_width(320.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(t("route_title")).size(14.0).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button("x").clicked() {
+                        close = true;
+                    }
+                });
+            });
+            ui.label(
+                RichText::new(format!("{} · {}", q.number, q.title))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+
+            // Summa va shu summaga mos marshrut — limitlar ochiq yozilgan.
+            ui.label(RichText::new(format!("{}: {}", t("route_amount"), money(amount))).size(12.5));
+            ui.label(
+                RichText::new(format!(
+                    "{} {}",
+                    t("route_by_limit"),
+                    route
+                        .iter()
+                        .map(|r| r.label())
+                        .collect::<Vec<_>>()
+                        .join(" → ")
+                ))
+                .size(11.0)
+                .color(theme::muted()),
+            );
+            ui.label(
+                RichText::new(t("route_limits_hint"))
+                    .size(10.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+
+            // Byudjet tekshiruvi (TZ IX.10).
+            match crate::checks::request_budget_left(
+                &q,
+                &app.materials,
+                &app.purchase_budgets,
+                &app.purchases,
+            ) {
+                Some(left) if left < 0.0 => {
+                    ui.label(
+                        RichText::new(format!("{} {}", t("route_over_budget"), money(-left)))
+                            .size(11.5)
+                            .color(theme::danger()),
+                    );
+                }
+                Some(left) => {
+                    ui.label(
+                        RichText::new(format!("{} {}", t("route_budget_left"), money(left)))
+                            .size(11.5)
+                            .color(theme::ok()),
+                    );
+                }
+                None => {
+                    ui.label(
+                        RichText::new(t("route_no_budget"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                }
+            }
+            ui.add_space(8.0);
+            ui.separator();
+            ui.add_space(6.0);
+
+            let mine: Vec<crate::domain::Approval> = app
+                .approvals
+                .iter()
+                .filter(|a| a.request_id == rid)
+                .cloned()
+                .collect();
+
+            if mine.is_empty() {
+                ui.label(
+                    RichText::new(t("route_not_built"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+                if ui
+                    .button(t("route_build"))
+                    .on_hover_text(t("route_build_hint"))
+                    .clicked()
+                {
+                    build = true;
+                }
+            } else {
+                let state = crate::checks::route_state(rid, &app.approvals);
+                for a in &mine {
+                    let role = crate::roles::Role::parse(&a.role);
+                    let waiting = matches!(
+                        state,
+                        crate::checks::RouteState::Waiting { step, .. } if step == a.step
+                    );
+                    ui.horizontal(|ui| {
+                        let (mark, color) = match a.decision {
+                            crate::domain::ApprovalDecision::Approved => ("+", theme::ok()),
+                            crate::domain::ApprovalDecision::Rejected => ("x", theme::danger()),
+                            crate::domain::ApprovalDecision::Pending if waiting => {
+                                ("*", theme::warn())
+                            }
+                            _ => ("·", theme::muted()),
+                        };
+                        ui.label(RichText::new(mark).color(color).strong().monospace());
+                        ui.label(RichText::new(format!("{}. {}", a.step, role.label())).size(12.0));
+                        if let Some(d) = a.decided_at {
+                            ui.label(
+                                RichText::new(d.format("%d.%m.%y").to_string())
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(theme::muted()),
+                            );
+                        }
+                    });
+                    if !a.approver.is_empty() {
+                        ui.label(
+                            RichText::new(format!("    {}", a.approver))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                    }
+                    if !a.comment.is_empty() {
+                        ui.label(
+                            RichText::new(format!("    {}", a.comment))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                    }
+
+                    // Qaror faqat navbatdagi bosqichda va faqat o'sha rolda.
+                    if waiting {
+                        let can = app.role() == role || app.role() == crate::roles::Role::Admin;
+                        ui.horizontal(|ui| {
+                            ui.add_space(14.0);
+                            if ui
+                                .add_enabled(can, egui::Button::new(t("route_approve")))
+                                .on_disabled_hover_text(format!(
+                                    "{} {}",
+                                    t("route_wrong_role"),
+                                    role.label()
+                                ))
+                                .clicked()
+                            {
+                                decide = Some((a.id, crate::domain::ApprovalDecision::Approved));
+                            }
+                            if ui
+                                .add_enabled(
+                                    can,
+                                    egui::Button::new(
+                                        RichText::new(t("route_reject")).color(theme::danger()),
+                                    ),
+                                )
+                                .clicked()
+                            {
+                                decide = Some((a.id, crate::domain::ApprovalDecision::Rejected));
+                            }
+                        });
+                    }
+                    ui.add_space(4.0);
+                }
+
+                // Ariza summasi o'zgargan bo'lsa marshrut eskirib qoladi —
+                // buni jim o'tkazib yubormaymiz.
+                let built: Vec<crate::roles::Role> = mine
+                    .iter()
+                    .map(|a| crate::roles::Role::parse(&a.role))
+                    .collect();
+                if built != route {
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(t("route_stale"))
+                            .size(11.0)
+                            .color(theme::warn()),
+                    );
+                }
+
+                ui.add_space(4.0);
+                if ui
+                    .small_button(t("route_rebuild"))
+                    .on_hover_text(t("route_rebuild_hint"))
+                    .clicked()
+                {
+                    clear = true;
+                }
+            }
+
+            // Rad etish sababi (TZ IX.32).
+            if q.status == RequestStatus::Rejected
+                || matches!(
+                    crate::checks::route_state(rid, &app.approvals),
+                    crate::checks::RouteState::Rejected { .. }
+                )
+            {
+                ui.add_space(8.0);
+                ui.separator();
+                ui.add_space(6.0);
+                ui.label(RichText::new(t("reject_reason")).size(12.0).strong());
+                let mut r = q.clone();
+                if ui
+                    .add_sized(
+                        [ui.available_width().min(320.0), 46.0],
+                        egui::TextEdit::multiline(&mut r.reject_reason)
+                            .hint_text(t("reject_reason_hint")),
+                    )
+                    .changed()
+                {
+                    edited = Some(r);
+                }
+                if q.reject_reason.trim().is_empty() {
+                    ui.label(
+                        RichText::new(t("reject_reason_missing"))
+                            .size(11.0)
+                            .color(theme::warn()),
+                    );
+                }
+            }
+        });
+
+    if build {
+        for (i, role) in route.iter().enumerate() {
+            app.db.insert_approval(&crate::domain::Approval {
+                id: 0,
+                project_id: pid,
+                request_id: rid,
+                step: i as i64 + 1,
+                role: role.code().to_string(),
+                approver: String::new(),
+                decision: crate::domain::ApprovalDecision::Pending,
+                decided_at: None,
+                comment: String::new(),
+            });
+        }
+        app.reload_modules();
+    }
+    if clear {
+        app.db.clear_approvals(rid);
+        app.reload_modules();
+    }
+    if let Some((id, decision)) = decide {
+        if let Some(mut a) = app.approvals.iter().find(|a| a.id == id).cloned() {
+            a.decision = decision;
+            a.decided_at = Some(app.today);
+            a.approver = app
+                .current_user
+                .and_then(|u| app.users.iter().find(|x| x.id == u))
+                .map(|u| u.name.clone())
+                .unwrap_or_else(|| t("route_unknown_user").to_string());
+            app.db.update_approval(&a);
+            app.reload_modules();
+
+            // Marshrut natijasi ariza holatiga o'tadi — ikkalasi bir joyda
+            // turmasin: holat qo'lda ham o'zgartiriladi, lekin kelishuv
+            // tugagach o'zi yangilanadi.
+            if let Some(mut q) = app.requests.iter().find(|q| q.id == rid).cloned() {
+                match crate::checks::route_state(rid, &app.approvals) {
+                    crate::checks::RouteState::Approved if q.status == RequestStatus::New => {
+                        q.status = RequestStatus::Approved;
+                        app.db.update_request(&q);
+                        app.reload_modules();
+                    }
+                    crate::checks::RouteState::Rejected { .. } => {
+                        q.status = RequestStatus::Rejected;
+                        app.db.update_request(&q);
+                        app.reload_modules();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(q) = edited {
+        app.db.update_request(&q);
+        app.reload_modules();
+    }
+    if close {
+        app.request_open = None;
     }
 }
 

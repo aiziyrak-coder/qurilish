@@ -2247,6 +2247,76 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cl_sales" => ("Sotuv holati", "Состояние продаж"),
         "cl_sold" => ("Sotilgan birliklar", "Продано единиц"),
 
+        // ---------- IX.8-10, 31-32. Kelishuv marshruti ----------
+        "ad_pending" => ("Kutilmoqda", "Ожидает"),
+        "ad_approved" => ("Kelishildi", "Согласовано"),
+        "ad_rejected" => ("Rad etildi", "Отклонено"),
+
+        "col_route" => ("Kelishuv", "Согласование"),
+        "route_none" => ("marshrut yo'q", "маршрута нет"),
+        "route_waiting" => ("kutilmoqda", "ожидает"),
+        "route_approved" => ("kelishildi", "согласовано"),
+        "route_rejected" => ("rad etdi:", "отклонил:"),
+        "route_open_hint" => (
+            "Kelishuv marshrutini ochish",
+            "Открыть маршрут согласования",
+        ),
+
+        "route_title" => ("Kelishuv marshruti", "Маршрут согласования"),
+        "route_amount" => ("Ariza summasi", "Сумма заявки"),
+        "route_by_limit" => ("Marshrut:", "Маршрут:"),
+        "route_limits_hint" => (
+            "Marshrut summaga qarab ochiladi: 10 mln gacha — prorab, 100 mln gacha — loyiha rahbari ham, undan yuqorisi — direktor ham.",
+            "Маршрут зависит от суммы: до 10 млн — прораб, до 100 млн — ещё руководитель проекта, выше — ещё директор.",
+        ),
+        "route_over_budget" => (
+            "Bo'lim byudjetidan oshadi:",
+            "Превышает бюджет раздела на:",
+        ),
+        "route_budget_left" => (
+            "Byudjetda qoladi:",
+            "Останется в бюджете:",
+        ),
+        "route_no_budget" => (
+            "Bu bo'lim uchun byudjet belgilanmagan",
+            "Бюджет по этому разделу не задан",
+        ),
+        "route_not_built" => (
+            "Marshrut hali ochilmagan",
+            "Маршрут ещё не открыт",
+        ),
+        "route_build" => ("Marshrutni ochish", "Открыть маршрут"),
+        "route_build_hint" => (
+            "Ariza summasiga mos bosqichlar yaratiladi.",
+            "Создаются этапы, соответствующие сумме заявки.",
+        ),
+        "route_stale" => (
+            "Marshrut ariza summasiga mos emas — qayta oching",
+            "Маршрут не соответствует сумме заявки — пересоздайте",
+        ),
+        "route_rebuild" => ("Marshrutni qayta ochish", "Пересоздать маршрут"),
+        "route_rebuild_hint" => (
+            "Barcha bosqichlar va qarorlar o'chiriladi.",
+            "Все этапы и решения будут удалены.",
+        ),
+        "route_approve" => ("Kelishish", "Согласовать"),
+        "route_reject" => ("Rad etish", "Отклонить"),
+        "route_wrong_role" => (
+            "Bu bosqichni kelishadi:",
+            "Этот этап согласует:",
+        ),
+        "route_unknown_user" => ("Foydalanuvchi tanlanmagan", "Пользователь не выбран"),
+
+        "reject_reason" => ("Rad etish sababi", "Причина отклонения"),
+        "reject_reason_hint" => (
+            "Nima uchun rad etildi va nima qilish kerak",
+            "Почему отклонено и что нужно сделать",
+        ),
+        "reject_reason_missing" => (
+            "Sabab yozilmagan — arizani bergan odam nima qilishini bilmaydi",
+            "Причина не указана — заявитель не поймёт, что делать",
+        ),
+
         // ---------- X.7-15, 30, 34-35. KP, yetkazib beruvchilar, byudjet ----------
         "pu_tab_orders" => ("Buyurtmalar", "Заказы"),
         "pu_tab_quotes" => ("Tijorat takliflari", "Коммерческие предложения"),

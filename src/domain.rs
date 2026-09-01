@@ -333,6 +333,32 @@ enum_kind!(RequestStatus {
     Rejected  => "rejected",  "rs_rejected";
 });
 
+enum_kind!(ApprovalDecision {
+    Pending  => "pending",  "ad_pending";
+    Approved => "approved", "ad_approved";
+    Rejected => "rejected", "ad_rejected";
+});
+
+/// Kelishuv marshrutining bitta bosqichi (TZ IX.8).
+///
+/// Bosqichlar ariza summasiga qarab avtomatik ochiladi va tartib bilan
+/// o'tiladi: oldingisi kelishmaguncha keyingisiga navbat kelmaydi.
+#[derive(Debug, Clone)]
+pub struct Approval {
+    pub id: i64,
+    pub project_id: i64,
+    pub request_id: i64,
+    /// Navbat raqami: 1, 2, 3.
+    pub step: i64,
+    /// Kim kelishishi kerak — rol kodi bilan saqlanadi.
+    pub role: String,
+    /// Kim kelishdi (ism). Qaror qabul qilinganda to'ldiriladi.
+    pub approver: String,
+    pub decision: ApprovalDecision,
+    pub decided_at: Option<NaiveDate>,
+    pub comment: String,
+}
+
 enum_kind!(Priority {
     Low    => "low",    "pr_low";
     Normal => "normal", "pr_normal";
@@ -357,6 +383,8 @@ pub struct Request {
     pub priority: Priority,
     pub status: RequestStatus,
     pub task_id: Option<i64>,
+    /// Rad etish sababi (TZ IX.32): rad etilgan ariza sababsiz qolmasligi kerak.
+    pub reject_reason: String,
     pub note: String,
 }
 

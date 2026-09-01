@@ -416,6 +416,10 @@ pub struct App {
     /// Yetkazib beruvchilar va tijorat takliflari (TZ X.7–12).
     pub suppliers: Vec<crate::domain::Supplier>,
     pub quotes: Vec<crate::domain::Quote>,
+    /// Arizalarning kelishuv bosqichlari (TZ IX.8).
+    pub approvals: Vec<crate::domain::Approval>,
+    /// Kelishuv paneli ochilgan ariza.
+    pub request_open: Option<i64>,
     pub purchase_budgets: Vec<crate::domain::PurchaseBudget>,
     /// Omborda tanlangan bo'lim (barcha omborlar — `None`).
     pub warehouse_filter: Option<i64>,
@@ -548,6 +552,8 @@ impl App {
             brigades: Vec::new(),
             suppliers: Vec::new(),
             quotes: Vec::new(),
+            approvals: Vec::new(),
+            request_open: None,
             purchase_budgets: Vec::new(),
             warehouse_filter: None,
             requests: Vec::new(),
@@ -701,6 +707,8 @@ impl App {
         self.brigades.clear();
         self.suppliers.clear();
         self.quotes.clear();
+        self.approvals.clear();
+        self.request_open = None;
         self.purchase_budgets.clear();
         self.warehouse_filter = None;
         self.requests.clear();
@@ -747,6 +755,7 @@ impl App {
         self.brigades = self.db.brigades(id);
         self.suppliers = self.db.suppliers(id);
         self.quotes = self.db.quotes(id);
+        self.approvals = self.db.approvals(id);
         self.purchase_budgets = self.db.purchase_budgets(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);

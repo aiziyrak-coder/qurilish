@@ -9,6 +9,7 @@
 use crate::db::Db;
 use crate::domain::*;
 use crate::model::{Section, Task};
+use crate::roles::Role;
 use chrono::NaiveDate;
 use rusqlite::params;
 use std::collections::HashMap;
@@ -1896,6 +1897,104 @@ pub fn budget_lines(budgets: &[PurchaseBudget], purchases: &[Purchase]) -> Vec<B
             }
         })
         .collect()
+}
+
+// ================= IX. Kelishuv marshruti va limitlar =================
+
+/// Shu summagacha bir kishi — prorab — kelishadi (TZ IX.9).
+pub const APPROVAL_LIMIT_1: f64 = 10_000_000.0;
+
+/// Shu summagacha loyiha rahbari ham kelishadi.
+pub const APPROVAL_LIMIT_2: f64 = 100_000_000.0;
+
+/// Ariza summasiga qarab kelishuv marshruti (TZ IX.8–9).
+///
+/// Limitlar kodda turibdi va ekranda ochiq yozilgan: kichik ariza uchun uzun
+/// marshrut ish sekinlashtiradi, katta summa esa bir kishining qaroriga
+/// qoldirilmasligi kerak.
+pub fn approval_route(amount: f64) -> Vec<Role> {
+    if amount <= APPROVAL_LIMIT_1 {
+        vec![Role::Foreman]
+    } else if amount <= APPROVAL_LIMIT_2 {
+        vec![Role::Foreman, Role::ProjectManager]
+    } else {
+        vec![Role::Foreman, Role::ProjectManager, Role::Director]
+    }
+}
+
+/// Arizaning kelishuv holati.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RouteState {
+    /// Marshrut hali qurilmagan.
+    None,
+    /// Navbatdagi bosqich: kim kutilmoqda.
+    Waiting { step: i64, role: Role },
+    /// Hamma bosqich kelishdi.
+    Approved,
+    /// Biror bosqichda rad etilgan.
+    Rejected { step: i64, role: Role },
+}
+
+/// Arizaning kelishuv holati: kim navbatda, kelishildimi yoki rad etildimi.
+///
+/// Bosqichlar tartib bilan o'tiladi — oldingisi kelishmaguncha keyingisi
+/// navbat kutadi. Bitta rad etish butun marshrutni to'xtatadi.
+pub fn route_state(request_id: i64, approvals: &[Approval]) -> RouteState {
+    let mut mine: Vec<&Approval> = approvals
+        .iter()
+        .filter(|a| a.request_id == request_id)
+        .collect();
+    if mine.is_empty() {
+        return RouteState::None;
+    }
+    mine.sort_by_key(|a| a.step);
+
+    for a in &mine {
+        match a.decision {
+            ApprovalDecision::Rejected => {
+                return RouteState::Rejected {
+                    step: a.step,
+                    role: Role::parse(&a.role),
+                }
+            }
+            ApprovalDecision::Pending => {
+                return RouteState::Waiting {
+                    step: a.step,
+                    role: Role::parse(&a.role),
+                }
+            }
+            ApprovalDecision::Approved => continue,
+        }
+    }
+    RouteState::Approved
+}
+
+/// Ariza summasi: miqdor × katalogdagi narx. Narx yo'q bo'lsa 0.
+pub fn request_amount(request: &Request, materials: &[Material]) -> f64 {
+    request
+        .material_id
+        .and_then(|id| materials.iter().find(|m| m.id == id))
+        .map_or(0.0, |m| request.qty * m.price)
+}
+
+/// Ariza byudjetga sig'adimi (TZ IX.10).
+///
+/// `None` — tekshiradigan byudjet yo'q. `Some(qolgan)` — shu bo'limda
+/// buyurtmalardan keyin qolgan summa; manfiy bo'lsa ariza byudjetdan oshadi.
+pub fn request_budget_left(
+    request: &Request,
+    materials: &[Material],
+    budgets: &[PurchaseBudget],
+    purchases: &[Purchase],
+) -> Option<f64> {
+    let section = request
+        .material_id
+        .and_then(|id| materials.iter().find(|m| m.id == id))
+        .map(|m| m.section)?;
+    let line = budget_lines(budgets, purchases)
+        .into_iter()
+        .find(|l| l.section == section)?;
+    (line.planned > 0.0).then(|| line.left - request_amount(request, materials))
 }
 
 // ================= IV. Ijro hujjatlari =================
