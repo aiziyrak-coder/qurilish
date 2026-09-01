@@ -37,19 +37,38 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     kpis(ui, app);
     ui.add_space(10.0);
 
+    // Yon panel `SidePanel` bilan: `set_width` ni ichkaridagi ScrollArea
+    // hurmat qilmasdi va jadval panel ostiga chiqib ketardi.
+    let wide = ui.available_width() > 900.0;
     let panel_w = (ui.available_width() * 0.32).clamp(280.0, 400.0);
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width((ui.available_width() - panel_w - 16.0).max(300.0));
-            list(ui, app);
-        });
-        ui.vertical(|ui| {
-            ui.set_width(panel_w);
-            if let Some((task_id, kind)) = required_panel(ui, app, panel_w) {
-                add_for = Some((Some(task_id), kind));
-            }
-        });
-    });
+    if wide {
+        egui::SidePanel::right("req_docs")
+            .resizable(false)
+            .exact_width(panel_w)
+            .frame(egui::Frame::new().inner_margin(egui::Margin {
+                left: 12,
+                ..Default::default()
+            }))
+            .show_inside(ui, |ui| {
+                if let Some((task_id, kind)) = required_panel(ui, app, panel_w) {
+                    add_for = Some((Some(task_id), kind));
+                }
+            });
+        list(ui, app, true);
+    } else {
+        // Tor oynada panel jadval ostida turadi — hammasi bitta oqimda suriladi.
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    list(ui, app, false);
+                    ui.add_space(10.0);
+                    if let Some((task_id, kind)) = required_panel(ui, app, ui.available_width()) {
+                        add_for = Some((Some(task_id), kind));
+                    }
+                });
+            });
+    }
 
     if let Some((task_id, kind)) = add_for {
         if let Some(pid) = app.current {
@@ -230,7 +249,9 @@ fn required_panel(ui: &mut egui::Ui, app: &App, w: f32) -> Option<(i64, ExecDocK
     create_for
 }
 
-fn list(ui: &mut egui::Ui, app: &mut App) {
+/// `fill` — jadval qolgan balandlikni to'liq egallaydimi. Tor oynada pastda
+/// yana bloklar bo'lgani uchun jadval faqat o'z balandligini oladi.
+fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
     if app.exec_docs.is_empty() {
         ui.add_space(40.0);
         ui.vertical_centered(|ui| {
@@ -243,7 +264,8 @@ fn list(ui: &mut egui::Ui, app: &mut App) {
     let mut removed: Option<i64> = None;
 
     egui::ScrollArea::both()
-        .auto_shrink([false, false])
+        .auto_shrink([false, !fill])
+        .max_height(if fill { f32::INFINITY } else { 320.0 })
         .show(ui, |ui| {
             egui::Grid::new("exec_grid")
                 .num_columns(8)

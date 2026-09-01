@@ -184,65 +184,73 @@ fn docs_queue(ui: &mut egui::Ui, app: &mut App) {
             );
             return;
         }
-        egui::Grid::new("sv_docs")
-            .num_columns(6)
-            .spacing([10.0, 6.0])
-            .striped(true)
+        egui::ScrollArea::horizontal()
+            .id_salt("sv_docs_scroll")
             .show(ui, |ui| {
-                for id in &waiting {
-                    let Some(d) = app.exec_docs.iter().find(|x| x.id == *id) else {
-                        continue;
-                    };
-                    cell_l(ui, 110.0, RichText::new(&d.number).size(12.5).strong());
-                    cell_l(
-                        ui,
-                        150.0,
-                        RichText::new(d.kind.label())
-                            .size(11.5)
-                            .color(theme::muted()),
-                    );
-                    cell_l(
-                        ui,
-                        320.0,
-                        RichText::new(super::issues::truncate(&d.name, 46)).size(12.5),
-                    );
-                    cell_l(
-                        ui,
-                        200.0,
-                        RichText::new(super::issues::truncate(
-                            &d.task_id.map(|t| app.task_name(t)).unwrap_or_default(),
-                            26,
-                        ))
-                        .size(12.0)
-                        .color(theme::muted()),
-                    );
-                    cell_l(
-                        ui,
-                        120.0,
-                        RichText::new(d.status.label()).size(11.5).color(
-                            if d.status == ExecDocStatus::Draft {
-                                theme::muted()
-                            } else {
-                                theme::accent()
-                            },
-                        ),
-                    );
-                    ui.horizontal(|ui| {
-                        if ui
-                            .small_button(RichText::new(t("sv_sign")).color(theme::ok()))
-                            .clicked()
-                        {
-                            decision = Some((d.id, ExecDocStatus::Signed));
-                        }
-                        if ui
-                            .small_button(RichText::new(t("sv_reject")).color(theme::danger()))
-                            .clicked()
-                        {
-                            decision = Some((d.id, ExecDocStatus::Rejected));
+                egui::Grid::new("sv_docs")
+                    .num_columns(6)
+                    .spacing([10.0, 6.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for id in &waiting {
+                            let Some(d) = app.exec_docs.iter().find(|x| x.id == *id) else {
+                                continue;
+                            };
+                            // Qaror tugmalari eng chapda: bu ekranning asosiy amali,
+                            // tor oynada surib izlash kerak bo'lmasin.
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .small_button(RichText::new(t("sv_sign")).color(theme::ok()))
+                                    .clicked()
+                                {
+                                    decision = Some((d.id, ExecDocStatus::Signed));
+                                }
+                                if ui
+                                    .small_button(
+                                        RichText::new(t("sv_reject")).color(theme::danger()),
+                                    )
+                                    .clicked()
+                                {
+                                    decision = Some((d.id, ExecDocStatus::Rejected));
+                                }
+                            });
+                            cell_l(ui, 110.0, RichText::new(&d.number).size(12.5).strong());
+                            cell_l(
+                                ui,
+                                150.0,
+                                RichText::new(d.kind.label())
+                                    .size(11.5)
+                                    .color(theme::muted()),
+                            );
+                            cell_l(
+                                ui,
+                                320.0,
+                                RichText::new(super::issues::truncate(&d.name, 46)).size(12.5),
+                            );
+                            cell_l(
+                                ui,
+                                200.0,
+                                RichText::new(super::issues::truncate(
+                                    &d.task_id.map(|t| app.task_name(t)).unwrap_or_default(),
+                                    26,
+                                ))
+                                .size(12.0)
+                                .color(theme::muted()),
+                            );
+                            cell_l(
+                                ui,
+                                120.0,
+                                RichText::new(d.status.label()).size(11.5).color(
+                                    if d.status == ExecDocStatus::Draft {
+                                        theme::muted()
+                                    } else {
+                                        theme::accent()
+                                    },
+                                ),
+                            );
+                            ui.end_row();
                         }
                     });
-                    ui.end_row();
-                }
             });
         ui.add_space(6.0);
         if ui.button(t("sv_open_docs")).clicked() {

@@ -184,92 +184,96 @@ fn today_tasks(ui: &mut egui::Ui, app: &mut App) {
             );
             return;
         }
-        egui::Grid::new("fm_tasks")
-            .num_columns(6)
-            .spacing([10.0, 6.0])
-            .striped(true)
+        egui::ScrollArea::horizontal()
+            .id_salt("fm_tasks_scroll")
             .show(ui, |ui| {
-                cell_l(
-                    ui,
-                    60.0,
-                    RichText::new(t("col_wbs")).size(11.0).color(theme::muted()),
-                );
-                cell_l(
-                    ui,
-                    300.0,
-                    RichText::new(t("col_task"))
-                        .size(11.0)
-                        .color(theme::muted()),
-                );
-                cell_l(
-                    ui,
-                    70.0,
-                    RichText::new(t("col_section_short"))
-                        .size(11.0)
-                        .color(theme::muted()),
-                );
-                cell_r(
-                    ui,
-                    140.0,
-                    RichText::new(t("col_progress"))
-                        .size(11.0)
-                        .color(theme::muted()),
-                );
-                cell_l(
-                    ui,
-                    170.0,
-                    RichText::new(t("col_responsible"))
-                        .size(11.0)
-                        .color(theme::muted()),
-                );
-                cell_l(ui, 70.0, RichText::new("").size(11.0));
-                ui.end_row();
+                egui::Grid::new("fm_tasks")
+                    .num_columns(6)
+                    .spacing([10.0, 6.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        cell_l(
+                            ui,
+                            60.0,
+                            RichText::new(t("col_wbs")).size(11.0).color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            300.0,
+                            RichText::new(t("col_task"))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            70.0,
+                            RichText::new(t("col_section_short"))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            140.0,
+                            RichText::new(t("col_progress"))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            170.0,
+                            RichText::new(t("col_responsible"))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        cell_l(ui, 70.0, RichText::new("").size(11.0));
+                        ui.end_row();
 
-                for id in &ids {
-                    let Some(src) = app.tasks.iter().find(|t| t.id == *id) else {
-                        continue;
-                    };
-                    let mut task = src.clone();
-                    cell_l(
-                        ui,
-                        60.0,
-                        RichText::new(&task.wbs).size(12.0).color(theme::muted()),
-                    );
-                    cell_l(
-                        ui,
-                        300.0,
-                        RichText::new(super::issues::truncate(&task.name, 42)).size(12.5),
-                    );
-                    cell_l(
-                        ui,
-                        70.0,
-                        RichText::new(task.section.code())
-                            .size(11.0)
-                            .color(theme::muted()),
-                    );
-                    // Bajarilishni shu yerda o'zgartirish mumkin — prorabning asosiy amali.
-                    let resp = ui.add_sized(
-                        [140.0, 22.0],
-                        egui::Slider::new(&mut task.progress, 0.0..=100.0)
-                            .suffix("%")
-                            .show_value(true),
-                    );
-                    cell_l(
-                        ui,
-                        170.0,
-                        RichText::new(super::issues::truncate(&task.responsible, 22))
-                            .size(12.0)
-                            .color(theme::muted()),
-                    );
-                    if ui.small_button(t("an_open")).clicked() {
-                        open_gantt = Some(task.id);
-                    }
-                    ui.end_row();
+                        for id in &ids {
+                            let Some(src) = app.tasks.iter().find(|t| t.id == *id) else {
+                                continue;
+                            };
+                            let mut task = src.clone();
+                            cell_l(
+                                ui,
+                                60.0,
+                                RichText::new(&task.wbs).size(12.0).color(theme::muted()),
+                            );
+                            cell_l(
+                                ui,
+                                300.0,
+                                RichText::new(super::issues::truncate(&task.name, 42)).size(12.5),
+                            );
+                            cell_l(
+                                ui,
+                                70.0,
+                                RichText::new(task.section.code())
+                                    .size(11.0)
+                                    .color(theme::muted()),
+                            );
+                            // Bajarilishni shu yerda o'zgartirish mumkin — prorabning asosiy amali.
+                            let resp = ui.add_sized(
+                                [140.0, 22.0],
+                                egui::Slider::new(&mut task.progress, 0.0..=100.0)
+                                    .suffix("%")
+                                    .show_value(true),
+                            );
+                            cell_l(
+                                ui,
+                                170.0,
+                                RichText::new(super::issues::truncate(&task.responsible, 22))
+                                    .size(12.0)
+                                    .color(theme::muted()),
+                            );
+                            if ui.small_button(t("an_open")).clicked() {
+                                open_gantt = Some(task.id);
+                            }
+                            ui.end_row();
 
-                    if resp.changed() {
-                        changed = Some(task);
-                    }
-                }
+                            if resp.changed() {
+                                changed = Some(task);
+                            }
+                        }
+                    });
             });
     });
 

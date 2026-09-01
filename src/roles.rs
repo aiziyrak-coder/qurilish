@@ -287,7 +287,10 @@ mod tests {
             Screen::Warehouse,
             Screen::Requests,
         ];
-        let foreman = screens.iter().filter(|s| Role::Foreman.can_edit(**s)).count();
+        let foreman = screens
+            .iter()
+            .filter(|s| Role::Foreman.can_edit(**s))
+            .count();
         let brig = screens
             .iter()
             .filter(|s| Role::Brigadier.can_edit(**s))
