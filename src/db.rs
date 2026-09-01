@@ -3041,6 +3041,137 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(lines.iter().any(|l| l.blocked()), "to'siq ko'rinmadi");
     }
 
+    /// TZ XVII.30: pul oqimi oylar kesimida yig'iladi.
+    #[test]
+    fn cash_flow_splits_income_and_expense_by_month() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let supply = app.supply();
+        let stock = app.stock();
+        let cost = app.cost_summary();
+        let sales = app.sales();
+        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+
+        let flow = crate::analytics::cash_flow(&inp, 3, 3);
+        assert_eq!(flow.len(), 7, "3 o'tgan + joriy + 3 kelasi oy");
+
+        // Oylar ketma-ket va takrorlanmaydi.
+        for w in flow.windows(2) {
+            assert!(w[0].month < w[1].month);
+        }
+        // Joriy oy ro'yxatda bor.
+        let now = crate::analytics::month_of(app.today);
+        assert!(flow.iter().any(|m| m.month == now));
+
+        for m in &flow {
+            // Chiqim tarkibi yig'indiga teng bo'lishi kerak.
+            assert!(
+                (m.expense - (m.purchases + m.payroll + m.machines)).abs() < 0.01,
+                "chiqim tarkibi mos emas"
+            );
+            assert!((m.net - (m.income - m.expense)).abs() < 0.01);
+            assert!(m.income >= 0.0 && m.expense >= 0.0);
+        }
+        // Qoldiq — o'tgan oylarning yig'indisi.
+        let mut sum = 0.0;
+        for m in &flow {
+            sum += m.net;
+            assert!((m.balance - sum).abs() < 0.01);
+        }
+        // Namunada xarid ham, ish haqi ham bor.
+        assert!(flow.iter().any(|m| m.purchases > 0.0));
+        assert!(flow.iter().any(|m| m.payroll > 0.0));
+    }
+
+    /// TZ XVII.31: kassa uzilishi faqat kelajakdan izlanadi.
+    #[test]
+    fn cash_gap_looks_only_forward() {
+        use crate::analytics::{cash_gap, month_of, CashMonth};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).expect("sana");
+        let m = |month: u32, balance: f64| CashMonth {
+            month: chrono::NaiveDate::from_ymd_opt(2026, month, 1).expect("oy"),
+            past: month <= 6,
+            income: 0.0,
+            expense: 0.0,
+            purchases: 0.0,
+            payroll: 0.0,
+            machines: 0.0,
+            net: 0.0,
+            balance,
+        };
+
+        // O'tgan oydagi minus hisobga olinmaydi.
+        let past_only = vec![m(5, -100.0), m(6, -50.0), m(7, 10.0)];
+        assert!(cash_gap(&past_only, today).is_none());
+
+        // Kelasi oydagi minus topiladi.
+        let ahead = vec![m(6, 100.0), m(7, 50.0), m(8, -30.0), m(9, -80.0)];
+        let g = cash_gap(&ahead, today).expect("uzilish");
+        assert_eq!(
+            g.month,
+            chrono::NaiveDate::from_ymd_opt(2026, 8, 1).unwrap()
+        );
+        assert_eq!(g.amount, 30.0, "birinchi manfiy oy olinadi");
+        assert_eq!(g.months_ahead, 2);
+
+        assert_eq!(month_of(today), m(6, 0.0).month);
+    }
+
+    /// TZ XVII.37: kunlik xulosa faqat bugungi narsalarni ko'rsatadi.
+    #[test]
+    fn briefing_lists_only_todays_items() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Bugunga aniq bir narsa qo'shamiz: bugun bartaraf etilishi kerak nuqson.
+        let mut q = app
+            .quality
+            .iter()
+            .find(|q| q.open_defect())
+            .cloned()
+            .expect("ochiq nuqson");
+        q.deadline = Some(app.today);
+        app.db.update_quality(&q);
+        app.reload_modules();
+
+        let supply = app.supply();
+        let stock = app.stock();
+        let cost = app.cost_summary();
+        let sales = app.sales();
+        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+
+        let lines = crate::analytics::briefing(&inp);
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.area == crate::analytics::Area::Quality),
+            "bugungi nuqson xulosada yo'q"
+        );
+        // Har bir qatorda matn va o'tish ekrani bor.
+        for l in &lines {
+            assert!(!l.text.is_empty());
+            assert_eq!(l.screen, l.area.screen());
+        }
+        // Muhimlik bo'yicha tartiblangan.
+        let ranks: Vec<u8> = lines
+            .iter()
+            .map(|l| match l.severity {
+                crate::domain::Severity::Critical => 0,
+                crate::domain::Severity::Major => 1,
+                crate::domain::Severity::Warning => 2,
+                crate::domain::Severity::Info => 3,
+                crate::domain::Severity::Ok => 4,
+            })
+            .collect();
+        assert!(ranks.windows(2).all(|w| w[0] <= w[1]));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

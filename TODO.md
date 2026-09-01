@@ -31,9 +31,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 18 | 12 | 11 |
 | XV. Xavfsizlik | 41 | 19 | 8 | 14 |
 | XVI. Mashinalar | 50 | 26 | 6 | 18 |
-| XVII. AI analitika | 51 | 12 | 9 | 30 |
+| XVII. AI analitika | 51 | 17 | 9 | 25 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **230** | **131** | **321** |
+| **Jami** | **682** | **235** | **131** | **316** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -730,8 +730,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 9. Kritik yo'l
 - [~] 10. Risklar prognozi
 - [x] 11. Moliyaviy analitika
-- [~] 12. Tannarx tahlili
-- [ ] 13. Yakuniy tannarx prognozi
+- [x] 12. Tannarx tahlili — *ish haqi, material, texnika*
+- [~] 13. Yakuniy tannarx prognozi — *pul oqimi rejasi*
 - [ ] 14. Foyda prognozi
 - [x] 15. Materiallar tahlili
 - [~] 16. Xaridlar tahlili
@@ -748,14 +748,14 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 27. **Benchmarking**
 - [~] 28. Loyihalar tahlili
 - [~] 29. Smeta tahlili
-- [ ] 30. **Pul oqimlari tahlili**
-- [ ] 31. **Kassa uzilishini rejalashtirish** — *AN-C5 qisman*
+- [x] 30. **Pul oqimlari tahlili** — *oylar kesimida fakt va reja*
+- [x] 31. **Kassa uzilishini rejalashtirish** — *birinchi manfiy oy va summa*
 - [ ] 32. Debitorlik qarzi tahlili
 - [ ] 33. AI tushum prognozi
 - [ ] 34. Shartnomalar tahlili
 - [ ] 35. Loyiha o'zgarishlari tahlili
 - [ ] 36. **«Nima bo'ladi, agar?»** — *ssenariy*
-- [ ] 37. **AI Daily Briefing**
+- [x] 37. **Kunlik xulosa** — *faqat bugungi muddat, yetkazish, hodisa*
 - [ ] 38. **AI Weekly Management Report**
 - [~] 39. AI sonlarni tushuntirishi — *fakt/hisob/tavsiya*
 - [x] 40. Ogohlantirishlar tizimi
@@ -765,8 +765,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 44. AI yashirin yo'qotishlarni izlashi
 - [x] 45. Chetlanishlar tahlili
 - [~] 46. Yagona AI chat
-- [ ] 47. Darajalar bo'yicha analitika
-- [ ] 48. **Drill-down**
+- [~] 47. Darajalar bo'yicha analitika — *ko'rsatkich → bo'lim*
+- [x] 48. **Drill-down** — *kartochka, topilma va oqim qatoridan bo'limga*
 - [ ] 49. **AI Executive Score** — *sog'lomlik indeksi qisman*
 - [~] 50. XVII ning bosh arxitekturasi
 - [x] 51. Eng muhim funksiya
@@ -827,5 +827,5 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 6. ~~Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili~~ (XIV.8–10, 30–35) — **bajarildi**
 7. ~~Xavfsizlik: naryad-dopusk, SIZ, ruxsatlar matritsasi, Safety Score~~ (XV.4–13, 20, 33) — **bajarildi**
 8. ~~Mashinalar: yo'l varaqalari, TX rejasi, tannarx, foydalanish koeffitsiyenti~~ (XVI.14–27, 32–38) — **bajarildi**
-9. **Analitika: pul oqimi, kassa uzilishi, Daily Briefing, drill-down** (XVII.30–31, 37–38, 48)
+9. ~~Analitika: pul oqimi, kassa uzilishi, kunlik xulosa, drill-down~~ (XVII.30–31, 37, 48) — **bajarildi**
 10. **Hujjat generatsiyasi va Excel eksporti** (IV.5–7, umumiy)

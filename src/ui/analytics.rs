@@ -61,6 +61,38 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     header(ui, score, &found);
     ui.add_space(10.0);
 
+    let tab_key = egui::Id::new("an_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in [
+            (0u8, t("an_tab_findings")),
+            (1, t("an_tab_cash")),
+            (2, t("an_tab_briefing")),
+        ] {
+            if ui.selectable_label(tab == i, label).clicked() {
+                tab = i;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(10.0);
+
+    if tab == 1 {
+        if let Some(screen) = cash_tab(ui, &inp) {
+            go = Some(screen);
+        }
+        if let Some(screen) = go {
+            app.screen = screen;
+        }
+        return;
+    }
+    if tab == 2 {
+        if let Some(screen) = briefing_tab(ui, &inp) {
+            app.screen = screen;
+        }
+        return;
+    }
+
     // Kartochka bosilsa — o'sha yo'nalish ekraniga o'tamiz.
     let cards: Vec<Stat> = metrics
         .iter()
@@ -243,6 +275,245 @@ fn chip(ui: &mut egui::Ui, color: Color32, n: usize, label: &str) {
     let color = if n == 0 { theme::muted() } else { color };
     ui.label(RichText::new(text).size(11.5).color(color));
     ui.add_space(6.0);
+}
+
+// ================================================================ Pul oqimi
+
+/// Oylar kesimida pul oqimi va kassa uzilishi (TZ XVII.30–31).
+fn cash_tab(ui: &mut egui::Ui, inp: &analytics::Input) -> Option<Screen> {
+    use super::warehouse::{cell_l, cell_r};
+    let flow = analytics::cash_flow(inp, 5, 6);
+    let gap = analytics::cash_gap(&flow, inp.today);
+    let mut go = None;
+
+    // Kassa uzilishi bo'lsa — birinchi navbatda shu.
+    match &gap {
+        Some(g) => {
+            egui::Frame::group(ui.style())
+                .fill(theme::card())
+                .inner_margin(10.0)
+                .show(ui, |ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(t("cash_gap_title"))
+                                .size(13.0)
+                                .strong()
+                                .color(theme::danger()),
+                        );
+                        ui.label(
+                            RichText::new(format!(
+                                "{} ({} {}) · {} {}",
+                                g.month.format("%m.%Y"),
+                                g.months_ahead,
+                                t("cash_gap_months"),
+                                t("cash_gap_amount"),
+                                money(g.amount)
+                            ))
+                            .size(12.5),
+                        );
+                    });
+                    ui.label(
+                        RichText::new(t("cash_gap_hint"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                });
+        }
+        None => {
+            ui.label(
+                RichText::new(t("cash_gap_none"))
+                    .size(12.0)
+                    .color(theme::ok()),
+            );
+        }
+    }
+    ui.add_space(8.0);
+    ui.label(
+        RichText::new(t("cash_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("an_cash")
+                .num_columns(9)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 110.0, t("col_month"));
+                    head_l(ui, 80.0, t("col_basis"));
+                    head_r(ui, 150.0, t("col_income"));
+                    head_r(ui, 150.0, t("col_purchases"));
+                    head_r(ui, 150.0, t("col_payroll"));
+                    head_r(ui, 140.0, t("col_machine_cost"));
+                    head_r(ui, 150.0, t("col_expense"));
+                    head_r(ui, 150.0, t("col_net"));
+                    head_r(ui, 160.0, t("col_cumulative"));
+                    ui.end_row();
+
+                    for m in &flow {
+                        let now = m.month == analytics::month_of(inp.today);
+                        cell_l(
+                            ui,
+                            110.0,
+                            RichText::new(m.month.format("%m.%Y").to_string())
+                                .size(12.0)
+                                .monospace()
+                                .color(if now { theme::accent() } else { theme::text() }),
+                        );
+                        cell_l(
+                            ui,
+                            80.0,
+                            RichText::new(if m.past { t("col_fact") } else { t("col_plan") })
+                                .size(10.5)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(m.income))
+                                .size(12.0)
+                                .color(if m.income > 0.0 {
+                                    theme::ok()
+                                } else {
+                                    theme::muted()
+                                }),
+                        );
+                        // Chiqim tarkibi ochiq turadi — qayerdan chiqqani ko'rinsin.
+                        for (v, screen, w) in [
+                            (m.purchases, Screen::Purchases, 150.0),
+                            (m.payroll, Screen::Timesheet, 150.0),
+                            (m.machines, Screen::Machines, 140.0),
+                        ] {
+                            let r = cell_r(
+                                ui,
+                                w,
+                                RichText::new(money(v)).size(12.0).color(if v > 0.0 {
+                                    theme::text()
+                                } else {
+                                    theme::muted()
+                                }),
+                            );
+                            if v > 0.0 && r.interact(egui::Sense::click()).clicked() {
+                                go = Some(screen);
+                            }
+                        }
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(m.expense))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(m.net))
+                                .size(12.5)
+                                .strong()
+                                .color(if m.net < 0.0 {
+                                    theme::danger()
+                                } else {
+                                    theme::ok()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            160.0,
+                            RichText::new(money(m.balance))
+                                .size(12.0)
+                                .color(if m.balance < 0.0 {
+                                    theme::danger()
+                                } else {
+                                    theme::muted()
+                                }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+    go
+}
+
+// ================================================================ Kunlik xulosa
+
+/// Bugungi kun uchun qisqa xulosa (TZ XVII.37).
+fn briefing_tab(ui: &mut egui::Ui, inp: &analytics::Input) -> Option<Screen> {
+    let lines = analytics::briefing(inp);
+    let mut go = None;
+
+    ui.label(
+        RichText::new(format!(
+            "{} · {}",
+            t("br_title"),
+            inp.today.format("%d.%m.%Y")
+        ))
+        .size(14.0)
+        .strong(),
+    );
+    ui.add_space(2.0);
+    ui.label(RichText::new(t("br_hint")).size(11.0).color(theme::muted()));
+    ui.add_space(10.0);
+
+    if lines.is_empty() {
+        ui.add_space(20.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(t("br_empty")).color(theme::ok()).size(15.0));
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("br_empty_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
+        });
+        return None;
+    }
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for l in &lines {
+                let r = egui::Frame::group(ui.style())
+                    .fill(theme::card())
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width() - 4.0);
+                        ui.horizontal_wrapped(|ui| {
+                            // Rangli nuqta — muhimlik darajasi.
+                            let (rect, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
+                            ui.painter().circle_filled(
+                                rect.center(),
+                                4.0,
+                                severity_color(l.severity),
+                            );
+                            ui.add_space(4.0);
+                            ui.label(
+                                RichText::new(l.area.label())
+                                    .size(11.0)
+                                    .color(theme::muted()),
+                            );
+                            ui.label(RichText::new(&l.text).size(13.0));
+                        });
+                    })
+                    .response;
+                if r.interact(Sense::click()).clicked() {
+                    go = Some(l.screen);
+                }
+                ui.add_space(6.0);
+            }
+        });
+    go
+}
+
+fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_l(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
+}
+
+fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_r(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
 }
 
 fn severity_color(s: Severity) -> Color32 {

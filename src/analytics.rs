@@ -832,6 +832,319 @@ fn sales_rules(inp: &Input, out: &mut Vec<Finding>) {
     }
 }
 
+// ================= XVII.30-31. Pul oqimi va kassa uzilishi =================
+
+/// Bir oylik pul oqimi (TZ XVII.30).
+#[derive(Debug, Clone)]
+pub struct CashMonth {
+    /// Oyning birinchi kuni.
+    pub month: NaiveDate,
+    /// O'tgan oy — sonlar fakt; kelasi oy — reja.
+    pub past: bool,
+    /// Kirim: mijozlardan tushgan yoki kutilayotgan pul.
+    pub income: f64,
+    /// Chiqim: xarid, ish haqi va texnika.
+    pub expense: f64,
+    pub purchases: f64,
+    pub payroll: f64,
+    pub machines: f64,
+    /// Kirim minus chiqim.
+    pub net: f64,
+    /// Davr boshidan yig'ilgan oqim.
+    pub balance: f64,
+}
+
+/// Sananing oyi — ekran uchun ochiq.
+pub fn month_of(d: NaiveDate) -> NaiveDate {
+    month_start(d)
+}
+
+/// Oyning birinchi kuni.
+fn month_start(d: NaiveDate) -> NaiveDate {
+    chrono::NaiveDate::from_ymd_opt(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1)
+        .unwrap_or(d)
+}
+
+/// Keyingi oyning birinchi kuni.
+fn next_month(d: NaiveDate) -> NaiveDate {
+    let (y, m) = (chrono::Datelike::year(&d), chrono::Datelike::month(&d));
+    let (y, m) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+    chrono::NaiveDate::from_ymd_opt(y, m, 1).unwrap_or(d)
+}
+
+/// TZ XVII.30: oylar kesimida pul oqimi.
+///
+/// O'tgan oylarda **fakt** turadi: haqiqatda tushgan to'lov, yetkazilgan
+/// xarid, tabeldan hisoblangan ish haqi va texnika xarajati. Kelasi oylarda
+/// **reja**: to'lov grafigi va buyurtma qilingan, hali kelmagan xaridlar.
+///
+/// Qoldiq bank hisobidagi pul emas — davr boshidan yig'ilgan oqim. Haqiqiy
+/// qoldiqni bilish uchun buxgalteriya ma'lumoti kerak, u bu yerda yo'q.
+pub fn cash_flow(inp: &Input, back: i64, ahead: i64) -> Vec<CashMonth> {
+    let start = {
+        let mut d = month_start(inp.today);
+        for _ in 0..back {
+            d = month_start(d - chrono::Duration::days(1));
+        }
+        d
+    };
+
+    let mut out: Vec<CashMonth> = Vec::new();
+    let mut balance = 0.0;
+    let mut m = start;
+    for _ in 0..(back + ahead + 1) {
+        let end = next_month(m);
+        let inside = |d: NaiveDate| d >= m && d < end;
+        let past = end <= month_start(inp.today) || m <= month_start(inp.today);
+
+        // Kirim: fakt to'lovlar; kelasi oyda — grafik bo'yicha qolgan qism.
+        let paid: f64 = inp
+            .payments
+            .iter()
+            .filter(|p| p.paid_date.is_some_and(inside))
+            .map(|p| p.paid)
+            .sum();
+        let planned: f64 = inp
+            .payments
+            .iter()
+            .filter(|p| inside(p.due) && p.due > inp.today)
+            .map(|p| (p.planned - p.paid).max(0.0))
+            .sum();
+        let income = paid + planned;
+
+        // Chiqim: xaridlar yetkazish sanasi bo'yicha.
+        let purchases: f64 = inp
+            .purchases
+            .iter()
+            .filter(|p| inside(p.delivery_date))
+            .map(|p| {
+                if p.delivery_date <= inp.today {
+                    // O'tgan kunda faqat haqiqatda kelgani pul talab qiladi.
+                    let qty = if p.delivered_qty > 0.0 {
+                        p.delivered_qty
+                    } else {
+                        p.qty
+                    };
+                    qty * p.price
+                } else {
+                    p.amount()
+                }
+            })
+            .sum();
+
+        // Ish haqi: tabeldan; kelasi oyda oxirgi oyning darajasi takrorlanadi.
+        let payroll: f64 = crate::checks::wages(
+            inp.workers,
+            inp.timesheet,
+            m,
+            end - chrono::Duration::days(1),
+        )
+        .iter()
+        .map(|w| w.wage)
+        .sum();
+        let machines: f64 = inp
+            .machine_logs
+            .iter()
+            .filter(|l| inside(l.date))
+            .map(|l| {
+                let rate = inp
+                    .machines
+                    .iter()
+                    .find(|x| x.id == l.machine_id)
+                    .map_or(0.0, |x| x.hour_rate);
+                l.hours * rate
+            })
+            .sum();
+
+        let expense = purchases + payroll + machines;
+        let net = income - expense;
+        balance += net;
+        out.push(CashMonth {
+            month: m,
+            past,
+            income,
+            expense,
+            purchases,
+            payroll,
+            machines,
+            net,
+            balance,
+        });
+        m = end;
+    }
+    out
+}
+
+/// Kassa uzilishi (TZ XVII.31).
+#[derive(Debug, Clone)]
+pub struct CashGap {
+    /// Qaysi oyda yetishmaydi.
+    pub month: NaiveDate,
+    /// Yetishmaydigan summa (musbat son).
+    pub amount: f64,
+    /// Shu oygacha necha oy qoldi.
+    pub months_ahead: i64,
+}
+
+/// Kelgusi oylarda qoldiq manfiyga tushadigan birinchi oy.
+///
+/// Faqat kelajakka qaraydi: o'tgan oydagi minus allaqachon yopilgan yoki
+/// yopilmagan — buni pul oqimi emas, buxgalteriya biladi.
+pub fn cash_gap(flow: &[CashMonth], today: NaiveDate) -> Option<CashGap> {
+    let start = month_start(today);
+    flow.iter()
+        .filter(|m| m.month > start)
+        .find(|m| m.balance < -0.01)
+        .map(|m| CashGap {
+            month: m.month,
+            amount: -m.balance,
+            months_ahead: flow
+                .iter()
+                .filter(|x| x.month > start && x.month <= m.month)
+                .count() as i64,
+        })
+}
+
+// ================= XVII.37. Kunlik xulosa =================
+
+/// Kunlik xulosaning bitta qatori.
+#[derive(Debug, Clone)]
+pub struct BriefLine {
+    pub area: Area,
+    pub severity: Severity,
+    pub text: String,
+    pub screen: Screen,
+}
+
+/// TZ XVII.37: bugungi kun uchun qisqa xulosa.
+///
+/// Bu topilmalar ro'yxatining takrori emas: bu yerda faqat **bugun** e'tibor
+/// talab qiladigan narsalar turadi — bugun tugaydigan muddatlar, bugun
+/// kutilayotgan yetkazishlar, kecha yozilgan hodisalar. Hech narsa bo'lmasa
+/// ro'yxat bo'sh qoladi, sun'iy qator qo'shilmaydi.
+pub fn briefing(inp: &Input) -> Vec<BriefLine> {
+    let today = inp.today;
+    let mut out = Vec::new();
+    let mut add = |area: Area, severity: Severity, text: String| {
+        out.push(BriefLine {
+            area,
+            severity,
+            text,
+            screen: area.screen(),
+        });
+    };
+
+    // Bugun tugashi kerak bo'lgan ishlar.
+    // Reja bo'yicha tugash sanasi: boshlanish + davomiylik (oxirgi kun kiradi).
+    let due_today: Vec<&Task> = inp
+        .tasks
+        .iter()
+        .filter(|t| t.progress < 100.0 && t.fact_end.is_none())
+        .filter(|t| t.plan_start + chrono::Duration::days(t.duration.max(1) - 1) == today)
+        .collect();
+    if !due_today.is_empty() {
+        add(
+            Area::Schedule,
+            Severity::Warning,
+            format!("{} {}", t("br_tasks_due"), due_today.len()),
+        );
+    }
+
+    // Bugun kutilayotgan yetkazishlar.
+    let deliveries: Vec<&Purchase> = inp
+        .purchases
+        .iter()
+        .filter(|p| p.delivery_date == today && !p.fully_delivered())
+        .collect();
+    if !deliveries.is_empty() {
+        add(
+            Area::Supply,
+            Severity::Info,
+            format!(
+                "{} {}: {}",
+                t("br_deliveries"),
+                deliveries.len(),
+                deliveries
+                    .iter()
+                    .map(|p| p.number.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        );
+    }
+
+    // Bugun to'lanishi kerak bo'lgan summa.
+    let due_payments: f64 = inp
+        .payments
+        .iter()
+        .filter(|p| p.due == today)
+        .map(|p| (p.planned - p.paid).max(0.0))
+        .sum();
+    if due_payments > 0.0 {
+        add(
+            Area::Sales,
+            Severity::Info,
+            format!(
+                "{} {}",
+                t("br_payments_due"),
+                crate::ui::money(due_payments)
+            ),
+        );
+    }
+
+    // Kecha va bugun yozilgan xavfsizlik hodisalari.
+    let since = today - chrono::Duration::days(1);
+    let events = inp
+        .safety
+        .iter()
+        .filter(|e| e.date >= since)
+        .filter(|e| {
+            matches!(
+                e.kind,
+                SafetyKind::Violation | SafetyKind::NearMiss | SafetyKind::Incident
+            )
+        })
+        .count();
+    if events > 0 {
+        add(
+            Area::Safety,
+            Severity::Major,
+            format!("{} {events}", t("br_safety")),
+        );
+    }
+
+    // Bugun muddati tugaydigan nuqsonlar.
+    let defects = inp
+        .quality
+        .iter()
+        .filter(|q| q.open_defect() && q.deadline == Some(today))
+        .count();
+    if defects > 0 {
+        add(
+            Area::Quality,
+            Severity::Warning,
+            format!("{} {defects}", t("br_defects")),
+        );
+    }
+
+    // Bugun ishga chiqmaganlar — tabelda yo'qlik belgilangan.
+    let absent = inp
+        .timesheet
+        .iter()
+        .filter(|e| e.date == today && e.kind.absence())
+        .count();
+    if absent > 0 {
+        add(
+            Area::Resources,
+            Severity::Info,
+            format!("{} {absent}", t("br_absent")),
+        );
+    }
+
+    out.sort_by_key(|l| rank(l.severity));
+    out
+}
+
 // ================================================================ Ko'rsatkichlar
 
 /// Yo'nalishlar bo'yicha asosiy ko'rsatkichlar.

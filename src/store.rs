@@ -3708,7 +3708,8 @@ impl Db {
             } else {
                 "Vertikal bo'yicha 6 mm og'ish, ruxsat 5 mm"
             },
-            Some(4),
+            // Muddati bugun tugaydi — kunlik xulosada ko'rinadi.
+            Some(0),
         );
         qc(
             QualityKind::Acceptance,
@@ -4872,7 +4873,8 @@ impl Db {
             24.0,
             if ru { "т" } else { "t" },
             10_200_000.0,
-            5,
+            // Bugun kutilmoqda — kunlik xulosada chiqadi.
+            0,
             PurchaseStatus::Paid,
             0.0,
             Section::Kj,

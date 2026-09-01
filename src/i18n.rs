@@ -1715,6 +1715,54 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Есть отрицательный остаток: расход больше прихода. Проверьте документы.",
         ),
 
+        // ---------- XVII.30-31, 37. Pul oqimi, kassa uzilishi, kunlik xulosa ----------
+        "an_tab_findings" => ("Topilmalar", "Находки"),
+        "an_tab_cash" => ("Pul oqimi", "Денежный поток"),
+        "an_tab_briefing" => ("Kunlik xulosa", "Сводка дня"),
+
+        "cash_hint" => (
+            "O'tgan oylarda fakt, kelasi oylarda reja. Qoldiq — bank hisobidagi pul emas, davr boshidan yig'ilgan oqim.",
+            "За прошедшие месяцы — факт, за будущие — план. Остаток не деньги на счёте, а накопленный поток с начала периода.",
+        ),
+        "cash_gap_title" => ("Kassa uzilishi kutilmoqda", "Ожидается кассовый разрыв"),
+        "cash_gap_amount" => ("yetishmaydi:", "не хватает:"),
+        "cash_gap_months" => ("oydan keyin", "мес. вперёд"),
+        "col_expense" => ("Jami chiqim", "Итого расход"),
+        "cash_gap_hint" => (
+            "To'lov grafigi va buyurtma qilingan xaridlar bo'yicha hisoblangan. Xaridni surish yoki to'lovni tezlashtirish kerak.",
+            "Рассчитано по графику платежей и размещённым заказам. Нужно сдвинуть закупки или ускорить поступления.",
+        ),
+        "cash_gap_none" => (
+            "Kelgusi oylarda kassa uzilishi ko'rinmayapti",
+            "В ближайшие месяцы кассовый разрыв не просматривается",
+        ),
+        "col_month" => ("Oy", "Месяц"),
+        "col_basis" => ("Asos", "Основа"),
+        "col_plan" => ("reja", "план"),
+        "col_income" => ("Kirim", "Поступления"),
+        "col_purchases" => ("Xaridlar", "Закупки"),
+        "col_payroll" => ("Ish haqi", "Зарплата"),
+        "col_net" => ("Farq", "Сальдо"),
+        "col_cumulative" => ("Yig'ilgan oqim", "Накопленный поток"),
+
+        // Kunlik xulosa (TZ XVII.37)
+        "br_title" => ("Bugungi kun", "Сводка на сегодня"),
+        "br_hint" => (
+            "Faqat bugun e'tibor talab qiladigan narsalar. Qatorga bosilsa tegishli bo'lim ochiladi.",
+            "Только то, что требует внимания сегодня. По строке открывается нужный раздел.",
+        ),
+        "br_empty" => ("Bugunga shoshilinch narsa yo'q", "На сегодня срочного нет"),
+        "br_empty_hint" => (
+            "Muddatlar, yetkazishlar va hodisalar bo'yicha bugungi kun toza",
+            "По срокам, поставкам и происшествиям сегодня чисто",
+        ),
+        "br_tasks_due" => ("Bugun tugashi kerak bo'lgan ishlar:", "Работ должно завершиться сегодня:"),
+        "br_deliveries" => ("Bugun kutilayotgan yetkazish:", "Ожидается поставок сегодня:"),
+        "br_payments_due" => ("Bugungi to'lov muddati:", "Срок платежа сегодня:"),
+        "br_safety" => ("Oxirgi ikki kunda xavfsizlik hodisalari:", "Происшествий по безопасности за два дня:"),
+        "br_defects" => ("Bugun bartaraf etilishi kerak bo'lgan nuqsonlar:", "Дефектов к устранению сегодня:"),
+        "br_absent" => ("Bugun ishga chiqmaganlar:", "Отсутствующих сегодня:"),
+
         // ---------- XVII. Analitika ----------
         "analytics_hint" => (
             "Barcha modullardan yig'ilgan faktlar. Dastur hukm chiqarmaydi — fakt, hisob va tavsiya ajratilgan.",
