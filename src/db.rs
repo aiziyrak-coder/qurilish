@@ -2163,6 +2163,166 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(c.per_unit, 1_800.0);
     }
 
+    /// TZ X.30: qisman yetkazish qoldiqni ochiq qoldiradi.
+    #[test]
+    fn partial_delivery_leaves_a_remainder() {
+        use crate::domain::{Purchase, PurchaseStatus};
+
+        let p = |qty: f64, delivered: f64| Purchase {
+            id: 0,
+            project_id: 1,
+            request_id: None,
+            number: "X-1".into(),
+            date: chrono::Local::now().date_naive(),
+            supplier: String::new(),
+            title: String::new(),
+            qty,
+            unit: String::new(),
+            price: 1000.0,
+            currency: "UZS".into(),
+            delivery_date: chrono::Local::now().date_naive(),
+            status: PurchaseStatus::Ordered,
+            delivered_qty: delivered,
+            section: crate::model::Section::None,
+            note: String::new(),
+        };
+        let a = p(180.0, 120.0);
+        assert!(a.partial());
+        assert!(!a.fully_delivered());
+        assert_eq!(a.remaining(), 60.0);
+
+        let b = p(180.0, 180.0);
+        assert!(b.fully_delivered());
+        assert!(!b.partial());
+        assert_eq!(b.remaining(), 0.0);
+
+        // Hech narsa kelmagan buyurtma «qisman» emas.
+        assert!(!p(180.0, 0.0).partial());
+    }
+
+    /// TZ X.11–12: takliflar ariza kesimida solishtiriladi.
+    #[test]
+    fn quotes_mark_the_cheapest_and_the_fastest() {
+        use crate::domain::Quote;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let rid = t.db.requests(pid).first().map(|r| r.id);
+
+        let mk = |price: f64, days: i64, valid: Option<i64>| {
+            t.db.insert_quote(&Quote {
+                id: 0,
+                project_id: pid,
+                request_id: rid,
+                supplier: format!("S{price}"),
+                title: "Sinov".into(),
+                qty: 10.0,
+                unit: "t".into(),
+                price,
+                currency: "UZS".into(),
+                delivery_days: days,
+                valid_until: valid.map(|d| today + chrono::Duration::days(d)),
+                chosen: false,
+                date: today,
+                note: String::new(),
+            })
+        };
+        let cheap = mk(100.0, 30, Some(10));
+        let quick = mk(120.0, 3, Some(10));
+        // Eng arzoni, lekin muddati o'tgan — hisobga olinmasligi kerak.
+        let stale = mk(80.0, 2, Some(-1));
+
+        let quotes: Vec<Quote> =
+            t.db.quotes(pid)
+                .into_iter()
+                .filter(|q| q.request_id == rid)
+                .collect();
+        let lines = crate::checks::quote_lines(&quotes, today);
+        let get = |id: i64| lines.iter().find(|l| l.quote_id == id).expect("qator");
+
+        assert!(
+            get(cheap).cheapest,
+            "muddati o'tgani eng arzon bo'la olmaydi"
+        );
+        assert!(!get(cheap).fastest);
+        assert!(get(quick).fastest);
+        assert_eq!(get(quick).over_best_pct, 20.0);
+        assert!(get(stale).expired);
+        assert!(!get(stale).cheapest);
+
+        // Tanlash: bitta arizada faqat bitta taklif tanlanadi.
+        t.db.choose_quote(cheap);
+        t.db.choose_quote(quick);
+        let chosen: Vec<i64> =
+            t.db.quotes(pid)
+                .into_iter()
+                .filter(|q| q.chosen && q.request_id == rid)
+                .map(|q| q.id)
+                .collect();
+        assert_eq!(chosen, vec![quick]);
+    }
+
+    /// TZ X.8, 40: yetkazib beruvchi tarixi xaridlardan hisoblanadi.
+    #[test]
+    fn supplier_history_comes_from_purchases() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let lines = crate::checks::supplier_lines(&t.db.purchases(pid), today);
+
+        assert!(!lines.is_empty(), "namunada xarid bor");
+        for l in &lines {
+            assert!(!l.supplier.is_empty());
+            assert!(l.orders > 0);
+            assert!((0.0..=100.0).contains(&l.on_time_pct));
+        }
+        // Namunada muddati o'tgan, to'liq yetkazilmagan buyurtma bor.
+        assert!(
+            lines.iter().any(|l| l.avg_delay > 0.0),
+            "kechikish ko'rinmadi"
+        );
+        assert!(lines.iter().any(|l| l.open_orders > 0));
+    }
+
+    /// TZ X.13: narx katalogdagidan keskin farq qilsa belgilanadi.
+    #[test]
+    fn price_anomaly_triggers_only_on_a_big_gap() {
+        use crate::checks::price_anomaly;
+        assert_eq!(price_anomaly(120.0, 100.0), Some(20.0));
+        assert_eq!(price_anomaly(70.0, 100.0), Some(-30.0));
+        assert_eq!(price_anomaly(110.0, 100.0), None, "10% — normal tebranish");
+        // Narx yoki katalog nol bo'lsa — solishtiradigan narsa yo'q.
+        assert_eq!(price_anomaly(0.0, 100.0), None);
+        assert_eq!(price_anomaly(100.0, 0.0), None);
+    }
+
+    /// TZ X.34–35: byudjet bo'lim kesimida nazorat qilinadi.
+    #[test]
+    fn budget_tracks_sections_and_flags_overspend() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let lines = crate::checks::budget_lines(&t.db.purchase_budgets(pid), &t.db.purchases(pid));
+
+        let vk = lines
+            .iter()
+            .find(|l| l.section == crate::model::Section::Vk)
+            .expect("VK bo'limi");
+        assert!(vk.over, "byudjeti kam bo'lim oshib ketgan bo'lishi kerak");
+        assert!(vk.left < 0.0);
+        assert!(
+            vk.delivered > 0.0 && vk.delivered < vk.ordered,
+            "qisman yetkazilgan"
+        );
+
+        let kj = lines
+            .iter()
+            .find(|l| l.section == crate::model::Section::Kj)
+            .expect("KJ bo'limi");
+        assert!(!kj.over);
+        assert!(kj.used_pct > 0.0 && kj.used_pct < 100.0);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

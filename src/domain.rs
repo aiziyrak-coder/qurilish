@@ -386,6 +386,10 @@ pub struct Purchase {
     pub currency: String,
     pub delivery_date: NaiveDate,
     pub status: PurchaseStatus,
+    /// Haqiqatda kelgan miqdor (TZ X.30): qisman yetkazish oddiy holat.
+    pub delivered_qty: f64,
+    /// Qaysi bo'limga tegishli — byudjet shu kesimda nazorat qilinadi.
+    pub section: crate::model::Section,
     pub note: String,
 }
 
@@ -393,6 +397,78 @@ impl Purchase {
     pub fn amount(&self) -> f64 {
         self.qty * self.price
     }
+
+    /// Yetkazilmay qolgan miqdor (TZ X.30).
+    pub fn remaining(&self) -> f64 {
+        (self.qty - self.delivered_qty).max(0.0)
+    }
+
+    /// Buyurtma to'liq yetkazilgan.
+    pub fn fully_delivered(&self) -> bool {
+        self.qty > 0.0 && self.delivered_qty + 0.0001 >= self.qty
+    }
+
+    /// Qisman yetkazilgan: bir qismi keldi, qolgani yo'lda.
+    pub fn partial(&self) -> bool {
+        self.delivered_qty > 0.0001 && !self.fully_delivered()
+    }
+}
+
+/// Yetkazib beruvchi (TZ X.7–8, 16).
+///
+/// Tarix alohida saqlanmaydi — u xaridlardan hisoblanadi, shuning uchun
+/// kartochka va haqiqiy buyurtmalar hech qachon bir-biriga zid bo'lmaydi.
+#[derive(Debug, Clone)]
+pub struct Supplier {
+    pub id: i64,
+    pub project_id: i64,
+    pub name: String,
+    /// STIR (INN).
+    pub inn: String,
+    pub contact: String,
+    pub phone: String,
+    /// Ishlash taqiqlangan: nomi ro'yxatda qoladi, lekin ogohlantiriladi.
+    pub blocked: bool,
+    pub note: String,
+}
+
+/// Tijorat taklifi — KP (TZ X.9–12, 15).
+#[derive(Debug, Clone)]
+pub struct Quote {
+    pub id: i64,
+    pub project_id: i64,
+    /// Qaysi arizaga javoban. Bog'lanmagan taklif ham bo'lishi mumkin.
+    pub request_id: Option<i64>,
+    pub supplier: String,
+    pub title: String,
+    pub qty: f64,
+    pub unit: String,
+    pub price: f64,
+    pub currency: String,
+    /// Yetkazish muddati, kunlarda — narx bilan birga solishtiriladi.
+    pub delivery_days: i64,
+    /// Taklif shu sanagacha kuchda.
+    pub valid_until: Option<NaiveDate>,
+    /// Tanlangan taklif: shundan xarid ochiladi.
+    pub chosen: bool,
+    pub date: NaiveDate,
+    pub note: String,
+}
+
+impl Quote {
+    pub fn amount(&self) -> f64 {
+        self.qty * self.price
+    }
+}
+
+/// Bo'lim bo'yicha xarid byudjeti (TZ X.34–35).
+#[derive(Debug, Clone)]
+pub struct PurchaseBudget {
+    pub id: i64,
+    pub project_id: i64,
+    pub section: crate::model::Section,
+    pub planned: f64,
+    pub note: String,
 }
 
 // ---------- XI–XII. Ombor va materiallar ----------

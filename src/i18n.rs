@@ -150,7 +150,6 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "col_role" => ("Rol", "Роль"),
         "col_org" => ("Tashkilot", "Организация"),
         "col_person" => ("Mas'ul shaxs", "Ответственное лицо"),
-        "col_phone" => ("Telefon", "Телефон"),
         "col_email" => ("E-mail", "E-mail"),
         "add_party" => ("+ Ishtirokchi qo'shish", "+ Добавить участника"),
         "delete_party" => ("Ishtirokchini o'chirish", "Удалить участника"),
@@ -2247,6 +2246,104 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cl_no_recent" => ("Jurnal yozuvlari yo'q.", "Записей журнала нет."),
         "cl_sales" => ("Sotuv holati", "Состояние продаж"),
         "cl_sold" => ("Sotilgan birliklar", "Продано единиц"),
+
+        // ---------- X.7-15, 30, 34-35. KP, yetkazib beruvchilar, byudjet ----------
+        "pu_tab_orders" => ("Buyurtmalar", "Заказы"),
+        "pu_tab_quotes" => ("Tijorat takliflari", "Коммерческие предложения"),
+        "pu_tab_suppliers" => ("Yetkazib beruvchilar", "Поставщики"),
+        "pu_tab_budget" => ("Byudjet", "Бюджет"),
+
+        "col_section" => ("Bo'lim", "Раздел"),
+        "col_delivered" => ("Kelgan", "Поступило"),
+        "purchase_partial" => ("Qisman yetkazilgan, qoldi:", "Поставлено частично, осталось:"),
+        "price_anomaly" => (
+            "Narx katalogdagidan farq qiladi:",
+            "Цена отличается от каталожной:",
+        ),
+
+        // Tijorat takliflari (TZ X.9-12, 15)
+        "add_quote" => ("+ Taklif", "+ Предложение"),
+        "quotes_hint" => (
+            "Bir arizaga bir nechta taklif kiritiladi va solishtiriladi. Eng arzoni va eng tezi belgilanadi, tanlov sizniki.",
+            "На одну заявку вносится несколько предложений и сравнивается. Отмечаются самое дешёвое и самое быстрое, выбор за вами.",
+        ),
+        "quotes_empty" => (
+            "Tijorat taklifi kiritilmagan — «+ Taklif» bilan boshlang",
+            "Коммерческие предложения не внесены — начните с «+ Предложение»",
+        ),
+        "col_over_best" => ("Eng arzondan", "От лучшей"),
+        "col_delivery_days" => ("Muddat, kun", "Срок, дней"),
+        "col_valid_until" => ("Kuchda", "Действует до"),
+        "col_verdict" => ("Xulosa", "Вывод"),
+        "quote_cheapest" => ("eng arzon", "самое дешёвое"),
+        "quote_fastest" => ("eng tez", "самое быстрое"),
+        "quote_best" => ("arzon va tez", "дешевле и быстрее"),
+        "quote_expired" => ("muddati o'tgan", "срок истёк"),
+        "quote_choose" => ("Tanlash", "Выбрать"),
+        "quote_choose_hint" => (
+            "Bir arizada faqat bitta taklif tanlangan bo'ladi.",
+            "По одной заявке выбирается только одно предложение.",
+        ),
+        "quote_chosen" => ("tanlandi", "выбрано"),
+        "quote_to_purchase" => ("Xarid ochish", "Создать заказ"),
+        "quote_purchase_created" => (
+            "Taklif bo'yicha xarid ochildi",
+            "По предложению создан заказ",
+        ),
+
+        // Yetkazib beruvchilar (TZ X.7-8, 16, 40)
+        "add_supplier" => ("+ Yetkazib beruvchi", "+ Поставщик"),
+        "supplier_new_name" => ("Yangi yetkazib beruvchi", "Новый поставщик"),
+        "suppliers_from_purchases" => (
+            "Xaridlardan to'ldirish",
+            "Заполнить из заказов",
+        ),
+        "suppliers_hint" => (
+            "Tarix alohida saqlanmaydi — u xaridlardan hisoblanadi, shuning uchun kartochka va haqiqiy buyurtmalar hech qachon zid bo'lmaydi.",
+            "История не хранится отдельно — она считается из заказов, поэтому карточка и реальные заказы никогда не расходятся.",
+        ),
+        "suppliers_empty" => (
+            "Yetkazib beruvchi kartochkasi yo'q — «Xaridlardan to'ldirish» tugmasini bosing",
+            "Карточек поставщиков нет — нажмите «Заполнить из заказов»",
+        ),
+        "col_inn" => ("STIR", "ИНН"),
+        "col_contact" => ("Aloqa", "Контакт"),
+        "col_phone" => ("Telefon", "Телефон"),
+        "col_orders" => ("Buyurtma", "Заказов"),
+        "orders_open_hint" => (
+            "Jami buyurtma · shundan to'liq yetkazilmagani",
+            "Всего заказов · из них не поставленных полностью",
+        ),
+        "col_on_time" => ("Muddatida", "В срок"),
+        "col_avg_delay" => ("O'rtacha kechikish", "Средняя задержка"),
+        "col_last_order" => ("Oxirgi buyurtma", "Последний заказ"),
+        "col_blocked" => ("Taqiq", "Блок"),
+        "supplier_blocked" => ("ishlamaymiz", "не работаем"),
+
+        // Byudjet (TZ X.34-35)
+        "add_budget" => ("+ Bo'lim byudjeti", "+ Бюджет раздела"),
+        "budget_hint" => (
+            "Reja bo'lim bo'yicha qo'lda qo'yiladi, sarflangani xaridlardan hisoblanadi. Oshib ketgani qizil bo'ladi.",
+            "План по разделу задаётся вручную, расход считается из заказов. Превышение выделяется красным.",
+        ),
+        "budget_empty" => (
+            "Byudjet ham, xarid ham yo'q",
+            "Нет ни бюджета, ни заказов",
+        ),
+        "budget_all_sections" => (
+            "Barcha bo'limlar uchun byudjet allaqachon bor",
+            "Бюджет уже задан для всех разделов",
+        ),
+        "col_ordered" => ("Buyurtma qilingan", "Заказано"),
+        "col_left" => ("Qoldi", "Остаток"),
+        "kpi_budget_planned" => ("Reja", "План"),
+        "kpi_budget_planned_hint" => ("bo'limlar bo'yicha", "по разделам"),
+        "kpi_budget_ordered" => ("Buyurtma qilingan", "Заказано"),
+        "kpi_budget_ordered_hint" => ("barcha xaridlar", "все заказы"),
+        "kpi_budget_left" => ("Qoldi", "Остаток"),
+        "kpi_budget_left_hint" => ("rejadan", "от плана"),
+        "kpi_budget_over" => ("Oshib ketgan", "Превышено"),
+        "kpi_budget_over_hint" => ("bo'lim", "разделов"),
 
         // ---------- XI. Omborlar, partiyalar, rezerv, inventarizatsiya ----------
         // Ombor turlari (TZ XI.3)

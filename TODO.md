@@ -23,8 +23,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VI. Prorab (mobil) | 37 | 8 | 7 | 22 |
 | VII. Texnik nazorat | 38 | 8 | 7 | 23 |
 | VIII. Buyurtmachi | 37 | 9 | 6 | 22 |
-| IX. Arizalar | 42 | 10 | 8 | 24 |
-| X. Xaridlar | 48 | 9 | 7 | 32 |
+| IX. Arizalar | 42 | 14 | 8 | 20 |
+| X. Xaridlar | 48 | 16 | 15 | 17 |
 | XI. Ombor | 48 | 25 | 6 | 17 |
 | XII. Materiallar | 41 | 12 | 6 | 23 |
 | XIII. Tabel | 44 | 15 | 10 | 19 |
@@ -33,7 +33,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 10 | 7 | 33 |
 | XVII. AI analitika | 51 | 12 | 9 | 30 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **176** | **116** | **390** |
+| **Jami** | **682** | **187** | **124** | **371** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -338,12 +338,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 12. Smetani tekshirish
 - [ ] 13. Loyihaga muvofiqlikni tekshirish
 - [ ] 14. Materialni almashtirish
-- [ ] 15. Tijorat takliflari
-- [ ] 16. AI yetkazib beruvchilarni solishtirishi
+- [x] 15. Tijorat takliflari
+- [x] 16. AI yetkazib beruvchilarni solishtirishi
 - [x] 17. Ariza → xarid
-- [ ] 18. Ariza → buyurtma
+- [x] 18. Ariza → buyurtma — *tanlangan taklifdan xarid*
 - [x] 19. Ariza → ombor
-- [ ] 20. Qisman yetkazish
+- [x] 20. Qisman yetkazish
 - [x] 21. Muddati o'tgan arizalarni nazorat qilish
 - [~] 22. Texnikaga ariza — *tur bor, jarayon yo'q*
 - [ ] 23. Transportga ariza
@@ -377,16 +377,16 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 4. AI xaridlarni rejalashtirishi
 - [~] 5. Ehtiyojni avtomatik hisoblash — *zaxiradan kam bo'yicha*
 - [~] 6. Xariddan oldin tekshirish
-- [ ] 7. Yetkazib beruvchilarni izlash
-- [ ] 8. Yetkazib beruvchi tarixi
-- [ ] 9. Tijorat taklifini so'rash
-- [ ] 10. KP qabul qilish
-- [ ] 11. AI KP larni solishtirishi
-- [ ] 12. AI eng yaxshi variantni tanlashi
-- [ ] 13. Narx anomaliyasi
-- [ ] 14. Narx o'zgarishini nazorat qilish
-- [ ] 15. Muqobil yetkazib beruvchi izlash
-- [ ] 16. Yetkazib beruvchini tekshirish
+- [~] 7. Yetkazib beruvchilarni izlash — *kartochka va ro'yxat*
+- [x] 8. Yetkazib beruvchi tarixi — *xaridlardan hisoblanadi*
+- [~] 9. Tijorat taklifini so'rash — *taklif yozuvi*
+- [x] 10. KP qabul qilish
+- [x] 11. AI KP larni solishtirishi — *narx va muddat bo'yicha*
+- [~] 12. AI eng yaxshi variantni tanlashi — *eng arzoni va eng tezi belgilanadi, tanlov odamniki*
+- [x] 13. Narx anomaliyasi — *katalogdan 20% farq*
+- [~] 14. Narx o'zgarishini nazorat qilish — *takliflar taqqoslanadi*
+- [x] 15. Muqobil yetkazib beruvchi izlash — *bir arizaga bir necha taklif*
+- [~] 16. Yetkazib beruvchini tekshirish — *STIR, taqiq belgisi*
 - [~] 17. Materialni tekshirish
 - [ ] 18. Texnik kelishuv
 - [ ] 19. Materialni almashtirish
@@ -400,17 +400,17 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 27. AI sertifikatni tekshiradi
 - [ ] 28. Qabulda foto
 - [x] 29. Ombor bilan bog'lanish — *bir bosishda kirim*
-- [ ] 30. Qisman yetkazish
+- [x] 30. Qisman yetkazish — *kelgan miqdor, qoldiq, kirim*
 - [x] 31. Kechikishlarni nazorat qilish
 - [ ] 32. GPR bilan bog'lanish
 - [ ] 33. Obyektlar bo'yicha xaridlarni nazorat qilish
-- [ ] 34. Bo'limlar bo'yicha xaridlarni nazorat qilish
-- [ ] 35. Xarid byudjetini nazorat qilish
+- [x] 34. Bo'limlar bo'yicha xaridlarni nazorat qilish
+- [x] 35. Xarid byudjetini nazorat qilish — *reja / buyurtma / qoldiq*
 - [~] 36. AI ortiqcha sarfni aniqlashi
 - [ ] 37. Markazlashtirilgan xaridlar
 - [ ] 38. Turli obyektlar xaridlarini solishtirish
 - [~] 39. Sarfni nazorat qilish
-- [ ] 40. Yetkazib beruvchilar tahlili
+- [x] 40. Yetkazib beruvchilar tahlili — *muddatida %, o'rtacha kechikish*
 - [ ] 41. Korrupsiya/manfaatlar to'qnashuvi riskini nazorat qilish
 - [ ] 42. Xaridlarni avtomatik bo'lish
 - [ ] 43. Shoshilinch xaridlar
@@ -822,7 +822,7 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 1. ~~Ombor: partiyalar, rezervlash, inventarizatsiya, qaytarish, bir necha ombor~~ (XI.3, 9, 17, 20–21, 24–28) — **bajarildi**
 2. ~~Normativ sarf va ortiqcha sarf nazorati~~ (XI.14–15, XII.21–22, III.28) — **bajarildi**
 3. ~~Tabel: brigadalar, smenalar, yo'qliklar, bo'sh turish, tannarx~~ (XIII.8–31) — **bajarildi**
-4. **Xaridlar: KP, yetkazib beruvchilar, qisman yetkazish, byudjet** (X.7–15, 30, 35)
+4. ~~Xaridlar: KP, yetkazib beruvchilar, qisman yetkazish, byudjet~~ (X.7–16, 30, 34–35, 40) — **bajarildi**
 5. **Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi** (IX.8–10, 31–32)
 6. **Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili** (XIV.8, 10, 30–35)
 7. **Xavfsizlik: naryad-dopusk, SIZ, ruxsatlar matritsasi, Safety Score** (XV.4–12, 33)

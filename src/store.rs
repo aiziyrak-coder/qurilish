@@ -402,6 +402,43 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
 
+            CREATE TABLE IF NOT EXISTS supplier (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                inn TEXT NOT NULL DEFAULT '',
+                contact TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                blocked INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS quote (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                request_id INTEGER,
+                supplier TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                qty REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                price REAL NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'UZS',
+                delivery_days INTEGER NOT NULL DEFAULT 0,
+                valid_until TEXT,
+                chosen INTEGER NOT NULL DEFAULT 0,
+                date TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_quote_req ON quote(request_id);
+
+            CREATE TABLE IF NOT EXISTS purchase_budget (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                section TEXT NOT NULL DEFAULT 'none',
+                planned REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE TABLE IF NOT EXISTS brigade (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -452,6 +489,8 @@ impl Db {
             "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
             "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
+            "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE purchase ADD COLUMN section TEXT NOT NULL DEFAULT 'none'",
             "ALTER TABLE timesheet ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'",
             "ALTER TABLE timesheet ADD COLUMN shift TEXT NOT NULL DEFAULT 'day'",
             "ALTER TABLE stock_move ADD COLUMN batch_id INTEGER",
@@ -1025,6 +1064,177 @@ impl Db {
         self.upd(
             "UPDATE inventory_line SET material_id=?2,book=?3,fact=?4,note=?5 WHERE id=?1",
             params![l.id, l.material_id, l.book, l.fact, l.note],
+        )
+    }
+
+    // ---------- X.7-15, 34-35. Yetkazib beruvchilar, KP, byudjet ----------
+
+    pub fn suppliers(&self, pid: i64) -> Vec<Supplier> {
+        self.list(
+            "SELECT id,project_id,name,inn,contact,phone,blocked,note
+             FROM supplier WHERE project_id=?1 ORDER BY name",
+            pid,
+            |r| {
+                Ok(Supplier {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    inn: r.get(3)?,
+                    contact: r.get(4)?,
+                    phone: r.get(5)?,
+                    blocked: r.get::<_, i64>(6)? != 0,
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_supplier(&self, x: &Supplier) -> i64 {
+        self.ins(
+            "INSERT INTO supplier (project_id,name,inn,contact,phone,blocked,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                x.project_id,
+                x.name,
+                x.inn,
+                x.contact,
+                x.phone,
+                i64::from(x.blocked),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_supplier(&self, x: &Supplier) -> bool {
+        self.upd(
+            "UPDATE supplier SET name=?2,inn=?3,contact=?4,phone=?5,blocked=?6,note=?7 WHERE id=?1",
+            params![
+                x.id,
+                x.name,
+                x.inn,
+                x.contact,
+                x.phone,
+                i64::from(x.blocked),
+                x.note
+            ],
+        )
+    }
+
+    pub fn quotes(&self, pid: i64) -> Vec<Quote> {
+        self.list(
+            "SELECT id,project_id,request_id,supplier,title,qty,unit,price,currency,
+                    delivery_days,valid_until,chosen,date,note
+             FROM quote WHERE project_id=?1 ORDER BY request_id,price",
+            pid,
+            |r| {
+                Ok(Quote {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    request_id: r.get(2)?,
+                    supplier: r.get(3)?,
+                    title: r.get(4)?,
+                    qty: r.get(5)?,
+                    unit: r.get(6)?,
+                    price: r.get(7)?,
+                    currency: r.get(8)?,
+                    delivery_days: r.get(9)?,
+                    valid_until: odate(r.get(10)?),
+                    chosen: r.get::<_, i64>(11)? != 0,
+                    date: date(&r.get::<_, String>(12)?),
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_quote(&self, q: &Quote) -> i64 {
+        self.ins(
+            "INSERT INTO quote (project_id,request_id,supplier,title,qty,unit,price,currency,
+                                delivery_days,valid_until,chosen,date,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                q.project_id,
+                q.request_id,
+                q.supplier,
+                q.title,
+                q.qty,
+                q.unit,
+                q.price,
+                q.currency,
+                q.delivery_days,
+                q.valid_until.map(|d| d.to_string()),
+                i64::from(q.chosen),
+                q.date.to_string(),
+                q.note
+            ],
+        )
+    }
+
+    pub fn update_quote(&self, q: &Quote) -> bool {
+        self.upd(
+            "UPDATE quote SET request_id=?2,supplier=?3,title=?4,qty=?5,unit=?6,price=?7,
+                    currency=?8,delivery_days=?9,valid_until=?10,chosen=?11,date=?12,note=?13
+             WHERE id=?1",
+            params![
+                q.id,
+                q.request_id,
+                q.supplier,
+                q.title,
+                q.qty,
+                q.unit,
+                q.price,
+                q.currency,
+                q.delivery_days,
+                q.valid_until.map(|d| d.to_string()),
+                i64::from(q.chosen),
+                q.date.to_string(),
+                q.note
+            ],
+        )
+    }
+
+    /// Bitta arizada faqat bitta taklif tanlangan bo'ladi (TZ X.12).
+    pub fn choose_quote(&self, id: i64) -> bool {
+        let Ok(conn) = self.conn().execute(
+            "UPDATE quote SET chosen = 0
+             WHERE request_id IS NOT NULL
+               AND request_id = (SELECT request_id FROM quote WHERE id=?1)",
+            params![id],
+        ) else {
+            return false;
+        };
+        let _ = conn;
+        self.upd("UPDATE quote SET chosen = 1 WHERE id=?1", params![id])
+    }
+
+    pub fn purchase_budgets(&self, pid: i64) -> Vec<PurchaseBudget> {
+        self.list(
+            "SELECT id,project_id,section,planned,note
+             FROM purchase_budget WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(PurchaseBudget {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    section: Section::parse(&r.get::<_, String>(2)?),
+                    planned: r.get(3)?,
+                    note: r.get(4)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_purchase_budget(&self, b: &PurchaseBudget) -> i64 {
+        self.ins(
+            "INSERT INTO purchase_budget (project_id,section,planned,note) VALUES (?1,?2,?3,?4)",
+            params![b.project_id, b.section.code(), b.planned, b.note],
+        )
+    }
+
+    pub fn update_purchase_budget(&self, b: &PurchaseBudget) -> bool {
+        self.upd(
+            "UPDATE purchase_budget SET section=?2,planned=?3,note=?4 WHERE id=?1",
+            params![b.id, b.section.code(), b.planned, b.note],
         )
     }
 
@@ -1685,7 +1895,7 @@ impl Db {
     pub fn purchases(&self, pid: i64) -> Vec<Purchase> {
         self.list(
             "SELECT id,project_id,request_id,number,date,supplier,title,qty,unit,price,currency,
-                    delivery_date,status,note
+                    delivery_date,status,delivered_qty,section,note
              FROM purchase WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -1703,7 +1913,9 @@ impl Db {
                     currency: r.get(10)?,
                     delivery_date: date(&r.get::<_, String>(11)?),
                     status: PurchaseStatus::parse(&r.get::<_, String>(12)?),
-                    note: r.get(13)?,
+                    delivered_qty: r.get(13)?,
+                    section: Section::parse(&r.get::<_, String>(14)?),
+                    note: r.get(15)?,
                 })
             },
         )
@@ -1712,8 +1924,8 @@ impl Db {
     pub fn insert_purchase(&self, p: &Purchase) -> i64 {
         self.ins(
             "INSERT INTO purchase (project_id,request_id,number,date,supplier,title,qty,unit,price,
-                                   currency,delivery_date,status,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                                   currency,delivery_date,status,delivered_qty,section,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 p.project_id,
                 p.request_id,
@@ -1727,6 +1939,8 @@ impl Db {
                 p.currency,
                 p.delivery_date.to_string(),
                 p.status.code(),
+                p.delivered_qty,
+                p.section.code(),
                 p.note
             ],
         )
@@ -1735,10 +1949,24 @@ impl Db {
     pub fn update_purchase(&self, p: &Purchase) -> bool {
         self.upd(
             "UPDATE purchase SET request_id=?2,number=?3,date=?4,supplier=?5,title=?6,qty=?7,
-                    unit=?8,price=?9,currency=?10,delivery_date=?11,status=?12,note=?13 WHERE id=?1",
+                    unit=?8,price=?9,currency=?10,delivery_date=?11,status=?12,delivered_qty=?13,
+                    section=?14,note=?15 WHERE id=?1",
             params![
-                p.id, p.request_id, p.number, p.date.to_string(), p.supplier, p.title, p.qty,
-                p.unit, p.price, p.currency, p.delivery_date.to_string(), p.status.code(), p.note
+                p.id,
+                p.request_id,
+                p.number,
+                p.date.to_string(),
+                p.supplier,
+                p.title,
+                p.qty,
+                p.unit,
+                p.price,
+                p.currency,
+                p.delivery_date.to_string(),
+                p.status.code(),
+                p.delivered_qty,
+                p.section.code(),
+                p.note
             ],
         )
     }
@@ -3512,7 +3740,9 @@ impl Db {
                    unit: &str,
                    price: f64,
                    delivery_in: i64,
-                   status: PurchaseStatus| {
+                   status: PurchaseStatus,
+                   delivered_qty: f64,
+                   section: Section| {
             self.insert_purchase(&Purchase {
                 id: 0,
                 project_id: pid,
@@ -3527,6 +3757,8 @@ impl Db {
                 currency: "UZS".into(),
                 delivery_date: today + chrono::Duration::days(delivery_in),
                 status,
+                delivered_qty,
+                section,
                 note: String::new(),
             });
         };
@@ -3559,6 +3791,8 @@ impl Db {
             1_400.0,
             -26,
             PurchaseStatus::Closed,
+            96_000.0,
+            Section::Ar,
         );
         // Z-002: buyurtma berilgan, yo'lda.
         pur(
@@ -3576,6 +3810,8 @@ impl Db {
             10_200_000.0,
             5,
             PurchaseStatus::Paid,
+            0.0,
+            Section::Kj,
         );
         // Z-003: qisman qoplangan xarid, muddati o'tgan.
         pur(
@@ -3593,7 +3829,118 @@ impl Db {
             41_000.0,
             -2,
             PurchaseStatus::Ordered,
+            // Qisman yetkazilgan: 180 dan 120 tasi kelgan (TZ X.30).
+            120.0,
+            Section::Vk,
         );
+
+        // Yetkazib beruvchilar kartochkasi (TZ X.7): tarix xaridlardan
+        // hisoblanadi, bu yerda faqat aloqa ma'lumoti turadi.
+        let sup = |name: &str, inn: &str, contact: &str, phone: &str| {
+            self.insert_supplier(&Supplier {
+                id: 0,
+                project_id: pid,
+                name: name.into(),
+                inn: inn.into(),
+                contact: contact.into(),
+                phone: phone.into(),
+                blocked: false,
+                note: String::new(),
+            });
+        };
+        if ru {
+            sup(s1, "302145879", "Рахимов Ж.", "+998 90 123-45-67");
+            sup(s2, "304871256", "Эргашев Т.", "+998 91 234-56-78");
+            sup(
+                "ООО «БетонПро»",
+                "301447790",
+                "Юлдашев К.",
+                "+998 93 345-67-89",
+            );
+        } else {
+            sup(s1, "302145879", "Rahimov J.", "+998 90 123-45-67");
+            sup(s2, "304871256", "Ergashev T.", "+998 91 234-56-78");
+            sup(
+                "«BetonPro» MChJ",
+                "301447790",
+                "Yuldashev K.",
+                "+998 93 345-67-89",
+            );
+        }
+
+        // Uchta tijorat taklifi bitta arizaga (TZ X.9–12): eng arzoni uzoq
+        // yetkazadi — tanlov faqat narxga qarab qilinmasligi ko'rinsin.
+        let quote = |supplier: &str,
+                     title: &str,
+                     qty: f64,
+                     unit: &str,
+                     price: f64,
+                     delivery_days: i64,
+                     days_ago: i64,
+                     chosen: bool| {
+            self.insert_quote(&Quote {
+                id: 0,
+                project_id: pid,
+                request_id: Some(z2),
+                supplier: supplier.into(),
+                title: title.into(),
+                qty,
+                unit: unit.into(),
+                price,
+                currency: "UZS".into(),
+                delivery_days,
+                valid_until: Some(today + chrono::Duration::days(10)),
+                chosen,
+                date: today - chrono::Duration::days(days_ago),
+                note: String::new(),
+            });
+        };
+        let rebar_title = if ru {
+            "Арматура А500С d16"
+        } else {
+            "A500S armatura d16"
+        };
+        let unit = if ru { "т" } else { "t" };
+        quote(s2, rebar_title, 24.0, unit, 10_200_000.0, 5, 10, true);
+        quote(s1, rebar_title, 24.0, unit, 9_850_000.0, 21, 10, false);
+        if ru {
+            quote(
+                "ООО «БетонПро»",
+                rebar_title,
+                24.0,
+                unit,
+                10_900_000.0,
+                3,
+                9,
+                false,
+            );
+        } else {
+            quote(
+                "«BetonPro» MChJ",
+                rebar_title,
+                24.0,
+                unit,
+                10_900_000.0,
+                3,
+                9,
+                false,
+            );
+        }
+
+        // Bo'limlar bo'yicha xarid byudjeti (TZ X.34–35).
+        let budget = |section: Section, planned: f64| {
+            self.insert_purchase_budget(&PurchaseBudget {
+                id: 0,
+                project_id: pid,
+                section,
+                planned,
+                note: String::new(),
+            });
+        };
+        budget(Section::Kj, 400_000_000.0);
+        budget(Section::Ar, 150_000_000.0);
+        // Suv va kanalizatsiya byudjeti ataylab kam — oshib ketgani ko'rinsin.
+        budget(Section::Vk, 5_000_000.0);
     }
 
     /// Material katalogi va ombor harakatlari namunasi (TZ XI-XII).

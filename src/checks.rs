@@ -1689,6 +1689,215 @@ pub fn task_costs(
         .collect()
 }
 
+// ================= X. Yetkazib beruvchilar, KP, byudjet =================
+
+/// Narx katalogdagidan shuncha foizga farq qilsa — anomaliya (TZ X.13).
+pub const PRICE_ANOMALY_PCT: f64 = 20.0;
+
+/// Yetkazib beruvchining xaridlardan hisoblangan tarixi (TZ X.8, 40).
+#[derive(Debug, Clone, Default)]
+pub struct SupplierLine {
+    pub supplier: String,
+    pub orders: usize,
+    pub amount: f64,
+    /// Muddatida yetkazilgan buyurtmalar ulushi, foizda.
+    pub on_time_pct: f64,
+    /// O'rtacha kechikish, kunlarda (faqat kechikkanlar bo'yicha).
+    pub avg_delay: f64,
+    pub last_order: Option<NaiveDate>,
+    /// To'liq yetkazilmagan buyurtmalar soni.
+    pub open_orders: usize,
+}
+
+/// Yetkazib beruvchilar bo'yicha yakun.
+///
+/// Ro'yxat kartochkalardan emas, xaridlardan yig'iladi: kartochkasi yo'q
+/// yetkazib beruvchi ham chetda qolmasligi kerak.
+pub fn supplier_lines(purchases: &[Purchase], today: NaiveDate) -> Vec<SupplierLine> {
+    let mut names: Vec<String> = purchases
+        .iter()
+        .map(|p| p.supplier.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+
+    names
+        .into_iter()
+        .map(|name| {
+            let mine: Vec<&Purchase> = purchases
+                .iter()
+                .filter(|p| p.supplier.trim() == name)
+                .collect();
+            // Kechikish: yetkazilgan buyurtmada yopilish sanasi bilan emas,
+            // rejadagi sana bilan bugungi kun solishtiriladi — yopilmagan
+            // buyurtma ham kechikkan hisoblanadi.
+            let mut on_time = 0usize;
+            let mut delays: Vec<i64> = Vec::new();
+            for p in &mine {
+                let late = if p.fully_delivered() {
+                    false
+                } else {
+                    p.delivery_date < today
+                };
+                if late {
+                    delays.push((today - p.delivery_date).num_days());
+                } else {
+                    on_time += 1;
+                }
+            }
+            SupplierLine {
+                orders: mine.len(),
+                amount: mine.iter().map(|p| p.amount()).sum(),
+                on_time_pct: if mine.is_empty() {
+                    0.0
+                } else {
+                    on_time as f64 / mine.len() as f64 * 100.0
+                },
+                avg_delay: if delays.is_empty() {
+                    0.0
+                } else {
+                    delays.iter().sum::<i64>() as f64 / delays.len() as f64
+                },
+                last_order: mine.iter().map(|p| p.date).max(),
+                open_orders: mine.iter().filter(|p| !p.fully_delivered()).count(),
+                supplier: name,
+            }
+        })
+        .collect()
+}
+
+/// Bitta tijorat taklifining bahosi (TZ X.11–12).
+#[derive(Debug, Clone)]
+pub struct QuoteLine {
+    pub quote_id: i64,
+    pub amount: f64,
+    /// Eng arzon taklifdan qancha qimmat, foizda. Eng arzonida 0.
+    pub over_best_pct: f64,
+    /// Eng arzon taklif.
+    pub cheapest: bool,
+    /// Eng tez yetkazadigan taklif.
+    pub fastest: bool,
+    /// Amal qilish muddati o'tgan.
+    pub expired: bool,
+}
+
+/// Takliflarni ariza kesimida solishtiradi.
+///
+/// «Eng yaxshi» deb bitta taklif tanlanmaydi: eng arzoni va eng tezi alohida
+/// belgilanadi, qaror odamniki bo'lib qoladi — muddat va narx orasidagi
+/// muvozanatni faqat loyihani biladigan odam tanlay oladi.
+pub fn quote_lines(quotes: &[Quote], today: NaiveDate) -> Vec<QuoteLine> {
+    let mut out: Vec<QuoteLine> = quotes
+        .iter()
+        .map(|q| QuoteLine {
+            quote_id: q.id,
+            amount: q.amount(),
+            over_best_pct: 0.0,
+            cheapest: false,
+            fastest: false,
+            expired: q.valid_until.is_some_and(|d| d < today),
+        })
+        .collect();
+
+    let mut groups: Vec<Option<i64>> = quotes.iter().map(|q| q.request_id).collect();
+    groups.sort();
+    groups.dedup();
+    for g in groups {
+        let idx: Vec<usize> = quotes
+            .iter()
+            .enumerate()
+            .filter(|(_, q)| q.request_id == g)
+            .map(|(i, _)| i)
+            .collect();
+        let best = idx
+            .iter()
+            .filter(|i| !out[**i].expired)
+            .map(|i| out[*i].amount)
+            .filter(|a| *a > 0.0)
+            .fold(f64::INFINITY, f64::min);
+        let quick = idx
+            .iter()
+            .filter(|i| !out[**i].expired)
+            .map(|i| quotes[*i].delivery_days)
+            .min();
+        for i in idx {
+            if out[i].expired {
+                continue;
+            }
+            if best.is_finite() && best > 0.0 {
+                out[i].over_best_pct = (out[i].amount - best) / best * 100.0;
+                out[i].cheapest = (out[i].amount - best).abs() < 0.01;
+            }
+            out[i].fastest = quick.is_some_and(|d| quotes[i].delivery_days == d);
+        }
+    }
+    out
+}
+
+/// Xarid narxi katalog narxidan keskin farq qilsa — belgilanadi (TZ X.13–14).
+///
+/// Farq har doim ham xato emas: bozor narxi o'zgargan bo'lishi mumkin.
+/// Shuning uchun bu taqiq emas, e'tiborni tortadigan belgi.
+pub fn price_anomaly(price: f64, catalog: f64) -> Option<f64> {
+    if price <= 0.0 || catalog <= 0.0 {
+        return None;
+    }
+    let pct = (price - catalog) / catalog * 100.0;
+    (pct.abs() >= PRICE_ANOMALY_PCT).then_some(pct)
+}
+
+/// Bo'lim bo'yicha xarid byudjeti holati (TZ X.34–35).
+#[derive(Debug, Clone)]
+pub struct BudgetLine {
+    pub section: Section,
+    pub planned: f64,
+    /// Buyurtma qilingan summa (barcha xaridlar).
+    pub ordered: f64,
+    /// Yetkazilgan qismning summasi.
+    pub delivered: f64,
+    /// Rejadan qolgan. Manfiy — byudjet oshib ketgan.
+    pub left: f64,
+    pub used_pct: f64,
+    pub over: bool,
+}
+
+/// Byudjet va haqiqiy xaridlar. Byudjeti belgilanmagan bo'lim ham chiqadi —
+/// unda reja nol bo'lib, sarflangani ko'rinib turadi.
+pub fn budget_lines(budgets: &[PurchaseBudget], purchases: &[Purchase]) -> Vec<BudgetLine> {
+    let mut sections: Vec<Section> = budgets.iter().map(|b| b.section).collect();
+    sections.extend(purchases.iter().map(|p| p.section));
+    sections.sort_by_key(|s| s.code());
+    sections.dedup();
+
+    sections
+        .into_iter()
+        .map(|section| {
+            let planned: f64 = budgets
+                .iter()
+                .filter(|b| b.section == section)
+                .map(|b| b.planned)
+                .sum();
+            let mine: Vec<&Purchase> = purchases.iter().filter(|p| p.section == section).collect();
+            let ordered: f64 = mine.iter().map(|p| p.amount()).sum();
+            let delivered: f64 = mine.iter().map(|p| p.delivered_qty * p.price).sum();
+            BudgetLine {
+                section,
+                planned,
+                ordered,
+                delivered,
+                left: planned - ordered,
+                used_pct: if planned > 0.0 {
+                    ordered / planned * 100.0
+                } else {
+                    0.0
+                },
+                over: planned > 0.0 && ordered > planned + 0.01,
+            }
+        })
+        .collect()
+}
+
 // ================= IV. Ijro hujjatlari =================
 
 /// Ish uchun talab qilinadigan bitta hujjat.

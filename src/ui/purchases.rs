@@ -8,7 +8,10 @@ use super::materials::{material_label, trim_num};
 use super::requests::request_label;
 use super::warehouse::{cell_l, cell_r};
 use super::*;
-use crate::domain::{MoveKind, Purchase, PurchaseStatus, RequestStatus, StockMove};
+use crate::domain::{
+    MoveKind, Purchase, PurchaseBudget, PurchaseStatus, Quote, RequestStatus, StockMove, Supplier,
+};
+use crate::model::Section;
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let Some(pid) = app.current else {
@@ -56,17 +59,41 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     kpi_row(ui, app);
     ui.add_space(10.0);
 
-    if app.purchases.is_empty() {
-        ui.add_space(50.0);
-        ui.vertical_centered(|ui| {
-            ui.label(
-                RichText::new(t("purchases_empty"))
-                    .color(theme::muted())
-                    .size(15.0),
-            );
-        });
-    } else {
-        table(ui, app);
+    let tab_key = egui::Id::new("pu_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in [
+            (0u8, t("pu_tab_orders")),
+            (1, t("pu_tab_quotes")),
+            (2, t("pu_tab_suppliers")),
+            (3, t("pu_tab_budget")),
+        ] {
+            if ui.selectable_label(tab == i, label).clicked() {
+                tab = i;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(8.0);
+
+    match tab {
+        1 => quotes_tab(ui, app, pid),
+        2 => suppliers_tab(ui, app, pid),
+        3 => budget_tab(ui, app, pid),
+        _ => {
+            if app.purchases.is_empty() {
+                ui.add_space(50.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        RichText::new(t("purchases_empty"))
+                            .color(theme::muted())
+                            .size(15.0),
+                    );
+                });
+            } else {
+                table(ui, app);
+            }
+        }
     }
 
     if add {
@@ -102,6 +129,14 @@ fn new_purchase(app: &App, pid: i64, number: String, request_id: Option<i64>) ->
         currency: app.settings.default_currency.clone(),
         delivery_date: app.today + chrono::Duration::days(7),
         status: PurchaseStatus::Draft,
+        delivered_qty: 0.0,
+        // Bo'lim arizadagi materialdan olinadi — qo'lda tanlash ham mumkin.
+        section: request_id
+            .and_then(|id| app.requests.iter().find(|q| q.id == id))
+            .and_then(|q| q.material_id)
+            .and_then(|m| app.materials.iter().find(|x| x.id == m))
+            .map(|m| m.section)
+            .unwrap_or(Section::None),
         note: String::new(),
     }
 }
@@ -159,12 +194,26 @@ fn unposted(app: &App) -> Vec<&Purchase> {
     app.purchases
         .iter()
         .filter(|p| {
-            matches!(p.status, PurchaseStatus::Delivered | PurchaseStatus::Closed)
-                && p.qty > 0.0
+            // Qisman yetkazilgan buyurtma ham kirim qilinadi (TZ X.30):
+            // kelgan qismi omborda turishi kerak, qolgani yo'lda qoladi.
+            let arrived = matches!(p.status, PurchaseStatus::Delivered | PurchaseStatus::Closed)
+                || p.delivered_qty > 0.0;
+            arrived
+                && posted_qty(p) > 0.0
                 && material_of(app, p).is_some()
                 && !app.stock_moves.iter().any(|m| m.document == p.number)
         })
         .collect()
+}
+
+/// Omborga qancha kirim qilinadi: kelgani ko'rsatilgan bo'lsa — o'sha,
+/// aks holda buyurtma miqdori to'liq kelgan deb olinadi.
+fn posted_qty(p: &Purchase) -> f64 {
+    if p.delivered_qty > 0.0 {
+        p.delivered_qty
+    } else {
+        p.qty
+    }
 }
 
 /// Xarid qaysi materialga tegishli — arizadagi material orqali aniqlanadi.
@@ -179,7 +228,7 @@ fn post_to_stock(app: &App, pid: i64) -> usize {
         .filter_map(|p| {
             Some((
                 material_of(app, p)?,
-                p.qty,
+                posted_qty(p),
                 p.price,
                 p.delivery_date,
                 p.number.clone(),
@@ -289,7 +338,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("purchases_grid")
-                .num_columns(13)
+                .num_columns(16)
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -298,9 +347,12 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                     head_l(ui, 180.0, t("col_supplier"));
                     head_l(ui, 200.0, t("col_item"));
                     head_l(ui, 190.0, t("col_request"));
+                    head_l(ui, 90.0, t("col_section"));
                     head_r(ui, 80.0, t("col_qty"));
+                    head_r(ui, 90.0, t("col_delivered"));
                     head_l(ui, 60.0, t("col_unit"));
                     head_r(ui, 110.0, t("col_price"));
+                    head_l(ui, 14.0, "");
                     head_r(ui, 130.0, t("col_sum"));
                     head_l(ui, 110.0, t("col_delivery"));
                     head_l(ui, 120.0, t("col_status"));
@@ -349,23 +401,59 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                                 }
                             });
 
+                        // Bo'lim — byudjet nazorati shu kesimda yuritiladi.
+                        egui::ComboBox::from_id_salt(("pu_sec", p.id))
+                            .selected_text(RichText::new(p.section.code()).size(11.5))
+                            .width(90.0)
+                            .show_ui(ui, |ui| {
+                                for sec in Section::ALL {
+                                    changed |= ui
+                                        .selectable_value(&mut p.section, sec, sec.label())
+                                        .changed();
+                                }
+                            });
                         changed |= ui
                             .add_sized(
                                 [80.0, 22.0],
                                 egui::DragValue::new(&mut p.qty).speed(1.0).range(0.0..=1e9),
                             )
                             .changed();
+                        // Kelgan miqdor (TZ X.30): qisman yetkazish oddiy holat.
+                        let resp = ui.add_sized(
+                            [90.0, 22.0],
+                            egui::DragValue::new(&mut p.delivered_qty)
+                                .speed(1.0)
+                                .range(0.0..=1e9),
+                        );
+                        changed |= resp.changed();
+                        if p.partial() {
+                            resp.on_hover_text(format!(
+                                "{} {}",
+                                t("purchase_partial"),
+                                trim_num(p.remaining())
+                            ));
+                        }
                         changed |= ui
                             .add_sized([60.0, 22.0], egui::TextEdit::singleline(&mut p.unit))
                             .changed();
-                        changed |= ui
-                            .add_sized(
-                                [110.0, 22.0],
-                                egui::DragValue::new(&mut p.price)
-                                    .speed(100.0)
-                                    .range(0.0..=1e12),
-                            )
-                            .changed();
+                        let resp = ui.add_sized(
+                            [110.0, 22.0],
+                            egui::DragValue::new(&mut p.price)
+                                .speed(100.0)
+                                .range(0.0..=1e12),
+                        );
+                        changed |= resp.changed();
+                        // Narx katalogdagidan keskin farq qilsa — e'tibor tortamiz
+                        // (TZ X.13). Bu taqiq emas: bozor narxi o'zgargan bo'lishi
+                        // mumkin, lekin xato ham shu yerda ko'rinadi.
+                        if let Some(pct) = catalog_price(app, &p)
+                            .and_then(|c| crate::checks::price_anomaly(p.price, c))
+                        {
+                            resp.on_hover_text(format!("{} {pct:+.0}%", t("price_anomaly")));
+                            ui.label(RichText::new("!").color(theme::warn()).strong());
+                        } else {
+                            ui.label("");
+                        }
                         cell_r(ui, 130.0, RichText::new(money(p.amount())).size(12.5));
 
                         ui.horizontal(|ui| {
@@ -464,6 +552,705 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     if let Some(id) = removed {
         app.db.del("purchase", id);
         app.reload_modules();
+    }
+}
+
+/// Xaridning katalogdagi narxi — narx anomaliyasini shunga solishtiramiz.
+fn catalog_price(app: &App, p: &Purchase) -> Option<f64> {
+    let m = material_of(app, p)?;
+    app.materials
+        .iter()
+        .find(|x| x.id == m)
+        .map(|x| x.price)
+        .filter(|v| *v > 0.0)
+}
+
+// ================================================================ Takliflar
+
+/// Tijorat takliflari — KP (TZ X.9–12, 15).
+fn quotes_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_quote")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("quotes_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if app.quotes.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("quotes_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let lines = crate::checks::quote_lines(&app.quotes, app.today);
+        let mut edited: Option<Quote> = None;
+        let mut removed: Option<i64> = None;
+        let mut chosen: Option<i64> = None;
+        let mut to_purchase: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("pu_quotes")
+                    .num_columns(12)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 170.0, t("col_request"));
+                        head_l(ui, 180.0, t("col_supplier"));
+                        head_l(ui, 190.0, t("col_item"));
+                        head_r(ui, 80.0, t("col_qty"));
+                        head_r(ui, 120.0, t("col_price"));
+                        head_r(ui, 130.0, t("col_sum"));
+                        head_r(ui, 80.0, t("col_over_best"));
+                        head_r(ui, 90.0, t("col_delivery_days"));
+                        head_l(ui, 110.0, t("col_valid_until"));
+                        head_l(ui, 120.0, t("col_verdict"));
+                        head_l(ui, 150.0, "");
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.quotes {
+                            let mut q = src.clone();
+                            let mut changed = false;
+                            let l = lines.iter().find(|l| l.quote_id == q.id);
+
+                            egui::ComboBox::from_id_salt(("q_req", q.id))
+                                .selected_text(super::issues::truncate(
+                                    &match q.request_id {
+                                        Some(id) => request_label(app, id),
+                                        None => t("dash").to_string(),
+                                    },
+                                    22,
+                                ))
+                                .width(170.0)
+                                .show_ui(ui, |ui| {
+                                    changed |= ui
+                                        .selectable_value(&mut q.request_id, None, t("dash"))
+                                        .changed();
+                                    for r in &app.requests {
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut q.request_id,
+                                                Some(r.id),
+                                                request_label(app, r.id),
+                                            )
+                                            .changed();
+                                    }
+                                });
+                            changed |= ui
+                                .add_sized(
+                                    [180.0, 22.0],
+                                    egui::TextEdit::singleline(&mut q.supplier),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add_sized([190.0, 22.0], egui::TextEdit::singleline(&mut q.title))
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [80.0, 22.0],
+                                    egui::DragValue::new(&mut q.qty).speed(1.0).range(0.0..=1e9),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [120.0, 22.0],
+                                    egui::DragValue::new(&mut q.price)
+                                        .speed(100.0)
+                                        .range(0.0..=1e12),
+                                )
+                                .changed();
+                            cell_r(ui, 130.0, RichText::new(money(q.amount())).size(12.5));
+
+                            // Eng arzondan farq: nol bo'lsa — shu eng arzoni.
+                            let over = l.map(|l| l.over_best_pct).unwrap_or(0.0);
+                            cell_r(
+                                ui,
+                                80.0,
+                                RichText::new(if over > 0.01 {
+                                    format!("+{over:.0}%")
+                                } else {
+                                    t("dash").to_string()
+                                })
+                                .size(11.5)
+                                .color(if over > 10.0 {
+                                    theme::danger()
+                                } else if over > 0.01 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                }),
+                            );
+                            changed |= ui
+                                .add_sized(
+                                    [90.0, 22.0],
+                                    egui::DragValue::new(&mut q.delivery_days)
+                                        .speed(1.0)
+                                        .range(0..=365),
+                                )
+                                .changed();
+
+                            ui.horizontal(|ui| {
+                                let mut has = q.valid_until.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    q.valid_until =
+                                        has.then(|| app.today + chrono::Duration::days(14));
+                                    changed = true;
+                                }
+                                if let Some(mut d) = q.valid_until {
+                                    if super::passport::date_edit(
+                                        ui,
+                                        &format!("qv{}", q.id),
+                                        &mut d,
+                                    ) {
+                                        q.valid_until = Some(d);
+                                        changed = true;
+                                    }
+                                }
+                            });
+
+                            // Xulosa: eng arzoni, eng tezi yoki muddati o'tgani.
+                            let (verdict, color) = match l {
+                                Some(l) if l.expired => (t("quote_expired"), theme::muted()),
+                                Some(l) if l.cheapest && l.fastest => {
+                                    (t("quote_best"), theme::ok())
+                                }
+                                Some(l) if l.cheapest => (t("quote_cheapest"), theme::ok()),
+                                Some(l) if l.fastest => (t("quote_fastest"), theme::accent()),
+                                _ => ("", theme::muted()),
+                            };
+                            cell_l(ui, 120.0, RichText::new(verdict).size(11.0).color(color));
+
+                            ui.horizontal(|ui| {
+                                if q.chosen {
+                                    ui.label(
+                                        RichText::new(t("quote_chosen"))
+                                            .size(11.0)
+                                            .color(theme::ok())
+                                            .strong(),
+                                    );
+                                    if ui.small_button(t("quote_to_purchase")).clicked() {
+                                        to_purchase = Some(q.id);
+                                    }
+                                } else if ui
+                                    .small_button(t("quote_choose"))
+                                    .on_hover_text(t("quote_choose_hint"))
+                                    .clicked()
+                                {
+                                    chosen = Some(q.id);
+                                }
+                            });
+
+                            if ui
+                                .small_button(RichText::new("x").color(theme::danger()))
+                                .clicked()
+                            {
+                                removed = Some(q.id);
+                            }
+                            ui.end_row();
+                            if changed {
+                                edited = Some(q);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(q) = edited {
+            app.db.update_quote(&q);
+            app.reload_modules();
+        }
+        if let Some(id) = chosen {
+            app.db.choose_quote(id);
+            app.reload_modules();
+        }
+        if let Some(id) = removed {
+            app.db.del("quote", id);
+            app.reload_modules();
+        }
+        if let Some(id) = to_purchase {
+            if let Some(q) = app.quotes.iter().find(|q| q.id == id).cloned() {
+                let n = app.purchases.len() + 1;
+                let mut p = new_purchase(app, pid, format!("X-{n:03}"), q.request_id);
+                p.supplier = q.supplier.clone();
+                p.title = q.title.clone();
+                p.qty = q.qty;
+                p.unit = q.unit.clone();
+                p.price = q.price;
+                p.currency = q.currency.clone();
+                p.delivery_date = app.today + chrono::Duration::days(q.delivery_days.max(0));
+                p.status = PurchaseStatus::Ordered;
+                app.db.insert_purchase(&p);
+                app.reload_modules();
+                app.notify(t("quote_purchase_created").to_string());
+            }
+        }
+    }
+
+    if add {
+        app.db.insert_quote(&Quote {
+            id: 0,
+            project_id: pid,
+            request_id: None,
+            supplier: String::new(),
+            title: String::new(),
+            qty: 0.0,
+            unit: String::new(),
+            price: 0.0,
+            currency: app.settings.default_currency.clone(),
+            delivery_days: 7,
+            valid_until: Some(app.today + chrono::Duration::days(14)),
+            chosen: false,
+            date: app.today,
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+// ================================================== Yetkazib beruvchilar
+
+/// Yetkazib beruvchilar va ularning xaridlardan hisoblangan tarixi (TZ X.7–8, 40).
+fn suppliers_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let lines = crate::checks::supplier_lines(&app.purchases, app.today);
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_supplier")).clicked() {
+            add = true;
+        }
+        // Xaridlarda uchraydigan, lekin kartochkasi yo'q yetkazib beruvchilar.
+        let missing = lines
+            .iter()
+            .filter(|l| !app.suppliers.iter().any(|s| s.name.trim() == l.supplier))
+            .count();
+        if missing > 0 && ui.button(t("suppliers_from_purchases")).clicked() {
+            for l in &lines {
+                if app.suppliers.iter().any(|s| s.name.trim() == l.supplier) {
+                    continue;
+                }
+                app.db.insert_supplier(&Supplier {
+                    id: 0,
+                    project_id: pid,
+                    name: l.supplier.clone(),
+                    inn: String::new(),
+                    contact: String::new(),
+                    phone: String::new(),
+                    blocked: false,
+                    note: String::new(),
+                });
+            }
+            app.reload_modules();
+        }
+        ui.label(
+            RichText::new(t("suppliers_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if app.suppliers.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("suppliers_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    let mut edited: Option<Supplier> = None;
+    let mut removed: Option<i64> = None;
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("pu_suppliers")
+                .num_columns(11)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 220.0, t("col_supplier"));
+                    head_l(ui, 110.0, t("col_inn"));
+                    head_l(ui, 150.0, t("col_contact"));
+                    head_l(ui, 150.0, t("col_phone"));
+                    head_r(ui, 80.0, t("col_orders"));
+                    head_r(ui, 150.0, t("col_sum"));
+                    head_r(ui, 90.0, t("col_on_time"));
+                    head_r(ui, 100.0, t("col_avg_delay"));
+                    head_l(ui, 110.0, t("col_last_order"));
+                    head_l(ui, 90.0, t("col_blocked"));
+                    head_l(ui, 24.0, "");
+                    ui.end_row();
+
+                    for src in &app.suppliers {
+                        let mut x = src.clone();
+                        let mut changed = false;
+                        let l = lines.iter().find(|l| l.supplier == x.name.trim());
+
+                        changed |= ui
+                            .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut x.name))
+                            .changed();
+                        changed |= ui
+                            .add_sized([110.0, 22.0], egui::TextEdit::singleline(&mut x.inn))
+                            .changed();
+                        changed |= ui
+                            .add_sized([150.0, 22.0], egui::TextEdit::singleline(&mut x.contact))
+                            .changed();
+                        changed |= ui
+                            .add_sized([150.0, 22.0], egui::TextEdit::singleline(&mut x.phone))
+                            .changed();
+
+                        // Jami buyurtma va shundan yopilmagani.
+                        let open = l.map(|l| l.open_orders).unwrap_or(0);
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(match l.map(|l| l.orders).unwrap_or(0) {
+                                0 => t("dash").to_string(),
+                                n if open > 0 => format!("{n} · {open}"),
+                                n => n.to_string(),
+                            })
+                            .size(12.0),
+                        )
+                        .on_hover_text(t("orders_open_hint"));
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(l.map(|l| l.amount).unwrap_or(0.0))).size(12.0),
+                        );
+                        // Muddatida yetkazish — asosiy ko'rsatkich.
+                        let on_time = l.map(|l| l.on_time_pct).unwrap_or(0.0);
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(if l.is_some_and(|l| l.orders > 0) {
+                                format!("{on_time:.0}%")
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(12.0)
+                            .color(
+                                if l.is_none_or(|l| l.orders == 0) {
+                                    theme::muted()
+                                } else if on_time >= 90.0 {
+                                    theme::ok()
+                                } else if on_time >= 60.0 {
+                                    theme::warn()
+                                } else {
+                                    theme::danger()
+                                },
+                            ),
+                        );
+                        let delay = l.map(|l| l.avg_delay).unwrap_or(0.0);
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(if delay > 0.0 {
+                                format!("{delay:.0} {}", t("days_short"))
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(11.5)
+                            .color(if delay > 0.0 {
+                                theme::danger()
+                            } else {
+                                theme::muted()
+                            }),
+                        );
+                        cell_l(
+                            ui,
+                            110.0,
+                            RichText::new(match l.and_then(|l| l.last_order) {
+                                Some(d) => d.format("%d.%m.%y").to_string(),
+                                None => t("dash").to_string(),
+                            })
+                            .size(11.5)
+                            .monospace()
+                            .color(theme::muted()),
+                        );
+                        ui.horizontal(|ui| {
+                            changed |= ui.checkbox(&mut x.blocked, "").changed();
+                            if x.blocked {
+                                ui.label(
+                                    RichText::new(t("supplier_blocked"))
+                                        .size(11.0)
+                                        .color(theme::danger()),
+                                );
+                            }
+                        });
+                        if ui
+                            .small_button(RichText::new("x").color(theme::danger()))
+                            .clicked()
+                        {
+                            removed = Some(x.id);
+                        }
+                        ui.end_row();
+                        if changed {
+                            edited = Some(x);
+                        }
+                    }
+                });
+        });
+
+    if let Some(x) = edited {
+        app.db.update_supplier(&x);
+        app.reload_modules();
+    }
+    if let Some(id) = removed {
+        app.db.del("supplier", id);
+        app.reload_modules();
+    }
+    if add {
+        app.db.insert_supplier(&Supplier {
+            id: 0,
+            project_id: pid,
+            name: t("supplier_new_name").to_string(),
+            inn: String::new(),
+            contact: String::new(),
+            phone: String::new(),
+            blocked: false,
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+// ================================================================ Byudjet
+
+/// Bo'limlar bo'yicha xarid byudjeti (TZ X.34–35).
+fn budget_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let lines = crate::checks::budget_lines(&app.purchase_budgets, &app.purchases);
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_budget")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("budget_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if lines.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("budget_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    let planned: f64 = lines.iter().map(|l| l.planned).sum();
+    let ordered: f64 = lines.iter().map(|l| l.ordered).sum();
+    let over = lines.iter().filter(|l| l.over).count();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_budget_planned"),
+                money(planned),
+                t("kpi_budget_planned_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_budget_ordered"),
+                money(ordered),
+                t("kpi_budget_ordered_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_budget_left"),
+                money(planned - ordered),
+                t("kpi_budget_left_hint"),
+                if ordered > planned {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("kpi_budget_over"),
+                over.to_string(),
+                t("kpi_budget_over_hint"),
+                if over > 0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+
+    let mut edited: Option<PurchaseBudget> = None;
+    let mut removed: Option<i64> = None;
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("pu_budget")
+                .num_columns(8)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 200.0, t("col_section"));
+                    head_r(ui, 150.0, t("col_planned"));
+                    head_r(ui, 150.0, t("col_ordered"));
+                    head_r(ui, 150.0, t("col_delivered"));
+                    head_r(ui, 150.0, t("col_left"));
+                    head_l(ui, 160.0, "");
+                    head_r(ui, 70.0, "%");
+                    head_l(ui, 24.0, "");
+                    ui.end_row();
+
+                    for l in &lines {
+                        let b = app
+                            .purchase_budgets
+                            .iter()
+                            .find(|b| b.section == l.section)
+                            .cloned();
+
+                        cell_l(ui, 200.0, RichText::new(l.section.label()).size(12.0));
+
+                        // Reja tahrirlanadi; byudjeti yo'q bo'limda faqat ko'rinadi.
+                        let mut budget_id = None;
+                        match b {
+                            Some(mut b) => {
+                                budget_id = Some(b.id);
+                                if ui
+                                    .add_sized(
+                                        [150.0, 22.0],
+                                        egui::DragValue::new(&mut b.planned)
+                                            .speed(100_000.0)
+                                            .range(0.0..=1e15),
+                                    )
+                                    .changed()
+                                {
+                                    edited = Some(b.clone());
+                                }
+                            }
+                            None => {
+                                cell_r(
+                                    ui,
+                                    150.0,
+                                    RichText::new(t("dash")).size(12.0).color(theme::muted()),
+                                );
+                            }
+                        }
+                        cell_r(ui, 150.0, RichText::new(money(l.ordered)).size(12.0));
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(l.delivered))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        let color = if l.over {
+                            theme::danger()
+                        } else if l.used_pct > 90.0 {
+                            theme::warn()
+                        } else {
+                            theme::ok()
+                        };
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(if l.planned > 0.0 {
+                                money(l.left)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(12.5)
+                            .color(color),
+                        );
+                        // Foizli chiziq: byudjet qanchalik ishlatilgani.
+                        bar(ui, 160.0, l.used_pct / 100.0, color);
+                        cell_r(
+                            ui,
+                            70.0,
+                            RichText::new(if l.planned > 0.0 {
+                                format!("{:.0}%", l.used_pct)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(11.5)
+                            .color(color),
+                        );
+                        match budget_id {
+                            Some(id) => {
+                                if ui
+                                    .small_button(RichText::new("x").color(theme::danger()))
+                                    .clicked()
+                                {
+                                    removed = Some(id);
+                                }
+                            }
+                            None => {
+                                ui.label("");
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
+
+    if let Some(b) = edited {
+        app.db.update_purchase_budget(&b);
+        app.reload_modules();
+    }
+    if let Some(id) = removed {
+        app.db.del("purchase_budget", id);
+        app.reload_modules();
+    }
+    if add {
+        // Byudjeti yo'q birinchi bo'lim uchun qator ochamiz.
+        let free = Section::ALL
+            .into_iter()
+            .find(|s| !app.purchase_budgets.iter().any(|b| b.section == *s));
+        match free {
+            Some(section) => {
+                app.db.insert_purchase_budget(&PurchaseBudget {
+                    id: 0,
+                    project_id: pid,
+                    section,
+                    planned: 0.0,
+                    note: String::new(),
+                });
+                app.reload_modules();
+            }
+            None => app.notify(t("budget_all_sections").to_string()),
+        }
+    }
+}
+
+/// Foiz chizig'i: to'ldirilgan ulush `v` (0..1 dan oshsa to'liq bo'ladi).
+fn bar(ui: &mut egui::Ui, width: f32, v: f64, color: egui::Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 10.0), egui::Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, 3.0, theme::track());
+    let w = (v.clamp(0.0, 1.0) as f32) * rect.width();
+    if w > 0.5 {
+        let mut fill = rect;
+        fill.set_width(w);
+        p.rect_filled(fill, 3.0, color);
     }
 }
 
