@@ -28,12 +28,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XI. Ombor | 48 | 25 | 6 | 17 |
 | XII. Materiallar | 41 | 12 | 6 | 23 |
 | XIII. Tabel | 44 | 15 | 10 | 19 |
-| XIV. Sifat | 41 | 8 | 6 | 27 |
+| XIV. Sifat | 41 | 18 | 12 | 11 |
 | XV. Xavfsizlik | 41 | 7 | 6 | 28 |
 | XVI. Mashinalar | 50 | 10 | 7 | 33 |
 | XVII. AI analitika | 51 | 12 | 9 | 30 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **192** | **124** | **366** |
+| **Jami** | **682** | **202** | **130** | **350** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -576,12 +576,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 2. Bosh ekran
 - [x] 3. **Uch daraja nazorat** — *kirish, operatsion, qabul*
 - [x] 4. Materiallarning kirish nazorati
-- [ ] 5. AI material tekshiruvi
+- [~] 5. AI material tekshiruvi — *kirish nazorati chek-listi*
 - [ ] 6. Brakka chiqarilgan materialni ishlatishni taqiqlash
 - [x] 7. Operatsion nazorat
-- [ ] 8. AI avtomatik chek-list yaratishi
-- [~] 9. Yashirin ishlar nazorati
-- [ ] 10. Keyingi bosqichni bloklash
+- [x] 8. Chek-listlar — *namuna, normativ havolasi, tekshiruvga ko'chiriladi*
+- [x] 9. Yashirin ishlar nazorati — *chek-list bandi sifatida*
+- [x] 10. Keyingi bosqichni bloklash — *ochiq nuqson ishni yopishga qo'ymaydi*
 - [~] 11. Sifat fotofiksatsiyasi
 - [ ] 🔒 12. Fotolarni AI tahlili
 - [ ] 13. Geometriya nazorati
@@ -601,12 +601,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 27. Texnologik ketma-ketlik nazorati
 - [ ] 28. Pudratchilar bo'yicha sifat nazorati
 - [ ] 29. Pudratchilar sifat reytingi
-- [ ] 30. Brak sabablarini tahlil qilish
-- [ ] 31. Takrorlanuvchi nuqsonlar
+- [x] 30. Brak sabablarini tahlil qilish
+- [x] 31. Takrorlanuvchi nuqsonlar — *bir xil sabab guruhlanadi*
 - [ ] 32. Prediktiv sifat nazorati
-- [ ] 33. **Quality Score**
-- [~] 34. Bosqich tayyorligini nazorat qilish
-- [ ] 35. Bosqichni yopishni taqiqlash
+- [x] 33. **Quality Score** — *0-100, ochiq va muddati o'tgan nuqsonlar jarimasi*
+- [x] 34. Bosqich tayyorligini nazorat qilish
+- [x] 35. Bosqichni yopishni taqiqlash — *ogohlantirish, taqiq emas*
 - [x] 36. Kunlik sifat nazorati
 - [ ] 37. Haftalik hisobot
 - [~] 38. AI-yordamchi
@@ -824,7 +824,7 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 3. ~~Tabel: brigadalar, smenalar, yo'qliklar, bo'sh turish, tannarx~~ (XIII.8–31) — **bajarildi**
 4. ~~Xaridlar: KP, yetkazib beruvchilar, qisman yetkazish, byudjet~~ (X.7–16, 30, 34–35, 40) — **bajarildi**
 5. ~~Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi~~ (IX.8–10, 31–32) — **bajarildi**
-6. **Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili** (XIV.8, 10, 30–35)
+6. ~~Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili~~ (XIV.8–10, 30–35) — **bajarildi**
 7. **Xavfsizlik: naryad-dopusk, SIZ, ruxsatlar matritsasi, Safety Score** (XV.4–12, 33)
 8. **Mashinalar: yo'l varaqalari, TX rejasi, tannarx, foydalanish koeffitsiyenti** (XVI.19–27, 34–38)
 9. **Analitika: pul oqimi, kassa uzilishi, Daily Briefing, drill-down** (XVII.30–31, 37–38, 48)

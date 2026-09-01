@@ -1997,6 +1997,211 @@ pub fn request_budget_left(
     (line.planned > 0.0).then(|| line.left - request_amount(request, materials))
 }
 
+// ================= XIV. Sifat: ball, bloklash, brak tahlili =================
+
+/// Ish shu foizdan oshgan bo'lsa «yopilmoqda» deb hisoblaymiz (TZ XIV.35).
+pub const CLOSING_PROGRESS: f64 = 95.0;
+
+/// Ishni yopishga to'sqinlik qiladigan sabab (TZ XIV.10, 35).
+#[derive(Debug, Clone)]
+pub struct TaskBlock {
+    pub task_id: i64,
+    /// Yopilmagan nuqsonlar soni.
+    pub open_defects: usize,
+    /// Shundan muddati o'tganlari.
+    pub overdue: usize,
+    /// To'ldirilmagan nazorat nuqtalari.
+    pub pending_points: usize,
+    /// Qabul nazorati umuman o'tkazilmagan.
+    pub no_acceptance: bool,
+}
+
+impl TaskBlock {
+    /// Ishni yopish mumkin emas.
+    pub fn blocked(&self) -> bool {
+        self.open_defects > 0 || self.pending_points > 0 || self.no_acceptance
+    }
+
+    /// Jiddiy to'siq: nuqson bartaraf etilmagan.
+    ///
+    /// Qabul nazorati yozilmagani ham to'siq, lekin u boshqa xil muammo —
+    /// hujjat yetishmaydi, ish esa buzuq emas. Ikkalasini bir xil ko'rsatish
+    /// haqiqiy nuqsonni ko'zdan yashiradi.
+    pub fn severe(&self) -> bool {
+        self.open_defects > 0
+    }
+}
+
+/// TZ XIV.10, 35: yopilishga yaqin ishlarni sifat bo'yicha tekshiradi.
+///
+/// Bloklash — taqiq emas, ogohlantirish: dastur ishni yopishga ruxsat berishi
+/// yoki bermasligi tashkiliy qaror, lekin nima yopilmaganini aytib turishi
+/// shart. Aks holda nuqson bosqich ostida ko'milib qoladi.
+pub fn task_blocks(
+    tasks: &[Task],
+    quality: &[QualityCheck],
+    points: &[CheckPoint],
+    today: NaiveDate,
+) -> Vec<TaskBlock> {
+    tasks
+        .iter()
+        .filter(|t| t.progress >= CLOSING_PROGRESS)
+        .map(|t| {
+            let mine: Vec<&QualityCheck> =
+                quality.iter().filter(|q| q.task_id == Some(t.id)).collect();
+            let open: Vec<&&QualityCheck> = mine.iter().filter(|q| q.open_defect()).collect();
+            let ids: Vec<i64> = mine.iter().map(|q| q.id).collect();
+            TaskBlock {
+                task_id: t.id,
+                open_defects: open.len(),
+                overdue: open
+                    .iter()
+                    .filter(|q| q.deadline.is_some_and(|d| d < today))
+                    .count(),
+                pending_points: points
+                    .iter()
+                    .filter(|p| ids.contains(&p.check_id))
+                    .filter(|p| p.result == PointResult::Pending)
+                    .count(),
+                no_acceptance: !mine.iter().any(|q| q.kind == QualityKind::Acceptance),
+            }
+        })
+        .filter(|b| b.blocked())
+        .collect::<Vec<_>>()
+        .into_iter()
+        // Haqiqiy nuqsonlar yuqorida: ular birinchi navbatdagi ish.
+        .fold(Vec::new(), |mut acc, b| {
+            let pos = acc
+                .iter()
+                .position(|x: &TaskBlock| !x.severe() && b.severe())
+                .unwrap_or(acc.len());
+            acc.insert(pos, b);
+            acc
+        })
+}
+
+/// Takrorlanuvchi nuqson (TZ XIV.30–31).
+#[derive(Debug, Clone)]
+pub struct DefectGroup {
+    /// Nuqson matni — solishtirish uchun tartibga solingan holda.
+    pub defect: String,
+    pub count: usize,
+    /// Hali yopilmaganlari.
+    pub open: usize,
+    pub last: Option<NaiveDate>,
+    /// Qaysi ishlarda uchradi.
+    pub tasks: Vec<i64>,
+}
+
+/// Brak sabablarini guruhlaydi: bir xil nuqson necha marta takrorlangan.
+///
+/// Solishtirish uchun matn kichik harflarga o'tkaziladi va ortiqcha bo'shliq
+/// olib tashlanadi — «Beton kavakligi» va «beton  kavakligi» bitta sabab.
+pub fn defect_groups(quality: &[QualityCheck]) -> Vec<DefectGroup> {
+    let key = |s: &str| {
+        s.to_lowercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let mut keys: Vec<String> = quality
+        .iter()
+        .filter(|q| q.result != QualityResult::Pass)
+        .map(|q| key(&q.defect))
+        .filter(|s| !s.is_empty())
+        .collect();
+    keys.sort();
+    keys.dedup();
+
+    let mut out: Vec<DefectGroup> = keys
+        .into_iter()
+        .map(|k| {
+            let mine: Vec<&QualityCheck> = quality
+                .iter()
+                .filter(|q| q.result != QualityResult::Pass && key(&q.defect) == k)
+                .collect();
+            let mut tasks: Vec<i64> = mine.iter().filter_map(|q| q.task_id).collect();
+            tasks.sort_unstable();
+            tasks.dedup();
+            DefectGroup {
+                // Ko'rsatish uchun birinchi uchragan yozuvdagi matn olinadi.
+                defect: mine
+                    .first()
+                    .map(|q| q.defect.trim().to_string())
+                    .unwrap_or_else(|| k.clone()),
+                count: mine.len(),
+                open: mine.iter().filter(|q| q.open_defect()).count(),
+                last: mine.iter().map(|q| q.date).max(),
+                tasks,
+            }
+        })
+        .collect();
+    // Ko'p takrorlangani yuqorida.
+    out.sort_by(|a, b| b.count.cmp(&a.count).then(b.open.cmp(&a.open)));
+    out
+}
+
+/// Sifat balli (TZ XIV.33).
+#[derive(Debug, Clone)]
+pub struct QualityScore {
+    /// 0..100.
+    pub score: f64,
+    pub checks: usize,
+    pub passed: usize,
+    pub conditional: usize,
+    pub failed: usize,
+    /// Yopilmagan nuqsonlar.
+    pub open: usize,
+    /// Muddati o'tgan nuqsonlar.
+    pub overdue: usize,
+}
+
+/// TZ XIV.33: sifat balli — o'tgan tekshiruvlar ulushidan ochiq nuqsonlar
+/// jarimasi ayrilgan.
+///
+/// Shartli o'tgan tekshiruv yarim ball beradi: nuqson bor, lekin ish
+/// to'xtamagan. Yopilmagan har bir nuqson 2 ball, muddati o'tgani yana
+/// 3 ball oladi — vaqt o'tgani sari ball o'zi pasayadi va e'tibor tortadi.
+/// Tekshiruv umuman bo'lmasa ball qo'yilmaydi: nol tekshiruv «yaxshi» degani
+/// emas, shuning uchun bunday holda 100 emas, 0 qaytadi va `checks` nol bo'ladi.
+pub fn quality_score(quality: &[QualityCheck], today: NaiveDate) -> QualityScore {
+    let checks = quality.len();
+    let passed = quality
+        .iter()
+        .filter(|q| q.result == QualityResult::Pass)
+        .count();
+    let conditional = quality
+        .iter()
+        .filter(|q| q.result == QualityResult::Conditional)
+        .count();
+    let failed = quality
+        .iter()
+        .filter(|q| q.result == QualityResult::Fail)
+        .count();
+    let open = quality.iter().filter(|q| q.open_defect()).count();
+    let overdue = quality
+        .iter()
+        .filter(|q| q.open_defect() && q.deadline.is_some_and(|d| d < today))
+        .count();
+
+    let score = if checks == 0 {
+        0.0
+    } else {
+        let base = (passed as f64 + conditional as f64 * 0.5) / checks as f64 * 100.0;
+        (base - open as f64 * 2.0 - overdue as f64 * 3.0).clamp(0.0, 100.0)
+    };
+
+    QualityScore {
+        score,
+        checks,
+        passed,
+        conditional,
+        failed,
+        open,
+        overdue,
+    }
+}
+
 // ================= IV. Ijro hujjatlari =================
 
 /// Ish uchun talab qilinadigan bitta hujjat.

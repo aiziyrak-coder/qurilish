@@ -418,6 +418,12 @@ pub struct App {
     pub quotes: Vec<crate::domain::Quote>,
     /// Arizalarning kelishuv bosqichlari (TZ IX.8).
     pub approvals: Vec<crate::domain::Approval>,
+    /// Sifat chek-listlari va nazorat nuqtalari (TZ XIV.8).
+    pub checklists: Vec<crate::domain::Checklist>,
+    pub checklist_items: Vec<crate::domain::ChecklistItem>,
+    pub check_points: Vec<crate::domain::CheckPoint>,
+    /// Nazorat nuqtalari paneli ochilgan tekshiruv.
+    pub quality_open: Option<i64>,
     /// Kelishuv paneli ochilgan ariza.
     pub request_open: Option<i64>,
     pub purchase_budgets: Vec<crate::domain::PurchaseBudget>,
@@ -553,6 +559,10 @@ impl App {
             suppliers: Vec::new(),
             quotes: Vec::new(),
             approvals: Vec::new(),
+            checklists: Vec::new(),
+            checklist_items: Vec::new(),
+            check_points: Vec::new(),
+            quality_open: None,
             request_open: None,
             purchase_budgets: Vec::new(),
             warehouse_filter: None,
@@ -708,6 +718,10 @@ impl App {
         self.suppliers.clear();
         self.quotes.clear();
         self.approvals.clear();
+        self.checklists.clear();
+        self.checklist_items.clear();
+        self.check_points.clear();
+        self.quality_open = None;
         self.request_open = None;
         self.purchase_budgets.clear();
         self.warehouse_filter = None;
@@ -756,6 +770,9 @@ impl App {
         self.suppliers = self.db.suppliers(id);
         self.quotes = self.db.quotes(id);
         self.approvals = self.db.approvals(id);
+        self.checklists = self.db.checklists(id);
+        self.checklist_items = self.db.checklist_items(id);
+        self.check_points = self.db.check_points(id);
         self.purchase_budgets = self.db.purchase_budgets(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);
@@ -1273,6 +1290,8 @@ impl App {
                     result: QualityResult::parse(m.get("result").copied().unwrap_or("")),
                     defect: m.get("defect").copied().unwrap_or("").into(),
                     deadline: None,
+                    checklist_id: None,
+                    fixed_at: None,
                     note: String::new(),
                 });
                 added += 1;

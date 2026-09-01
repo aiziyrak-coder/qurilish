@@ -924,6 +924,63 @@ pub struct QualityCheck {
     pub result: QualityResult,
     pub defect: String,
     pub deadline: Option<NaiveDate>,
+    /// Qaysi chek-list bo'yicha tekshirildi (TZ XIV.8).
+    pub checklist_id: Option<i64>,
+    /// Nuqson bartaraf etilgan sana. Bo'sh — hali ochiq (TZ XIV.20, 35).
+    pub fixed_at: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl QualityCheck {
+    /// Yopilmagan nuqson: natija salbiy va bartaraf etilmagan.
+    pub fn open_defect(&self) -> bool {
+        self.result != QualityResult::Pass && self.fixed_at.is_none()
+    }
+}
+
+/// Chek-list namunasi (TZ XIV.8): bo'lim yoki ish turi uchun nazorat ro'yxati.
+#[derive(Debug, Clone)]
+pub struct Checklist {
+    pub id: i64,
+    pub project_id: i64,
+    pub name: String,
+    pub section: crate::model::Section,
+    pub kind: QualityKind,
+    pub note: String,
+}
+
+/// Chek-list bandi — namunadagi bitta nazorat nuqtasi.
+#[derive(Debug, Clone)]
+pub struct ChecklistItem {
+    pub id: i64,
+    pub checklist_id: i64,
+    pub pos: i64,
+    pub text: String,
+    /// Normativ havolasi: hujjat va band.
+    pub norm_doc: String,
+    pub norm_clause: String,
+}
+
+enum_kind!(PointResult {
+    Pending => "pending", "pt_pending";
+    Pass    => "pass",    "pt_pass";
+    Fail    => "pass_no", "pt_fail";
+    Na      => "na",      "pt_na";
+});
+
+/// Tekshiruvdagi nazorat nuqtasi.
+///
+/// Matn namunadan **ko'chirib olinadi**: namuna keyin o'zgarsa ham,
+/// o'tkazilgan tekshiruv qanday bo'lgan bo'lsa shundayligicha qoladi.
+#[derive(Debug, Clone)]
+pub struct CheckPoint {
+    pub id: i64,
+    pub check_id: i64,
+    pub pos: i64,
+    pub text: String,
+    pub norm_doc: String,
+    pub norm_clause: String,
+    pub result: PointResult,
     pub note: String,
 }
 

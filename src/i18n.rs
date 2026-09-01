@@ -2698,6 +2698,107 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_total_cost" => ("Jami tannarx", "Итого себестоимость"),
         "kpi_total_cost_hint" => ("ish haqi va material", "зарплата и материал"),
 
+        // ---------- XIV.8, 10, 30-35. Chek-listlar, ball, bloklash ----------
+        "ql_tab_checks" => ("Tekshiruvlar", "Проверки"),
+        "ql_tab_checklists" => ("Chek-listlar", "Чек-листы"),
+        "ql_tab_defects" => ("Brak tahlili", "Анализ брака"),
+        "ql_tab_blocks" => ("Bloklangan ishlar", "Заблокированные работы"),
+
+        "kpi_quality_score" => ("Sifat balli", "Балл качества"),
+        "kpi_quality_score_hint" => ("0-100, ochiq nuqsonlar hisobga olinadi", "0-100, с учётом открытых дефектов"),
+        "kpi_score_open" => ("ochiq nuqson", "открытых дефектов"),
+        "kpi_quality_blocked" => ("Bloklangan", "Заблокировано"),
+        "kpi_quality_blocked_hint" => ("ish yopilmaydi", "работ нельзя закрыть"),
+
+        "col_fixed" => ("Bartaraf etildi", "Устранено"),
+        "fixed_hint" => (
+            "Nuqson bartaraf etilgan sanani belgilang — ochiq nuqsonlar ballni pasaytiradi.",
+            "Отметьте дату устранения дефекта — открытые дефекты снижают балл.",
+        ),
+        "col_points" => ("Nazorat nuqtalari", "Точки контроля"),
+        "points_none" => ("chek-list yo'q", "чек-листа нет"),
+        "points_open_hint" => (
+            "Nazorat nuqtalarini ochish",
+            "Открыть точки контроля",
+        ),
+
+        // Nazorat nuqtalari paneli
+        "points_title" => ("Nazorat nuqtalari", "Точки контроля"),
+        "points_no_checklist" => (
+            "Bu bosqich uchun chek-list namunasi yo'q — «Chek-listlar» ko'rinishida yarating",
+            "Для этого этапа нет шаблона чек-листа — создайте его во вкладке «Чек-листы»",
+        ),
+        "points_apply" => ("Namunadan:", "Из шаблона:"),
+        "points_apply_hint" => (
+            "Bandlar ko'chirib olinadi: namuna keyin o'zgarsa ham bu tekshiruv o'zgarmaydi.",
+            "Пункты копируются: если шаблон потом изменится, эта проверка не изменится.",
+        ),
+        "points_applied" => ("Nazorat nuqtalari qo'shildi:", "Добавлено точек контроля:"),
+        "points_empty" => (
+            "Nuqta yo'q — namunadan oling yoki qo'lda qo'shing",
+            "Точек нет — возьмите из шаблона или добавьте вручную",
+        ),
+        "points_add" => ("+ Nuqta", "+ Точка"),
+
+        "pt_pending" => ("Tekshirilmagan", "Не проверено"),
+        "pt_pass" => ("Mos", "Соответствует"),
+        "pt_fail" => ("Mos emas", "Не соответствует"),
+        "pt_na" => ("Taalluqli emas", "Не применимо"),
+        "pts_pending" => ("—", "—"),
+        "pts_pass" => ("Mos", "Да"),
+        "pts_fail" => ("Yo'q", "Нет"),
+        "pts_na" => ("N/A", "N/A"),
+
+        // Chek-list namunalari
+        "add_checklist" => ("+ Chek-list", "+ Чек-лист"),
+        "checklist_new_name" => ("Chek-list", "Чек-лист"),
+        "checklist_add_item" => ("+ Band", "+ Пункт"),
+        "checklist_no_items" => (
+            "Band yo'q — «+ Band» bilan qo'shing",
+            "Пунктов нет — добавьте кнопкой «+ Пункт»",
+        ),
+        "checklists_hint" => (
+            "Namuna bo'lim va nazorat bosqichiga bog'lanadi. Tekshiruvga biriktirilganda bandlar ko'chirib olinadi.",
+            "Шаблон привязан к разделу и этапу контроля. При привязке к проверке пункты копируются.",
+        ),
+        "checklists_empty" => (
+            "Chek-list namunasi yo'q — «+ Chek-list» bilan boshlang",
+            "Шаблонов чек-листов нет — начните с «+ Чек-лист»",
+        ),
+        "col_norm_doc" => ("Hujjat", "Документ"),
+        "col_norm_clause" => ("Band", "Пункт"),
+
+        // Brak tahlili
+        "defects_hint" => (
+            "Bir xil nuqson necha marta takrorlangani. Uch martadan ko'pi — tizimli muammo, sababini izlash kerak.",
+            "Сколько раз повторился один и тот же дефект. Больше трёх раз — системная проблема, нужно искать причину.",
+        ),
+        "defects_empty" => (
+            "Nuqson yozilmagan — brak tahlili uchun ma'lumot yo'q",
+            "Дефекты не зафиксированы — нет данных для анализа брака",
+        ),
+        "col_times" => ("Marta", "Раз"),
+        "col_open" => ("Ochiq", "Открыто"),
+        "col_overdue" => ("Muddati o'tgan", "Просрочено"),
+        "col_last" => ("Oxirgi", "Последний"),
+        "col_tasks" => ("Ishlar", "Работы"),
+
+        // Bloklash
+        "blocks_hint" => (
+            "Yopilishga yaqin (95% dan yuqori) ishlar sifat bo'yicha tekshiriladi. Bu taqiq emas — nima yopilmaganini ko'rsatadi.",
+            "Работы близкие к закрытию (выше 95%) проверяются по качеству. Это не запрет — показывает, что не закрыто.",
+        ),
+        "blocks_empty" => (
+            "Sifat bo'yicha to'siq yo'q",
+            "Блокировок по качеству нет",
+        ),
+        "col_open_defects" => ("Ochiq nuqson", "Открытых дефектов"),
+        "col_pending_points" => ("Tekshirilmagan", "Не проверено точек"),
+        "col_reason" => ("Sabab", "Причина"),
+        "block_no_acceptance" => ("qabul nazorati yo'q", "нет приёмочного контроля"),
+        "block_open_defects" => ("nuqson bartaraf etilmagan", "дефект не устранён"),
+        "block_pending_points" => ("nazorat nuqtalari to'ldirilmagan", "точки контроля не заполнены"),
+
         // ---------- XIV. Sifat ----------
         "quality_hint" => (
             "Kirish, operatsion va qabul nazorati. Nuqson bo'lsa muddat qo'ying.",

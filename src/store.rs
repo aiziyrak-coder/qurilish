@@ -402,6 +402,37 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
 
+            CREATE TABLE IF NOT EXISTS checklist (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                section TEXT NOT NULL DEFAULT 'none',
+                kind TEXT NOT NULL DEFAULT 'operational',
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS checklist_item (
+                id INTEGER PRIMARY KEY,
+                checklist_id INTEGER NOT NULL REFERENCES checklist(id) ON DELETE CASCADE,
+                pos INTEGER NOT NULL DEFAULT 1,
+                text TEXT NOT NULL DEFAULT '',
+                norm_doc TEXT NOT NULL DEFAULT '',
+                norm_clause TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_cli_list ON checklist_item(checklist_id);
+
+            CREATE TABLE IF NOT EXISTS check_point (
+                id INTEGER PRIMARY KEY,
+                check_id INTEGER NOT NULL REFERENCES quality_check(id) ON DELETE CASCADE,
+                pos INTEGER NOT NULL DEFAULT 1,
+                text TEXT NOT NULL DEFAULT '',
+                norm_doc TEXT NOT NULL DEFAULT '',
+                norm_clause TEXT NOT NULL DEFAULT '',
+                result TEXT NOT NULL DEFAULT 'pending',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_cp_check ON check_point(check_id);
+
             CREATE TABLE IF NOT EXISTS approval (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -504,6 +535,8 @@ impl Db {
             "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
             "ALTER TABLE request ADD COLUMN reject_reason TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE quality_check ADD COLUMN checklist_id INTEGER",
+            "ALTER TABLE quality_check ADD COLUMN fixed_at TEXT",
             "ALTER TABLE purchase ADD COLUMN section TEXT NOT NULL DEFAULT 'none'",
             "ALTER TABLE timesheet ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'",
             "ALTER TABLE timesheet ADD COLUMN shift TEXT NOT NULL DEFAULT 'day'",
@@ -1079,6 +1112,180 @@ impl Db {
             "UPDATE inventory_line SET material_id=?2,book=?3,fact=?4,note=?5 WHERE id=?1",
             params![l.id, l.material_id, l.book, l.fact, l.note],
         )
+    }
+
+    // ---------- XIV.8. Chek-listlar va nazorat nuqtalari ----------
+
+    pub fn checklists(&self, pid: i64) -> Vec<Checklist> {
+        self.list(
+            "SELECT id,project_id,name,section,kind,note
+             FROM checklist WHERE project_id=?1 ORDER BY name",
+            pid,
+            |r| {
+                Ok(Checklist {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    section: Section::parse(&r.get::<_, String>(3)?),
+                    kind: QualityKind::parse(&r.get::<_, String>(4)?),
+                    note: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_checklist(&self, c: &Checklist) -> i64 {
+        self.ins(
+            "INSERT INTO checklist (project_id,name,section,kind,note) VALUES (?1,?2,?3,?4,?5)",
+            params![
+                c.project_id,
+                c.name,
+                c.section.code(),
+                c.kind.code(),
+                c.note
+            ],
+        )
+    }
+
+    pub fn update_checklist(&self, c: &Checklist) -> bool {
+        self.upd(
+            "UPDATE checklist SET name=?2,section=?3,kind=?4,note=?5 WHERE id=?1",
+            params![c.id, c.name, c.section.code(), c.kind.code(), c.note],
+        )
+    }
+
+    pub fn checklist_items(&self, pid: i64) -> Vec<ChecklistItem> {
+        self.list(
+            "SELECT i.id,i.checklist_id,i.pos,i.text,i.norm_doc,i.norm_clause
+             FROM checklist_item i
+             JOIN checklist c ON c.id = i.checklist_id
+             WHERE c.project_id=?1 ORDER BY i.checklist_id,i.pos,i.id",
+            pid,
+            |r| {
+                Ok(ChecklistItem {
+                    id: r.get(0)?,
+                    checklist_id: r.get(1)?,
+                    pos: r.get(2)?,
+                    text: r.get(3)?,
+                    norm_doc: r.get(4)?,
+                    norm_clause: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_checklist_item(&self, i: &ChecklistItem) -> i64 {
+        self.ins(
+            "INSERT INTO checklist_item (checklist_id,pos,text,norm_doc,norm_clause)
+             VALUES (?1,?2,?3,?4,?5)",
+            params![i.checklist_id, i.pos, i.text, i.norm_doc, i.norm_clause],
+        )
+    }
+
+    pub fn update_checklist_item(&self, i: &ChecklistItem) -> bool {
+        self.upd(
+            "UPDATE checklist_item SET pos=?2,text=?3,norm_doc=?4,norm_clause=?5 WHERE id=?1",
+            params![i.id, i.pos, i.text, i.norm_doc, i.norm_clause],
+        )
+    }
+
+    pub fn check_points(&self, pid: i64) -> Vec<CheckPoint> {
+        self.list(
+            "SELECT p.id,p.check_id,p.pos,p.text,p.norm_doc,p.norm_clause,p.result,p.note
+             FROM check_point p
+             JOIN quality_check q ON q.id = p.check_id
+             WHERE q.project_id=?1 ORDER BY p.check_id,p.pos,p.id",
+            pid,
+            |r| {
+                Ok(CheckPoint {
+                    id: r.get(0)?,
+                    check_id: r.get(1)?,
+                    pos: r.get(2)?,
+                    text: r.get(3)?,
+                    norm_doc: r.get(4)?,
+                    norm_clause: r.get(5)?,
+                    result: PointResult::parse(&r.get::<_, String>(6)?),
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_check_point(&self, p: &CheckPoint) -> i64 {
+        self.ins(
+            "INSERT INTO check_point (check_id,pos,text,norm_doc,norm_clause,result,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                p.check_id,
+                p.pos,
+                p.text,
+                p.norm_doc,
+                p.norm_clause,
+                p.result.code(),
+                p.note
+            ],
+        )
+    }
+
+    pub fn update_check_point(&self, p: &CheckPoint) -> bool {
+        self.upd(
+            "UPDATE check_point SET pos=?2,text=?3,norm_doc=?4,norm_clause=?5,result=?6,note=?7
+             WHERE id=?1",
+            params![
+                p.id,
+                p.pos,
+                p.text,
+                p.norm_doc,
+                p.norm_clause,
+                p.result.code(),
+                p.note
+            ],
+        )
+    }
+
+    /// Chek-list bandlarini tekshiruvga ko'chiradi (TZ XIV.8).
+    ///
+    /// Ko'chirib olinadi, havola qilinmaydi: namuna keyin o'zgarsa ham
+    /// o'tkazilgan tekshiruv o'zgarmaydi.
+    pub fn apply_checklist(&self, check_id: i64, checklist_id: i64) -> usize {
+        let _ = self.conn().execute(
+            "DELETE FROM check_point WHERE check_id=?1",
+            params![check_id],
+        );
+        let items: Vec<ChecklistItem> = self
+            .conn()
+            .prepare(
+                "SELECT id,checklist_id,pos,text,norm_doc,norm_clause
+                 FROM checklist_item WHERE checklist_id=?1 ORDER BY pos,id",
+            )
+            .and_then(|mut st| {
+                st.query_map(params![checklist_id], |r| {
+                    Ok(ChecklistItem {
+                        id: r.get(0)?,
+                        checklist_id: r.get(1)?,
+                        pos: r.get(2)?,
+                        text: r.get(3)?,
+                        norm_doc: r.get(4)?,
+                        norm_clause: r.get(5)?,
+                    })
+                })
+                .and_then(|rows| rows.collect())
+            })
+            .unwrap_or_default();
+
+        for (n, i) in items.iter().enumerate() {
+            self.insert_check_point(&CheckPoint {
+                id: 0,
+                check_id,
+                pos: n as i64 + 1,
+                text: i.text.clone(),
+                norm_doc: i.norm_doc.clone(),
+                norm_clause: i.norm_clause.clone(),
+                result: PointResult::Pending,
+                note: String::new(),
+            });
+        }
+        items.len()
     }
 
     // ---------- IX.8-10. Kelishuv marshruti ----------
@@ -2390,7 +2597,8 @@ impl Db {
 
     pub fn quality_checks(&self, pid: i64) -> Vec<QualityCheck> {
         self.list(
-            "SELECT id,project_id,kind,date,task_id,material_id,subject,inspector,result,defect,deadline,note
+            "SELECT id,project_id,kind,date,task_id,material_id,subject,inspector,result,defect,
+                    deadline,checklist_id,fixed_at,note
              FROM quality_check WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -2406,7 +2614,9 @@ impl Db {
                     result: QualityResult::parse(&r.get::<_, String>(8)?),
                     defect: r.get(9)?,
                     deadline: odate(r.get(10)?),
-                    note: r.get(11)?,
+                    checklist_id: r.get(11)?,
+                    fixed_at: odate(r.get(12)?),
+                    note: r.get(13)?,
                 })
             },
         )
@@ -2414,11 +2624,23 @@ impl Db {
 
     pub fn insert_quality(&self, q: &QualityCheck) -> i64 {
         self.ins(
-            "INSERT INTO quality_check (project_id,kind,date,task_id,material_id,subject,inspector,result,defect,deadline,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO quality_check (project_id,kind,date,task_id,material_id,subject,inspector,
+                                        result,defect,deadline,checklist_id,fixed_at,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                q.project_id, q.kind.code(), q.date.to_string(), q.task_id, q.material_id,
-                q.subject, q.inspector, q.result.code(), q.defect, ods(q.deadline), q.note
+                q.project_id,
+                q.kind.code(),
+                q.date.to_string(),
+                q.task_id,
+                q.material_id,
+                q.subject,
+                q.inspector,
+                q.result.code(),
+                q.defect,
+                ods(q.deadline),
+                q.checklist_id,
+                ods(q.fixed_at),
+                q.note
             ],
         )
     }
@@ -2426,7 +2648,8 @@ impl Db {
     pub fn update_quality(&self, q: &QualityCheck) -> bool {
         self.upd(
             "UPDATE quality_check SET kind=?2,date=?3,task_id=?4,material_id=?5,subject=?6,
-                    inspector=?7,result=?8,defect=?9,deadline=?10,note=?11 WHERE id=?1",
+                    inspector=?7,result=?8,defect=?9,deadline=?10,checklist_id=?11,fixed_at=?12,
+                    note=?13 WHERE id=?1",
             params![
                 q.id,
                 q.kind.code(),
@@ -2438,6 +2661,8 @@ impl Db {
                 q.result.code(),
                 q.defect,
                 ods(q.deadline),
+                q.checklist_id,
+                ods(q.fixed_at),
                 q.note
             ],
         )
@@ -3148,6 +3373,8 @@ impl Db {
                 result,
                 defect: defect.into(),
                 deadline: deadline_in.map(|d| today + chrono::Duration::days(d)),
+                checklist_id: None,
+                fixed_at: None,
                 note: String::new(),
             });
         };
@@ -3230,6 +3457,152 @@ impl Db {
             "",
             None,
         );
+
+        // Chek-list namunalari (TZ XIV.8): monolit ishlari va g'isht terish.
+        let checklist =
+            |name: &str, section: Section, kind: QualityKind, items: &[(&str, &str, &str)]| {
+                let id = self.insert_checklist(&Checklist {
+                    id: 0,
+                    project_id: pid,
+                    name: name.into(),
+                    section,
+                    kind,
+                    note: String::new(),
+                });
+                for (n, (text, doc, clause)) in items.iter().enumerate() {
+                    self.insert_checklist_item(&ChecklistItem {
+                        id: 0,
+                        checklist_id: id,
+                        pos: n as i64 + 1,
+                        text: (*text).into(),
+                        norm_doc: (*doc).into(),
+                        norm_clause: (*clause).into(),
+                    });
+                }
+                id
+            };
+        if ru {
+            checklist(
+                "Монолитные работы — операционный контроль",
+                Section::Kj,
+                QualityKind::Operational,
+                &[
+                    (
+                        "Соответствие опалубки проекту",
+                        "ШНК 3.03.01-98",
+                        "п. 2.108",
+                    ),
+                    ("Класс и защитный слой арматуры", "ШНК 2.03.01-96", "п. 5.5"),
+                    (
+                        "Отметки и геометрия конструкции",
+                        "ШНК 3.01.03-97",
+                        "п. 4.3",
+                    ),
+                    (
+                        "Чистота опалубки перед бетонированием",
+                        "ШНК 3.03.01-98",
+                        "п. 2.110",
+                    ),
+                    (
+                        "Наличие паспорта на бетонную смесь",
+                        "ГОСТ 7473-2010",
+                        "п. 6.2",
+                    ),
+                ],
+            );
+            checklist(
+                "Кирпичная кладка — приёмочный контроль",
+                Section::Ar,
+                QualityKind::Acceptance,
+                &[
+                    ("Отклонение стены от вертикали", "ШНК 3.03.01-98", "табл. 9"),
+                    ("Толщина и заполнение швов", "ШНК 3.03.01-98", "п. 7.29"),
+                    ("Перевязка швов", "ШНК 3.03.01-98", "п. 7.10"),
+                    ("Наличие акта скрытых работ", "ШНК 3.01.01-03", "п. 6.4"),
+                ],
+            );
+        } else {
+            checklist(
+                "Monolit ishlari — operatsion nazorat",
+                Section::Kj,
+                QualityKind::Operational,
+                &[
+                    (
+                        "Qolipning loyihaga mosligi",
+                        "ShNQ 3.03.01-98",
+                        "2.108-band",
+                    ),
+                    (
+                        "Armatura sinfi va himoya qatlami",
+                        "ShNQ 2.03.01-96",
+                        "5.5-band",
+                    ),
+                    (
+                        "Konstruksiya belgilari va geometriyasi",
+                        "ShNQ 3.01.03-97",
+                        "4.3-band",
+                    ),
+                    (
+                        "Betonlashdan oldin qolip tozaligi",
+                        "ShNQ 3.03.01-98",
+                        "2.110-band",
+                    ),
+                    ("Beton aralashmasi pasporti", "GOST 7473-2010", "6.2-band"),
+                ],
+            );
+            checklist(
+                "G'isht terish — qabul nazorati",
+                Section::Ar,
+                QualityKind::Acceptance,
+                &[
+                    (
+                        "Devorning vertikaldan og'ishi",
+                        "ShNQ 3.03.01-98",
+                        "9-jadval",
+                    ),
+                    (
+                        "Chok qalinligi va to'ldirilishi",
+                        "ShNQ 3.03.01-98",
+                        "7.29-band",
+                    ),
+                    ("Choklarning bog'lanishi", "ShNQ 3.03.01-98", "7.10-band"),
+                    (
+                        "Yashirin ishlar dalolatnomasi",
+                        "ShNQ 3.01.01-03",
+                        "6.4-band",
+                    ),
+                ],
+            );
+        }
+
+        // Namunadagi tekshiruvlarga chek-list biriktiramiz — nuqtalar paneli
+        // bo'sh ko'rinmasin. Bittasida nomuvofiqlik ataylab qoldirilgan.
+        let lists = self.checklists(pid);
+        for check in self.quality_checks(pid) {
+            let Some(list) = lists.iter().find(|c| c.kind == check.kind) else {
+                continue;
+            };
+            if self.apply_checklist(check.id, list.id) == 0 {
+                continue;
+            }
+            let mut x = check.clone();
+            x.checklist_id = Some(list.id);
+            self.update_quality(&x);
+
+            // O'tgan tekshiruvda hamma nuqta mos; nuqsonlisida bittasi mos emas.
+            let points = self.check_points(pid);
+            for (n, p) in points.iter().filter(|p| p.check_id == check.id).enumerate() {
+                let mut p = p.clone();
+                p.result = if check.result == QualityResult::Pass {
+                    PointResult::Pass
+                } else if n == 1 {
+                    PointResult::Fail
+                } else {
+                    PointResult::Pass
+                };
+                self.update_check_point(&p);
+            }
+        }
 
         // ---------- XV. Xavfsizlik ----------
         let safety_resp = if ru {

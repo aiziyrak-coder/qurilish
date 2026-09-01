@@ -858,7 +858,7 @@ fn parse_date(s: &str) -> NaiveDate {
 mod tests {
     use super::*;
     use crate::checks;
-    use crate::domain::{IssueModule, Severity};
+    use crate::domain::{IssueModule, QualityResult, Severity};
     use std::sync::atomic::{AtomicU32, Ordering};
 
     static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -1691,7 +1691,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
     /// TZ XIII-XVI: resurs modullarining namuna ma'lumoti to'liq va izchil.
     #[test]
     fn demo_resources_are_consistent() {
-        use crate::domain::{IssueStatus, MachineStatus, QualityResult, SafetyKind};
+        use crate::domain::{IssueStatus, MachineStatus, SafetyKind};
 
         let t = TempDb::new();
         let pid = t.db.seed_demo().unwrap();
@@ -2467,6 +2467,225 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(states
             .iter()
             .any(|s| matches!(s, RouteState::Waiting { .. })));
+    }
+
+    /// Yordamchi: sinov uchun sifat tekshiruvi.
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    fn test_check(
+        pid: i64,
+        kind: crate::domain::QualityKind,
+        task_id: Option<i64>,
+        result: crate::domain::QualityResult,
+        defect: &str,
+        deadline: Option<chrono::NaiveDate>,
+        fixed_at: Option<chrono::NaiveDate>,
+    ) -> crate::domain::QualityCheck {
+        crate::domain::QualityCheck {
+            id: 0,
+            project_id: pid,
+            kind,
+            date: chrono::Local::now().date_naive(),
+            task_id,
+            material_id: None,
+            subject: "Sinov".into(),
+            inspector: String::new(),
+            result,
+            defect: defect.into(),
+            deadline,
+            checklist_id: None,
+            fixed_at,
+            note: String::new(),
+        }
+    }
+
+    /// TZ XIV.33: sifat balli ochiq nuqsonlar uchun pasayadi.
+    #[test]
+    fn quality_score_drops_with_open_defects() {
+        use crate::checks::quality_score;
+        use crate::domain::QualityKind;
+
+        let today = chrono::Local::now().date_naive();
+        let mk = |result: crate::domain::QualityResult, fixed: bool, deadline: Option<i64>| {
+            test_check(
+                1,
+                QualityKind::Operational,
+                None,
+                result,
+                "n",
+                deadline.map(|d| today + chrono::Duration::days(d)),
+                fixed.then_some(today),
+            )
+        };
+
+        // Tekshiruv yo'q — ball qo'yilmaydi, 100 emas.
+        let empty = quality_score(&[], today);
+        assert_eq!(empty.checks, 0);
+        assert_eq!(empty.score, 0.0);
+
+        // Hammasi o'tgan.
+        let all_pass: Vec<_> = (0..4)
+            .map(|_| mk(QualityResult::Pass, false, None))
+            .collect();
+        assert_eq!(quality_score(&all_pass, today).score, 100.0);
+
+        // Bittasi shartli, bartaraf etilgan: 3.5/4 = 87.5, jarima yo'q.
+        let mut list = all_pass.clone();
+        list[0] = mk(QualityResult::Conditional, true, None);
+        let s = quality_score(&list, today);
+        assert_eq!(s.conditional, 1);
+        assert_eq!(s.open, 0);
+        assert_eq!(s.score, 87.5);
+
+        // O'sha nuqson ochiq bo'lsa — 2 ball jarima.
+        list[0] = mk(QualityResult::Conditional, false, None);
+        assert_eq!(quality_score(&list, today).score, 85.5);
+
+        // Muddati o'tgan bo'lsa — yana 3 ball.
+        list[0] = mk(QualityResult::Conditional, false, Some(-1));
+        let s = quality_score(&list, today);
+        assert_eq!(s.overdue, 1);
+        assert_eq!(s.score, 82.5);
+
+        // Ball 0 dan pastga tushmaydi.
+        let bad: Vec<_> = (0..30)
+            .map(|_| mk(QualityResult::Fail, false, Some(-5)))
+            .collect();
+        assert_eq!(quality_score(&bad, today).score, 0.0);
+    }
+
+    /// TZ XIV.10, 35: yopilishga yaqin ish sifat bo'yicha bloklanadi.
+    #[test]
+    fn task_blocks_catch_unfinished_quality() {
+        use crate::checks::{task_blocks, CLOSING_PROGRESS};
+        use crate::domain::{CheckPoint, PointResult, QualityKind};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+
+        let mut tasks = t.db.tasks(pid).unwrap_or_default();
+        let task = tasks.first_mut().expect("ish");
+        task.progress = CLOSING_PROGRESS;
+        t.db.update_task(task).unwrap();
+        let tid = task.id;
+        let tasks = t.db.tasks(pid).unwrap_or_default();
+
+        // Tekshiruv umuman yo'q — qabul nazorati yetishmaydi.
+        let blocks = task_blocks(&tasks, &[], &[], today);
+        let b = blocks.iter().find(|b| b.task_id == tid).expect("blok");
+        assert!(b.no_acceptance);
+        assert!(b.blocked());
+
+        // Qabul nazorati bor va nuqsonsiz — to'siq yo'q.
+        let ok = vec![test_check(
+            pid,
+            QualityKind::Acceptance,
+            Some(tid),
+            QualityResult::Pass,
+            "",
+            None,
+            None,
+        )];
+        assert!(!task_blocks(&tasks, &ok, &[], today)
+            .iter()
+            .any(|b| b.task_id == tid));
+
+        // Bartaraf etilmagan nuqson — to'siq.
+        let mut bad = ok.clone();
+        bad[0].result = QualityResult::Fail;
+        bad[0].deadline = Some(today - chrono::Duration::days(2));
+        bad[0].id = 5;
+        let blocks = task_blocks(&tasks, &bad, &[], today);
+        let b = blocks.iter().find(|b| b.task_id == tid).expect("blok");
+        assert_eq!(b.open_defects, 1);
+        assert_eq!(b.overdue, 1);
+
+        // Bartaraf etilgan bo'lsa to'siq qolmaydi.
+        let mut fixed = bad.clone();
+        fixed[0].fixed_at = Some(today);
+        assert!(!task_blocks(&tasks, &fixed, &[], today)
+            .iter()
+            .any(|b| b.task_id == tid));
+
+        // To'ldirilmagan nazorat nuqtasi ham to'sadi.
+        let point = CheckPoint {
+            id: 1,
+            check_id: 5,
+            pos: 1,
+            text: "Nuqta".into(),
+            norm_doc: String::new(),
+            norm_clause: String::new(),
+            result: PointResult::Pending,
+            note: String::new(),
+        };
+        let blocks = task_blocks(&tasks, &fixed, std::slice::from_ref(&point), today);
+        let b = blocks.iter().find(|b| b.task_id == tid).expect("blok");
+        assert_eq!(b.pending_points, 1);
+    }
+
+    /// TZ XIV.30–31: bir xil nuqson guruhlanadi.
+    #[test]
+    fn defect_groups_find_repeats() {
+        use crate::checks::defect_groups;
+        use crate::domain::QualityKind;
+
+        let today = chrono::Local::now().date_naive();
+        let mk = |defect: &str, task: Option<i64>, fixed: bool| {
+            test_check(
+                1,
+                QualityKind::Operational,
+                task,
+                QualityResult::Fail,
+                defect,
+                None,
+                fixed.then_some(today),
+            )
+        };
+        let list = vec![
+            mk("Beton kavakligi", Some(1), false),
+            // Bir xil sabab, boshqacha yozilgan — bitta guruhga tushishi kerak.
+            mk("beton  KAVAKLIGI", Some(2), true),
+            mk("Chok qalinligi", Some(1), false),
+            test_check(
+                1,
+                QualityKind::Operational,
+                None,
+                QualityResult::Pass,
+                "Beton kavakligi",
+                None,
+                None,
+            ),
+        ];
+
+        let groups = defect_groups(&list);
+        assert_eq!(groups.len(), 2, "o'tgan tekshiruv brak emas");
+        let first = &groups[0];
+        assert_eq!(first.count, 2, "yozilishi farq qilsa ham bitta sabab");
+        assert_eq!(first.open, 1);
+        assert_eq!(first.tasks, vec![1, 2]);
+    }
+
+    /// Namunada chek-listlar va to'ldirilgan nazorat nuqtalari bor.
+    #[test]
+    fn demo_has_checklists_with_points() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+
+        let lists = t.db.checklists(pid);
+        assert_eq!(lists.len(), 2);
+        let items = t.db.checklist_items(pid);
+        assert!(items.len() >= 8);
+        for i in &items {
+            assert!(!i.text.is_empty());
+            assert!(!i.norm_doc.is_empty(), "normativ havolasi yo'q");
+        }
+
+        let points = t.db.check_points(pid);
+        assert!(!points.is_empty(), "nazorat nuqtalari ko'chirilmagan");
+        assert!(points
+            .iter()
+            .any(|p| p.result == crate::domain::PointResult::Fail));
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
