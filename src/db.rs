@@ -1498,6 +1498,77 @@ mod tests {
         assert!(t.db.issues(pid).is_empty());
     }
 
+    /// TZ II.1-2: IFC fayli o'qilib, elementlar va bog'lanishlar bazaga tushadi.
+    #[test]
+    fn ifc_import_fills_the_graph() {
+        use crate::domain::Relation;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+
+        let ifc = "ISO-10303-21;\nHEADER;\nFILE_SCHEMA(('IFC4'));\nENDSEC;\nDATA;\n\
+#5= IFCBUILDINGSTOREY('s1',$,'3-qavat',$,$,$,$,$,.ELEMENT.,0.);\n\
+#10= IFCWALLSTANDARDCASE('w1',$,'Devor',$,$,$,$,'IFC-D1');\n\
+#11= IFCOPENINGELEMENT('o1',$,'Teshik',$,$,$,$,'IFC-PR1');\n\
+#12= IFCWINDOW('n1',$,'Deraza',$,$,$,$,'IFC-OK1');\n\
+#13= IFCDUCTSEGMENT('d1',$,'Vozduxovod',$,$,$,$,'IFC-V1');\n\
+#20= IFCRELCONTAINEDINSPATIALSTRUCTURE('r1',$,$,$,(#10,#13),#5);\n\
+#21= IFCRELVOIDSELEMENT('r2',$,$,$,#10,#11);\n\
+#22= IFCRELFILLSELEMENT('r3',$,$,$,#11,#12);\n\
+ENDSEC;\nEND-ISO-10303-21;\n";
+
+        let dir = std::env::temp_dir().join(format!("qurai_ifc_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("demo.ifc");
+        std::fs::write(&path, ifc).unwrap();
+
+        // Ilova o'z ulanishi bilan ishlaydi — xuddi haqiqiy ishga tushirishdagidek.
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let before = app.elements.len();
+        let links_before = app.element_links.len();
+
+        app.import_ifc(&path);
+
+        let added: Vec<&crate::domain::Element> = app
+            .elements
+            .iter()
+            .filter(|e| e.sheet == "IFC")
+            .collect();
+        assert_eq!(added.len(), 4, "IFC dan 4 element kutilgan");
+        assert!(app.elements.len() > before);
+
+        let by_mark = |m: &str| {
+            app.elements
+                .iter()
+                .find(|e| e.mark == m)
+                .unwrap_or_else(|| panic!("{m} topilmadi"))
+        };
+        let wall = by_mark("IFC-D1");
+        assert_eq!(wall.kind, crate::domain::ElementKind::Wall);
+        assert_eq!(wall.section, crate::model::Section::Ar);
+        assert_eq!(wall.level, "3-qavat");
+        assert_eq!(by_mark("IFC-V1").section, crate::model::Section::Ov);
+
+        // Devor -> teshik -> deraza zanjiri bazaga tushdi.
+        let links = t.db.element_links(pid);
+        let has = |from: i64, to: i64| {
+            links
+                .iter()
+                .any(|l| l.from_el == from && l.to_el == to && l.relation == Relation::Contains)
+        };
+        assert!(has(wall.id, by_mark("IFC-PR1").id));
+        assert!(has(by_mark("IFC-PR1").id, by_mark("IFC-OK1").id));
+        assert!(app.element_links.len() > links_before);
+
+        // Ikkinchi import dublikat yaratmaydi.
+        app.import_ifc(&path);
+        let again = app.elements.iter().filter(|e| e.sheet == "IFC").count();
+        assert_eq!(again, 4, "qayta import dublikat berdi");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// TZ XIII-XVI: resurs modullarining namuna ma'lumoti to'liq va izchil.
     #[test]
     fn demo_resources_are_consistent() {

@@ -482,11 +482,20 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
 
 fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut add = false;
+    let mut import = false;
     let mut removed: Option<i64> = None;
 
     ui.horizontal(|ui| {
         if ui.button(t("add_element")).clicked() {
             add = true;
+        }
+        // TZ II.1-2: chizmani qo'lda kiritish o'rniga IFC dan o'qish.
+        if ui
+            .button(t("import_ifc"))
+            .on_hover_text(t("import_ifc_hint"))
+            .clicked()
+        {
+            import = true;
         }
         ui.label(
             RichText::new(t("elements_hint"))
@@ -495,6 +504,16 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
         );
     });
     ui.add_space(6.0);
+
+    if import {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title(t("import_ifc"))
+            .add_filter("IFC", &["ifc", "IFC"])
+            .pick_file()
+        {
+            app.import_ifc(&path);
+        }
+    }
 
     if app.elements.is_empty() {
         empty(ui, t("no_elements"));

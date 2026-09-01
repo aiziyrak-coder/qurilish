@@ -10,6 +10,7 @@ mod cpm;
 mod db;
 mod domain;
 mod i18n;
+mod ifc;
 mod import;
 mod model;
 mod sales;

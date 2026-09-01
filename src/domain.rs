@@ -12,7 +12,9 @@ use chrono::NaiveDate;
 /// Sanoq turlari uchun umumiy shakl: kod, tarjima, ro'yxat.
 macro_rules! enum_kind {
     ($name:ident { $($v:ident => $code:literal, $key:literal;)+ }) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        // `Ord` — sanoq turlarini tartiblash va dedup qilish uchun
+        // (masalan IFC importidagi bog'lanishlar ro'yxati).
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum $name { $($v,)+ }
 
         impl $name {

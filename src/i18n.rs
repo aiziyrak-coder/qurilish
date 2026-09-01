@@ -746,6 +746,23 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "col_pos" => ("№", "№"),
 
         // ---------- Elementlar va bog'lanishlar / Элементы и связи ----------
+        "import_ifc" => ("IFC dan o'qish", "Импорт из IFC"),
+        "import_ifc_hint" => (
+            "IFC (ochiq BIM formati) faylidan elementlar va ular orasidagi bog'lanishlar o'qiladi. DWG va RVT yopiq formatlar — ular hujjat sifatida biriktiriladi.",
+            "Из файла IFC (открытый формат BIM) читаются элементы и связи между ними. DWG и RVT — закрытые форматы, они прикрепляются как документы.",
+        ),
+        "ifc_failed" => ("IFC fayli o'qilmadi", "Файл IFC не прочитан"),
+        "ifc_empty" => (
+            "Faylda o'qiladigan yozuv topilmadi — bu IFC fayli emasga o'xshaydi.",
+            "В файле не найдено записей — похоже, это не файл IFC.",
+        ),
+        "ifc_no_elements" => (
+            "Faylda tanish element topilmadi.",
+            "В файле не найдено распознаваемых элементов.",
+        ),
+        "ifc_added" => ("Qo'shildi:", "Добавлено:"),
+        "ifc_links" => ("bog'lanish:", "связей:"),
+        "ifc_existing" => ("mavjud edi:", "уже было:"),
         "add_element" => ("+ Element", "+ Элемент"),
         "delete_element" => ("Elementni o'chirish", "Удалить элемент"),
         "select_element" => ("Ro'yxatdan elementni tanlang", "Выберите элемент из списка"),

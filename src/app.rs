@@ -779,6 +779,85 @@ impl App {
         });
     }
 
+    /// TZ II.1–2: IFC faylini o'qib, bilimlar grafiga qo'shadi.
+    ///
+    /// Mavjud elementlar o'chirilmaydi — import qo'shimcha qiladi. Bir xil
+    /// marka ikki marta tushmasligi uchun IFC dan kelgan va o'sha markali
+    /// element allaqachon bo'lsa, u qayta yozilmaydi.
+    pub fn import_ifc(&mut self, path: &std::path::Path) {
+        let Some(pid) = self.current else { return };
+        let src = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            // IFC odatda UTF-8, ammo eski fayllar boshqa kodlashda bo'lishi mumkin.
+            Err(_) => match std::fs::read(path) {
+                Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+                Err(e) => {
+                    self.notify(format!("{}: {e}", t("ifc_failed")));
+                    return;
+                }
+            },
+        };
+
+        let model = crate::ifc::parse(&src);
+        if model.entities.is_empty() {
+            self.notify(t("ifc_empty").to_string());
+            return;
+        }
+        let graph = crate::ifc::to_graph(&model, pid);
+        if graph.elements.is_empty() {
+            self.notify(t("ifc_no_elements").to_string());
+            return;
+        }
+
+        // IFC dagi o'rin -> bazadagi identifikator.
+        let mut ids: Vec<Option<i64>> = Vec::with_capacity(graph.elements.len());
+        let mut added = 0usize;
+        let mut skipped = 0usize;
+        for e in &graph.elements {
+            let existing = self
+                .elements
+                .iter()
+                .find(|x| x.sheet == "IFC" && !e.mark.is_empty() && x.mark == e.mark)
+                .map(|x| x.id);
+            match existing {
+                Some(id) => {
+                    ids.push(Some(id));
+                    skipped += 1;
+                }
+                None => {
+                    let id = self.db.insert_element(e);
+                    ids.push((id > 0).then_some(id));
+                    if id > 0 {
+                        added += 1;
+                    }
+                }
+            }
+        }
+
+        let mut links = 0usize;
+        for (from, to, relation) in &graph.links {
+            if let (Some(Some(a)), Some(Some(b))) = (ids.get(*from), ids.get(*to)) {
+                if self.db.insert_element_link(&ElementLink {
+                    id: 0,
+                    from_el: *a,
+                    to_el: *b,
+                    relation: *relation,
+                }) > 0
+                {
+                    links += 1;
+                }
+            }
+        }
+
+        self.reload_modules();
+        self.notify(format!(
+            "{} {added} · {} {links} · {} {skipped}",
+            t("ifc_added"),
+            t("ifc_links"),
+            t("ifc_existing")
+        ));
+    }
+
     /// TZ XVII: kesishgan tahlil uchun barcha modullardan ma'lumot yig'adi.
     ///
     /// Hisoblar shu yerda emas, `analytics` da bajariladi — ekran va hisobot
