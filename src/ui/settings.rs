@@ -9,6 +9,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut changed = false;
     let mut make_demo = false;
     let mut make_backup = false;
+    let mut add_user = false;
+    let mut export_pkg = false;
+    let mut import_pkg = false;
+    let mut edited_user: Option<crate::roles::User> = None;
+    let mut removed_user: Option<i64> = None;
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.heading(t("settings_title"));
@@ -171,6 +176,23 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     make_demo = true;
                 }
             });
+            // Qurilmalar orasida ma'lumot fayl orqali ko'chadi (server yo'q).
+            field(ui, t("set_package"), |ui| {
+                if ui
+                    .button(t("set_package_export"))
+                    .on_hover_text(t("set_package_export_hint"))
+                    .clicked()
+                {
+                    export_pkg = true;
+                }
+                if ui
+                    .button(t("set_package_import"))
+                    .on_hover_text(t("set_package_import_hint"))
+                    .clicked()
+                {
+                    import_pkg = true;
+                }
+            });
             // Kod git bilan qaytadi, ma'lumot esa qaytmaydi — zaxira alohida.
             field(ui, t("set_backup"), |ui| {
                 if ui
@@ -181,6 +203,67 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     make_backup = true;
                 }
             });
+        });
+
+        ui.add_space(10.0);
+
+        // ---------- Foydalanuvchilar va rollar ----------
+        card_frame(ui, t("set_group_roles"), w, |ui| {
+            ui.label(
+                RichText::new(t("set_roles_note"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(8.0);
+            if ui.button(t("add_user")).clicked() {
+                add_user = true;
+            }
+            ui.add_space(6.0);
+
+            if app.users.is_empty() {
+                ui.label(
+                    RichText::new(t("role_no_users"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+            }
+            egui::Grid::new("users_grid")
+                .num_columns(4)
+                .spacing([10.0, 6.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    for src in &app.users {
+                        let mut u = src.clone();
+                        let mut changed = false;
+                        changed |= ui
+                            .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut u.name))
+                            .changed();
+                        egui::ComboBox::from_id_salt(("user_role", u.id))
+                            .selected_text(u.role.label())
+                            .width(170.0)
+                            .show_ui(ui, |ui| {
+                                for r in crate::roles::Role::ALL {
+                                    changed |= ui
+                                        .selectable_value(&mut u.role, *r, r.label())
+                                        .on_hover_text(r.hint())
+                                        .changed();
+                                }
+                            });
+                        changed |= ui
+                            .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut u.note))
+                            .changed();
+                        if ui
+                            .small_button(RichText::new("x").color(theme::danger()))
+                            .clicked()
+                        {
+                            removed_user = Some(u.id);
+                        }
+                        ui.end_row();
+                        if changed {
+                            edited_user = Some(u);
+                        }
+                    }
+                });
         });
 
         ui.add_space(10.0);
@@ -204,6 +287,78 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if changed {
         app.save_settings();
         app.notify(t("set_saved").to_string());
+    }
+
+    if add_user {
+        let n = app.users.len() + 1;
+        app.db.insert_user(&crate::roles::User {
+            id: 0,
+            name: format!("{} {n}", t("user_new_name")),
+            role: crate::roles::Role::Foreman,
+            note: String::new(),
+        });
+        app.reload_users();
+    }
+    if let Some(u) = edited_user {
+        app.db.update_user(&u);
+        app.reload_users();
+    }
+    if let Some(id) = removed_user {
+        app.db.del("app_user", id);
+        // Joriy foydalanuvchi o'chirilsa — rol to'liq huquqqa qaytadi.
+        if app.current_user == Some(id) {
+            app.set_user(None);
+        }
+        app.reload_users();
+    }
+
+    if export_pkg {
+        if app.current.is_none() {
+            app.notify(t("no_object_selected").to_string());
+        } else {
+            let pkg = app.export_package();
+            let file = format!("qurai-paket-{}.txt", app.today.format("%Y-%m-%d"));
+            if let Some(path) = rfd::FileDialog::new()
+                .set_title(t("set_package_export"))
+                .set_file_name(&file)
+                .add_filter("QURAi", &["txt"])
+                .save_file()
+            {
+                match std::fs::write(&path, crate::package::write(&pkg)) {
+                    Ok(()) => app.notify(format!(
+                        "{} {} · {}",
+                        t("set_package_saved"),
+                        pkg.row_count(),
+                        path.display()
+                    )),
+                    Err(e) => app.notify(format!("{}: {e}", t("set_package_failed"))),
+                }
+            }
+        }
+    }
+    if import_pkg {
+        if app.current.is_none() {
+            app.notify(t("no_object_selected").to_string());
+        } else if let Some(path) = rfd::FileDialog::new()
+            .set_title(t("set_package_import"))
+            .add_filter("QURAi", &["txt"])
+            .pick_file()
+        {
+            match std::fs::read_to_string(&path).map_err(|e| e.to_string()) {
+                Ok(text) => match crate::package::read(&text) {
+                    Ok(pkg) => {
+                        let (added, existing) = app.import_package(&pkg);
+                        app.notify(format!(
+                            "{} {added} · {} {existing}",
+                            t("ifc_added"),
+                            t("ifc_existing")
+                        ));
+                    }
+                    Err(_) => app.notify(t("set_package_bad").to_string()),
+                },
+                Err(e) => app.notify(format!("{}: {e}", t("set_package_failed"))),
+            }
+        }
     }
 
     if make_backup {

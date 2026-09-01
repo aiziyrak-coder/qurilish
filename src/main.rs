@@ -13,6 +13,8 @@ mod i18n;
 mod ifc;
 mod import;
 mod model;
+mod package;
+mod roles;
 mod sales;
 mod store;
 mod theme;

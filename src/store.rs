@@ -10,6 +10,7 @@
 use crate::db::Db;
 use crate::domain::*;
 use crate::model::Section;
+use crate::roles::{Role, User};
 use chrono::{Datelike, NaiveDate};
 use rusqlite::{params, Row};
 
@@ -358,6 +359,13 @@ impl Db {
                 note TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_pay_deal ON payment(deal_id);
+
+            CREATE TABLE IF NOT EXISTS app_user (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT 'admin',
+                note TEXT NOT NULL DEFAULT ''
+            );
             "#,
         )?;
 
@@ -621,6 +629,42 @@ impl Db {
     /// Bitta shartnomaning to'lov grafigini o'chiradi — qayta yaratishdan oldin.
     pub fn clear_payments(&self, deal_id: i64) -> bool {
         self.upd("DELETE FROM payment WHERE deal_id=?1", params![deal_id])
+    }
+
+    // ---------- Rollar ----------
+
+    pub fn users(&self) -> Vec<User> {
+        let Ok(mut st) = self
+            .conn()
+            .prepare("SELECT id,name,role,note FROM app_user ORDER BY id")
+        else {
+            return Vec::new();
+        };
+        let Ok(rows) = st.query_map([], |r| {
+            Ok(User {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                role: Role::parse(&r.get::<_, String>(2)?),
+                note: r.get(3)?,
+            })
+        }) else {
+            return Vec::new();
+        };
+        rows.filter_map(|x| x.ok()).collect()
+    }
+
+    pub fn insert_user(&self, u: &User) -> i64 {
+        self.ins(
+            "INSERT INTO app_user (name,role,note) VALUES (?1,?2,?3)",
+            params![u.name, u.role.code(), u.note],
+        )
+    }
+
+    pub fn update_user(&self, u: &User) -> bool {
+        self.upd(
+            "UPDATE app_user SET name=?2,role=?3,note=?4 WHERE id=?1",
+            params![u.id, u.name, u.role.code(), u.note],
+        )
     }
 
     // ---------- Umumiy yordamchilar ----------

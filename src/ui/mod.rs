@@ -129,7 +129,12 @@ pub fn draw(ctx: &Context, app: &mut App) {
     top_bar(ctx, app);
     side_bar(ctx, app);
 
-    egui::CentralPanel::default().show(ctx, |ui| match app.screen {
+    egui::CentralPanel::default().show(ctx, |ui| {
+        // Rol bu ekranni o'zgartira olmasa — buni yashirmaymiz, ochiq aytamiz.
+        if !app.can_edit(app.screen) {
+            readonly_banner(ui, app);
+        }
+        match app.screen {
         Screen::Dashboard => dashboard::show(ui, app),
         Screen::Passport => passport::show(ui, app),
         Screen::Gantt => gantt::show(ui, app),
@@ -154,6 +159,7 @@ pub fn draw(ctx: &Context, app: &mut App) {
         Screen::Client => client::show(ui, app),
         Screen::Copilot => copilot::show(ui, app),
         Screen::Settings => settings::show(ui, app),
+        }
     });
 
     search::draw(ctx, app);
@@ -229,6 +235,8 @@ fn top_bar(ctx: &Context, app: &mut App) {
                             .size(13.0),
                     );
                     ui.separator();
+                    role_picker(ui, app);
+                    ui.separator();
                     if let Some(p) = app.project() {
                         let c = match p.status {
                             crate::model::ObjectStatus::InProgress => theme::ok(),
@@ -241,6 +249,88 @@ fn top_bar(ctx: &Context, app: &mut App) {
                 });
             });
         });
+}
+
+/// Joriy foydalanuvchi va rol. Bosilsa — almashtirish ro'yxati.
+fn role_picker(ui: &mut egui::Ui, app: &mut App) {
+    let role = app.role();
+    let name = app
+        .current_user
+        .and_then(|id| app.users.iter().find(|u| u.id == id))
+        .map(|u| u.name.clone())
+        .unwrap_or_else(|| t("role_nobody").to_string());
+    let color = if app.can_edit(app.screen) {
+        theme::muted()
+    } else {
+        // Faqat o'qish holati yuqori panelda ham ko'rinib tursin.
+        theme::warn()
+    };
+
+    let mut pick: Option<Option<i64>> = None;
+    egui::ComboBox::from_id_salt("role_picker")
+        .selected_text(RichText::new(format!("{name} · {}", role.label())).color(color))
+        .width(220.0)
+        .show_ui(ui, |ui| {
+            ui.label(
+                RichText::new(t("role_switch_hint"))
+                    .size(10.5)
+                    .color(theme::muted()),
+            );
+            ui.separator();
+            if ui
+                .selectable_label(app.current_user.is_none(), t("role_nobody"))
+                .clicked()
+            {
+                pick = Some(None);
+            }
+            for u in &app.users {
+                let label = format!("{} · {}", u.name, u.role.label());
+                if ui
+                    .selectable_label(app.current_user == Some(u.id), label)
+                    .clicked()
+                {
+                    pick = Some(Some(u.id));
+                }
+            }
+            if app.users.is_empty() {
+                ui.label(
+                    RichText::new(t("role_no_users"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+            }
+        })
+        .response
+        .on_hover_text(role.hint());
+
+    if let Some(id) = pick {
+        app.set_user(id);
+    }
+}
+
+/// Ekran faqat o'qish uchun ochilganda tepada chiqadigan tasma.
+fn readonly_banner(ui: &mut egui::Ui, app: &App) {
+    egui::Frame::new()
+        .fill(theme::warn().gamma_multiply(0.14))
+        .stroke(Stroke::new(1.0_f32, theme::warn()))
+        .corner_radius(6)
+        .inner_margin(egui::Margin::symmetric(10, 6))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(t("role_readonly"))
+                        .size(12.0)
+                        .color(theme::warn())
+                        .strong(),
+                );
+                ui.label(
+                    RichText::new(format!("{}: {}", t("role_current"), app.role().label()))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+            });
+        });
+    ui.add_space(6.0);
 }
 
 /// Modul holatining rangi. Tayyor modul belgisiz qoladi — ro'yxat shovqinsiz

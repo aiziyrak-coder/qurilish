@@ -420,6 +420,9 @@ pub struct App {
     pub machine_logs: Vec<MachineLog>,
     /// Tabelda ko'rsatilayotgan hafta boshi (dushanba).
     pub timesheet_week: Option<chrono::NaiveDate>,
+    /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
+    pub users: Vec<crate::roles::User>,
+    pub current_user: Option<i64>,
     pub sales_block: Option<i64>,
     pub selected_unit: Option<i64>,
     pub selected_deal: Option<i64>,
@@ -532,6 +535,8 @@ impl App {
             machines: Vec::new(),
             machine_logs: Vec::new(),
             timesheet_week: None,
+            users: Vec::new(),
+            current_user: None,
             sales_block: None,
             selected_unit: None,
             selected_deal: None,
@@ -566,6 +571,13 @@ impl App {
                 app.select_project(p.id);
             }
         }
+        // Rollar: oxirgi tanlangan foydalanuvchi tiklanadi.
+        app.reload_users();
+        app.current_user = app
+            .db
+            .get_setting("current_user")
+            .and_then(|v| v.parse::<i64>().ok())
+            .filter(|id| app.users.iter().any(|u| u.id == *id));
         app
     }
 
@@ -779,12 +791,436 @@ impl App {
         });
     }
 
+    /// Joriy rol. Foydalanuvchi tanlanmagan bo'lsa — to'liq huquq:
+    /// bitta odam ishlayotgan ilovada cheklov ma'nosiz.
+    pub fn role(&self) -> crate::roles::Role {
+        self.current_user
+            .and_then(|id| self.users.iter().find(|u| u.id == id))
+            .map(|u| u.role)
+            .unwrap_or(crate::roles::Role::Admin)
+    }
+
+    /// Joriy rol shu ekranni o'zgartira oladimi.
+    pub fn can_edit(&self, screen: Screen) -> bool {
+        self.role().can_edit(screen)
+    }
+
+    /// Joriy ekranni o'zgartirish mumkinmi — yozuvchi amallar shu orqali tekshiriladi.
+    fn writable(&mut self) -> bool {
+        if self.can_edit(self.screen) {
+            return true;
+        }
+        self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+        false
+    }
+
+    pub fn reload_users(&mut self) {
+        self.users = self.db.users();
+        // Tanlangan foydalanuvchi o'chirilgan bo'lsa — tanlovni bo'shatamiz.
+        if self.current_user.is_some_and(|id| !self.users.iter().any(|u| u.id == id)) {
+            self.current_user = None;
+        }
+    }
+
+    /// Foydalanuvchini almashtirish: rolning uy ekrani ochiladi.
+    pub fn set_user(&mut self, id: Option<i64>) {
+        self.current_user = id;
+        let _ = self.db.set_setting("current_user", &id.map(|v| v.to_string()).unwrap_or_default());
+        self.screen = self.role().home();
+    }
+
+    // ---------- Loyiha paketi (qurilmalar orasida almashish) ----------
+
+    /// Maydonchada to'ldiriladigan ma'lumotni paketga chiqaradi.
+    ///
+    /// Paketga faqat **kunlik ijro** kiradi: jurnal, tabel, texnika smenalari,
+    /// sifat va xavfsizlik yozuvlari. Grafik, smeta va shartnomalar chiqmaydi —
+    /// ular ofisda yuritiladi va ikki tomondan tahrirlansa ziddiyat tug'iladi.
+    pub fn export_package(&self) -> crate::package::Package {
+        use crate::package::{Package, Table};
+
+        let name = |id: Option<i64>| id.map(|t| self.task_name(t)).unwrap_or_default();
+
+        let journal = Table {
+            name: "journal".into(),
+            columns: vec![
+                "date".into(),
+                "author".into(),
+                "weather".into(),
+                "temperature".into(),
+                "workers".into(),
+                "machines".into(),
+                "task".into(),
+                "volume".into(),
+                "unit".into(),
+                "text".into(),
+                "remarks".into(),
+            ],
+            rows: self
+                .journal
+                .iter()
+                .map(|j| {
+                    vec![
+                        j.date.to_string(),
+                        j.author.clone(),
+                        j.weather.clone(),
+                        j.temperature.to_string(),
+                        j.workers.to_string(),
+                        j.machines.to_string(),
+                        name(j.task_id),
+                        j.volume.to_string(),
+                        j.unit.clone(),
+                        j.text.clone(),
+                        j.remarks.clone(),
+                    ]
+                })
+                .collect(),
+        };
+
+        let timesheet = Table {
+            name: "timesheet".into(),
+            columns: vec!["date".into(), "worker".into(), "hours".into()],
+            rows: self
+                .timesheet
+                .iter()
+                .map(|e| {
+                    let worker = self
+                        .workers
+                        .iter()
+                        .find(|w| w.id == e.worker_id)
+                        .map(|w| w.name.clone())
+                        .unwrap_or_default();
+                    vec![e.date.to_string(), worker, e.hours.to_string()]
+                })
+                .collect(),
+        };
+
+        let machine_logs = Table {
+            name: "machine_log".into(),
+            columns: vec![
+                "date".into(),
+                "machine".into(),
+                "hours".into(),
+                "fuel".into(),
+                "task".into(),
+            ],
+            rows: self
+                .machine_logs
+                .iter()
+                .map(|l| {
+                    let machine = self
+                        .machines
+                        .iter()
+                        .find(|m| m.id == l.machine_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    vec![
+                        l.date.to_string(),
+                        machine,
+                        l.hours.to_string(),
+                        l.fuel.to_string(),
+                        name(l.task_id),
+                    ]
+                })
+                .collect(),
+        };
+
+        let quality = Table {
+            name: "quality".into(),
+            columns: vec![
+                "date".into(),
+                "kind".into(),
+                "subject".into(),
+                "inspector".into(),
+                "result".into(),
+                "defect".into(),
+                "task".into(),
+            ],
+            rows: self
+                .quality
+                .iter()
+                .map(|q| {
+                    vec![
+                        q.date.to_string(),
+                        q.kind.code().into(),
+                        q.subject.clone(),
+                        q.inspector.clone(),
+                        q.result.code().into(),
+                        q.defect.clone(),
+                        name(q.task_id),
+                    ]
+                })
+                .collect(),
+        };
+
+        let safety = Table {
+            name: "safety".into(),
+            columns: vec![
+                "date".into(),
+                "kind".into(),
+                "severity".into(),
+                "place".into(),
+                "description".into(),
+                "measure".into(),
+                "responsible".into(),
+                "status".into(),
+            ],
+            rows: self
+                .safety
+                .iter()
+                .map(|s| {
+                    vec![
+                        s.date.to_string(),
+                        s.kind.code().into(),
+                        s.severity.code().into(),
+                        s.place.clone(),
+                        s.description.clone(),
+                        s.measure.clone(),
+                        s.responsible.clone(),
+                        s.status.code().into(),
+                    ]
+                })
+                .collect(),
+        };
+
+        Package {
+            version: crate::package::VERSION.into(),
+            project: self.project().map(|p| p.name.clone()).unwrap_or_default(),
+            created: self.today.to_string(),
+            tables: vec![journal, timesheet, machine_logs, quality, safety],
+        }
+    }
+
+    /// Paketdagi yozuvlarni bazaga qo'shadi. Mavjudlari qayta yozilmaydi.
+    ///
+    /// Natija: (qo'shilgan, mavjud bo'lgani). Ishchi yoki texnika topilmasa —
+    /// yangisi yaratiladi: maydonchada kiritilgan yozuv yo'qolib qolmasin.
+    pub fn import_package(&mut self, pkg: &crate::package::Package) -> (usize, usize) {
+        use crate::domain::{
+            JournalEntry, Machine, MachineKind, MachineLog, MachineStatus, QualityCheck,
+            QualityKind, QualityResult, SafetyEvent, SafetyKind, Severity, Worker,
+        };
+        use crate::package::row_map;
+
+        let Some(pid) = self.current else {
+            return (0, 0);
+        };
+        let (mut added, mut existing) = (0usize, 0usize);
+        let date = |s: &str| {
+            chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or(self.today)
+        };
+        let num = |s: &str| s.parse::<f64>().unwrap_or(0.0);
+        let int = |s: &str| s.parse::<i64>().unwrap_or(0);
+
+        // ---- Jurnal: sana va matn bo'yicha takrorlanmaydi.
+        if let Some(t) = pkg.table("journal") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let d = date(m.get("date").copied().unwrap_or(""));
+                let text = m.get("text").copied().unwrap_or("").to_string();
+                if self.journal.iter().any(|j| j.date == d && j.text == text) {
+                    existing += 1;
+                    continue;
+                }
+                let task_id = self.task_id_by_name(m.get("task").copied().unwrap_or(""));
+                self.db.insert_journal(&JournalEntry {
+                    id: 0,
+                    project_id: pid,
+                    date: d,
+                    author: m.get("author").copied().unwrap_or("").into(),
+                    weather: m.get("weather").copied().unwrap_or("").into(),
+                    temperature: num(m.get("temperature").copied().unwrap_or("")),
+                    workers: int(m.get("workers").copied().unwrap_or("")),
+                    machines: int(m.get("machines").copied().unwrap_or("")),
+                    task_id,
+                    volume: num(m.get("volume").copied().unwrap_or("")),
+                    unit: m.get("unit").copied().unwrap_or("").into(),
+                    text,
+                    remarks: m.get("remarks").copied().unwrap_or("").into(),
+                    photos: String::new(),
+                });
+                added += 1;
+            }
+        }
+
+        // ---- Tabel: bir ishchining bir kuni bitta bo'ladi.
+        if let Some(t) = pkg.table("timesheet") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let d = date(m.get("date").copied().unwrap_or(""));
+                let who = m.get("worker").copied().unwrap_or("").trim().to_string();
+                if who.is_empty() {
+                    continue;
+                }
+                let wid = match self.workers.iter().find(|w| w.name == who) {
+                    Some(w) => w.id,
+                    None => {
+                        let id = self.db.insert_worker(&Worker {
+                            id: 0,
+                            project_id: pid,
+                            name: who.clone(),
+                            position: String::new(),
+                            org: String::new(),
+                            hourly_rate: 0.0,
+                            active: true,
+                        });
+                        self.workers = self.db.workers(pid);
+                        id
+                    }
+                };
+                if self
+                    .timesheet
+                    .iter()
+                    .any(|e| e.worker_id == wid && e.date == d)
+                {
+                    existing += 1;
+                    continue;
+                }
+                self.db
+                    .set_timesheet(pid, wid, d, num(m.get("hours").copied().unwrap_or("")));
+                added += 1;
+            }
+        }
+
+        // ---- Texnika smenalari.
+        if let Some(t) = pkg.table("machine_log") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let d = date(m.get("date").copied().unwrap_or(""));
+                let who = m.get("machine").copied().unwrap_or("").trim().to_string();
+                if who.is_empty() {
+                    continue;
+                }
+                let mid = match self.machines.iter().find(|x| x.name == who) {
+                    Some(x) => x.id,
+                    None => {
+                        let id = self.db.insert_machine(&Machine {
+                            id: 0,
+                            project_id: pid,
+                            name: who.clone(),
+                            kind: MachineKind::Other,
+                            reg_no: String::new(),
+                            owner: String::new(),
+                            status: MachineStatus::Idle,
+                            hour_rate: 0.0,
+                            operator: String::new(),
+                            inspection_until: None,
+                        });
+                        self.machines = self.db.machines(pid);
+                        id
+                    }
+                };
+                if self
+                    .machine_logs
+                    .iter()
+                    .any(|l| l.machine_id == mid && l.date == d)
+                {
+                    existing += 1;
+                    continue;
+                }
+                self.db.insert_machine_log(&MachineLog {
+                    id: 0,
+                    project_id: pid,
+                    machine_id: mid,
+                    date: d,
+                    hours: num(m.get("hours").copied().unwrap_or("")),
+                    fuel: num(m.get("fuel").copied().unwrap_or("")),
+                    task_id: self.task_id_by_name(m.get("task").copied().unwrap_or("")),
+                    note: String::new(),
+                });
+                added += 1;
+            }
+        }
+
+        // ---- Sifat nazorati.
+        if let Some(t) = pkg.table("quality") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let d = date(m.get("date").copied().unwrap_or(""));
+                let subject = m.get("subject").copied().unwrap_or("").to_string();
+                if self
+                    .quality
+                    .iter()
+                    .any(|q| q.date == d && q.subject == subject)
+                {
+                    existing += 1;
+                    continue;
+                }
+                self.db.insert_quality(&QualityCheck {
+                    id: 0,
+                    project_id: pid,
+                    kind: QualityKind::parse(m.get("kind").copied().unwrap_or("")),
+                    date: d,
+                    task_id: self.task_id_by_name(m.get("task").copied().unwrap_or("")),
+                    material_id: None,
+                    subject,
+                    inspector: m.get("inspector").copied().unwrap_or("").into(),
+                    result: QualityResult::parse(m.get("result").copied().unwrap_or("")),
+                    defect: m.get("defect").copied().unwrap_or("").into(),
+                    deadline: None,
+                    note: String::new(),
+                });
+                added += 1;
+            }
+        }
+
+        // ---- Xavfsizlik.
+        if let Some(t) = pkg.table("safety") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let d = date(m.get("date").copied().unwrap_or(""));
+                let description = m.get("description").copied().unwrap_or("").to_string();
+                if self
+                    .safety
+                    .iter()
+                    .any(|s| s.date == d && s.description == description)
+                {
+                    existing += 1;
+                    continue;
+                }
+                self.db.insert_safety(&SafetyEvent {
+                    id: 0,
+                    project_id: pid,
+                    date: d,
+                    kind: SafetyKind::parse(m.get("kind").copied().unwrap_or("")),
+                    severity: Severity::parse(m.get("severity").copied().unwrap_or("")),
+                    place: m.get("place").copied().unwrap_or("").into(),
+                    description,
+                    responsible: m.get("responsible").copied().unwrap_or("").into(),
+                    measure: m.get("measure").copied().unwrap_or("").into(),
+                    deadline: None,
+                    status: crate::domain::IssueStatus::parse(
+                        m.get("status").copied().unwrap_or(""),
+                    ),
+                });
+                added += 1;
+            }
+        }
+
+        self.reload_modules();
+        (added, existing)
+    }
+
+    /// Ish nomidan uning identifikatorini topadi (paketda nom ko'chadi, id emas).
+    fn task_id_by_name(&self, name: &str) -> Option<i64> {
+        let n = name.trim();
+        if n.is_empty() {
+            return None;
+        }
+        self.tasks.iter().find(|t| t.name == n).map(|t| t.id)
+    }
+
     /// TZ II.1–2: IFC faylini o'qib, bilimlar grafiga qo'shadi.
     ///
     /// Mavjud elementlar o'chirilmaydi — import qo'shimcha qiladi. Bir xil
     /// marka ikki marta tushmasligi uchun IFC dan kelgan va o'sha markali
     /// element allaqachon bo'lsa, u qayta yozilmaydi.
     pub fn import_ifc(&mut self, path: &std::path::Path) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let Some(pid) = self.current else { return };
         let src = match std::fs::read_to_string(path) {
             Ok(s) => s,
@@ -968,6 +1404,11 @@ impl App {
 
     /// TZ III.2: smetani fayldan import qilish.
     pub fn import_estimate(&mut self, path: &std::path::Path) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Estimate) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let Some(pid) = self.current else { return };
         let imported = match crate::import::estimate_from_file(path) {
             Ok(v) => v,
@@ -1034,6 +1475,11 @@ impl App {
     /// Hajmi ko'rsatilmagan ishda foizni hisoblab bo'lmaydi — bunday ishlar
     /// tegilmaydi va soni foydalanuvchiga aytiladi.
     pub fn apply_journal_to_tasks(&mut self) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Journal) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         use std::collections::HashMap as Map;
         let mut done: Map<i64, f64> = Map::new();
         let mut first: Map<i64, NaiveDate> = Map::new();
@@ -1126,6 +1572,10 @@ impl App {
     }
 
     pub fn save_issue(&mut self, issue: Issue) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.writable() {
+            return;
+        }
         if self.db.update_issue(&issue) {
             if let Some(slot) = self.issues.iter_mut().find(|x| x.id == issue.id) {
                 *slot = issue;
@@ -1136,6 +1586,11 @@ impl App {
     }
 
     pub fn save_norm(&mut self, key: &str, norm: Norm) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         if self.db.save_norm(key, &norm) {
             self.norms.insert(key.to_string(), norm);
             self.notify(t("norm_saved").to_string());
@@ -1148,6 +1603,11 @@ impl App {
     /// qayta tiklaydi. Polosani tasodifan sudrab yuborish ishni mahkamlab
     /// qo'yadi — bunday ishlarni birma-bir qidirmaslik uchun kerak.
     pub fn unpin_all(&mut self) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let ids: Vec<i64> = self
             .tasks
             .iter()
@@ -1170,6 +1630,11 @@ impl App {
     /// Ishni ±N kunga suradi (klaviatura bilan boshqarish uchun).
     /// Surilgan ish mahkamlanadi — aks holda CPM uni qaytarib qo'yardi.
     pub fn nudge_task(&mut self, id: i64, days: i64) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let Some(mut task) = self.task(id).cloned() else {
             return;
         };
@@ -1180,6 +1645,11 @@ impl App {
 
     /// Ishni ro'yxatda yuqoriga yoki pastga suradi.
     pub fn reorder_task(&mut self, id: i64, up: bool) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let ids: Vec<i64> = self.tasks.iter().map(|t| t.id).collect();
         let Some(i) = ids.iter().position(|x| *x == id) else {
             return;
@@ -1231,6 +1701,11 @@ impl App {
 
     /// Obyektni o'chiradi: bog'liq ma'lumot sxemadagi CASCADE bilan ketadi.
     pub fn delete_project(&mut self, id: i64) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Passport) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         if let Err(e) = self.db.delete_project(id) {
             self.notify(format!("{}: {e}", t("save_failed")));
             return;
@@ -1247,6 +1722,11 @@ impl App {
     }
 
     pub fn save_task(&mut self, task: Task) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         if let Err(e) = self.db.update_task(&task) {
             self.notify(format!("{}: {e}", t("err_save_task")));
             return;
@@ -1258,6 +1738,11 @@ impl App {
     }
 
     pub fn add_task(&mut self) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let Some(pid) = self.current else { return };
         let task = Task {
             id: 0,
@@ -1285,6 +1770,11 @@ impl App {
     }
 
     pub fn delete_task(&mut self, id: i64) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         if let Err(e) = self.db.delete_task(id) {
             self.notify(format!("{}: {e}", t("err_del_task")));
             return;
@@ -1297,6 +1787,11 @@ impl App {
     }
 
     pub fn add_link(&mut self, pred: i64, succ: i64, kind: LinkType, lag: i64) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         if pred == succ {
             self.notify(t("link_self").into());
             return;
@@ -1330,6 +1825,11 @@ impl App {
     }
 
     pub fn delete_link(&mut self, id: i64) {
+        // Rol cheklovi: bu amal yozuvchi.
+        if !self.can_edit(Screen::Gantt) {
+            self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
+            return;
+        }
         let _ = self.db.delete_link(id);
         self.reload_project_data();
     }

@@ -1498,6 +1498,125 @@ mod tests {
         assert!(t.db.issues(pid).is_empty());
     }
 
+    /// Qurilmalar orasida almashish: paket chiqarilib, boshqa bazaga tushadi.
+    #[test]
+    fn package_moves_field_work_between_databases() {
+        // Maydondagi baza: namuna ma'lumot bilan.
+        let field = TempDb::new();
+        let pid = field.db.seed_demo().unwrap();
+        let mut site = crate::app::App::new(Db::open(&field.path).unwrap());
+        site.select_project(pid);
+
+        let pkg = site.export_package();
+        assert!(pkg.row_count() > 0, "paket bo'sh");
+        assert!(pkg.table("journal").is_some());
+        assert!(pkg.table("timesheet").is_some());
+        // Grafik va smeta ataylab chiqmaydi.
+        assert!(pkg.table("task").is_none());
+        assert!(pkg.table("estimate").is_none());
+
+        // Fayl orqali ko'chiramiz.
+        let text = crate::package::write(&pkg);
+        let back = crate::package::read(&text).expect("o'qildi");
+
+        // Ofisdagi baza: o'sha obyekt bor, lekin kunlik ijro yo'q.
+        let office = TempDb::new();
+        let opid = office
+            .db
+            .insert_project(&crate::model::Project {
+                id: 0,
+                name: "Ofis nusxasi".into(),
+                code: String::new(),
+                address: String::new(),
+                object_type: String::new(),
+                floors: 0,
+                area_total: 0.0,
+                status: crate::model::ObjectStatus::InProgress,
+                start_date: chrono::Local::now().date_naive(),
+                planned_end: chrono::Local::now().date_naive(),
+                contract_sum: 0.0,
+                paid_total: 0.0,
+                currency: "UZS".into(),
+                funding_source: String::new(),
+                notes: String::new(),
+            })
+            .unwrap();
+        let mut hq = crate::app::App::new(Db::open(&office.path).unwrap());
+        hq.select_project(opid);
+        assert!(hq.journal.is_empty());
+
+        let (added, existing) = hq.import_package(&back);
+        assert!(added > 0, "hech narsa qo'shilmadi");
+        assert_eq!(existing, 0);
+        assert!(!hq.journal.is_empty(), "jurnal ko'chmadi");
+        assert!(!hq.timesheet.is_empty(), "tabel ko'chmadi");
+        // Ishchilar paketda nom bilan kelgan — ular yaratildi.
+        assert!(!hq.workers.is_empty());
+
+        // Ikkinchi import dublikat yaratmaydi.
+        let before = hq.journal.len();
+        let (added2, existing2) = hq.import_package(&back);
+        assert_eq!(added2, 0, "takroriy import dublikat berdi");
+        assert!(existing2 > 0);
+        assert_eq!(hq.journal.len(), before);
+    }
+
+    /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
+    #[test]
+    fn role_blocks_writes_but_not_reads() {
+        use crate::app::Screen;
+        use crate::roles::{Role, User};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let client = t.db.insert_user(&User {
+            id: 0,
+            name: "Buyurtmachi".into(),
+            role: Role::Client,
+            note: String::new(),
+        });
+        let foreman = t.db.insert_user(&User {
+            id: 0,
+            name: "Prorab".into(),
+            role: Role::Foreman,
+            note: String::new(),
+        });
+
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let task = app.tasks.first().cloned().expect("ish");
+
+        // Buyurtmachi: ko'radi, lekin o'zgartira olmaydi.
+        app.set_user(Some(client));
+        assert_eq!(app.role(), Role::Client);
+        assert!(!app.tasks.is_empty(), "ma'lumot ko'rinishda qolishi kerak");
+        app.screen = Screen::Gantt;
+        let mut edited = task.clone();
+        edited.progress = 5.0;
+        app.save_task(edited);
+        let after = t.db.tasks(pid).unwrap();
+        let saved = after.iter().find(|x| x.id == task.id).unwrap();
+        assert_eq!(saved.progress, task.progress, "buyurtmachi ishni o'zgartirdi");
+
+        // Prorab: grafikda ishlay oladi.
+        app.set_user(Some(foreman));
+        app.screen = Screen::Gantt;
+        let mut edited = task.clone();
+        edited.progress = 42.0;
+        app.save_task(edited);
+        let after = t.db.tasks(pid).unwrap();
+        let saved = after.iter().find(|x| x.id == task.id).unwrap();
+        assert_eq!(saved.progress, 42.0, "prorab ishni o'zgartira olmadi");
+
+        // Ammo smetani emas.
+        assert!(!app.can_edit(Screen::Estimate));
+
+        // Rol tanlanmagan bo'lsa — cheklov yo'q.
+        app.set_user(None);
+        assert_eq!(app.role(), Role::Admin);
+        assert!(app.can_edit(Screen::Estimate));
+    }
+
     /// TZ II.1-2: IFC fayli o'qilib, elementlar va bog'lanishlar bazaga tushadi.
     #[test]
     fn ifc_import_fills_the_graph() {

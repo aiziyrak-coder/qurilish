@@ -355,6 +355,71 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "set_db_path" => ("Baza fayli", "Файл базы данных"),
         "set_open_folder" => ("Papkani ochish", "Открыть папку"),
         "set_objects_count" => ("Obyektlar soni", "Объектов в базе"),
+        // ---------- Rollar ----------
+        "role_admin" => ("Administrator", "Администратор"),
+        "role_admin_hint" => (
+            "Hamma bo'limni ko'radi va o'zgartiradi.",
+            "Видит и изменяет все разделы.",
+        ),
+        "role_foreman" => ("Prorab", "Прораб"),
+        "role_foreman_hint" => (
+            "Ijro: jurnal, tabel, texnika smenalari, bajarilish foizi, arizalar.",
+            "Исполнение: журнал, табель, смены техники, процент выполнения, заявки.",
+        ),
+        "role_supervisor" => ("Texnik nazorat", "Технадзор"),
+        "role_supervisor_hint" => (
+            "Nazorat: ijro hujjatlari, sifat, xavfsizlik, tekshiruv natijalari.",
+            "Контроль: исполнительная документация, качество, ТБ, результаты проверок.",
+        ),
+        "role_sales" => ("Sotuv", "Продажи"),
+        "role_sales_hint" => (
+            "Kvartiralar, shartnomalar va to'lovlar.",
+            "Квартиры, договоры и платежи.",
+        ),
+        "role_client_hint" => (
+            "Faqat ko'rish: hech narsani o'zgartirmaydi.",
+            "Только просмотр: ничего не изменяет.",
+        ),
+        "role_nobody" => ("Rol tanlanmagan", "Роль не выбрана"),
+        "role_no_users" => (
+            "Foydalanuvchilar sozlamalarda qo'shiladi.",
+            "Пользователи добавляются в настройках.",
+        ),
+        "role_switch_hint" => (
+            "Rol ish taqsimoti uchun; bu parol bilan himoya emas.",
+            "Роль — для разделения работы; это не защита паролем.",
+        ),
+        "role_readonly" => (
+            "Bu ekran shu rolda faqat ko'rish uchun",
+            "Этот экран в этой роли только для просмотра",
+        ),
+        "role_current" => ("Joriy rol", "Текущая роль"),
+        "set_group_roles" => ("Foydalanuvchilar va rollar", "Пользователи и роли"),
+        "set_roles_note" => (
+            "Rol ish taqsimoti uchun: kim nimani to'ldirishini belgilaydi. Baza fayli ochiq, shuning uchun bu parol bilan himoya emas — haqiqiy kirish nazorati server qismi bilan keladi.",
+            "Роль нужна для разделения работы: кто что заполняет. Файл базы открыт, поэтому это не защита паролем — реальный контроль доступа появится вместе с серверной частью.",
+        ),
+        "add_user" => ("+ Foydalanuvchi", "+ Пользователь"),
+        "user_new_name" => ("Yangi foydalanuvchi", "Новый пользователь"),
+        "col_user" => ("Ism", "Имя"),
+
+        "set_package" => ("Loyiha paketi", "Пакет объекта"),
+        "set_package_export" => ("Paketga chiqarish…", "Выгрузить пакет…"),
+        "set_package_export_hint" => (
+            "Kunlik ijro (jurnal, tabel, smenalar, sifat, xavfsizlik) matn fayliga yoziladi va boshqa kompyuterga olib borilishi mumkin. Grafik va smeta chiqmaydi — ular ofisda yuritiladi.",
+            "Ежедневное исполнение (журнал, табель, смены, качество, ТБ) записывается в текстовый файл и переносится на другой компьютер. График и смета не выгружаются — они ведутся в офисе.",
+        ),
+        "set_package_import" => ("Paketdan olish…", "Загрузить пакет…"),
+        "set_package_import_hint" => (
+            "Paketdagi yozuvlar qo'shiladi. Mavjud yozuvlar qayta yozilmaydi — ziddiyatni odam hal qiladi.",
+            "Записи из пакета добавляются. Существующие не перезаписываются — конфликт решает человек.",
+        ),
+        "set_package_saved" => ("Paket saqlandi, qatorlar:", "Пакет сохранен, строк:"),
+        "set_package_failed" => ("Paket bilan ishlab bo'lmadi", "С пакетом поработать не удалось"),
+        "set_package_bad" => (
+            "Bu QURAi paketi emasga o'xshaydi.",
+            "Похоже, это не пакет QURAi.",
+        ),
         "set_backup" => ("Zaxira nusxa", "Резервная копия"),
         "set_backup_btn" => ("Nusxa saqlash…", "Сохранить копию…"),
         "set_backup_hint" => (
