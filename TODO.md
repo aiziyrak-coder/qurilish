@@ -829,3 +829,19 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 8. ~~Mashinalar: yo'l varaqalari, TX rejasi, tannarx, foydalanish koeffitsiyenti~~ (XVI.14–27, 32–38) — **bajarildi**
 9. ~~Analitika: pul oqimi, kassa uzilishi, kunlik xulosa, drill-down~~ (XVII.30–31, 37, 48) — **bajarildi**
 10. **Hujjat generatsiyasi va Excel eksporti** (IV.5–7, umumiy)
+
+### To'qqiz bosqich bitgach — keyingi navbat
+
+Birinchi to'qqiz band bajarildi. Endi eng ko'p foyda beradigan qolgan ishlar:
+
+1. **Hujjat generatsiyasi**: KS-2, KS-3, M-29, yashirin ishlar dalolatnomasi,
+   inventarizatsiya ro'yxati, naryad-dopusk blankasi (IV.5–7, XI.25, XV.11)
+2. **Excel eksporti**: har bir jadval uchun (umumiy talab)
+3. **Bir nechta obyekt kesimida analitika** (XVII.4, X.33, XV.34)
+4. **Smeta ↔ material ↔ ish bog'lanishi**: pozitsiya darajasida (III.28, XII.5–7)
+5. **Debitorlik va to'lov intizomi** (XVII.32–33, XX)
+6. **Pudratchilar va yetkazib beruvchilar reytingi** (XIV.28–29, XV.35, XVII.23–24)
+7. **Ssenariy modellashtirish «nima bo'ladi, agar?»** (XVII.36, 43)
+
+Server, DWG/RVT va til modeli bo'yicha ishlar `USTA.md` da alohida yozilgan —
+ular ilovadan tashqaridagi qarorlarni talab qiladi.
