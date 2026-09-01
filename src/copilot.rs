@@ -30,6 +30,7 @@ pub enum Intent {
     Safety,
     Sales,
     Docs,
+    Cash,
     Attention,
 }
 
@@ -39,6 +40,9 @@ impl Intent {
         Intent::Attention,
         Intent::Delays,
         Intent::Critical,
+        // Pul oqimi umumiy «pul» savolidan oldin tekshiriladi: aks holda
+        // «pul oqimi» so'rovi umumiy moliya javobiga tushib ketardi.
+        Intent::Cash,
         Intent::Money,
         Intent::Docs,
         Intent::Supply,
@@ -58,6 +62,7 @@ impl Intent {
             Intent::Delays => t("cp_q_delays"),
             Intent::Critical => t("cp_q_critical"),
             Intent::Money => t("cp_q_money"),
+            Intent::Cash => t("cp_q_cash"),
             Intent::Docs => t("cp_q_docs"),
             Intent::Supply => t("cp_q_supply"),
             Intent::Stock => t("cp_q_stock"),
@@ -75,6 +80,7 @@ impl Intent {
             Intent::Overview | Intent::Attention => Screen::Analytics,
             Intent::Delays | Intent::Critical => Screen::Gantt,
             Intent::Money => Screen::Estimate,
+            Intent::Cash => Screen::Analytics,
             Intent::Docs => Screen::ExecDocs,
             Intent::Supply => Screen::Requests,
             Intent::Stock => Screen::Warehouse,
@@ -149,6 +155,16 @@ impl Intent {
                 "остат",
                 "материал",
                 "запас",
+            ],
+            Intent::Cash => &[
+                "pul oqim",
+                "kassa",
+                "uzilish",
+                "denejn",
+                "денежн",
+                "поток",
+                "кассов",
+                "разрыв",
             ],
             Intent::Crew => &[
                 "ishchi",
@@ -277,6 +293,7 @@ pub fn answer(intent: Intent, inp: &Input) -> Answer {
         Intent::Docs => docs(inp),
         Intent::Supply => supply(inp),
         Intent::Stock => stock(inp),
+        Intent::Cash => cash(inp),
         Intent::Crew => crew(inp),
         Intent::Machines => machines(inp),
         Intent::Quality => quality(inp),
@@ -516,20 +533,12 @@ fn crew(inp: &Input) -> Vec<Line> {
         .filter(|e| e.date >= week)
         .map(|e| e.hours)
         .sum();
-    let payroll: f64 = inp
-        .timesheet
-        .iter()
-        .filter(|e| e.date >= week)
-        .map(|e| {
-            e.hours
-                * inp
-                    .workers
-                    .iter()
-                    .find(|w| w.id == e.worker_id)
-                    .map(|w| w.hourly_rate)
-                    .unwrap_or(0.0)
-        })
-        .sum();
+    // Ish haqi tabel ekranidagi bilan bitta hisobdan olinadi: smena va
+    // ortiqcha ish koeffitsiyentlari bu yerda ham qo'llanadi.
+    let wages = crate::checks::wages(inp.workers, inp.timesheet, week, today);
+    let payroll: f64 = wages.iter().map(|w| w.wage).sum();
+    let downtime: f64 = wages.iter().map(|w| w.downtime_hours).sum();
+    let absences: i64 = wages.iter().map(|w| w.absence_days).sum();
 
     let mut out = vec![
         line(
@@ -541,8 +550,48 @@ fn crew(inp: &Input) -> Vec<Line> {
         line(t("kpi_hours_week"), trim(week_hours)),
         line(t("kpi_payroll"), money(payroll)),
     ];
+    // Bo'sh turish va yo'qliklar — soat yo'qolishining sababi.
+    if downtime > 0.0 {
+        out.push(alert(t("kpi_downtime"), trim(downtime)));
+    }
+    if absences > 0 {
+        out.push(line(t("kpi_absences"), absences.to_string()));
+    }
     if today_people == 0 && !inp.workers.is_empty() {
         out.push(alert(t("cp_l_no_timesheet"), t("an_r4_fact").to_string()));
+    }
+    out
+}
+
+/// Pul oqimi va kassa uzilishi (TZ XVII.30–31).
+fn cash(inp: &Input) -> Vec<Line> {
+    let flow = crate::analytics::cash_flow(inp, 2, 4);
+    let now = crate::analytics::month_of(inp.today);
+    let mut out = Vec::new();
+
+    if let Some(m) = flow.iter().find(|m| m.month == now) {
+        out.push(line(t("cp_l_this_month_in"), money(m.income)));
+        out.push(line(t("cp_l_this_month_out"), money(m.expense)));
+        out.push(Line {
+            label: t("col_net").to_string(),
+            value: money(m.net),
+            alert: m.net < 0.0,
+        });
+    }
+    // Kelasi oylar rejasi.
+    for m in flow.iter().filter(|m| m.month > now).take(3) {
+        out.push(Line {
+            label: m.month.format("%m.%Y").to_string(),
+            value: format!("{} / {}", money(m.income), money(m.expense)),
+            alert: m.net < 0.0,
+        });
+    }
+    match crate::analytics::cash_gap(&flow, inp.today) {
+        Some(g) => out.push(alert(
+            t("cash_gap_title"),
+            format!("{} · {}", g.month.format("%m.%Y"), money(g.amount)),
+        )),
+        None => out.push(line(t("cp_l_none"), t("cash_gap_none").to_string())),
     }
     out
 }
@@ -690,6 +739,9 @@ mod tests {
         assert_eq!(detect("Что с деньгами?"), Some(Intent::Money));
         assert_eq!(detect("nima kechikkan"), Some(Intent::Delays));
         assert_eq!(detect("сколько рабочих"), Some(Intent::Crew));
+        // Pul oqimi umumiy «pul» savolidan ajratiladi.
+        assert_eq!(detect("pul oqimi qanday"), Some(Intent::Cash));
+        assert_eq!(detect("кассовый разрыв"), Some(Intent::Cash));
         assert_eq!(detect("kvartira sotuvi"), Some(Intent::Sales));
     }
 

@@ -31,9 +31,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 18 | 12 | 11 |
 | XV. Xavfsizlik | 41 | 19 | 8 | 14 |
 | XVI. Mashinalar | 50 | 26 | 6 | 18 |
-| XVII. AI analitika | 51 | 17 | 9 | 25 |
+| XVII. AI analitika | 51 | 18 | 8 | 25 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **235** | **131** | **316** |
+| **Jami** | **682** | **236** | **130** | **316** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -764,7 +764,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 43. Ssenariy modellashtirish
 - [ ] 44. AI yashirin yo'qotishlarni izlashi
 - [x] 45. Chetlanishlar tahlili
-- [~] 46. Yagona AI chat
+- [x] 46. Yagona AI chat — *o'n uch savol, har biri manba ekraniga bog'langan*
 - [~] 47. Darajalar bo'yicha analitika — *ko'rsatkich → bo'lim*
 - [x] 48. **Drill-down** — *kartochka, topilma va oqim qatoridan bo'limga*
 - [ ] 49. **AI Executive Score** — *sog'lomlik indeksi qisman*

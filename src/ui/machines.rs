@@ -235,20 +235,27 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
     let today = app.today;
     // TX va to'siqlar butun tarix bo'yicha hisoblanadi.
     let lines = machine_lines(app, today - chrono::Duration::days(30), today);
+    // Tor ekranda davlat raqami va egasi yashiriladi: ular o'zgarmaydigan
+    // ma'lumot, kunlik ish esa o'ng tomondagi ustunlarda.
+    let wide = ui.available_width() > 1400.0;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("machines_grid")
-                .num_columns(14)
+                .num_columns(if wide { 14 } else { 12 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
                     head_l(ui, 190.0, t("col_machine"));
                     head_l(ui, 140.0, t("col_kind"));
-                    head_l(ui, 120.0, t("col_reg_no"));
+                    if wide {
+                        head_l(ui, 120.0, t("col_reg_no"));
+                    }
                     head_l(ui, 120.0, t("col_status"));
-                    head_l(ui, 160.0, t("col_owner"));
+                    if wide {
+                        head_l(ui, 160.0, t("col_owner"));
+                    }
                     head_l(ui, 150.0, t("col_operator"));
                     head_r(ui, 120.0, t("col_hour_rate"));
                     head_l(ui, 150.0, t("col_inspection"));
@@ -276,9 +283,11 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
                                         ui.selectable_value(&mut m.kind, *k, k.label()).changed();
                                 }
                             });
-                        changed |= ui
-                            .add_sized([120.0, 22.0], egui::TextEdit::singleline(&mut m.reg_no))
-                            .changed();
+                        if wide {
+                            changed |= ui
+                                .add_sized([120.0, 22.0], egui::TextEdit::singleline(&mut m.reg_no))
+                                .changed();
+                        }
                         egui::ComboBox::from_id_salt(("mch_st", m.id))
                             .selected_text(
                                 RichText::new(m.status.label()).color(status_color(m.status)),
@@ -290,9 +299,11 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
                                         ui.selectable_value(&mut m.status, *s, s.label()).changed();
                                 }
                             });
-                        changed |= ui
-                            .add_sized([160.0, 22.0], egui::TextEdit::singleline(&mut m.owner))
-                            .changed();
+                        if wide {
+                            changed |= ui
+                                .add_sized([160.0, 22.0], egui::TextEdit::singleline(&mut m.owner))
+                                .changed();
+                        }
                         changed |= ui
                             .add_sized([150.0, 22.0], egui::TextEdit::singleline(&mut m.operator))
                             .changed();

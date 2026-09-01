@@ -1727,6 +1727,9 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cash_gap_title" => ("Kassa uzilishi kutilmoqda", "Ожидается кассовый разрыв"),
         "cash_gap_amount" => ("yetishmaydi:", "не хватает:"),
         "cash_gap_months" => ("oydan keyin", "мес. вперёд"),
+        "cp_q_cash" => ("Pul oqimi qanday?", "Как с денежным потоком?"),
+        "cp_l_this_month_in" => ("Shu oy kirim", "Поступления за месяц"),
+        "cp_l_this_month_out" => ("Shu oy chiqim", "Расход за месяц"),
         "col_expense" => ("Jami chiqim", "Итого расход"),
         "cash_gap_hint" => (
             "To'lov grafigi va buyurtma qilingan xaridlar bo'yicha hisoblangan. Xaridni surish yoki to'lovni tezlashtirish kerak.",

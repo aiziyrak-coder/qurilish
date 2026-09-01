@@ -286,6 +286,9 @@ fn sheet_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
     });
     ui.add_space(6.0);
 
+    // Tor ekranda brigada va lavozim ustunlari yashiriladi: kunlik ustunlar
+    // muhimroq, ular gorizontal aylantirishning narigi chetiga tushib qolmasin.
+    let wide = ui.available_width() > 1300.0;
     let wages = crate::checks::wages(&app.workers, &app.timesheet, week, days[6]);
     let mut edited: Option<Worker> = None;
     let mut removed: Option<i64> = None;
@@ -299,13 +302,15 @@ fn sheet_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("timesheet_grid")
-                .num_columns(14)
+                .num_columns(if wide { 14 } else { 12 })
                 .spacing([6.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
                     head_l(ui, 190.0, t("col_worker"));
-                    head_l(ui, 150.0, t("col_brigade"));
-                    head_l(ui, 130.0, t("col_position"));
+                    if wide {
+                        head_l(ui, 150.0, t("col_brigade"));
+                        head_l(ui, 130.0, t("col_position"));
+                    }
                     head_r(ui, 105.0, t("col_hourly_rate"));
                     for d in &days {
                         let weekend = d.weekday().num_days_from_monday() >= 5;
@@ -349,10 +354,15 @@ fn sheet_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                                 .add_sized([160.0, 22.0], egui::TextEdit::singleline(&mut w.name))
                                 .changed();
                         });
-                        changed |= brigade_picker(ui, app, w.id, &mut w.brigade_id, 150.0);
-                        changed |= ui
-                            .add_sized([130.0, 22.0], egui::TextEdit::singleline(&mut w.position))
-                            .changed();
+                        if wide {
+                            changed |= brigade_picker(ui, app, w.id, &mut w.brigade_id, 150.0);
+                            changed |= ui
+                                .add_sized(
+                                    [130.0, 22.0],
+                                    egui::TextEdit::singleline(&mut w.position),
+                                )
+                                .changed();
+                        }
                         changed |= ui
                             .add_sized(
                                 [105.0, 22.0],
@@ -506,8 +516,10 @@ fn sheet_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                             .size(11.5)
                             .color(theme::muted()),
                     );
-                    cell_l(ui, 150.0, RichText::new(""));
-                    cell_l(ui, 130.0, RichText::new(""));
+                    if wide {
+                        cell_l(ui, 150.0, RichText::new(""));
+                        cell_l(ui, 130.0, RichText::new(""));
+                    }
                     cell_l(ui, 105.0, RichText::new(""));
                     let mut week_total = 0.0;
                     for d in &days {
