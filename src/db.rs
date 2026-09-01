@@ -1498,6 +1498,78 @@ mod tests {
         assert!(t.db.issues(pid).is_empty());
     }
 
+    /// TZ XIII-XVI: resurs modullarining namuna ma'lumoti to'liq va izchil.
+    #[test]
+    fn demo_resources_are_consistent() {
+        use crate::domain::{IssueStatus, MachineStatus, QualityResult, SafetyKind};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+
+        let workers = t.db.workers(pid);
+        let sheet = t.db.timesheet(pid);
+        assert_eq!(workers.len(), 6);
+        assert!(!sheet.is_empty(), "tabel bo'sh");
+        // Tabelda faqat mavjud ishchilar va real soatlar.
+        for e in &sheet {
+            assert!(workers.iter().any(|w| w.id == e.worker_id));
+            assert!(e.hours > 0.0 && e.hours <= 24.0, "soat: {}", e.hours);
+            assert!(e.date <= today);
+        }
+
+        // Sifat: mos emas va shartli holatlar namunada bor.
+        let quality = t.db.quality_checks(pid);
+        assert!(quality.len() >= 5);
+        assert!(quality.iter().any(|q| q.result == QualityResult::Fail));
+        assert!(quality.iter().any(|q| q.result == QualityResult::Conditional));
+
+        // Xavfsizlik: muddati o'tgan yopilmagan yozuv bor.
+        let safety = t.db.safety_events(pid);
+        assert!(safety.iter().any(|s| s.kind == SafetyKind::Training));
+        assert!(
+            safety.iter().any(|s| {
+                matches!(s.status, IssueStatus::Open | IssueStatus::InWork)
+                    && s.deadline.is_some_and(|d| d < today)
+            }),
+            "muddati o'tgan xavfsizlik yozuvi yo'q"
+        );
+
+        // Texnika: smenalar mavjud texnikaga bog'langan, ta'mirdagisi ishlamaydi.
+        let machines = t.db.machines(pid);
+        let logs = t.db.machine_logs(pid);
+        assert_eq!(machines.len(), 4);
+        assert!(!logs.is_empty());
+        for l in &logs {
+            assert!(machines.iter().any(|m| m.id == l.machine_id));
+            assert!(l.hours > 0.0);
+        }
+        let repair = machines
+            .iter()
+            .find(|m| m.status == MachineStatus::Repair)
+            .expect("ta'mirdagi texnika");
+        assert!(
+            !logs.iter().any(|l| l.machine_id == repair.id),
+            "ta'mirdagi texnikada smena bo'lmasligi kerak"
+        );
+        // Texnik ko'rik muddati o'tgan texnika ataylab qoldirilgan.
+        assert!(machines
+            .iter()
+            .any(|m| m.inspection_until.is_some_and(|d| d < today)));
+    }
+
+    /// Namuna ikki marta chaqirilsa nusxalanmaydi.
+    #[test]
+    fn demo_resources_are_seeded_once() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let n = t.db.workers(pid).len();
+        let m = t.db.machines(pid).len();
+        t.db.seed_demo_resources(pid, false);
+        assert_eq!(t.db.workers(pid).len(), n);
+        assert_eq!(t.db.machines(pid).len(), m);
+    }
+
     /// TZ XIX: namuna sotuv ma'lumoti to'liq quriladi va kvartira holati
     /// shartnomaga mos keladi.
     #[test]

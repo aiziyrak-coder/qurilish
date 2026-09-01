@@ -9,15 +9,19 @@ mod execdocs;
 mod gantt;
 mod issues;
 mod journal;
+mod machines;
 mod materials;
 mod module_page;
 mod passport;
 mod ppr;
 mod purchases;
+mod quality;
 mod requests;
+mod safety;
 mod sales;
 mod search;
 mod settings;
+mod timesheet;
 mod warehouse;
 
 use crate::app::{App, Readiness, Screen, NAV_GROUPS};
@@ -136,6 +140,10 @@ pub fn draw(ctx: &Context, app: &mut App) {
         Screen::Purchases => purchases::show(ui, app),
         Screen::Sales => sales::show(ui, app),
         Screen::Deals => deals::show(ui, app),
+        Screen::Timesheet => timesheet::show(ui, app),
+        Screen::Quality => quality::show(ui, app),
+        Screen::Safety => safety::show(ui, app),
+        Screen::Machines => machines::show(ui, app),
         Screen::Settings => settings::show(ui, app),
         other => stub(ui, other),
     });
@@ -389,8 +397,19 @@ fn side_bar(ctx: &Context, app: &mut App) {
                             ui.label(RichText::new(text).size(10.5).color(theme::muted()));
                         });
                     };
-                    legend(ui, true, theme::warn(), t("legend_storage"));
-                    legend(ui, false, theme::muted(), t("legend_planned"));
+                    // Izohda faqat haqiqatda uchraydigan belgilar ko'rsatiladi.
+                    let has = |r: Readiness| {
+                        NAV_GROUPS
+                            .iter()
+                            .flat_map(|(_, s)| s.iter())
+                            .any(|s| s.readiness() == r)
+                    };
+                    if has(Readiness::Storage) {
+                        legend(ui, true, theme::warn(), t("legend_storage"));
+                    }
+                    if has(Readiness::Planned) {
+                        legend(ui, false, theme::muted(), t("legend_planned"));
+                    }
                     ui.add_space(10.0);
                 });
 

@@ -247,6 +247,35 @@ olinadi; kirimda narx ko'rsatilmagan bo'lsa katalogdagi narx ishlatiladi.
 Chiqim kirimdan ko'p yozilsa qoldiq manfiy bo'ladi va bu hujjatdagi xato deb
 alohida ajratib ko'rsatiladi.
 
+### Tabel (TZ XIII)
+Haftalik jadval: qatorlar — ishchilar, ustunlar — hafta kunlari, katakda soat.
+Bugungi kun va dam olish kunlari sarlavhada ajratilgan; kun bo'yicha va ishchi
+bo'yicha yig'indilar chetda turadi. Ish haqi soat va soatlik stavkadan
+hisoblanadi — alohida kiritilmaydi, shuning uchun tabel bilan hech qachon zid
+bo'lmaydi. Ko'rsatkichlar: faol ishchilar, haftalik soat, kunlik o'rtacha va ish
+haqi fondi.
+
+### Sifat nazorati (TZ XIV)
+Uch bosqich: **kirish** (material qabuli), **operatsion** (ish jarayonida) va
+**qabul** (bosqich yakuni). Har yozuvda nazorat obyekti, ish yoki material,
+tekshiruvchi, natija (mos / shartli mos / mos emas), nuqson tavsifi va bartaraf
+etish muddati. Muddati o'tgan, bartaraf etilmagan nuqson alohida ko'rsatkichda
+va jadvalda qizil undov bilan ajraladi.
+
+### Mehnat xavfsizligi (TZ XV)
+Hodisalar jurnali: buzilish, xavfli holat, baxtsiz hodisa, tekshiruv va
+instruktaj. Har yozuvda muhimlik darajasi, joy, tavsif, ko'rilgan chora, mas'ul,
+muddat va holat. Yopilmagan va muddati o'tgan yozuvlar ko'rsatkichlarda alohida.
+TZ III.32 ga muvofiq ekran fakt qayd etadi, aybdorni belgilamaydi.
+
+### Texnika (TZ XVI)
+Ikki ko'rinish. **Park** — texnika ro'yxati, turi, davlat raqami, holati
+(ishlamoqda / bo'sh / ta'mirda / o'chirilgan), egasi, operatori, soatlik stavkasi,
+texnik ko'rik muddati va oxirgi 30 kundagi motosoati. **Smenalar** — kunlik
+motosoat va yoqilg'i jurnali, ishga bog'lanishi bilan. Motosoat, yoqilg'i va
+xarajat smenalardan hisoblanadi; texnik ko'rik muddati tugagan yoki 30 kun ichida
+tugaydigan texnika alohida ogohlantiriladi.
+
 ### Sotuv — shaxmatka (XIX)
 Bino sotuv kesimida: **blok (podez) → qavat → kvartira**. Shaxmatkada vertikal o'q
 qavatlar (yuqoridan pastga), gorizontal o'q qavatdagi kvartiralar; har katakda
@@ -314,6 +343,10 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/execdocs.rs` | Ijro hujjatlari va rasmiylashtirilmagan ishlar |
 | `src/ui/journal.rs` | Kundalik ishlar jurnali |
 | `src/ui/documents.rs` | Obyekt hujjatlari va foto galereyasi |
+| `src/ui/timesheet.rs` | Tabel: haftalik soat jadvali va ish haqi |
+| `src/ui/quality.rs` | Sifat nazorati: uch bosqich va nuqson muddati |
+| `src/ui/safety.rs` | Mehnat xavfsizligi hodisalari jurnali |
+| `src/ui/machines.rs` | Texnika parki va smenalar |
 | `src/sales.rs` | Sotuv hisobi: qarz, to'lov grafigi, kvartira holati |
 | `src/ui/sales.rs` | Sotuv shaxmatkasi va kvartira kartochkasi |
 | `src/ui/deals.rs` | Shartnomalar, to'lov turlari va to'lov grafigi |
@@ -334,10 +367,8 @@ identifikatorlar qayta ishlatilmaydi. Obyekt o'chirilganda bog'liq ma'lumot
 
 ## TZ bo'yicha keyingi bosqichlar
 
-IX–XII (arizalar, xaridlar, ombor, materiallar) ekranlari tayyor. Qolgan
-XIII–XVI (tabel, sifat, xavfsizlik, texnika) uchun domen turlari
-(`src/domain.rs`), baza sxemasi va CRUD (`src/store.rs`) allaqachon yozilgan —
-qolgani ekranlarni ulash.
+I–V va IX–XVI modullari, shuningdek XIX–XX sotuv bo'limi to'liq ishlaydi.
+Qolgan uchta yo'nalish arxitektura qarorini kutmoqda.
 
 Uchta arxitektura qarori alohida hal qilinishi kerak:
 

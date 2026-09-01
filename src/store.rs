@@ -10,7 +10,7 @@
 use crate::db::Db;
 use crate::domain::*;
 use crate::model::Section;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use rusqlite::{params, Row};
 
 fn date(s: &str) -> NaiveDate {
@@ -2118,7 +2118,340 @@ impl Db {
         self.seed_demo_stock(pid, ru);
         self.seed_demo_supply(pid, ru);
         self.seed_demo_sales(pid, ru);
+        self.seed_demo_resources(pid, ru);
     }
+
+    /// Resurs va nazorat modullari namunasi (TZ XIII-XVI).
+    ///
+    /// Ataylab bir nechta muammoli holat qoldirilgan: bitta materialning kirish
+    /// nazorati «mos emas», bitta xavfsizlik yozuvi muddati o'tgan, bitta
+    /// texnikaning texnik ko'rigi tugagan.
+    pub fn seed_demo_resources(&self, pid: i64, ru: bool) {
+        if !self.workers(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+        let materials = self.materials(pid);
+        let by_code = |c: &str| materials.iter().find(|m| m.code == c).map(|m| m.id);
+
+        // ---------- XIII. Ishchilar va tabel ----------
+        let crew: [(&str, &str, f64); 6] = if ru {
+            [
+                ("Юсупов Б.Р.", "Прораб", 45_000.0),
+                ("Каримов А.Т.", "Бетонщик", 32_000.0),
+                ("Назаров Ш.И.", "Арматурщик", 32_000.0),
+                ("Умаров Д.К.", "Каменщик", 30_000.0),
+                ("Хасанов Ф.М.", "Электромонтажник", 35_000.0),
+                ("Собиров Н.А.", "Разнорабочий", 22_000.0),
+            ]
+        } else {
+            [
+                ("Yusupov B.R.", "Prorab", 45_000.0),
+                ("Karimov A.T.", "Betonchi", 32_000.0),
+                ("Nazarov Sh.I.", "Armaturachi", 32_000.0),
+                ("Umarov D.K.", "G'ishtchi", 30_000.0),
+                ("Hasanov F.M.", "Elektromontajchi", 35_000.0),
+                ("Sobirov N.A.", "Yordamchi ishchi", 22_000.0),
+            ]
+        };
+        let org = if ru { "ООО «Навруз Курилиш»" } else { "«Navro'z Qurilish» MChJ" };
+        let mut ids = Vec::new();
+        for (name, position, rate) in crew {
+            ids.push(self.insert_worker(&Worker {
+                id: 0,
+                project_id: pid,
+                name: name.into(),
+                position: position.into(),
+                org: org.into(),
+                hourly_rate: rate,
+                active: true,
+            }));
+        }
+
+        // Oxirgi ikki hafta: ish kunlari 8 soat, shanba 6, yakshanba dam.
+        for back in 0..14 {
+            let day = today - chrono::Duration::days(back);
+            let wd = day.weekday().num_days_from_monday();
+            if wd == 6 {
+                continue;
+            }
+            let base = if wd == 5 { 6.0 } else { 8.0 };
+            for (i, wid) in ids.iter().enumerate() {
+                if *wid == 0 {
+                    continue;
+                }
+                // Prorab har kuni, brigada esa navbat bilan biroz farqli ishlaydi.
+                let hours = if i == 0 {
+                    base
+                } else if (back as usize + i).is_multiple_of(7) {
+                    0.0
+                } else if (back as usize + i).is_multiple_of(5) {
+                    base + 2.0
+                } else {
+                    base
+                };
+                if hours > 0.0 {
+                    self.set_timesheet(pid, *wid, day, hours);
+                }
+            }
+        }
+
+        // ---------- XIV. Sifat nazorati ----------
+        let inspector = if ru { "ПТО: Саидова М.И." } else { "PTO: Saidova M.I." };
+        let qc = |kind: QualityKind,
+                  days_ago: i64,
+                  subject: &str,
+                  task_id: Option<i64>,
+                  material_id: Option<i64>,
+                  result: QualityResult,
+                  defect: &str,
+                  deadline_in: Option<i64>| {
+            self.insert_quality(&QualityCheck {
+                id: 0,
+                project_id: pid,
+                kind,
+                date: today - chrono::Duration::days(days_ago),
+                task_id,
+                material_id,
+                subject: subject.into(),
+                inspector: inspector.into(),
+                result,
+                defect: defect.into(),
+                deadline: deadline_in.map(|d| today + chrono::Duration::days(d)),
+                note: String::new(),
+            });
+        };
+        qc(
+            QualityKind::Input,
+            26,
+            if ru { "Приемка кирпича М150" } else { "M150 g'ishtni qabul qilish" },
+            None,
+            by_code("M-201"),
+            QualityResult::Pass,
+            "",
+            None,
+        );
+        // Sertifikati muddati o'tgan armatura — kirish nazoratidan o'tmadi.
+        qc(
+            QualityKind::Input,
+            12,
+            if ru { "Приемка арматуры А500С" } else { "A500S armaturani qabul qilish" },
+            None,
+            by_code("M-102"),
+            QualityResult::Fail,
+            if ru {
+                "Сертификат просрочен, партия не допущена"
+            } else {
+                "Sertifikat muddati o'tgan, partiya qabul qilinmadi"
+            },
+            Some(-3),
+        );
+        qc(
+            QualityKind::Operational,
+            8,
+            if ru { "Опалубка колонн 9 этажа" } else { "9-qavat ustunlari opalubkasi" },
+            by_wbs("7"),
+            None,
+            QualityResult::Conditional,
+            if ru {
+                "Отклонение по вертикали 6 мм при допуске 5 мм"
+            } else {
+                "Vertikal bo'yicha 6 mm og'ish, ruxsat 5 mm"
+            },
+            Some(4),
+        );
+        qc(
+            QualityKind::Acceptance,
+            30,
+            if ru { "Приемка фундаментной плиты" } else { "Poydevor plitasini qabul qilish" },
+            by_wbs("3"),
+            None,
+            QualityResult::Pass,
+            "",
+            None,
+        );
+        qc(
+            QualityKind::Operational,
+            3,
+            if ru { "Кладка наружных стен, оси А-В" } else { "Tashqi devor g'ishtligi, A-B o'qlari" },
+            by_wbs("9"),
+            None,
+            QualityResult::Pass,
+            "",
+            None,
+        );
+
+        // ---------- XV. Xavfsizlik ----------
+        let safety_resp = if ru { "Инженер по ТБ: Эргашев К." } else { "TX muhandisi: Ergashev K." };
+        let se = |days_ago: i64,
+                  kind: SafetyKind,
+                  severity: Severity,
+                  place: &str,
+                  description: &str,
+                  measure: &str,
+                  deadline_in: Option<i64>,
+                  status: IssueStatus| {
+            self.insert_safety(&SafetyEvent {
+                id: 0,
+                project_id: pid,
+                date: today - chrono::Duration::days(days_ago),
+                kind,
+                severity,
+                place: place.into(),
+                description: description.into(),
+                responsible: safety_resp.into(),
+                measure: measure.into(),
+                deadline: deadline_in.map(|d| today + chrono::Duration::days(d)),
+                status,
+            });
+        };
+        se(
+            21,
+            SafetyKind::Training,
+            Severity::Info,
+            if ru { "Штаб строительства" } else { "Qurilish shtabi" },
+            if ru { "Первичный инструктаж, 12 человек" } else { "Boshlang'ich instruktaj, 12 kishi" },
+            if ru { "Журнал заполнен" } else { "Jurnal to'ldirildi" },
+            None,
+            IssueStatus::Fixed,
+        );
+        // Muddati o'tgan va yopilmagan buzilish.
+        se(
+            9,
+            SafetyKind::Violation,
+            Severity::Warning,
+            if ru { "8 этаж, ось Б" } else { "8-qavat, B o'qi" },
+            if ru {
+                "Работа на высоте без страховочной привязи"
+            } else {
+                "Balandlikda strahovka kamarisiz ishlash"
+            },
+            if ru { "Выдать привязи, повторный инструктаж" } else { "Kamar berish, takroriy instruktaj" },
+            Some(-2),
+            IssueStatus::Open,
+        );
+        se(
+            5,
+            SafetyKind::NearMiss,
+            Severity::Warning,
+            if ru { "Зона крана" } else { "Kran zonasi" },
+            if ru {
+                "Падение доски с 7 этажа, пострадавших нет"
+            } else {
+                "7-qavatdan taxta tushdi, jabrlangan yo'q"
+            },
+            if ru { "Установить защитный козырек" } else { "Himoya kozirkasi o'rnatish" },
+            Some(3),
+            IssueStatus::InWork,
+        );
+        se(
+            2,
+            SafetyKind::Inspection,
+            Severity::Info,
+            if ru { "Объект целиком" } else { "Butun obyekt" },
+            if ru { "Плановая проверка ТБ" } else { "Rejali TX tekshiruvi" },
+            if ru { "Замечания устранены на месте" } else { "Kamchiliklar joyida bartaraf etildi" },
+            None,
+            IssueStatus::Fixed,
+        );
+
+        // ---------- XVI. Texnika ----------
+        let owner = if ru { "ООО «СтройМеханизация»" } else { "«StroyMexanizatsiya» MChJ" };
+        let mch = |name: &str,
+                   kind: MachineKind,
+                   reg_no: &str,
+                   status: MachineStatus,
+                   hour_rate: f64,
+                   operator: &str,
+                   inspection_in: Option<i64>|
+         -> i64 {
+            self.insert_machine(&Machine {
+                id: 0,
+                project_id: pid,
+                name: name.into(),
+                kind,
+                reg_no: reg_no.into(),
+                owner: owner.into(),
+                status,
+                hour_rate,
+                operator: operator.into(),
+                inspection_until: inspection_in.map(|d| today + chrono::Duration::days(d)),
+            })
+        };
+        let crane = mch(
+            if ru { "Башенный кран КБ-403" } else { "KB-403 minorali kran" },
+            MachineKind::Crane,
+            "01 A 123 BC",
+            MachineStatus::Working,
+            180_000.0,
+            if ru { "Тошматов А." } else { "Toshmatov A." },
+            Some(120),
+        );
+        // Texnik ko'rik muddati o'tgan — ishlatib bo'lmaydi.
+        let excavator = mch(
+            if ru { "Экскаватор Hyundai R220" } else { "Hyundai R220 ekskavator" },
+            MachineKind::Excavator,
+            "01 B 456 CD",
+            MachineStatus::Idle,
+            210_000.0,
+            if ru { "Рахимов Ш." } else { "Rahimov Sh." },
+            Some(-14),
+        );
+        let pump = mch(
+            if ru { "Автобетононасос 37 м" } else { "37 m avtobetonnasos" },
+            MachineKind::Concrete,
+            "01 C 789 DE",
+            MachineStatus::Working,
+            340_000.0,
+            if ru { "Аминов Р." } else { "Aminov R." },
+            Some(45),
+        );
+        // Lift ta'mirda — smenasi yo'q, faqat parkda turadi.
+        let _lift = mch(
+            if ru { "Строительный подъемник" } else { "Qurilish liftlari" },
+            MachineKind::Lift,
+            "01 D 012 EF",
+            MachineStatus::Repair,
+            90_000.0,
+            String::new().as_str(),
+            Some(200),
+        );
+
+        // Oxirgi 20 kunlik smenalar.
+        let karkas = by_wbs("7");
+        let devor = by_wbs("9");
+        for back in 0..20 {
+            let day = today - chrono::Duration::days(back);
+            if day.weekday().num_days_from_monday() == 6 {
+                continue;
+            }
+            let log = |machine_id: i64, hours: f64, fuel: f64, task_id: Option<i64>| {
+                if machine_id > 0 && hours > 0.0 {
+                    self.insert_machine_log(&MachineLog {
+                        id: 0,
+                        project_id: pid,
+                        machine_id,
+                        date: day,
+                        hours,
+                        fuel,
+                        task_id,
+                        note: String::new(),
+                    });
+                }
+            };
+            log(crane, 8.0, 0.0, karkas);
+            // Nasos faqat betonlash kunlarida chiqadi.
+            if back % 3 == 0 {
+                log(pump, 5.0, 90.0, karkas);
+            }
+            if back % 4 == 1 {
+                log(excavator, 6.0, 70.0, devor);
+            }
+        }
+    }
+
 
     /// Sotuv namunasi: ikkita blok, kvartiralar va turli holatdagi shartnomalar
     /// (TZ XIX-XX). Bir shartnomada to'lov ataylab kechiktirilgan — muddati

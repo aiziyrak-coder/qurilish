@@ -5,8 +5,8 @@ use crate::cpm::{self, Progress, Schedule};
 use crate::db::Db;
 use crate::domain::{
     Block, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Issue,
-    IssueModule, IssueStatus, JournalEntry, Material, Payment, PprDoc, Purchase, Request, Severity,
-    StockMove, Unit,
+    IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material, Payment, PprDoc,
+    Purchase, QualityCheck, Request, SafetyEvent, Severity, StockMove, TimesheetEntry, Unit, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -139,12 +139,11 @@ impl Screen {
             | Screen::Purchases
             | Screen::Sales
             | Screen::Deals
+            | Screen::Timesheet
+            | Screen::Quality
+            | Screen::Safety
+            | Screen::Machines
             | Screen::Settings => Readiness::Ready,
-
-            // Bularning domen turlari `domain.rs` da, jadvallari `store.rs` da bor.
-            Screen::Quality | Screen::Safety | Screen::Timesheet | Screen::Machines => {
-                Readiness::Storage
-            }
 
             // Bular server, mobil klient yoki LLM ni talab qiladi.
             Screen::Foreman
@@ -464,6 +463,14 @@ pub struct App {
     pub deals: Vec<Deal>,
     pub payments: Vec<Payment>,
     /// Shaxmatkada tanlangan blok va birlik.
+    pub workers: Vec<Worker>,
+    pub timesheet: Vec<TimesheetEntry>,
+    pub quality: Vec<QualityCheck>,
+    pub safety: Vec<SafetyEvent>,
+    pub machines: Vec<Machine>,
+    pub machine_logs: Vec<MachineLog>,
+    /// Tabelda ko'rsatilayotgan hafta boshi (dushanba).
+    pub timesheet_week: Option<chrono::NaiveDate>,
     pub sales_block: Option<i64>,
     pub selected_unit: Option<i64>,
     pub selected_deal: Option<i64>,
@@ -530,6 +537,10 @@ impl App {
                 Ok("purchases") => Screen::Purchases,
                 Ok("sales") => Screen::Sales,
                 Ok("deals") => Screen::Deals,
+                Ok("timesheet") => Screen::Timesheet,
+                Ok("quality") => Screen::Quality,
+                Ok("safety") => Screen::Safety,
+                Ok("machines") => Screen::Machines,
                 _ => Screen::Dashboard,
             },
             today: chrono::Local::now().date_naive(),
@@ -560,6 +571,13 @@ impl App {
             units: Vec::new(),
             deals: Vec::new(),
             payments: Vec::new(),
+            workers: Vec::new(),
+            timesheet: Vec::new(),
+            quality: Vec::new(),
+            safety: Vec::new(),
+            machines: Vec::new(),
+            machine_logs: Vec::new(),
+            timesheet_week: None,
             sales_block: None,
             selected_unit: None,
             selected_deal: None,
@@ -676,6 +694,12 @@ impl App {
         self.units.clear();
         self.deals.clear();
         self.payments.clear();
+        self.workers.clear();
+        self.timesheet.clear();
+        self.quality.clear();
+        self.safety.clear();
+        self.machines.clear();
+        self.machine_logs.clear();
         self.sales_block = None;
         self.selected_unit = None;
         self.selected_deal = None;
@@ -701,6 +725,12 @@ impl App {
         self.stock_moves = self.db.stock_moves(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);
+        self.workers = self.db.workers(id);
+        self.timesheet = self.db.timesheet(id);
+        self.quality = self.db.quality_checks(id);
+        self.safety = self.db.safety_events(id);
+        self.machines = self.db.machines(id);
+        self.machine_logs = self.db.machine_logs(id);
         self.blocks = self.db.blocks(id);
         self.units = self.db.units(id);
         self.deals = self.db.deals(id);

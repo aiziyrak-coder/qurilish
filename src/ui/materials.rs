@@ -331,6 +331,8 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
 
 /// 12.0 -> «12», 4.5 -> «4.5».
 pub fn trim_num(v: f64) -> String {
+    // Manfiy nol «-0» bo'lib chiqmasin.
+    let v = if v == 0.0 { 0.0 } else { v };
     if (v - v.round()).abs() < 1e-6 {
         format!("{:.0}", v)
     } else {

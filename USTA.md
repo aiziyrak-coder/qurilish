@@ -34,11 +34,11 @@ Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo cli
 - [x] **X Xaridlar** — ariza → xarid → yetkazish → omborga kirim
 - [x] **XIX Sotuv — shaxmatka** — bloklar, qavatlar, kvartiralar, holatlar
 - [x] **XX Shartnomalar va to'lovlar** — to'lov turlari, grafik, qarz nazorati
-- [ ] **XIV Sifat** — kirish/operatsion/qabul nazorati  <- HOZIR SHU YERDA
-- [ ] **XV Xavfsizlik** — buzilishlar, instruktajlar, naryad-dopusk
-- [ ] **XIII Tabel** — ishchilar, soatlar, ishlarga taqsimot
-- [ ] **XVI Mashinalar** — texnika, motosoat, YoMM, TX
-- [ ] **XVII AI analitika** — qolgan modullar to'lgandan keyin
+- [x] **XIV Sifat** — kirish/operatsion/qabul nazorati, nuqson muddati
+- [x] **XV Xavfsizlik** — buzilish, xavfli holat, hodisa, tekshiruv, instruktaj
+- [x] **XIII Tabel** — haftalik jadval, soat va ish haqi fondi
+- [x] **XVI Mashinalar** — park, smenalar, motosoat, YoMM, texnik ko'rik
+- [ ] **XVII AI analitika** — qolgan modullar to'lgandan keyin  <- HOZIR SHU YERDA
 - [ ] **VI Prorab mobil ilovasi** — BLOKLANGAN: mobil klient + server kerak
 - [ ] **VII Texnik nazorat kabineti** — BLOKLANGAN: rollar + server kerak
 - [ ] **VIII Buyurtmachi kabineti** — BLOKLANGAN: rollar + server kerak
