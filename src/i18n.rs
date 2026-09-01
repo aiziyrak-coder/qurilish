@@ -185,6 +185,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_on_track" => ("grafik bo'yicha", "в графике"),
 
         // ---------- Umumiy ko'rinish / Обзор ----------
+        "block_analytics" => ("Tahlil xulosasi", "Сводка анализа"),
+        "block_analytics_open" => ("Batafsil tahlil", "Подробный анализ"),
+        "block_sales" => ("Sotuv", "Продажи"),
+        "block_sales_open" => ("Shaxmatkani ochish", "Открыть шахматку"),
         "block_overdue" => ("Muddati o'tgan ishlar", "Просроченные работы"),
         "no_overdue" => ("Muddati o'tgan ishlar yo'q.", "Просроченных работ нет."),
         "col_task" => ("Ish", "Работа"),
@@ -351,6 +355,14 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "set_db_path" => ("Baza fayli", "Файл базы данных"),
         "set_open_folder" => ("Papkani ochish", "Открыть папку"),
         "set_objects_count" => ("Obyektlar soni", "Объектов в базе"),
+        "set_backup" => ("Zaxira nusxa", "Резервная копия"),
+        "set_backup_btn" => ("Nusxa saqlash…", "Сохранить копию…"),
+        "set_backup_hint" => (
+            "Bazaning izchil nusxasi bitta faylga yoziladi. Ma'lumot yo'qolsa, shu fayldan tiklanadi.",
+            "Целостная копия базы записывается в один файл. При потере данных восстановление идет из него.",
+        ),
+        "set_backup_done" => ("Zaxira nusxa saqlandi:", "Резервная копия сохранена:"),
+        "set_backup_failed" => ("Zaxira nusxa saqlanmadi", "Резервная копия не сохранена"),
         "set_create_demo" => ("Namoyish obyektini yaratish", "Создать демо-объект"),
         "set_demo_created" => ("Namoyish obyekti yaratildi", "Демо-объект создан"),
         "set_group_about" => ("Dastur haqi", "О программе"),
@@ -1014,145 +1026,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "screen_copilot" => ("AI Copilot", "AI Copilot"),
 
         // ---------- Modul holati / Состояние модуля ----------
-        "readiness_ready" => ("Ishlaydi", "Работает"),
-        "readiness_storage" => ("Baza tayyor, ekran qolgan", "База готова, остался экран"),
-        "readiness_planned" => ("Rejalashtirilgan", "Запланирован"),
-        "legend_storage" => ("baza tayyor, ekran qolgan", "база готова, остался экран"),
-        "legend_planned" => ("rejalashtirilgan", "запланирован"),
-        "module_requirements" => ("TZ bo'yicha talablar", "Требования по ТЗ"),
-        "module_state_storage_title" => ("Nima tayyor", "Что готово"),
-        "module_state_planned_title" => ("Nimaga bog'liq", "От чего зависит"),
-        "module_state_storage" => (
-            "Modulning domen turlari (src/domain.rs) va baza jadvallari (src/store.rs) yozilgan: yozuvlarni o'qish, qo'shish va o'zgartirish tayyor. Qolgani — ekranni qurish va uni boshqa modullar bilan bog'lash.",
-            "Доменные типы модуля (src/domain.rs) и таблицы базы (src/store.rs) написаны: чтение, добавление и изменение записей готовы. Осталось построить экран и связать его с остальными модулями.",
-        ),
-        "module_state_planned" => (
-            "Bu modul faqat ekran emas — u ilovaning hozirgi chegarasidan tashqariga chiqadi. Quyidagi shart bajarilmaguncha uni boshlash mantiqsiz.",
-            "Этот модуль — не только экран: он выходит за текущие границы приложения. Начинать его до выполнения условия ниже не имеет смысла.",
-        ),
-        "module_blocker" => ("SHARTI", "УСЛОВИЕ"),
-        "blocker_mobile" => (
-            "Alohida mobil klient va server qismi. Prorab obyektda telefon bilan ishlaydi, desktop klient bu vazifani bajara olmaydi.",
-            "Отдельный мобильный клиент и серверная часть. Прораб работает на объекте с телефона, десктоп-клиент эту задачу не закрывает.",
-        ),
-        "blocker_roles" => (
-            "Foydalanuvchi rollari, kirish nazorati va server. Hozir ilova bir foydalanuvchili va to'liq lokal.",
-            "Роли пользователей, контроль доступа и сервер. Сейчас приложение однопользовательское и полностью локальное.",
-        ),
-        "blocker_modules" => (
-            "Analitika boshqa modullar ma'lumotidan quriladi. Ta'minot, resurs va sifat modullari to'lmaguncha ko'rsatadigan narsa bo'lmaydi.",
-            "Аналитика строится на данных остальных модулей. Пока не наполнены снабжение, ресурсы и качество, показывать нечего.",
-        ),
-        "blocker_llm" => (
-            "Til modeli integratsiyasi: qaysi model, qayerda ishlaydi va ma'lumot chetga chiqadimi — bu alohida qaror.",
-            "Интеграция языковой модели: какая модель, где выполняется и покидают ли данные контур — это отдельное решение.",
-        ),
 
         // ---------- TZ tavsiflari / Описания по ТЗ ----------
-        "tz_quality" => (
-            "Materialdan tortib qabulgacha bo'lgan butun sifat zanjiri: kirish nazorati, ish jarayonidagi nazorat, yashirin ishlar va nuqsonlarni bartaraf etish.",
-            "Вся цепочка качества от материала до приемки: входной контроль, операционный контроль, скрытые работы и устранение дефектов.",
-        ),
-        "tzp_quality" => (
-            "Materiallarning kirish nazorati: sertifikat, pasport, loyihaga muvofiqlik\nOperatsion nazorat: ish jarayonida o'lchash va tekshirish\nQabul nazorati va yashirin ishlar dalolatnomalari\nPPR va texnologik kartalarga muvofiqlikni nazorat qilish\nLaboratoriya sinovlari va geodezik nazorat\nNuqson, uni bartaraf etish muddati va qayta qabul\nFotofiksatsiya va brak statistikasi",
-            "Входной контроль материалов: сертификат, паспорт, соответствие проекту\nОперационный контроль: замеры и проверки в процессе работ\nПриемочный контроль и акты скрытых работ\nКонтроль соответствия ППР и технологическим картам\nЛабораторные испытания и геодезический контроль\nДефект, срок устранения и повторная приемка\nФотофиксация и статистика брака",
-        ),
-        "tz_safety" => (
-            "Mehnat muhofazasi, texnika xavfsizligi va yuqori xavfli ishlarni boshqarish: ruxsatlar, instruktajlar, SIZ va hodisalar.",
-            "Охрана труда, техника безопасности и управление работами повышенной опасности: допуски, инструктажи, СИЗ и происшествия.",
-        ),
-        "tzp_safety" => (
-            "Ishchilarni ishga qo'yish, instruktajlar va ularning muddati\nSIZ bilan ta'minlash va foydalanish nazorati\nYuqori xavfli ishlar uchun naryad-dopusklar\nBalandlikdagi, yer ishlari va yuk ko'tarish operatsiyalari\nElektr xavfsizligi va payvandlash ishlari\nYong'in xavfsizligi\nBuzilish, xavfli holat va baxtsiz hodisalarni qayd etish\nBartaraf etish choralari, mas'ul va muddat",
-            "Допуск работников, инструктажи и их сроки\nОбеспечение СИЗ и контроль применения\nНаряды-допуски на работы повышенной опасности\nВысотные, земляные работы и грузоподъемные операции\nЭлектробезопасность и сварочные работы\nПожарная безопасность\nФиксация нарушений, опасных ситуаций и несчастных случаев\nМеры устранения, ответственный и срок",
-        ),
-        "tz_foreman" => (
-            "Prorabning obyektdagi ish quroli: topshiriq oladi, kunlik faktni yozadi, foto qo'yadi va ariza yaratadi.",
-            "Рабочий инструмент прораба на объекте: получает задания, фиксирует дневной факт, прикладывает фото и создает заявки.",
-        ),
-        "tzp_foreman" => (
-            "Topshiriqlarni olish va GPR ni ko'rish\nKundalik jurnalni to'ldirish va bajarilgan hajmni qayd etish\nFoto va video biriktirish\nAriza yaratish: material, texnika, ishchi kuchi\nIshchi va texnikani hisobga olish\nE'tirozlarni qayd etish va ijro hujjatlarini rasmiylashtirish\nTexnik nazorat bilan aloqa va bildirishnomalar",
-            "Получение заданий и просмотр ГПР\nЗаполнение ежедневного журнала и фиксация выполненных объемов\nПрикрепление фото и видео\nСоздание заявок: материалы, техника, рабочая сила\nУчет рабочих и техники\nФиксация замечаний и оформление исполнительной документации\nСвязь с технадзором и уведомления",
-        ),
-        "tz_tech_supervision" => (
-            "Texnik nazoratning raqamli kabineti: bajarilgan ishni, sifatni va hujjatlarni tekshiradi, yashirin ishlarni qabul qiladi.",
-            "Цифровой кабинет технадзора: проверяет выполненные работы, качество и документацию, принимает скрытые работы.",
-        ),
-        "tzp_tech_supervision" => (
-            "Faqat biriktirilgan obyektlarni ko'rish\nBajarilgan ishlar va haqiqiy hajmlarni tekshirish\nLoyihaga muvofiqlikni va sifatni tekshirish\nYashirin ishlarni qabul qilish yoki rad etish\nIjro hujjatlarini tekshirish va imzolash\nE'tiroz qo'yish va bartaraf etilishini nazorat qilish\nMateriallarni nazorat qilish va hisobot shakllantirish",
-            "Просмотр только закрепленных объектов\nПроверка выполненных работ и фактических объемов\nПроверка соответствия проекту и качества\nПриемка или отклонение скрытых работ\nПроверка и подписание исполнительной документации\nВыдача замечаний и контроль их устранения\nКонтроль материалов и формирование отчетов",
-        ),
-        "tz_client" => (
-            "Buyurtmachining nazorat kabineti: pul, muddat, sifat va hujjatlarni pudratchidan so'ramay ko'radi.",
-            "Контрольный кабинет заказчика: видит деньги, сроки, качество и документы, не спрашивая подрядчика.",
-        ),
-        "tzp_client" => (
-            "Qurilish holati va GPR bajarilishi real vaqtda\nByudjet, smeta va haqiqiy xarajatlar\nSifat, e'tirozlar va texnik nazorat xulosalari\nIjro hujjatlari va loyiha hujjatlari\nXaridlar va yetkazib berish holati\nObyektning haqiqiy muammolari va risklari",
-            "Состояние строительства и выполнение ГПР в реальном времени\nБюджет, смета и фактические расходы\nКачество, замечания и заключения технадзора\nИсполнительная и проектная документация\nЗакупки и статус поставок\nРеальные проблемы и риски объекта",
-        ),
-        "tz_requests" => (
-            "Obyektdagi har qanday ehtiyoj mas'uli, muddati, byudjeti va holati bo'lgan nazorat qilinadigan arizaga aylanadi.",
-            "Любая потребность на объекте превращается в контролируемую заявку с ответственным, сроком, бюджетом и статусом.",
-        ),
-        "tzp_requests" => (
-            "Material, uskuna, asbob, spetstexnika, transport arizalari\nXizmat, ta'mir va ishchi kuchi arizalari\nLaboratoriya sinovlari va loyiha o'zgarishlari arizalari\nProrab → PTO → xaridlar → ombor → moliya zanjiri\nTasdiqlash bosqichlari, muddat va ustuvorlik\nMuddati o'tgan arizalar nazorati",
-            "Заявки на материалы, оборудование, инструмент, спецтехнику, транспорт\nЗаявки на услуги, ремонт и рабочую силу\nЗаявки на лабораторные испытания и изменения проекта\nЦепочка прораб → ПТО → закупки → склад → финансы\nЭтапы согласования, срок и приоритет\nКонтроль просроченных заявок",
-        ),
-        "tz_purchases" => (
-            "Ehtiyojdan yopilishgacha bo'lgan to'liq xarid zanjiri va ta'minotchilarni solishtirish.",
-            "Полная цепочка закупки от потребности до закрытия и сравнение поставщиков.",
-        ),
-        "tzp_purchases" => (
-            "Ehtiyoj → ariza → ta'minotchi qidirish → KP → solishtirish\nKelishuv → buyurtma → shartnoma → to'lov → yetkazish → qabul → ombor\nHar bir xaridning manbasi ko'rsatiladi\nKP larni solishtirish: narx, yetkazish muddati, to'lov sharti\nNarx nazorati va keraksiz xaridning oldini olish\nMuddati o'tgan va yo'ldagi xaridlar",
-            "Потребность → заявка → поиск поставщика → КП → сравнение\nСогласование → заказ → договор → оплата → доставка → приемка → склад\nУ каждой закупки указан источник\nСравнение КП: цена, срок поставки, условия оплаты\nКонтроль цены и предотвращение ненужных закупок\nПросроченные закупки и закупки в пути",
-        ),
-        "tz_warehouse" => (
-            "Materialning obyektga kirishidan sarflanishigacha bo'lgan harakati, qoldiqlar va saqlash muddatlari.",
-            "Движение материала от поступления на объект до списания, остатки и сроки хранения.",
-        ),
-        "tzp_warehouse" => (
-            "Kirim, qabul, joylashtirish va ko'chirish\nBerish, qaytarish va hisobdan chiqarish\nQoldiqlar va inventarizatsiya\nPartiyalar, sertifikatlar va yaroqlilik muddati\nHaqiqiy sarf va yo'qotishlarni hisoblash\nSmeta ehtiyoji bilan solishtirish",
-            "Поступление, приемка, размещение и перемещение\nВыдача, возврат и списание\nОстатки и инвентаризация\nПартии, сертификаты и сроки годности\nУчет фактического расхода и потерь\nСверка со сметной потребностью",
-        ),
-        "tz_materials" => (
-            "Kompaniyaning yagona material katalogi: texnik tavsif, sertifikat va loyihaga muvofiqlik.",
-            "Единый каталог материалов компании: технические характеристики, сертификаты и соответствие проекту.",
-        ),
-        "tzp_materials" => (
-            "Yagona katalog va klassifikatsiya\nTexnik tavsif: marka, sinf, GOST\nLoyiha, smeta, xarid va omborga bog'lash\nSertifikat va pasport nazorati\nLoyihaga muvofiqlikni tekshirish\nAnaloglar va alternativalarni solishtirish\nNarx dinamikasi tahlili",
-            "Единый каталог и классификация\nТехнические характеристики: марка, класс, ГОСТ\nПривязка к проекту, смете, закупкам и складу\nКонтроль сертификатов и паспортов\nПроверка соответствия проекту\nСравнение аналогов и альтернатив\nАнализ динамики цен",
-        ),
-        "tz_timesheet" => (
-            "Ish vaqti hisobi: smenalar, ortiqcha soatlar, brigadalar va soatlarni ishlarga taqsimlash.",
-            "Учет рабочего времени: смены, сверхурочные, бригады и распределение часов по работам.",
-        ),
-        "tzp_timesheet" => (
-            "Kelish va ketish, smenalar\nOrtiqcha, tungi, dam olish va bayram soatlari\nYo'qlik: ta'til, kasallik varaqasi, xizmat safari\nIshchilarni obyektlar bo'yicha taqsimlash\nSoatlarni GPR ishlariga taqsimlash\nBrigadalar va ish unumdorligi",
-            "Приход и уход, смены\nСверхурочные, ночные, выходные и праздничные часы\nОтсутствие: отпуск, больничный, командировка\nРаспределение работников по объектам\nРаспределение часов по работам ГПР\nБригады и производительность",
-        ),
-        "tz_machines" => (
-            "Butun qurilish texnikasi: holati, TX va ta'miri, YoMM, motosoat va o'z qiymatiga ta'siri.",
-            "Вся строительная техника: состояние, ТО и ремонт, ГСМ, моточасы и влияние на себестоимость.",
-        ),
-        "tzp_machines" => (
-            "Texnika, avtomobil, mexanizm va ijaraga olingan texnika hisobi\nOperatorlar va ularning biriktirilishi\nTexnik holat, navbatdagi ko'rik, TX va ta'mir\nYoMM, motosoat va probeg\nTexnikaning yuklanishi va bo'sh turishi\nGPR, arizalar, xavfsizlik va tabel bilan bog'lanish",
-            "Учет техники, автомобилей, механизмов и арендованной техники\nОператоры и их закрепление\nТехническое состояние, очередной осмотр, ТО и ремонт\nГСМ, моточасы и пробег\nЗагрузка техники и простои\nСвязь с ГПР, заявками, безопасностью и табелем",
-        ),
-        "tz_analytics" => (
-            "Barcha modullar ma'lumotini boshqaruv qarorlariga aylantiradi: direktor ekrani, chetlanishlar va risklar.",
-            "Превращает данные всех модулей в управленческие решения: экран директора, отклонения и риски.",
-        ),
-        "tzp_analytics" => (
-            "Loyihalar, smetalar, GPR, xaridlar, ombor va moliyani birlashtirish\nDirektor ekrani: daromad, xarajat, foyda, rentabellik\nGPR bajarilishi va byudjet chetlanishi\nSifat, xavfsizlik va unumdorlik ko'rsatkichlari\nRisklar va ularning sababi\nObyektlar va bo'linmalarni solishtirish",
-            "Объединение проектов, смет, ГПР, закупок, склада и финансов\nЭкран директора: выручка, затраты, прибыль, рентабельность\nВыполнение ГПР и отклонение бюджета\nПоказатели качества, безопасности и производительности\nРиски и их причины\nСравнение объектов и подразделений",
-        ),
-        "tz_copilot" => (
-            "Har bir rol uchun shaxsiy yordamchi: o'z ma'lumoti doirasida savolga javob beradi va hisobot tayyorlaydi.",
-            "Персональный помощник для каждой роли: отвечает на вопросы в рамках своих данных и готовит отчеты.",
-        ),
-        "tzp_copilot" => (
-            "Direktor, bosh muhandis, PTO, prorab, texnik nazorat uchun alohida ko'rinish\nHar bir foydalanuvchi faqat o'z ma'lumotini va o'z funksiyalarini ko'radi\nSavol-javob va hisobot tayyorlash\nOgohlantirish va tavsiyalar\nQarorning asosini ko'rsatish — javob manbasi bilan",
-            "Отдельное представление для директора, главного инженера, ПТО, прораба, технадзора\nКаждый пользователь видит только свои данные и свои функции\nВопрос-ответ и подготовка отчетов\nПредупреждения и рекомендации\nОбоснование решения — ответ с источником",
-        ),
 
         // ---------- Boshqaruv paneli / Панель управления ----------
         "sc_title" => ("Bajarilish egri chizig'i", "Кривая выполнения"),
@@ -1668,6 +1543,22 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Barcha modullardan yig'ilgan faktlar. Dastur hukm chiqarmaydi — fakt, hisob va tavsiya ajratilgan.",
             "Факты, собранные из всех модулей. Программа не выносит вердикт — факт, расчет и рекомендация разделены.",
         ),
+        "col_object" => ("Obyekt", "Объект"),
+        "an_export" => ("Hisobotni saqlash", "Сохранить отчет"),
+        "an_export_hint" => (
+            "Ko'rsatkichlar va topilmalar matn faylida saqlanadi — pochta yoki yig'ilish uchun.",
+            "Показатели и находки сохраняются в текстовый файл — для письма или совещания.",
+        ),
+        "an_export_done" => ("Hisobot saqlandi:", "Отчет сохранен:"),
+        "an_export_failed" => ("Hisobot saqlanmadi", "Отчет не сохранен"),
+        "an_report_title" => ("obyekt bo'yicha tahlil hisoboti", "аналитический отчет по объекту"),
+        "an_report_metrics" => ("Ko'rsatkichlar", "Показатели"),
+        "an_findings_count" => ("ta topilma", "находок"),
+        "an_report_findings" => ("Topilmalar", "Находки"),
+        "an_report_note" => (
+            "Hisobot dastur bazasidagi ma'lumotdan hisoblangan. Dastur hukm chiqarmaydi: fakt, hisob va tavsiya ajratilgan.",
+            "Отчет рассчитан по данным базы программы. Программа не выносит вердикт: факт, расчет и рекомендация разделены.",
+        ),
         "an_health" => ("Obyekt sog'lomligi", "Здоровье объекта"),
         "an_health_hint" => (
             "100 dan topilmalar og'irligi ayriladi: kritik −15, jiddiy −8, ogohlantirish −4.",
@@ -2047,6 +1938,76 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_open_safety" => ("Ochiq xavfsizlik", "Открытых по ТБ"),
         "kpi_open_safety_hint" => ("chora kutmoqda", "ожидают мер"),
 
+        // ---------- Navigatsiya belgilari ----------
+        "readiness_storage" => ("baza tayyor, ekran qolgan", "база готова, экран впереди"),
+        "readiness_planned" => ("rejalashtirilgan", "запланировано"),
+        "legend_storage" => ("baza tayyor, ekran qolgan", "база готова, экран впереди"),
+        "legend_planned" => ("rejalashtirilgan", "запланировано"),
+
+        // ---------- XVIII. Yordamchi ----------
+        "cp_title" => ("Ma'lumot bo'yicha yordamchi", "Помощник по данным"),
+        "cp_disclaimer" => (
+            "Bu yerda til modeli ishlatilmaydi: javob faqat shu bazadagi ma'lumotdan hisoblanadi va tekshirilishi mumkin.",
+            "Языковая модель здесь не используется: ответ считается только по данным этой базы и может быть проверен.",
+        ),
+        "cp_placeholder" => (
+            "Savolni yozing: «ombor holati», «nima kechikkan», «pul qanday»…",
+            "Напишите вопрос: «состояние склада», «что просрочено», «что с деньгами»…",
+        ),
+        "cp_ask" => ("So'rash", "Спросить"),
+        "cp_clear" => ("Tozalash", "Очистить"),
+        "cp_check" => ("Tekshirish", "Проверить"),
+        "cp_suggestions" => ("Tayyor savollar:", "Готовые вопросы:"),
+        "cp_start" => (
+            "Savol tanlang yoki o'zingiz yozing.",
+            "Выберите вопрос или напишите свой.",
+        ),
+        "cp_unknown" => (
+            "Bu savolga javob bera olmayman.",
+            "На этот вопрос ответить не могу.",
+        ),
+        "cp_unknown_hint" => (
+            "Javobni o'ylab topmayman — quyidagi tayyor savollardan birini tanlang.",
+            "Я не придумываю ответ — выберите один из готовых вопросов ниже.",
+        ),
+        "cp_note" => (
+            "Javob shu obyektning bazasidagi ma'lumotdan hisoblangan. «Tekshirish» tugmasi manba ekranini ochadi.",
+            "Ответ рассчитан по данным базы этого объекта. Кнопка «Проверить» откроет исходный экран.",
+        ),
+
+        // Savollar
+        "cp_q_overview" => ("Obyekt qanday ketyapti?", "Как идет объект?"),
+        "cp_q_attention" => ("Nimaga e'tibor berish kerak?", "На что обратить внимание?"),
+        "cp_q_delays" => ("Nima kechikkan?", "Что просрочено?"),
+        "cp_q_critical" => ("Kritik yo'lda nima bor?", "Что на критическом пути?"),
+        "cp_q_money" => ("Pul holati qanday?", "Что с деньгами?"),
+        "cp_q_docs" => ("Hujjatlar tayyormi?", "Готовы ли документы?"),
+        "cp_q_supply" => ("Ta'minot qanday?", "Как со снабжением?"),
+        "cp_q_stock" => ("Omborda nima bor?", "Что на складе?"),
+        "cp_q_crew" => ("Kim ishlayapti?", "Кто работает?"),
+        "cp_q_machines" => ("Texnika qanday ishlayapti?", "Как работает техника?"),
+        "cp_q_quality" => ("Sifat qanday?", "Как с качеством?"),
+        "cp_q_safety" => ("Xavfsizlikda muammo bormi?", "Есть ли проблемы по ТБ?"),
+        "cp_q_sales" => ("Sotuv qanday ketyapti?", "Как идут продажи?"),
+
+        // Javob qatorlari
+        "cp_l_fact" => ("Bajarilgan", "Выполнено"),
+        "cp_l_plan" => ("Rejaga ko'ra", "По плану"),
+        "cp_l_delay" => ("Kechikish", "Отставание"),
+        "cp_l_forecast" => ("Tugash prognozi", "Прогноз окончания"),
+        "cp_l_health" => ("Sog'lomlik indeksi", "Индекс здоровья"),
+        "cp_l_none" => ("Natija", "Результат"),
+        "cp_l_count" => ("Jami", "Всего"),
+        "cp_l_signed" => ("Imzolangan hujjatlar", "Подписанных документов"),
+        "cp_l_waiting" => ("Imzo kutmoqda", "Ждут подписи"),
+        "cp_l_open_requests" => ("Ochiq arizalar", "Открытых заявок"),
+        "cp_l_today_people" => ("Bugun tabelda", "Сегодня в табеле"),
+        "cp_l_today_hours" => ("Bugungi soat", "Часов сегодня"),
+        "cp_l_no_timesheet" => ("Diqqat", "Внимание"),
+        "cp_no_overdue" => ("Muddati o'tgan ish yo'q.", "Просроченных работ нет."),
+        "cp_no_critical" => ("Kritik yo'l aniqlanmadi.", "Критический путь не определен."),
+        "cp_no_sales" => ("Bu obyekt sotuvda emas.", "Этот объект не в продаже."),
+
         // ---------- VII. Texnik nazorat kabineti ----------
         "sv_title" => ("Ko'rib chiqish navbati", "Очередь на рассмотрение"),
         "sv_hint" => (
@@ -2234,22 +2195,6 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "screen_sales" => ("Sotuv — shaxmatka", "Продажи — шахматка"),
         "screen_deals" => ("Shartnomalar va to'lovlar", "Договоры и платежи"),
         "nav_sales" => ("SOTUV", "ПРОДАЖИ"),
-        "tz_sales" => (
-            "Bino bo'yicha sotuv holati: bloklar, qavatlar va kvartiralar shaxmatkasi.",
-            "Состояние продаж по дому: шахматка блоков, этажей и квартир.",
-        ),
-        "tz_deals" => (
-            "Sotuv shartnomalari, to'lov turlari va to'lov grafigi.",
-            "Договоры продажи, формы оплаты и график платежей.",
-        ),
-        "tzp_sales" => (
-            "Har bir birlikning holati va narxi bitta ko'rinishda; shartnoma ochilganda rang o'zi o'zgaradi.",
-            "Статус и цена каждой единицы в одном виде; при оформлении договора цвет меняется сам.",
-        ),
-        "tzp_deals" => (
-            "Reja va fakt bir yozuvda: qarz va muddati o'tgan to'lov hisobdan chiqadi.",
-            "План и факт в одной записи: долг и просрочка выводятся расчетом.",
-        ),
 
         // Birlik turlari va holatlari
         "uk_flat" => ("Kvartira", "Квартира"),

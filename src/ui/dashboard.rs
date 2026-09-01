@@ -73,6 +73,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
         ui.add_space(12.0);
 
+        // ---- Tahlil xulosasi + sotuv (agar obyekt sotuvda bo'lsa) ----
+        ui.horizontal_top(|ui| {
+            card_frame(ui, t("block_analytics"), left_w, |ui| {
+                if let Some(sc) = analytics_card(ui, app) {
+                    goto_screen = Some(sc);
+                }
+            });
+            card_frame(ui, t("block_sales"), right_w, |ui| {
+                if sales_card(ui, app) {
+                    goto_screen = Some(Screen::Sales);
+                }
+            });
+        });
+
+        ui.add_space(12.0);
+
         // ---- Bugungi ishlar + yaqin 14 kun ----
         ui.horizontal_top(|ui| {
             card_frame(ui, t("block_today"), left_w, |ui| {
@@ -1083,4 +1099,140 @@ fn upcoming_card(ui: &mut egui::Ui, app: &App) {
                 .color(theme::muted()),
         );
     }
+}
+
+// ================================================================ Tahlil xulosasi
+
+/// Eng muhim topilmalar — to'liq ro'yxat «AI analitika» ekranida.
+fn analytics_card(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
+    let supply = app.supply();
+    let stock = app.stock();
+    let cost = app.cost_summary();
+    let sales = app.sales();
+    let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+    let found = crate::analytics::findings(&inp);
+    let score = crate::analytics::health(&found);
+
+    let color = if score >= 85 {
+        theme::ok()
+    } else if score >= 60 {
+        theme::warn()
+    } else {
+        theme::danger()
+    };
+
+    let mut go = None;
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(format!("{score}"))
+                .size(26.0)
+                .strong()
+                .color(color),
+        );
+        ui.vertical(|ui| {
+            ui.label(RichText::new(t("an_health")).size(12.0));
+            ui.label(
+                RichText::new(format!("{} {}", found.len(), t("an_findings_count")))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+        });
+    });
+    ui.add_space(8.0);
+
+    if found.is_empty() {
+        ui.label(
+            RichText::new(t("an_nothing"))
+                .size(12.5)
+                .color(theme::ok()),
+        );
+    } else {
+        for f in found.iter().take(4) {
+            let c = match f.severity {
+                crate::domain::Severity::Critical => theme::danger(),
+                crate::domain::Severity::Major => theme::warn(),
+                _ => theme::accent(),
+            };
+            ui.horizontal(|ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(4.0, 14.0), Sense::hover());
+                ui.painter().rect_filled(r, 2.0, c);
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(f.area.label())
+                        .size(10.5)
+                        .color(theme::muted()),
+                );
+                ui.label(RichText::new(super::issues::truncate(&f.fact, 58)).size(12.0));
+            });
+        }
+    }
+
+    ui.add_space(8.0);
+    if ui.button(t("block_analytics_open")).clicked() {
+        go = Some(Screen::Analytics);
+    }
+    go
+}
+
+// ================================================================ Sotuv
+
+/// Sotuv holati qisqacha. Obyekt sotuvda bo'lmasa — buni ochiq aytadi.
+fn sales_card(ui: &mut egui::Ui, app: &App) -> bool {
+    if app.units.is_empty() {
+        ui.label(
+            RichText::new(t("cp_no_sales"))
+                .size(12.0)
+                .color(theme::muted()),
+        );
+        return false;
+    }
+    let s = app.sales();
+    let pct = if s.units > 0 {
+        s.sold as f64 / s.units as f64 * 100.0
+    } else {
+        0.0
+    };
+
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width().min(360.0), 10.0), Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, 3.0, theme::track());
+    p.rect_filled(
+        Rect::from_min_size(
+            rect.min,
+            vec2(rect.width() * (pct / 100.0).clamp(0.0, 1.0) as f32, rect.height()),
+        ),
+        3.0,
+        theme::accent(),
+    );
+    ui.add_space(6.0);
+
+    let line = |ui: &mut egui::Ui, label: &str, value: String, color: Color32| {
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [150.0, 18.0],
+                egui::Label::new(RichText::new(label).size(11.5).color(theme::muted())),
+            );
+            ui.label(RichText::new(value).size(12.5).color(color));
+        });
+    };
+    line(
+        ui,
+        t("cl_sold"),
+        format!("{} / {} ({pct:.0}%)", s.sold, s.units),
+        theme::text(),
+    );
+    line(ui, t("us_free"), s.free.to_string(), theme::ok());
+    line(ui, t("kpi_received"), money(s.received), theme::ok());
+    line(
+        ui,
+        t("kpi_debt"),
+        money(s.debt),
+        if s.debt > 0.0 { theme::warn() } else { theme::ok() },
+    );
+    if s.overdue > 0.0 {
+        line(ui, t("kpi_overdue_pay"), money(s.overdue), theme::danger());
+    }
+
+    ui.add_space(8.0);
+    ui.button(t("block_sales_open")).clicked()
 }

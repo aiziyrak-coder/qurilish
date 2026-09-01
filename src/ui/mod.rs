@@ -3,6 +3,7 @@
 mod aicheck;
 mod analytics;
 mod client;
+mod copilot;
 mod dashboard;
 mod deals;
 mod documents;
@@ -14,7 +15,6 @@ mod issues;
 mod journal;
 mod machines;
 mod materials;
-mod module_page;
 mod passport;
 mod ppr;
 mod purchases;
@@ -152,8 +152,8 @@ pub fn draw(ctx: &Context, app: &mut App) {
         Screen::Foreman => foreman::show(ui, app),
         Screen::TechSupervision => supervision::show(ui, app),
         Screen::Client => client::show(ui, app),
+        Screen::Copilot => copilot::show(ui, app),
         Screen::Settings => settings::show(ui, app),
-        other => stub(ui, other),
     });
 
     search::draw(ctx, app);
@@ -473,10 +473,6 @@ fn new_project(app: &mut App) {
         }
         Err(e) => app.notify(format!("{}: {e}", t("err_create_object"))),
     }
-}
-
-fn stub(ui: &mut egui::Ui, screen: Screen) {
-    module_page::show(ui, screen);
 }
 
 fn dialogs(ctx: &Context, app: &mut App) {

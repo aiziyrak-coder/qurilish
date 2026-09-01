@@ -147,63 +147,12 @@ impl Screen {
             | Screen::Foreman
             | Screen::TechSupervision
             | Screen::Client
+            | Screen::Copilot
             | Screen::Settings => Readiness::Ready,
 
-            // Bular server, mobil klient yoki LLM ni talab qiladi.
-            Screen::Copilot => Readiness::Planned,
         }
     }
 
-    /// Zaglushkada ko'rsatiladigan qisqa tavsif — TZ dan olingan.
-    pub fn tz_summary(self) -> &'static str {
-        match self {
-            Screen::Quality => t("tz_quality"),
-            Screen::Safety => t("tz_safety"),
-            Screen::Foreman => t("tz_foreman"),
-            Screen::TechSupervision => t("tz_tech_supervision"),
-            Screen::Client => t("tz_client"),
-            Screen::Requests => t("tz_requests"),
-            Screen::Purchases => t("tz_purchases"),
-            Screen::Warehouse => t("tz_warehouse"),
-            Screen::Materials => t("tz_materials"),
-            Screen::Timesheet => t("tz_timesheet"),
-            Screen::Machines => t("tz_machines"),
-            Screen::Analytics => t("tz_analytics"),
-            Screen::Copilot => t("tz_copilot"),
-            _ => "",
-        }
-    }
-
-    /// TZ dagi talablar ro'yxati — har bir satr alohida band.
-    pub fn tz_points(self) -> &'static str {
-        match self {
-            Screen::Quality => t("tzp_quality"),
-            Screen::Safety => t("tzp_safety"),
-            Screen::Foreman => t("tzp_foreman"),
-            Screen::TechSupervision => t("tzp_tech_supervision"),
-            Screen::Client => t("tzp_client"),
-            Screen::Requests => t("tzp_requests"),
-            Screen::Purchases => t("tzp_purchases"),
-            Screen::Warehouse => t("tzp_warehouse"),
-            Screen::Materials => t("tzp_materials"),
-            Screen::Timesheet => t("tzp_timesheet"),
-            Screen::Machines => t("tzp_machines"),
-            Screen::Analytics => t("tzp_analytics"),
-            Screen::Copilot => t("tzp_copilot"),
-            _ => "",
-        }
-    }
-
-    /// Modulni boshlashga to'sqinlik qilayotgan omil.
-    pub fn blocker(self) -> &'static str {
-        match self {
-            Screen::Foreman => t("blocker_mobile"),
-            Screen::TechSupervision | Screen::Client => t("blocker_roles"),
-            Screen::Analytics => t("blocker_modules"),
-            Screen::Copilot => t("blocker_llm"),
-            _ => "",
-        }
-    }
 }
 
 /// Navigatsiya guruhlari — TZ ning mantiqiy bloklari.
@@ -545,6 +494,7 @@ impl App {
                 Ok("foreman") => Screen::Foreman,
                 Ok("supervision") => Screen::TechSupervision,
                 Ok("client") => Screen::Client,
+                Ok("copilot") => Screen::Copilot,
                 _ => Screen::Dashboard,
             },
             today: chrono::Local::now().date_naive(),

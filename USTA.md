@@ -3,47 +3,44 @@
 ## Maqsad
 
 TZ «Construction Intelligence Platform» bo'yicha Windows uchun native desktop
-ilova qurish: qurilish loyihasini boshqarish, loyiha va smetani AI tekshiruvi,
-ijro hujjatlari, ta'minot zanjiri, resurs va sifat nazorati.
+ilova: qurilish loyihasini boshqarish, loyiha va smetani tekshirish, ijro
+hujjatlari, ta'minot zanjiri, resurs va sifat nazorati, kesishgan tahlil hamda
+kvartiralarni sotish.
 
 ## Stack va struktura
 
 - **Rust + egui/eframe** — native oyna, GPU orqali chiziladi, webview yo'q
 - **SQLite (rusqlite, WAL)** — to'liq lokal, server kerak emas
-- `src/model.rs` — I modul turlari · `src/domain.rs` — II–XVI turlari
+- `src/model.rs` — I modul turlari · `src/domain.rs` — II–XX turlari
 - `src/cpm.rs` — tarmoq grafigi · `src/checks.rs` — tekshiruv qoidalari
+- `src/sales.rs` — sotuv hisobi · `src/analytics.rs` — kesishgan tahlil
+- `src/copilot.rs` — savol-javob · `src/backup.rs` — zaxira nusxa
 - `src/import.rs` — smeta importi · `src/db.rs` + `src/store.rs` — ombor
 - `src/ui/` — har bir ekran alohida fayl · `src/i18n.rs` — uz/ru satrlar
 
 Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo clippy`
 
-## Yo'l xaritasi (TZ modullari)
+Diagnostika: `QURAI_SCREEN=<ekran>` kerakli ekranda ochadi, `QURAI_DB=<yo'l>`
+boshqa bazada ishga tushiradi (sinov uchun).
 
-- [x] **I.1 Obyekt pasporti** — bosqichlar, moliya, ishtirokchilar, hujjat va foto
-- [x] **I.2 GPR** — Gantt, CPM, tahlil oynasi, klaviatura boshqaruvi
-- [x] **I.3 PPR** — kartalar, resurs gistogrammasi, qoplanish, 6 qoida
-- [x] **II AI loyiha tekshiruvi** — bilimlar grafi, 12 qoida, normativ reyestri, ACTION
+## Yo'l xaritasi
+
+Barcha TZ modullari va sotuv bo'limi qurilgan:
+
+- [x] **I.1 Obyekt pasporti** · **I.2 GPR** (CPM, Gantt) · **I.3 PPR**
+- [x] **II AI loyiha tekshiruvi** — bilimlar grafi, 12 qoida, normativ reyestri
 - [x] **III AI smeta tekshiruvi** — import, 8 qoida, qiymat nazorati
-- [x] **IV Ijro hujjatlari** — bo'lim bo'yicha talablar reyestri
-- [x] **V Ishlar jurnali** — fotofiksatsiya, GPR ni fakt bo'yicha yangilash
-- [x] **Umumiy ko'rinish** — S-egri, diqqat paneli, yaqin 14 kun
-- [x] **Umumiy qidiruv** — Ctrl+K, barcha modullar bo'ylab
-- [x] **XII Materiallar** — katalog, sertifikat muddati, qoldiq ko'rsatkichi
-- [x] **XI Ombor** — kirim/chiqim/hisobdan chiqarish, qoldiq va uning qiymati
-- [x] **IX Arizalar** — ehtiyoj → ariza → tasdiqlash, qoplanish nazorati
-- [x] **X Xaridlar** — ariza → xarid → yetkazish → omborga kirim
-- [x] **XIX Sotuv — shaxmatka** — bloklar, qavatlar, kvartiralar, holatlar
-- [x] **XX Shartnomalar va to'lovlar** — to'lov turlari, grafik, qarz nazorati
-- [x] **XIV Sifat** — kirish/operatsion/qabul nazorati, nuqson muddati
-- [x] **XV Xavfsizlik** — buzilish, xavfli holat, hodisa, tekshiruv, instruktaj
-- [x] **XIII Tabel** — haftalik jadval, soat va ish haqi fondi
-- [x] **XVI Mashinalar** — park, smenalar, motosoat, YoMM, texnik ko'rik
-- [ ] **XVII AI analitika** — qolgan modullar to'lgandan keyin  <- HOZIR SHU YERDA
-- [ ] **VI Prorab mobil ilovasi** — BLOKLANGAN: mobil klient + server kerak
-- [ ] **VII Texnik nazorat kabineti** — BLOKLANGAN: rollar + server kerak
-- [ ] **VIII Buyurtmachi kabineti** — BLOKLANGAN: rollar + server kerak
-- [ ] **XVIII AI Copilot** — BLOKLANGAN: LLM integratsiyasi kerak
-- [ ] **II.1–2 Chizmani tanish** — BLOKLANGAN: PDF/DWG/IFC kutubxonasi kerak
+- [x] **IV Ijro hujjatlari** · **V Ishlar jurnali** (fotofiksatsiya)
+- [x] **VI Prorab ish o'rni** — kunlik ekran: ishlar, jurnal, tabel, smenalar
+- [x] **VII Texnik nazorat kabineti** — ko'rib chiqish navbati va qarorlar
+- [x] **VIII Buyurtmachi kabineti** — faqat o'qish uchun hisobot ko'rinishi
+- [x] **IX Arizalar** · **X Xaridlar** — ehtiyoj → ariza → xarid → ombor
+- [x] **XI Ombor** · **XII Materiallar** — qoldiq harakatlardan hisoblanadi
+- [x] **XIII Tabel** · **XIV Sifat** · **XV Xavfsizlik** · **XVI Texnika**
+- [x] **XVII AI analitika** — 8 yo'nalish, 24 qoida, sog'lomlik indeksi, hisobot
+- [x] **XVIII Yordamchi** — savol-javob, faqat o'z bazasidan (til modelisiz)
+- [x] **XIX Sotuv — shaxmatka** · **XX Shartnomalar va to'lovlar**
+- [x] **Umumiy ko'rinish**, **umumiy qidiruv** (Ctrl+K), **zaxira nusxa**
 
 ## Muhim qarorlar
 
@@ -54,31 +51,29 @@ Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo cli
   tekshiruvi talab qilinadi» deb yoziladi.
 - **Dastur hukm chiqarmaydi** (TZ III.32). Fakt, hisob va xulosa ajratilgan;
   «oshirilgan» emas, «oshirilgan bo'lishi mumkin» deb yoziladi.
-- **Har bir hisob bitta funksiyadan** — masalan resurs talabi tekshiruvda ham,
-  gistogrammada ham `checks::resource_demand` dan olinadi, shunda diagramma va
-  xato matni bir-biriga zid chiqmaydi.
-- **Ombor qoldig'i saqlanmaydi, hisoblanadi** — `checks::stock_balances` kirim,
-  chiqim va hisobdan chiqarishdan chiqaradi. Shunda hujjat bilan qoldiq hech
-  qachon bir-biriga zid bo'lmaydi; manfiy qoldiq esa hujjatdagi xatoni ko'rsatadi.
-- **Ta'minot zanjiri raqam orqali bog'lanadi** — xarid omborga kirim qilinganda
-  kirim harakatining hujjat raqami xarid raqami bo'ladi. Shu sabab «kirim
-  qilinganmi?» degan savolga javob alohida bayroqsiz, ma'lumotning o'zidan chiqadi
-  va tugma ikki marta bosilsa ham takror kirim bo'lmaydi.
-- **Sotuv bo'limi TZ dan tashqarida, ammo bir xil qoidalar bilan** — XIX-XX
-  raqamlari TZ ning I–XVIII sidan keyin davom etadi. Kvartira holati alohida
-  bayroq emas: u shartnoma holatidan kelib chiqadi (`sales::status_for`), shuning
-  uchun shaxmatkadagi rang va shartnoma hech qachon bir-biriga zid bo'lmaydi.
-- **To'lov grafigi shartnomadan quriladi** — `sales::build_schedule` boshlang'ich
-  to'lov va teng oylik ulushlarni hisoblaydi; yaxlitlash qoldig'i oxirgi oyga
-  qo'shiladi, shunda grafik summasi shartnoma summasiga tiyin-tiyin to'g'ri keladi.
+- **Har bir hisob bitta funksiyadan.** Resurs talabi tekshiruvda ham,
+  gistogrammada ham `checks::resource_demand` dan; sotuv qarzi ekranda ham,
+  hisobotda ham `sales::deal_state` dan olinadi.
+- **Hosilaviy holat saqlanmaydi, hisoblanadi.** Ombor qoldig'i — harakatlardan,
+  kvartira holati — shartnomadan, ish haqi — tabel va stavkadan. Shuning uchun
+  hujjat bilan ko'rsatkich hech qachon bir-biriga zid bo'lmaydi.
+- **Yordamchida til modeli yo'q** (XVIII). Javob shu bazadagi hisobdan chiqadi va
+  «Tekshirish» tugmasi manba ekranini ochadi. Model qo'shilganda shu funksiyalar
+  unga asbob bo'lib beriladi — sonlar baribir bazadan olinadi.
 - **Baza migratsiyasi qo'shimcha ustunlar orqali** — eski baza ochilaveradi,
   ma'lumot yo'qolmaydi (test bilan qoplangan).
+- **Zaxira nusxa `VACUUM INTO` orqali.** WAL rejimida `.db` faylini shunchaki
+  ko'chirish yetarli emas — yozilmagan tranzaksiyalar tushib qolishi mumkin.
 
-## Ochiq savollar / xavflar
+## Qolgan yo'nalishlar (arxitektura qarori kerak)
 
-- **Server va rollar** — VI, VII, VIII modullari shusiz mumkin emas. Qaror kerak:
-  qachon va qanday texnologiyada quramiz?
-- **Chizmani tanish** — II modulning haqiqiy qiymati shunga bog'liq. IFC dan
-  boshlash mantiqan to'g'ri (ochiq format, grafga to'g'ridan-to'g'ri tushadi).
-- **LLM** — «AI javob beradi» deb yozilgan joylar qoidalar dvigateli bilan
-  yopilmaydi. Qaysi model, qayerda ishlaydi, ma'lumot chetga chiqadimi?
+Bular ilovaning ichida emas, undan tashqarida turadi:
+
+1. **Server va ko'p foydalanuvchi.** VI–VIII kabinetlari hozir shu kompyuterdagi
+   bazada ishlaydi. Bir nechta qurilma o'rtasida sinxronizatsiya, rollar bo'yicha
+   kirish va masofadan imzolash uchun server qismi kerak.
+2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
+   kutubxonani talab qiladi. Hozir loyiha elementlari qo'lda kiritiladi.
+   IFC dan boshlash mantiqan to'g'ri — ochiq format, grafga to'g'ridan-to'g'ri tushadi.
+3. **Til modeli (LLM).** Erkin matnli savol-javob va hujjat matnini tahlil qilish
+   uchun. Qaror kerak: qaysi model, qayerda ishlaydi, ma'lumot chetga chiqadimi.

@@ -39,7 +39,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let mut go: Option<Screen> = None;
 
+    let mut export = false;
     ui.horizontal(|ui| {
+        if ui
+            .button(t("an_export"))
+            .on_hover_text(t("an_export_hint"))
+            .clicked()
+        {
+            export = true;
+        }
         ui.label(
             RichText::new(t("analytics_hint"))
                 .size(11.0)
@@ -128,6 +136,27 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     ui.add_space(6.0);
                 }
             });
+    }
+
+    if export {
+        // Hisobot ekrandagi bilan bir xil hisobdan chiqadi.
+        let name = app
+            .project()
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| t("dash").to_string());
+        let text = analytics::report(&inp, &name);
+        let file = format!("qurai-{}.txt", app.today.format("%Y-%m-%d"));
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title(t("an_export"))
+            .set_file_name(&file)
+            .add_filter("Text", &["txt"])
+            .save_file()
+        {
+            match std::fs::write(&path, text) {
+                Ok(()) => app.notify(format!("{} {}", t("an_export_done"), path.display())),
+                Err(e) => app.notify(format!("{}: {e}", t("an_export_failed"))),
+            }
+        }
     }
 
     if let Some(screen) = go {

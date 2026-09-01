@@ -3,7 +3,9 @@
 
 mod analytics;
 mod app;
+mod backup;
 mod checks;
+mod copilot;
 mod cpm;
 mod db;
 mod domain;

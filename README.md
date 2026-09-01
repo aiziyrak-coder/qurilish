@@ -33,6 +33,10 @@ Baza fayli sukut bo'yicha dastur yonidagi `data/qurai.db` da. `QURAI_DB` muhit
 o'zgaruvchisi bilan boshqa yo'lni ko'rsatish mumkin — sinov yoki portativ
 ishlatish uchun qulay.
 
+Sozlamalarda **zaxira nusxa** olish mumkin: bazaning izchil nusxasi bitta faylga
+yoziladi (`VACUUM INTO`), shuning uchun WAL rejimida ham hech narsa tushib
+qolmaydi. Kod git bilan qaytadi, ma'lumot esa qaytmaydi — nusxani muntazam oling.
+
 ## Umumiy qidiruv
 
 `Ctrl+K` yoki `/` — barcha modullar bo'ylab qidiradi: GPR ishlari, loyiha
@@ -311,6 +315,46 @@ to'lanmagan qator qizil undov bilan ajraladi. Qarz shartnoma summasidan
 hisoblanadi, grafikdan emas — grafik to'ldirilmagan bo'lsa ham qarz to'g'ri
 ko'rinadi.
 
+### AI analitika (TZ XVII)
+Barcha modullardan yig'ilgan bitta ko'rinish. Yuqorida **sog'lomlik indeksi**:
+100 dan topilmalar og'irligi ayriladi (kritik −15, jiddiy −8, ogohlantirish −4) —
+hisob ochiq yozilgan, chunki yopiq ball ishonchsiz.
+
+Sakkiz yo'nalish (muddat, pul, hujjatlar, ta'minot, sifat, xavfsizlik, resurslar,
+sotuv) bo'yicha ko'rsatkichlar — har biri bosilsa o'z ekranini ochadi. Pastda
+24 qoida bo'yicha topilmalar, muhimligi bo'yicha tartiblangan. Har topilma uch
+qismga ajratilgan: **fakt** (nima kuzatildi), **hisob** (qaysi sonlardan chiqdi)
+va **tavsiya** (nima qilish mumkin) — TZ III.32 ga muvofiq dastur hukm
+chiqarmaydi. Har qoidaning barqaror kodi bor (`AN-S2`, `AN-P5`…), shuning uchun
+hisobotlarni ishga tushirishlar orasida solishtirish mumkin.
+
+«Hisobotni saqlash» ko'rsatkichlar va topilmalarni matn fayliga chiqaradi.
+
+### Prorab ish o'rni (TZ VI)
+Bir kunlik ekran: bugun ketayotgan ishlar (bajarilishni shu yerda o'zgartirish
+mumkin), kunlik jurnal yozuvi, brigada soatlari («butun brigadaga smena» bir
+bosishda), texnika smenalari va diqqat talab qiladigan holatlar — ochiq
+xavfsizlik yozuvlari va zaxiradan kam materiallar. Kunni yopish uchun boshqa
+bo'limlarga o'tish shart emas.
+
+### Texnik nazorat kabineti (TZ VII)
+Ko'rib chiqish navbati: imzo kutayotgan ijro hujjatlari (imzolash va rad etish
+tugmalari bilan), talabga mos kelmagan sifat yozuvlari, yopilmagan jiddiy
+nomuvofiqliklar va muddati o'tgan xavfsizlik choralari.
+
+### Buyurtmachi kabineti (TZ VIII)
+Faqat o'qish uchun ko'rinish: bajarilish va prognoz, shartnoma muddati, bo'limlar
+kesimidagi bajarilish, moliya (shartnoma, smeta, bajarilgan ish qiymati,
+to'langan va to'lanmagan qism), oxirgi ish kunlari va sotuv holati.
+
+### Yordamchi (TZ XVIII)
+Savol beriladi — javob shu bazadagi ma'lumotdan hisoblanadi. **Til modeli
+ishlatilmaydi va bu ekranda ochiq aytiladi.** 13 ta tayyor savol bor; erkin
+yozilgan savol kalit so'zlar bo'yicha shulardan biriga bog'lanadi. Aniq mavzuli
+savol umumiy so'zlardan ustun turadi — «ombor holati qanday?» ombor haqidagi
+savol deb tushuniladi. Savol tanilmasa javob **o'ylab topilmaydi**: ekran buni
+ochiq aytadi. Har javobda «Tekshirish» tugmasi manba ekranini ochadi.
+
 ### Umumiy ko'rinish
 Obyekt bo'yicha xulosa, muddati o'tgan ishlar mas'ullari va kechikish miqdori bilan
 (bosilsa GPR da ochiladi), bo'limlar kesimidagi bajarilish, bugungi ishlar.
@@ -347,6 +391,14 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/quality.rs` | Sifat nazorati: uch bosqich va nuqson muddati |
 | `src/ui/safety.rs` | Mehnat xavfsizligi hodisalari jurnali |
 | `src/ui/machines.rs` | Texnika parki va smenalar |
+| `src/analytics.rs` | Kesishgan tahlil: 24 qoida, sog'lomlik indeksi, hisobot |
+| `src/copilot.rs` | Savol-javob: niyatni tanish va javob hisobi |
+| `src/backup.rs` | Bazaning izchil zaxira nusxasi |
+| `src/ui/analytics.rs` | AI analitika ekrani |
+| `src/ui/copilot.rs` | Yordamchi ekrani |
+| `src/ui/foreman.rs` | Prorab ish o'rni |
+| `src/ui/supervision.rs` | Texnik nazorat kabineti |
+| `src/ui/client.rs` | Buyurtmachi kabineti |
 | `src/sales.rs` | Sotuv hisobi: qarz, to'lov grafigi, kvartira holati |
 | `src/ui/sales.rs` | Sotuv shaxmatkasi va kvartira kartochkasi |
 | `src/ui/deals.rs` | Shartnomalar, to'lov turlari va to'lov grafigi |
@@ -367,8 +419,16 @@ identifikatorlar qayta ishlatilmaydi. Obyekt o'chirilganda bog'liq ma'lumot
 
 ## TZ bo'yicha keyingi bosqichlar
 
-I–V va IX–XVI modullari, shuningdek XIX–XX sotuv bo'limi to'liq ishlaydi.
-Qolgan uchta yo'nalish arxitektura qarorini kutmoqda.
+TZ ning I–XVIII modullari va XIX–XX sotuv bo'limi qurilgan. Uch yo'nalish
+ilovadan tashqarida turadi va alohida qaror talab qiladi:
+
+1. **Server va ko'p foydalanuvchi.** VI–VIII kabinetlari hozir shu kompyuterdagi
+   bazada ishlaydi. Qurilmalar o'rtasida sinxronizatsiya, rollar bo'yicha kirish
+   va masofadan imzolash server qismini talab qiladi.
+2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
+   kutubxonani talab qiladi; hozir loyiha elementlari qo'lda kiritiladi.
+3. **Til modeli.** Erkin matnli savol-javob va hujjat matnini tahlil qilish
+   uchun. XVIII moduli hozir qoidalar bilan ishlaydi va buni ochiq aytadi.
 
 Uchta arxitektura qarori alohida hal qilinishi kerak:
 

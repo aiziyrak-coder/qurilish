@@ -8,6 +8,7 @@ use crate::theme::Theme;
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut changed = false;
     let mut make_demo = false;
+    let mut make_backup = false;
 
     egui::ScrollArea::vertical().show(ui, |ui| {
         ui.heading(t("settings_title"));
@@ -170,6 +171,16 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     make_demo = true;
                 }
             });
+            // Kod git bilan qaytadi, ma'lumot esa qaytmaydi — zaxira alohida.
+            field(ui, t("set_backup"), |ui| {
+                if ui
+                    .button(t("set_backup_btn"))
+                    .on_hover_text(t("set_backup_hint"))
+                    .clicked()
+                {
+                    make_backup = true;
+                }
+            });
         });
 
         ui.add_space(10.0);
@@ -193,6 +204,21 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if changed {
         app.save_settings();
         app.notify(t("set_saved").to_string());
+    }
+
+    if make_backup {
+        let name = crate::backup::suggested_name(chrono::Local::now().naive_local());
+        if let Some(dest) = rfd::FileDialog::new()
+            .set_title(t("set_backup_btn"))
+            .set_file_name(&name)
+            .add_filter("SQLite", &["db"])
+            .save_file()
+        {
+            match crate::backup::create(app.db.conn(), &dest) {
+                Ok(p) => app.notify(format!("{} {}", t("set_backup_done"), p.display())),
+                Err(e) => app.notify(format!("{}: {e}", t("set_backup_failed"))),
+            }
+        }
     }
 
     if make_demo {

@@ -998,6 +998,58 @@ pub fn metrics(inp: &Input) -> Vec<Metric> {
     out
 }
 
+/// Topilmalar va ko'rsatkichlardan matnli hisobot tuzadi.
+///
+/// Hisobot ekrandagi bilan bir xil manbadan chiqadi, shuning uchun faylda va
+/// ekranda turli sonlar bo'lishi mumkin emas.
+pub fn report(inp: &Input, project: &str) -> String {
+    use std::fmt::Write;
+
+    let f = findings(inp);
+    let mut o = String::new();
+    let _ = writeln!(o, "QURAi — {}", t("an_report_title"));
+    let _ = writeln!(o, "{}: {project}", t("col_object"));
+    let _ = writeln!(o, "{}: {}", t("col_date"), inp.today.format("%d.%m.%Y"));
+    let _ = writeln!(o, "{}: {} / 100", t("an_health"), health(&f));
+    let _ = writeln!(o);
+
+    let _ = writeln!(o, "== {} ==", t("an_report_metrics"));
+    for m in metrics(inp) {
+        let _ = write!(o, "{:<28} {:>18}", m.title, m.value);
+        if m.hint.is_empty() {
+            let _ = writeln!(o);
+        } else {
+            let _ = writeln!(o, "   ({})", m.hint);
+        }
+    }
+
+    let _ = writeln!(o);
+    let _ = writeln!(o, "== {} ({}) ==", t("an_report_findings"), f.len());
+    if f.is_empty() {
+        let _ = writeln!(o, "{}", t("an_nothing"));
+    }
+    for x in &f {
+        let _ = writeln!(o);
+        let _ = writeln!(
+            o,
+            "[{}] {} · {}",
+            x.code,
+            x.severity.label(),
+            x.area.label()
+        );
+        let _ = writeln!(o, "{}", x.fact);
+        if !x.evidence.is_empty() {
+            let _ = writeln!(o, "  {}: {}", t("an_evidence"), x.evidence);
+        }
+        if !x.action.is_empty() {
+            let _ = writeln!(o, "  {}: {}", t("an_action"), x.action);
+        }
+    }
+    let _ = writeln!(o);
+    let _ = writeln!(o, "{}", t("an_report_note"));
+    o
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
