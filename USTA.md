@@ -49,6 +49,29 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
 - [x] **Loyiha paketi** — qurilmalar orasida fayl orqali almashish
 - [x] **Til modeli** — integratsiya nuqtasi, sukut bo'yicha o'chiq
 
+### Chuqurlashtirilgan modullar (TZ bo'yicha ikkinchi qatlam)
+
+- [x] **XI Ombor** — bir nechta ombor va ular orasida ko'chirish, partiyalar
+      (sertifikat, yaroqlilik, FEFO), rezerv, inventarizatsiya, qaytarish
+- [x] **XI–XII Sarf normalari** — normativ / fakt taqqoslash, ortiqcha sarf
+      summasi (norma bajarilgan hajmga qarab hisoblanadi)
+- [x] **XIII Tabel** — brigadalar, smenalar (koeffitsiyent bilan), yo'qliklar,
+      bo'sh turish, ish tannarxi (ish haqi + material + texnika)
+- [x] **X Xaridlar** — tijorat takliflari va ularni solishtirish, yetkazib
+      beruvchilar tarixi, qisman yetkazish, bo'lim byudjeti
+- [x] **IX Arizalar** — summaga qarab kelishuv marshruti, byudjet tekshiruvi,
+      qaror tarixi, rad etish sababi
+- [x] **XIV Sifat** — chek-listlar (normativ havolasi bilan), nazorat nuqtalari,
+      Quality Score, brak tahlili, bosqichni yopishga to'siq
+- [x] **XV Xavfsizlik** — ruxsatlar matritsasi, SIZ nazorati, naryad-dopusk va
+      uni tekshirish, Safety Score
+- [x] **XVI Texnika** — yo'l varaqalari, yoqilg'i normasi, rejali TX,
+      foydalanish koeffitsiyenti, ishlatishga to'siq
+- [x] **XVII Analitika** — oylik pul oqimi, kassa uzilishi, kunlik xulosa
+
+Qolgan ishlar `TODO.md` da modul bo'yicha ro'yxatlangan: TZ ning 682 bandidan
+236 tasi to'liq, 130 tasi qisman bajarilgan.
+
 ## Muhim qarorlar
 
 - **Desktop klient native holicha qoladi.** Server qismi kerak bo'lganda
