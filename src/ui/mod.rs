@@ -1,10 +1,13 @@
 //! Oyna bezagi, navigatsiya va umumiy vidjetlar.
 
 mod aicheck;
+mod analytics;
+mod client;
 mod dashboard;
 mod deals;
 mod documents;
 mod estimate;
+mod foreman;
 mod execdocs;
 mod gantt;
 mod issues;
@@ -21,6 +24,7 @@ mod safety;
 mod sales;
 mod search;
 mod settings;
+mod supervision;
 mod timesheet;
 mod warehouse;
 
@@ -144,6 +148,10 @@ pub fn draw(ctx: &Context, app: &mut App) {
         Screen::Quality => quality::show(ui, app),
         Screen::Safety => safety::show(ui, app),
         Screen::Machines => machines::show(ui, app),
+        Screen::Analytics => analytics::show(ui, app),
+        Screen::Foreman => foreman::show(ui, app),
+        Screen::TechSupervision => supervision::show(ui, app),
+        Screen::Client => client::show(ui, app),
         Screen::Settings => settings::show(ui, app),
         other => stub(ui, other),
     });
@@ -634,6 +642,43 @@ fn toast(ctx: &Context, app: &mut App) {
 }
 
 // ---------- Umumiy vidjetlar ----------
+
+/// Raqamni qisqa ko'rinishda: 12.0 -> «12», 4.5 -> «4.5».
+pub fn trim(v: f64) -> String {
+    materials::trim_num(v)
+}
+
+/// Bosiladigan ko'rsatkich kartochkasi — bosilganda `true` qaytaradi.
+pub fn stat_card_link(
+    ui: &mut egui::Ui,
+    title: &str,
+    value: String,
+    hint: &str,
+    color: Color32,
+) -> bool {
+    let r = egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::line()))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(14, 12))
+        .show(ui, |ui| {
+            ui.set_width(168.0);
+            ui.vertical(|ui| {
+                ui.label(RichText::new(title).size(12.0).color(theme::muted()));
+                ui.add_space(2.0);
+                ui.label(RichText::new(value).size(20.0).strong().color(color));
+                if !hint.is_empty() {
+                    ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+                }
+            });
+        })
+        .response
+        .interact(egui::Sense::click());
+    if r.hovered() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    r.clicked()
+}
 
 /// Ko'rsatkich kartochkasi.
 pub fn stat_card(ui: &mut egui::Ui, title: &str, value: String, hint: &str, color: Color32) {

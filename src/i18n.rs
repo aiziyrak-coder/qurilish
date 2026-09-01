@@ -1663,6 +1663,452 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Есть отрицательный остаток: расход больше прихода. Проверьте документы.",
         ),
 
+        // ---------- XVII. Analitika ----------
+        "analytics_hint" => (
+            "Barcha modullardan yig'ilgan faktlar. Dastur hukm chiqarmaydi — fakt, hisob va tavsiya ajratilgan.",
+            "Факты, собранные из всех модулей. Программа не выносит вердикт — факт, расчет и рекомендация разделены.",
+        ),
+        "an_health" => ("Obyekt sog'lomligi", "Здоровье объекта"),
+        "an_health_hint" => (
+            "100 dan topilmalar og'irligi ayriladi: kritik −15, jiddiy −8, ogohlantirish −4.",
+            "Из 100 вычитается вес находок: критично −15, серьезно −8, предупреждение −4.",
+        ),
+        "an_all" => ("Hammasi", "Все"),
+        "an_open" => ("O'tish", "Перейти"),
+        "an_evidence" => ("Hisob", "Расчет"),
+        "an_action" => ("Tavsiya", "Рекомендация"),
+        "an_nothing" => ("E'tibor talab qiladigan holat topilmadi", "Ситуаций, требующих внимания, не найдено"),
+        "an_nothing_hint" => (
+            "Bu tekshiruv modullardagi ma'lumotga tayanadi — ma'lumot to'ldirilsa, tahlil ham to'liqroq bo'ladi.",
+            "Проверка опирается на данные модулей — чем полнее данные, тем полнее анализ.",
+        ),
+
+        // Yo'nalishlar
+        "area_schedule" => ("Muddat", "Сроки"),
+        "area_cost" => ("Pul", "Деньги"),
+        "area_docs" => ("Hujjatlar", "Документы"),
+        "area_supply" => ("Ta'minot", "Снабжение"),
+        "area_quality" => ("Sifat", "Качество"),
+        "area_safety" => ("Xavfsizlik", "Безопасность"),
+        "area_resources" => ("Resurslar", "Ресурсы"),
+        "area_sales" => ("Sotuv", "Продажи"),
+
+        // Umumiy o'lchov birliklari
+        "an_tasks" => ("Ishlar", "Работ"),
+        "an_issues" => ("Nomuvofiqliklar", "Несоответствий"),
+        "an_requests" => ("Arizalar", "Заявок"),
+        "an_purchases" => ("Xaridlar", "Закупок"),
+        "an_materials" => ("Materiallar", "Материалов"),
+        "an_defects" => ("Nuqsonlar", "Дефектов"),
+        "an_events" => ("Hodisalar", "Событий"),
+        "an_machines" => ("Texnika", "Техники"),
+        "an_workers" => ("Ishchilar", "Рабочих"),
+        "an_deals" => ("Shartnomalar", "Договоров"),
+        "an_positions" => ("pozitsiya", "позиций"),
+        "an_amount" => ("Summa", "Сумма"),
+        "an_plan_fact" => ("Reja / fakt", "План / факт"),
+        "an_delay" => ("kechikish", "отставание"),
+        "an_estimate" => ("Smeta:", "Смета:"),
+        "an_contract" => ("shartnoma:", "договор:"),
+        "an_earned" => ("Bajarildi:", "Выполнено:"),
+        "an_paid" => ("to'landi:", "оплачено:"),
+        "an_sold" => ("sotilgan", "продано"),
+        "an_built" => ("qurilgan", "построено"),
+
+        // Ko'rsatkichlar
+        "an_m_progress" => ("Bajarilish", "Выполнение"),
+        "an_plan" => ("reja", "план"),
+        "an_m_delay" => ("Kechikish", "Отставание"),
+        "an_forecast" => ("prognoz", "прогноз"),
+        "an_m_estimate" => ("Smeta summasi", "Сумма сметы"),
+        "an_m_issues" => ("Ochiq nomuvofiqlik", "Открытых несоответствий"),
+        "an_m_issues_hint" => ("AI tekshiruvidan", "из AI-проверки"),
+        "an_m_stock" => ("Ombor qiymati", "Стоимость склада"),
+        "an_below_min" => ("zaxiradan kam", "ниже минимума"),
+        "an_m_quality" => ("Sifat", "Качество"),
+        "an_checks" => ("tekshiruv", "проверок"),
+        "an_m_safety" => ("Ochiq xavfsizlik", "Открытых по ТБ"),
+        "an_m_safety_hint" => ("chora kutmoqda", "ожидают мер"),
+        "an_m_resources" => ("Ish soati, 7 kun", "Часов, 7 дней"),
+        "an_machine_hours" => ("motosoat", "моточасов"),
+        "an_m_sales" => ("Sotilgan", "Продано"),
+        "an_received" => ("tushum", "поступило"),
+
+        // Muddat qoidalari
+        "an_s1_fact" => (
+            "Bog'lanishlarda halqa bor — grafik hisobi ishonchsiz.",
+            "В связях есть цикл — расчет графика недостоверен.",
+        ),
+        "an_s1_action" => (
+            "GPR da halqadagi bog'lanishlardan birini olib tashlang.",
+            "Удалите одну из связей цикла в графике.",
+        ),
+        "an_s2_fact" => (
+            "Obyekt rejadan orqada bo'lishi mumkin.",
+            "Объект, возможно, отстает от плана.",
+        ),
+        "an_s2_action" => (
+            "Kritik yo'ldagi ishlarni ko'rib chiqing: resursni kuchaytirish yoki muddatni qayta kelishish.",
+            "Пересмотрите работы критического пути: усилить ресурс или пересогласовать срок.",
+        ),
+        "an_s3_fact" => (
+            "Muddati o'tgan, ammo yopilmagan ishlar bor.",
+            "Есть работы с прошедшим сроком, но не закрытые.",
+        ),
+        "an_s3_action" => (
+            "Jurnal orqali haqiqiy hajmni kiriting yoki muddatni yangilang.",
+            "Внесите фактический объем через журнал или обновите срок.",
+        ),
+        "an_s4_fact" => (
+            "Kritik yo'ldagi ish kechikkan — umumiy muddat siljishi mumkin.",
+            "Работа на критическом пути просрочена — общий срок может сдвинуться.",
+        ),
+        "an_s4_action" => (
+            "Shu ishlarni birinchi navbatda hal qiling; qolganlarida zaxira bor.",
+            "Решайте эти работы в первую очередь; у остальных есть резерв.",
+        ),
+
+        // Pul qoidalari
+        "an_c1_fact" => (
+            "Smetadagi hajm loyihadagidan oshgan bo'lishi mumkin.",
+            "Объем в смете, возможно, превышает проектный.",
+        ),
+        "an_c1_action" => (
+            "«AI smeta tekshiruvi» da farq qilgan pozitsiyalarni ko'ring.",
+            "Посмотрите расходящиеся позиции в «AI-проверке сметы».",
+        ),
+        "an_c2_fact" => (
+            "Smetada takrorlangan pozitsiyalar bor.",
+            "В смете есть повторяющиеся позиции.",
+        ),
+        "an_c2_action" => (
+            "Takrorlarni birlashtiring yoki farqni izohlang.",
+            "Объедините дубли или объясните различие.",
+        ),
+        "an_c3_fact" => (
+            "Bir xil ish uchun narxlar farq qiladi.",
+            "Цены на одинаковые работы различаются.",
+        ),
+        "an_c3_action" => (
+            "Eng past narxga keltirilsa tejash imkoni bor.",
+            "Приведение к минимальной цене дает экономию.",
+        ),
+        "an_c4_fact" => (
+            "Smeta summasi shartnoma summasidan oshgan.",
+            "Сумма сметы превышает сумму договора.",
+        ),
+        "an_c4_action" => (
+            "Qo'shimcha kelishuv kerak bo'lishi mumkin — buyurtmachi bilan muhokama qiling.",
+            "Может потребоваться допсоглашение — обсудите с заказчиком.",
+        ),
+        "an_c5_fact" => (
+            "Bajarilgan ish moliyalashtirishdan oldinda — kassa uzilishi ehtimoli.",
+            "Выполнение опережает финансирование — возможен кассовый разрыв.",
+        ),
+        "an_c5_action" => (
+            "Bajarilgan ish dalolatnomalarini taqdim eting va to'lovni tezlashtiring.",
+            "Предъявите акты выполненных работ и ускорьте оплату.",
+        ),
+
+        // Hujjat qoidalari
+        "an_d1_fact" => (
+            "Tugallangan ishlarda imzolangan ijro hujjati yo'q.",
+            "У завершенных работ нет подписанной исполнительной документации.",
+        ),
+        "an_d1_action" => (
+            "«Ijro hujjatlari» da dalolatnomalarni rasmiylashtiring.",
+            "Оформите акты в разделе «Исполнительная документация».",
+        ),
+        "an_d2_fact" => (
+            "AI tekshiruvining yopilmagan kritik nomuvofiqliklari bor.",
+            "Есть незакрытые критические несоответствия AI-проверки.",
+        ),
+        "an_d2_action" => (
+            "Har birini muhandis tekshiruvidan o'tkazing va holatini yangilang.",
+            "Проверьте каждое инженером и обновите статус.",
+        ),
+
+        // Ta'minot qoidalari
+        "an_p1_fact" => (
+            "Kerak bo'lgan sanasi o'tgan arizalar bor.",
+            "Есть заявки с прошедшим сроком потребности.",
+        ),
+        "an_p1_action" => (
+            "Xaridni tezlashtiring yoki ehtiyoj sanasini qayta kelishing.",
+            "Ускорьте закупку или пересогласуйте срок потребности.",
+        ),
+        "an_p2_fact" => (
+            "Yetkazilgan xaridlar omborga kirim qilinmagan.",
+            "Доставленные закупки не оприходованы на склад.",
+        ),
+        "an_p2_action" => (
+            "«Xaridlar» da «Omborga kirim qilish» tugmasini bosing.",
+            "Нажмите «Оприходовать на склад» в разделе «Закупки».",
+        ),
+        "an_p3_fact" => (
+            "Ombor qoldig'i manfiy — hujjatlarda xato bo'lishi mumkin.",
+            "Остаток на складе отрицательный — возможна ошибка в документах.",
+        ),
+        "an_p3_action" => (
+            "Kirim va chiqim hujjatlarini solishtiring.",
+            "Сверьте приходные и расходные документы.",
+        ),
+        "an_p4_fact" => (
+            "Zaxiradan kam material bor va u bo'yicha ochiq ariza yo'q.",
+            "Есть материалы ниже минимума без открытой заявки.",
+        ),
+        "an_p4_action" => (
+            "«Arizalar» da «Zaxira bo'yicha ariza» tugmasi shuni bir bosishda ochadi.",
+            "Кнопка «Заявка по запасу» в разделе «Заявки» создаст их одним нажатием.",
+        ),
+        "an_p5_fact" => (
+            "Sertifikat muddati o'tgan material qoldig'i bor.",
+            "Есть остаток материала с просроченным сертификатом.",
+        ),
+        "an_p5_action" => (
+            "Sertifikatni yangilang yoki materialni ishlatishni to'xtating.",
+            "Обновите сертификат или прекратите применение материала.",
+        ),
+
+        // Sifat qoidalari
+        "an_q1_fact" => (
+            "Bartaraf etish muddati o'tgan nuqsonlar bor.",
+            "Есть дефекты с прошедшим сроком устранения.",
+        ),
+        "an_q1_action" => (
+            "Nuqsonni bartaraf eting va qayta nazoratdan o'tkazing.",
+            "Устраните дефект и проведите повторный контроль.",
+        ),
+        "an_q2_fact" => (
+            "Talabga mos kelmagan nazorat yozuvlari ulushi yuqori.",
+            "Высока доля записей контроля «не соответствует».",
+        ),
+        "an_q2_action" => (
+            "Takrorlanayotgan sababni aniqlang: material, texnologiya yoki malaka.",
+            "Определите повторяющуюся причину: материал, технология или квалификация.",
+        ),
+        "an_q3_fact" => (
+            "Tugallangan ishlarda qabul nazorati yozilmagan.",
+            "У завершенных работ нет записи приемочного контроля.",
+        ),
+        "an_q3_action" => (
+            "Qabul nazoratini o'tkazing — ijro hujjati uchun asos bo'ladi.",
+            "Проведите приемочный контроль — это основание для исполнительной документации.",
+        ),
+
+        // Xavfsizlik qoidalari
+        "an_x1_fact" => (
+            "Muddati o'tgan, chora ko'rilmagan xavfsizlik yozuvlari bor.",
+            "Есть записи по ТБ с прошедшим сроком и без принятых мер.",
+        ),
+        "an_x1_action" => (
+            "Chorani bajaring va yozuvni yoping.",
+            "Выполните меру и закройте запись.",
+        ),
+        "an_x2_fact" => (
+            "Obyektda baxtsiz hodisa qayd etilgan.",
+            "На объекте зафиксирован несчастный случай.",
+        ),
+        "an_x2_action" => (
+            "Tekshiruv materiallarini to'ldiring va oldini olish choralarini yozing.",
+            "Заполните материалы расследования и внесите предупредительные меры.",
+        ),
+        "an_x3_fact" => (
+            "Ishchilar ro'yxatda, instruktaj esa yozilmagan.",
+            "Рабочие в списке есть, а инструктаж не внесен.",
+        ),
+        "an_x3_action" => (
+            "Instruktajni o'tkazing va «Xavfsizlik» da qayd eting.",
+            "Проведите инструктаж и зафиксируйте в разделе «Безопасность».",
+        ),
+
+        // Resurs qoidalari
+        "an_r1_fact" => (
+            "Texnik ko'rigi tugagan texnikada smena yozilgan.",
+            "По технике с истекшим техосмотром внесены смены.",
+        ),
+        "an_r1_action" => (
+            "Texnik ko'rikni yangilang yoki texnikani ishdan chiqaring.",
+            "Обновите техосмотр или выведите технику из работы.",
+        ),
+        "an_r2_fact" => (
+            "Texnik ko'rik muddati tugagan texnika bor.",
+            "Есть техника с истекшим сроком техосмотра.",
+        ),
+        "an_r2_action" => (
+            "Ko'rikdan o'tkazing — aks holda ishga qo'yib bo'lmaydi.",
+            "Пройдите техосмотр — иначе технику нельзя допускать к работе.",
+        ),
+        "an_r3_fact" => (
+            "«Ishlamoqda» deb belgilangan texnikada oxirgi 14 kunda smena yo'q.",
+            "У техники со статусом «работает» нет смен за последние 14 дней.",
+        ),
+        "an_r3_action" => (
+            "Holatni aniqlashtiring yoki smenalarni kiriting — ijara bekorga to'lanayotgan bo'lishi mumkin.",
+            "Уточните статус или внесите смены — возможно, аренда оплачивается впустую.",
+        ),
+        "an_r4_fact" => (
+            "Ishchilar bor, oxirgi haftada tabel to'ldirilmagan.",
+            "Рабочие есть, но табель за последнюю неделю не заполнен.",
+        ),
+        "an_r4_action" => (
+            "Tabelni to'ldiring — ish haqi va bandlik hisobi shunga tayanadi.",
+            "Заполните табель — на нем строится расчет зарплаты и занятости.",
+        ),
+
+        // Sotuv qoidalari
+        "an_v1_fact" => (
+            "Muddati o'tgan to'lovlar bor.",
+            "Есть просроченные платежи.",
+        ),
+        "an_v1_action" => (
+            "Mijozlar bilan bog'laning; grafik qayta ko'rib chiqilishi mumkin.",
+            "Свяжитесь с клиентами; график может быть пересмотрен.",
+        ),
+        "an_v2_fact" => (
+            "Sotuv qurilishdan orqada qolmoqda.",
+            "Продажи отстают от хода строительства.",
+        ),
+        "an_v2_action" => (
+            "Narx yoki to'lov shartlarini ko'rib chiqing.",
+            "Пересмотрите цену или условия оплаты.",
+        ),
+        "an_v3_fact" => (
+            "30 kundan ortiq band qilingan, ammo imzolanmagan shartnomalar bor.",
+            "Есть брони старше 30 дней без подписанного договора.",
+        ),
+        "an_v3_action" => (
+            "Bandlikni tasdiqlang yoki bo'shating — kvartira sotuvdan chiqib turibdi.",
+            "Подтвердите бронь или освободите — квартира выведена из продажи.",
+        ),
+        "an_v4_fact" => (
+            "Shartnoma bor, to'lov grafigi tuzilmagan.",
+            "Договор есть, график платежей не составлен.",
+        ),
+        "an_v4_action" => (
+            "Shartnoma kartochkasida «Grafikni qayta qurish» tugmasini bosing.",
+            "Нажмите «Пересобрать график» в карточке договора.",
+        ),
+
+        // ---------- VI. Prorab ish o'rni ----------
+        "foreman_today" => ("Bugungi kun", "Сегодняшний день"),
+        "foreman_hint" => (
+            "Kunni shu yerda yoping: bajarilish, jurnal, tabel va smenalar.",
+            "Закройте день здесь: выполнение, журнал, табель и смены.",
+        ),
+        "foreman_tasks" => ("Bugun ketayotgan ishlar", "Работы, идущие сегодня"),
+        "foreman_no_tasks" => (
+            "Bugunga rejalashtirilgan ish yo'q.",
+            "На сегодня работ не запланировано.",
+        ),
+        "foreman_journal" => ("Kunlik jurnal", "Журнал за день"),
+        "foreman_no_journal" => (
+            "Bugungi kun uchun jurnal yozuvi yo'q.",
+            "Записи журнала за сегодня нет.",
+        ),
+        "foreman_start_journal" => ("Bugungi yozuvni ochish", "Открыть запись за сегодня"),
+        "foreman_journal_saved" => (
+            "O'zgarishlar darhol saqlanadi",
+            "Изменения сохраняются сразу",
+        ),
+        "foreman_crew" => ("Brigada va soatlar", "Бригада и часы"),
+        "foreman_no_workers" => (
+            "Ishchilar ro'yxati bo'sh — «Tabel» bo'limida qo'shing.",
+            "Список рабочих пуст — добавьте в разделе «Табель».",
+        ),
+        "foreman_fill_shift" => ("Butun brigadaga smena", "Смена всей бригаде"),
+        "foreman_fill_shift_hint" => (
+            "Faol ishchilarning hammasiga bugunga 8 soat qo'yadi; keyin alohida tuzatish mumkin.",
+            "Проставит 8 часов за сегодня всем активным рабочим; потом можно поправить.",
+        ),
+        "foreman_machines" => ("Texnika smenalari", "Смены техники"),
+        "foreman_no_machines" => (
+            "Texnika kiritilmagan — «Mashinalar» bo'limida qo'shing.",
+            "Техника не внесена — добавьте в разделе «Техника».",
+        ),
+        "foreman_add_shift" => ("Smena ochish", "Открыть смену"),
+        "foreman_attention" => ("Diqqat talab qiladi", "Требует внимания"),
+        "foreman_all_clear" => (
+            "Ochiq xavfsizlik yozuvi va zaxira muammosi yo'q.",
+            "Открытых записей по ТБ и проблем с запасом нет.",
+        ),
+        "open_journal" => ("Jurnalni ochish", "Открыть журнал"),
+        "inspection_expired" => ("texnik ko'rik o'tgan", "техосмотр просрочен"),
+        "col_wbs" => ("№", "№"),
+        "col_progress" => ("Bajarilish", "Выполнение"),
+        "kpi_running_today" => ("Bugungi ishlar", "Работ сегодня"),
+        "kpi_running_today_hint" => ("rejaga ko'ra", "по графику"),
+        "kpi_crew_today" => ("Brigadada", "В бригаде"),
+        "kpi_crew_today_hint" => ("tabelga kiritilgan", "внесено в табель"),
+        "kpi_machines_today" => ("Texnika smenasi", "Смен техники"),
+        "kpi_machines_today_hint" => ("bugun", "сегодня"),
+        "kpi_journal_today" => ("Jurnal to'ldirildi", "Журнал заполнен"),
+        "kpi_journal_today_hint" => ("bugungi yozuv", "запись за сегодня"),
+        "kpi_open_safety" => ("Ochiq xavfsizlik", "Открытых по ТБ"),
+        "kpi_open_safety_hint" => ("chora kutmoqda", "ожидают мер"),
+
+        // ---------- VII. Texnik nazorat kabineti ----------
+        "sv_title" => ("Ko'rib chiqish navbati", "Очередь на рассмотрение"),
+        "sv_hint" => (
+            "Qaror shu ilovada qayd etiladi; masofadan imzolash server qismini talab qiladi.",
+            "Решение фиксируется в этом приложении; удаленная подпись требует серверной части.",
+        ),
+        "sv_kpi_docs" => ("Imzo kutmoqda", "Ждут подписи"),
+        "sv_kpi_docs_hint" => ("ijro hujjatlari", "исполнительная документация"),
+        "sv_kpi_rejected" => ("Rad etilgan", "Отклонено"),
+        "sv_kpi_rejected_hint" => ("qayta ishlash kerak", "требуется доработка"),
+        "sv_kpi_quality" => ("Sifat bo'yicha", "По качеству"),
+        "sv_kpi_quality_hint" => ("mos emas yoki shartli", "не соответствует или условно"),
+        "sv_kpi_issues" => ("Kritik nomuvofiqlik", "Критических несоответствий"),
+        "sv_kpi_issues_hint" => ("yopilmagan", "не закрыто"),
+        "sv_kpi_safety" => ("Xavfsizlik muddati", "Просрочка по ТБ"),
+        "sv_kpi_safety_hint" => ("chora ko'rilmagan", "меры не приняты"),
+        "sv_docs" => ("Ijro hujjatlari", "Исполнительная документация"),
+        "sv_docs_empty" => ("Imzo kutayotgan hujjat yo'q.", "Документов, ждущих подписи, нет."),
+        "sv_sign" => ("Imzolash", "Подписать"),
+        "sv_reject" => ("Rad etish", "Отклонить"),
+        "sv_open_docs" => ("Barcha hujjatlar", "Все документы"),
+        "sv_quality" => ("Sifat nazorati", "Контроль качества"),
+        "sv_quality_empty" => ("Barcha yozuvlar talabga mos.", "Все записи соответствуют требованиям."),
+        "sv_open_quality" => ("Sifat bo'limi", "Раздел качества"),
+        "sv_issues" => ("Nomuvofiqliklar", "Несоответствия"),
+        "sv_issues_empty" => ("Ochiq jiddiy nomuvofiqlik yo'q.", "Открытых серьезных несоответствий нет."),
+        "sv_open_issues" => ("AI tekshiruvi", "AI-проверка"),
+        "sv_safety" => ("Mehnat xavfsizligi", "Охрана труда"),
+        "sv_safety_empty" => ("Ochiq yozuv yo'q.", "Открытых записей нет."),
+        "sv_open_safety" => ("Xavfsizlik bo'limi", "Раздел безопасности"),
+        "sv_more" => ("ta yana", "еще"),
+
+        // ---------- VIII. Buyurtmachi kabineti ----------
+        "cl_hint" => (
+            "Faqat ko'rish uchun: bu yerdan ma'lumot o'zgartirilmaydi.",
+            "Только для просмотра: данные отсюда не изменяются.",
+        ),
+        "cl_progress" => ("Bajarilish", "Выполнение"),
+        "cl_deadline" => ("Shartnoma muddati", "Срок по договору"),
+        "cl_days_left" => ("kun qoldi", "дней осталось"),
+        "cl_days_over" => ("kun o'tdi", "дней просрочено"),
+        "cl_forecast" => ("Tugash prognozi", "Прогноз окончания"),
+        "cl_on_time" => ("muddatida", "в срок"),
+        "cl_contract" => ("Shartnoma summasi", "Сумма договора"),
+        "cl_contract_hint" => ("qurilish bo'yicha", "по строительству"),
+        "cl_paid" => ("To'langan", "Оплачено"),
+        "cl_of_contract" => ("shartnomadan", "от договора"),
+        "cl_sections" => ("Bo'limlar bo'yicha bajarilish", "Выполнение по разделам"),
+        "cl_no_sections" => ("Ishlar kiritilmagan.", "Работы не внесены."),
+        "cl_finance" => ("Moliya", "Финансы"),
+        "cl_estimate" => ("Smeta summasi", "Сумма сметы"),
+        "cl_earned" => ("Bajarilgan ish qiymati", "Стоимость выполненных работ"),
+        "cl_unpaid" => ("Bajarilgan, to'lanmagan", "Выполнено, не оплачено"),
+        "cl_finance_note" => (
+            "Bajarilgan ish qiymati shartnoma summasi va bajarilish foizidan hisoblanadi.",
+            "Стоимость выполненных работ считается из суммы договора и процента выполнения.",
+        ),
+        "cl_recent" => ("Oxirgi ish kunlari", "Последние рабочие дни"),
+        "cl_no_recent" => ("Jurnal yozuvlari yo'q.", "Записей журнала нет."),
+        "cl_sales" => ("Sotuv holati", "Состояние продаж"),
+        "cl_sold" => ("Sotilgan birliklar", "Продано единиц"),
+
         // ---------- XIII. Tabel ----------
         "add_worker" => ("+ Ishchi", "+ Рабочий"),
         "worker_new_name" => ("Yangi ishchi", "Новый рабочий"),

@@ -143,14 +143,14 @@ impl Screen {
             | Screen::Quality
             | Screen::Safety
             | Screen::Machines
+            | Screen::Analytics
+            | Screen::Foreman
+            | Screen::TechSupervision
+            | Screen::Client
             | Screen::Settings => Readiness::Ready,
 
             // Bular server, mobil klient yoki LLM ni talab qiladi.
-            Screen::Foreman
-            | Screen::TechSupervision
-            | Screen::Client
-            | Screen::Analytics
-            | Screen::Copilot => Readiness::Planned,
+            Screen::Copilot => Readiness::Planned,
         }
     }
 
@@ -541,6 +541,10 @@ impl App {
                 Ok("quality") => Screen::Quality,
                 Ok("safety") => Screen::Safety,
                 Ok("machines") => Screen::Machines,
+                Ok("analytics") => Screen::Analytics,
+                Ok("foreman") => Screen::Foreman,
+                Ok("supervision") => Screen::TechSupervision,
+                Ok("client") => Screen::Client,
                 _ => Screen::Dashboard,
             },
             today: chrono::Local::now().date_naive(),
@@ -823,6 +827,46 @@ impl App {
         } else {
             format!("{n} {}", t("issues_found"))
         });
+    }
+
+    /// TZ XVII: kesishgan tahlil uchun barcha modullardan ma'lumot yig'adi.
+    ///
+    /// Hisoblar shu yerda emas, `analytics` da bajariladi — ekran va hisobot
+    /// bir xil manbadan foydalanadi.
+    pub fn analytics_input<'a>(
+        &'a self,
+        supply: &'a [checks::SupplyLine],
+        stock: &'a [checks::StockLine],
+        cost: &'a checks::CostSummary,
+        sales: &'a crate::sales::SalesSummary,
+    ) -> crate::analytics::Input<'a> {
+        crate::analytics::Input {
+            today: self.today,
+            tasks: &self.tasks,
+            schedule: &self.schedule,
+            progress: &self.progress,
+            issues: &self.issues,
+            exec_docs: &self.exec_docs,
+            requests: &self.requests,
+            purchases: &self.purchases,
+            supply,
+            stock,
+            stock_moves: &self.stock_moves,
+            materials: &self.materials,
+            quality: &self.quality,
+            safety: &self.safety,
+            machines: &self.machines,
+            machine_logs: &self.machine_logs,
+            workers: &self.workers,
+            timesheet: &self.timesheet,
+            units: &self.units,
+            deals: &self.deals,
+            payments: &self.payments,
+            cost,
+            sales,
+            contract_sum: self.project().map(|p| p.contract_sum).unwrap_or(0.0),
+            paid_total: self.project().map(|p| p.paid_total).unwrap_or(0.0),
+        }
     }
 
     /// TZ XIX-XX: obyekt bo'yicha sotuv xulosasi.
