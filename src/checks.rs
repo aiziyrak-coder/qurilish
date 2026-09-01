@@ -2202,6 +2202,232 @@ pub fn quality_score(quality: &[QualityCheck], today: NaiveDate) -> QualityScore
     }
 }
 
+// ================= XV. Xavfsizlik: ruxsat, SIZ, naryad, ball =================
+
+/// Ruxsat shu kundan kam qolganda «tugayapti» deb belgilanadi (TZ XV.7).
+pub const PERMIT_WARN_DAYS: i64 = 30;
+
+/// Bitta ishchining ruxsat va SIZ holati (TZ XV.4–5, 8–9).
+#[derive(Debug, Clone)]
+pub struct WorkerSafety {
+    pub worker_id: i64,
+    /// Amal qiladigan ruxsatlar.
+    pub valid: Vec<PermitKind>,
+    /// Muddati o'tganlari.
+    pub expired: Vec<PermitKind>,
+    /// Tez orada tugaydiganlari.
+    pub expiring: Vec<PermitKind>,
+    /// Berilmagan majburiy SIZ.
+    pub ppe_missing: Vec<PpeItem>,
+    /// Muddati o'tgan SIZ.
+    pub ppe_expired: Vec<PpeItem>,
+}
+
+impl WorkerSafety {
+    /// Ishchini ishga qo'yish mumkin emas: kirish instruktaji yo'q yoki
+    /// majburiy SIZ berilmagan.
+    pub fn blocked(&self) -> bool {
+        !self.valid.contains(&PermitKind::Induction) || !self.ppe_missing.is_empty()
+    }
+
+    /// Shu turdagi ishga ruxsati bormi.
+    pub fn allows(&self, kind: PermitKind) -> bool {
+        self.valid.contains(&kind)
+    }
+}
+
+/// Har bir ishchi bo'yicha ruxsat va SIZ holati.
+pub fn worker_safety(
+    workers: &[Worker],
+    permits: &[WorkerPermit],
+    ppe: &[PpeIssue],
+    today: NaiveDate,
+) -> Vec<WorkerSafety> {
+    workers
+        .iter()
+        .map(|w| {
+            let mine: Vec<&WorkerPermit> = permits.iter().filter(|p| p.worker_id == w.id).collect();
+            let mut valid = Vec::new();
+            let mut expired = Vec::new();
+            let mut expiring = Vec::new();
+            for k in PermitKind::ALL {
+                let best = mine
+                    .iter()
+                    .filter(|p| p.kind == *k)
+                    .max_by_key(|p| p.valid_until);
+                match best {
+                    None => {}
+                    Some(p) if p.expired(today) => expired.push(*k),
+                    Some(p) => {
+                        valid.push(*k);
+                        if p.expires_soon(today, PERMIT_WARN_DAYS) {
+                            expiring.push(*k);
+                        }
+                    }
+                }
+            }
+
+            // SIZ: har bir majburiy buyum berilgan va muddati o'tmagan bo'lishi kerak.
+            let issued: Vec<&PpeIssue> = ppe.iter().filter(|p| p.worker_id == w.id).collect();
+            let mut ppe_missing = Vec::new();
+            let mut ppe_expired = Vec::new();
+            for item in PpeItem::REQUIRED {
+                let best = issued
+                    .iter()
+                    .filter(|p| p.item == *item)
+                    .max_by_key(|p| p.issued);
+                match best {
+                    None => ppe_missing.push(*item),
+                    Some(p) if p.expired(today) => ppe_expired.push(*item),
+                    Some(_) => {}
+                }
+            }
+
+            WorkerSafety {
+                worker_id: w.id,
+                valid,
+                expired,
+                expiring,
+                ppe_missing,
+                ppe_expired,
+            }
+        })
+        .collect()
+}
+
+/// Naryad-dopuskdagi kamchilik (TZ XV.12).
+#[derive(Debug, Clone, PartialEq)]
+pub enum PermitIssue {
+    /// Bajaruvchi ko'rsatilmagan.
+    NoWorkers,
+    /// Chora-tadbirlar yozilmagan.
+    NoMeasures,
+    /// Mas'ul ko'rsatilmagan.
+    NoIssuer,
+    /// Muddat noto'g'ri: tugash sanasi boshlanishdan oldin.
+    BadPeriod,
+    /// Naryad muddati o'tgan, lekin yopilmagan.
+    Overdue,
+    /// Ishchining shu turdagi ishga ruxsati yo'q.
+    WorkerNotAllowed(i64),
+    /// Ishchining majburiy SIZ yetishmaydi.
+    WorkerNoPpe(i64),
+}
+
+/// TZ XV.12: naryadni berishdan oldin tekshiradi.
+///
+/// Tekshiruv taqiq emas — ro'yxat. Lekin bo'sh ro'yxat bo'lmasa, naryadni
+/// imzolashdan oldin nima yetishmayotgani ko'rinib turadi.
+pub fn permit_issues(
+    permit: &WorkPermit,
+    safety: &[WorkerSafety],
+    today: NaiveDate,
+) -> Vec<PermitIssue> {
+    let mut out = Vec::new();
+    let ids = permit.worker_ids();
+    if ids.is_empty() {
+        out.push(PermitIssue::NoWorkers);
+    }
+    if permit.measures.trim().is_empty() {
+        out.push(PermitIssue::NoMeasures);
+    }
+    if permit.issuer.trim().is_empty() || permit.supervisor.trim().is_empty() {
+        out.push(PermitIssue::NoIssuer);
+    }
+    if permit.date_to < permit.date_from {
+        out.push(PermitIssue::BadPeriod);
+    }
+    if permit.status == PermitStatus::Open && permit.date_to < today {
+        out.push(PermitIssue::Overdue);
+    }
+    for id in ids {
+        let Some(w) = safety.iter().find(|s| s.worker_id == id) else {
+            continue;
+        };
+        if !w.allows(permit.kind) {
+            out.push(PermitIssue::WorkerNotAllowed(id));
+        }
+        if !w.ppe_missing.is_empty() || !w.ppe_expired.is_empty() {
+            out.push(PermitIssue::WorkerNoPpe(id));
+        }
+    }
+    out
+}
+
+/// Xavfsizlik balli (TZ XV.33).
+#[derive(Debug, Clone)]
+pub struct SafetyScore {
+    /// 0..100.
+    pub score: f64,
+    pub incidents: usize,
+    pub violations: usize,
+    pub near_misses: usize,
+    /// Bartaraf etilmagan va muddati o'tgan chora-tadbirlar.
+    pub overdue: usize,
+    /// Muddati o'tgan ruxsatlar soni.
+    pub expired_permits: usize,
+    /// Majburiy SIZ yetishmayotgan ishchilar.
+    pub without_ppe: usize,
+    /// Kamchiligi bor ochiq naryadlar.
+    pub bad_permits: usize,
+}
+
+/// TZ XV.33: xavfsizlik balli 100 dan boshlanadi va kamchiliklar ayriladi.
+///
+/// Hodisa eng og'ir jarima (25 ball): bir marta yuz bergan baxtsiz hodisa
+/// oylik statistikadan muhimroq. Near miss kichik jarima (2 ball) — uni
+/// yozganlik yaxshi, lekin takrorlanishi tizimli muammo.
+pub fn safety_score(
+    events: &[SafetyEvent],
+    safety: &[WorkerSafety],
+    permits: &[WorkPermit],
+    today: NaiveDate,
+) -> SafetyScore {
+    // Oxirgi 90 kundagi hodisalar hisobga olinadi: eski buzilish bugungi
+    // holatni belgilamaydi.
+    let since = today - chrono::Duration::days(90);
+    let recent: Vec<&SafetyEvent> = events.iter().filter(|e| e.date >= since).collect();
+    let count = |k: SafetyKind| recent.iter().filter(|e| e.kind == k).count();
+
+    let incidents = count(SafetyKind::Incident);
+    let violations = count(SafetyKind::Violation);
+    let near_misses = count(SafetyKind::NearMiss);
+    let overdue = events
+        .iter()
+        .filter(|e| e.status != IssueStatus::Fixed && e.status != IssueStatus::Rejected)
+        .filter(|e| e.deadline.is_some_and(|d| d < today))
+        .count();
+    let expired_permits: usize = safety.iter().map(|s| s.expired.len()).sum();
+    let without_ppe = safety
+        .iter()
+        .filter(|s| !s.ppe_missing.is_empty() || !s.ppe_expired.is_empty())
+        .count();
+    let bad_permits = permits
+        .iter()
+        .filter(|p| p.status == PermitStatus::Open)
+        .filter(|p| !permit_issues(p, safety, today).is_empty())
+        .count();
+
+    let penalty = incidents as f64 * 25.0
+        + violations as f64 * 5.0
+        + near_misses as f64 * 2.0
+        + overdue as f64 * 4.0
+        + expired_permits as f64 * 3.0
+        + without_ppe as f64 * 3.0
+        + bad_permits as f64 * 6.0;
+
+    SafetyScore {
+        score: (100.0 - penalty).clamp(0.0, 100.0),
+        incidents,
+        violations,
+        near_misses,
+        overdue,
+        expired_permits,
+        without_ppe,
+        bad_permits,
+    }
+}
+
 // ================= IV. Ijro hujjatlari =================
 
 /// Ish uchun talab qilinadigan bitta hujjat.

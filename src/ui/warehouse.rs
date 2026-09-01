@@ -1329,7 +1329,7 @@ fn close_inventory(app: &mut App, pid: i64, inv_id: i64) {
 // ================================================================ Hujayralar
 
 /// Chapga tekislangan matn hujayrasi.
-pub fn cell_l(ui: &mut egui::Ui, w: f32, text: RichText) {
+pub fn cell_l(ui: &mut egui::Ui, w: f32, text: RichText) -> egui::Response {
     ui.allocate_ui_with_layout(
         egui::vec2(w, 18.0),
         egui::Layout::left_to_right(egui::Align::Center),
@@ -1337,9 +1337,10 @@ pub fn cell_l(ui: &mut egui::Ui, w: f32, text: RichText) {
             // Grid ustuni to'liq kenglikni egallashi kerak — aks holda
             // keyingi ustun ustiga chiqib ketadi.
             ui.set_min_width(w);
-            ui.add(egui::Label::new(text).truncate());
+            ui.add(egui::Label::new(text).truncate())
         },
-    );
+    )
+    .inner
 }
 
 /// O'ngga tekislangan raqam hujayrasi.

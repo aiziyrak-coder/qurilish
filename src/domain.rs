@@ -1010,6 +1010,160 @@ pub struct SafetyEvent {
     pub status: IssueStatus,
 }
 
+enum_kind!(PermitKind {
+    Induction => "induction", "pk_induction";
+    Height    => "height",    "pk_height";
+    Electric  => "electric",  "pk_electric";
+    HotWork   => "hot_work",  "pk_hot_work";
+    Lifting   => "lifting",   "pk_lifting";
+    Confined  => "confined",  "pk_confined";
+    Excavation => "excavation", "pk_excavation";
+    Medical   => "medical",   "pk_medical";
+});
+
+/// Ishchining ruxsati yoki guvohnomasi (TZ XV.4–5).
+///
+/// Muddat majburiy: muddatsiz ruxsat nazorat qilinmaydi, u esa qog'ozda
+/// bor, amalda yo'q degani.
+#[derive(Debug, Clone)]
+pub struct WorkerPermit {
+    pub id: i64,
+    pub project_id: i64,
+    pub worker_id: i64,
+    pub kind: PermitKind,
+    /// Guvohnoma yoki protokol raqami.
+    pub number: String,
+    pub issued: NaiveDate,
+    pub valid_until: NaiveDate,
+    pub note: String,
+}
+
+impl WorkerPermit {
+    pub fn expired(&self, today: NaiveDate) -> bool {
+        self.valid_until < today
+    }
+
+    /// Shu kun ichida tugaydi — oldindan ogohlantirish uchun.
+    pub fn expires_soon(&self, today: NaiveDate, days: i64) -> bool {
+        !self.expired(today) && (self.valid_until - today).num_days() <= days
+    }
+}
+
+enum_kind!(PpeItem {
+    Helmet  => "helmet",  "ppe_helmet";
+    Vest    => "vest",    "ppe_vest";
+    Boots   => "boots",   "ppe_boots";
+    Gloves  => "gloves",  "ppe_gloves";
+    Glasses => "glasses", "ppe_glasses";
+    Harness => "harness", "ppe_harness";
+    Mask    => "mask",    "ppe_mask";
+    Ears    => "ears",    "ppe_ears";
+});
+
+impl PpeItem {
+    /// Har bir ishchida bo'lishi shart bo'lgan SIZ (TZ XV.8).
+    ///
+    /// Qolganlari ish turiga qarab beriladi: arqon faqat balandlikda,
+    /// niqob changli ishda.
+    pub const REQUIRED: &'static [PpeItem] = &[
+        PpeItem::Helmet,
+        PpeItem::Vest,
+        PpeItem::Boots,
+        PpeItem::Gloves,
+    ];
+
+    /// Odatdagi xizmat muddati, oylarda.
+    pub fn months(self) -> i64 {
+        match self {
+            PpeItem::Helmet => 24,
+            PpeItem::Vest | PpeItem::Boots => 12,
+            PpeItem::Gloves | PpeItem::Mask => 1,
+            PpeItem::Glasses | PpeItem::Ears => 12,
+            PpeItem::Harness => 12,
+        }
+    }
+}
+
+/// Ishchiga berilgan SIZ (TZ XV.8–9).
+#[derive(Debug, Clone)]
+pub struct PpeIssue {
+    pub id: i64,
+    pub project_id: i64,
+    pub worker_id: i64,
+    pub item: PpeItem,
+    pub issued: NaiveDate,
+    /// Xizmat muddati, oylarda. Nol — muddatsiz.
+    pub months: i64,
+    pub note: String,
+}
+
+impl PpeIssue {
+    /// Xizmat muddati tugaydigan sana. Muddatsiz bo'lsa `None`.
+    pub fn until(&self) -> Option<NaiveDate> {
+        (self.months > 0).then(|| {
+            // Oylarni kunga aylantirishda o'rtacha oy uzunligi ishlatiladi:
+            // SIZ muddati kun aniqligida yuritilmaydi.
+            self.issued + chrono::Duration::days(self.months * 30)
+        })
+    }
+
+    pub fn expired(&self, today: NaiveDate) -> bool {
+        self.until().is_some_and(|d| d < today)
+    }
+}
+
+enum_kind!(PermitStatus {
+    Draft   => "draft",   "wps_draft";
+    Open    => "open",    "wps_open";
+    Closed  => "closed",  "wps_closed";
+    Stopped => "stopped", "wps_stopped";
+});
+
+/// Naryad-dopusk — yuqori xavfli ishga ruxsat (TZ XV.10–11).
+///
+/// Bu hujjat aniq ish, aniq muddat va aniq odamlar uchun beriladi: muddati
+/// o'tgan yoki ruxsatsiz ishchi kiritilgan naryad ish boshlashga asos emas.
+#[derive(Debug, Clone)]
+pub struct WorkPermit {
+    pub id: i64,
+    pub project_id: i64,
+    pub number: String,
+    /// Qanday xavfli ish — ishchining ruxsati shu turga tekshiriladi.
+    pub kind: PermitKind,
+    pub task_id: Option<i64>,
+    pub place: String,
+    pub date_from: NaiveDate,
+    pub date_to: NaiveDate,
+    /// Naryadni bergan mas'ul.
+    pub issuer: String,
+    /// Ish boshida nazorat qiladigan mas'ul.
+    pub supervisor: String,
+    /// Bajaruvchilar — ishchi id lari vergul bilan.
+    pub workers: String,
+    /// Xavfsizlik chora-tadbirlari.
+    pub measures: String,
+    pub status: PermitStatus,
+    pub note: String,
+}
+
+impl WorkPermit {
+    /// Bajaruvchilar ro'yxati.
+    pub fn worker_ids(&self) -> Vec<i64> {
+        self.workers
+            .split(',')
+            .filter_map(|s| s.trim().parse().ok())
+            .collect()
+    }
+
+    pub fn set_workers(&mut self, ids: &[i64]) {
+        self.workers = ids
+            .iter()
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+    }
+}
+
 // ---------- XVI. Mashinalar ----------
 
 enum_kind!(MachineKind {

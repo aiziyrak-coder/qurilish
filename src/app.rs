@@ -422,6 +422,10 @@ pub struct App {
     pub checklists: Vec<crate::domain::Checklist>,
     pub checklist_items: Vec<crate::domain::ChecklistItem>,
     pub check_points: Vec<crate::domain::CheckPoint>,
+    /// Ruxsatlar, SIZ va naryad-dopusklar (TZ XV.4–12).
+    pub worker_permits: Vec<crate::domain::WorkerPermit>,
+    pub ppe_issues: Vec<crate::domain::PpeIssue>,
+    pub work_permits: Vec<crate::domain::WorkPermit>,
     /// Nazorat nuqtalari paneli ochilgan tekshiruv.
     pub quality_open: Option<i64>,
     /// Kelishuv paneli ochilgan ariza.
@@ -562,6 +566,9 @@ impl App {
             checklists: Vec::new(),
             checklist_items: Vec::new(),
             check_points: Vec::new(),
+            worker_permits: Vec::new(),
+            ppe_issues: Vec::new(),
+            work_permits: Vec::new(),
             quality_open: None,
             request_open: None,
             purchase_budgets: Vec::new(),
@@ -721,6 +728,9 @@ impl App {
         self.checklists.clear();
         self.checklist_items.clear();
         self.check_points.clear();
+        self.worker_permits.clear();
+        self.ppe_issues.clear();
+        self.work_permits.clear();
         self.quality_open = None;
         self.request_open = None;
         self.purchase_budgets.clear();
@@ -773,6 +783,9 @@ impl App {
         self.checklists = self.db.checklists(id);
         self.checklist_items = self.db.checklist_items(id);
         self.check_points = self.db.check_points(id);
+        self.worker_permits = self.db.worker_permits(id);
+        self.ppe_issues = self.db.ppe_issues(id);
+        self.work_permits = self.db.work_permits(id);
         self.purchase_budgets = self.db.purchase_budgets(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);
@@ -1521,6 +1534,16 @@ impl App {
     }
 
     /// Partiyalar bo'yicha qoldiq va FEFO navbati (TZ XI.9, XI.28).
+    /// Ishchilarning ruxsat va SIZ holati (TZ XV.4–9).
+    pub fn worker_safety(&self) -> Vec<crate::checks::WorkerSafety> {
+        crate::checks::worker_safety(
+            &self.workers,
+            &self.worker_permits,
+            &self.ppe_issues,
+            self.today,
+        )
+    }
+
     /// Normativ va haqiqiy sarf (TZ XI.14–15).
     pub fn consumption(&self) -> Vec<crate::checks::ConsumptionLine> {
         crate::checks::consumption(

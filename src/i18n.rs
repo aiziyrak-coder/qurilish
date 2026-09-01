@@ -2824,6 +2824,99 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_quality_overdue" => ("Muddati o'tgan nuqson", "Просроченный дефект"),
         "kpi_quality_overdue_hint" => ("bartaraf etilmagan", "не устранен"),
 
+        // ---------- XV.4-12, 33. Ruxsatlar, SIZ, naryad-dopusk, ball ----------
+        "sf_tab_events" => ("Hodisalar", "События"),
+        "sf_tab_permits" => ("Ruxsatlar", "Допуски"),
+        "sf_tab_ppe" => ("SIZ", "СИЗ"),
+        "sf_tab_work_permits" => ("Naryad-dopusk", "Наряд-допуск"),
+
+        "kpi_safety_score" => ("Xavfsizlik balli", "Балл безопасности"),
+        "kpi_score_permits" => ("ruxsat muddati o'tgan", "просроченных допусков"),
+        "kpi_score_ppe" => ("SIZ yo'q", "без СИЗ"),
+        "kpi_score_violations" => ("buzilish", "нарушений"),
+        "kpi_score_near_miss" => ("near miss", "near miss"),
+        "kpi_score_bad_permits" => ("kamchilikli naryad", "нарядов с замечаниями"),
+
+        // Ruxsat turlari (TZ XV.4-5)
+        "pk_induction" => ("Kirish instruktaji", "Вводный инструктаж"),
+        "pk_height" => ("Balandlikda", "Высотные"),
+        "pk_electric" => ("Elektr", "Электро"),
+        "pk_hot_work" => ("O't ishlari", "Огневые"),
+        "pk_lifting" => ("Yuk ko'tarish", "Грузоподъёмные"),
+        "pk_confined" => ("Yopiq idish", "Замкнутое пространство"),
+        "pk_excavation" => ("Yer ishlari", "Земляные"),
+        "pk_medical" => ("Tibbiy ko'rik", "Медосмотр"),
+
+        "permits_hint" => (
+            "Katakda ruxsat muddati. Bosilsa ruxsat bir yilga ochiladi yoki uzaytiriladi; raqam va aniq sana keyin tahrirlanadi.",
+            "В ячейке — срок допуска. По нажатию допуск открывается или продлевается на год; номер и точную дату можно уточнить позже.",
+        ),
+        "permits_no_workers" => (
+            "Ishchi yo'q — avval «Tabel» bo'limida ishchi qo'shing",
+            "Нет рабочих — сначала добавьте их в разделе «Табель»",
+        ),
+        "permit_issue" => ("Ruxsat ochish", "Открыть допуск"),
+        "permit_extend" => ("Bir yilga uzaytirish", "Продлить на год"),
+        "worker_ok" => ("ishga ruxsat bor", "допуск есть"),
+        "worker_blocked" => ("ishga qo'yib bo'lmaydi", "нельзя допускать"),
+        "worker_expired" => ("muddati o'tgan ruxsat bor", "есть просроченный допуск"),
+        "worker_expiring" => ("muddati tugayapti", "срок истекает"),
+
+        // SIZ (TZ XV.8-9)
+        "ppe_helmet" => ("Kaska", "Каска"),
+        "ppe_vest" => ("Jilet", "Жилет"),
+        "ppe_boots" => ("Poyabzal", "Обувь"),
+        "ppe_gloves" => ("Qo'lqop", "Перчатки"),
+        "ppe_glasses" => ("Ko'zoynak", "Очки"),
+        "ppe_harness" => ("Arqon", "Страховочная привязь"),
+        "ppe_mask" => ("Niqob", "Респиратор"),
+        "ppe_ears" => ("Quloqchin", "Наушники"),
+        "ppe_hint" => (
+            "Qora sarlavhali SIZ har bir ishchida bo'lishi shart, kulrangi ish turiga qarab beriladi. Katak bosilsa SIZ beriladi va xizmat muddati boshlanadi.",
+            "СИЗ с тёмным заголовком обязательны для каждого рабочего, серые выдаются по виду работ. По нажатию СИЗ выдаётся и начинается срок службы.",
+        ),
+        "ppe_required" => ("Har bir ishchida bo'lishi shart", "Обязателен для каждого"),
+        "ppe_by_work" => ("Ish turiga qarab beriladi", "Выдаётся по виду работ"),
+        "ppe_none" => ("berilmagan", "не выдан"),
+        "ppe_no_limit" => ("muddatsiz", "бессрочно"),
+        "ppe_missing" => ("yetishmaydi:", "не хватает:"),
+        "ppe_issue_hint" => (
+            "Bosilsa SIZ beriladi, xizmat muddati bugundan boshlanadi.",
+            "По нажатию СИЗ выдаётся, срок службы начинается с сегодня.",
+        ),
+
+        // Naryad-dopusk (TZ XV.10-12)
+        "wps_draft" => ("Loyiha", "Черновик"),
+        "wps_open" => ("Ochiq", "Открыт"),
+        "wps_closed" => ("Yopilgan", "Закрыт"),
+        "wps_stopped" => ("To'xtatilgan", "Приостановлен"),
+        "add_work_permit" => ("+ Naryad", "+ Наряд"),
+        "work_permits_hint" => (
+            "Naryad aniq ish, aniq muddat va aniq odamlar uchun beriladi. Kamchiliklar ustuni imzolashdan oldin nima yetishmayotganini ko'rsatadi.",
+            "Наряд выдаётся на конкретную работу, срок и людей. Графа замечаний показывает, чего не хватает до подписания.",
+        ),
+        "work_permits_empty" => (
+            "Naryad-dopusk yo'q — yuqori xavfli ish uchun «+ Naryad» bilan oching",
+            "Нарядов нет — для работ повышенной опасности откройте «+ Наряд»",
+        ),
+        "col_from" => ("Boshlanish", "Начало"),
+        "col_to" => ("Tugash", "Окончание"),
+        "col_issuer" => ("Bergan", "Выдал"),
+        "col_supervisor" => ("Nazorat qiluvchi", "Ответственный"),
+        "col_executors" => ("Bajaruvchilar", "Исполнители"),
+        "col_permit_issues" => ("Kamchiliklar", "Замечания"),
+        "workers_none" => ("tanlanmagan", "не выбраны"),
+        "workers_count" => ("ishchi", "чел."),
+        "permit_ok" => ("kamchilik yo'q", "замечаний нет"),
+
+        "pi_no_workers" => ("bajaruvchilar ko'rsatilmagan", "не указаны исполнители"),
+        "pi_no_measures" => ("chora-tadbirlar yozilmagan", "не указаны мероприятия"),
+        "pi_no_issuer" => ("mas'ul ko'rsatilmagan", "не указан ответственный"),
+        "pi_bad_period" => ("muddat noto'g'ri", "неверный срок"),
+        "pi_overdue" => ("muddati o'tgan, yopilmagan", "срок истёк, не закрыт"),
+        "pi_not_allowed" => ("bu ishga ruxsati yo'q", "нет допуска на эти работы"),
+        "pi_no_ppe" => ("SIZ yetishmaydi", "не хватает СИЗ"),
+
         // ---------- XV. Xavfsizlik ----------
         "safety_hint" => (
             "Hodisa qayd etiladi, aybdor belgilanmaydi. Chora va muddat ko'rsatiling.",

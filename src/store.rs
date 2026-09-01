@@ -402,6 +402,46 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
 
+            CREATE TABLE IF NOT EXISTS worker_permit (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                worker_id INTEGER NOT NULL REFERENCES worker(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'induction',
+                number TEXT NOT NULL DEFAULT '',
+                issued TEXT NOT NULL,
+                valid_until TEXT NOT NULL,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_wp_worker ON worker_permit(worker_id);
+
+            CREATE TABLE IF NOT EXISTS ppe_issue (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                worker_id INTEGER NOT NULL REFERENCES worker(id) ON DELETE CASCADE,
+                item TEXT NOT NULL DEFAULT 'helmet',
+                issued TEXT NOT NULL,
+                months INTEGER NOT NULL DEFAULT 12,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_ppe_worker ON ppe_issue(worker_id);
+
+            CREATE TABLE IF NOT EXISTS work_permit (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                number TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'height',
+                task_id INTEGER,
+                place TEXT NOT NULL DEFAULT '',
+                date_from TEXT NOT NULL,
+                date_to TEXT NOT NULL,
+                issuer TEXT NOT NULL DEFAULT '',
+                supervisor TEXT NOT NULL DEFAULT '',
+                workers TEXT NOT NULL DEFAULT '',
+                measures TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                note TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE TABLE IF NOT EXISTS checklist (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -1111,6 +1151,181 @@ impl Db {
         self.upd(
             "UPDATE inventory_line SET material_id=?2,book=?3,fact=?4,note=?5 WHERE id=?1",
             params![l.id, l.material_id, l.book, l.fact, l.note],
+        )
+    }
+
+    // ---------- XV.4-12. Ruxsatlar, SIZ, naryad-dopusk ----------
+
+    pub fn worker_permits(&self, pid: i64) -> Vec<WorkerPermit> {
+        self.list(
+            "SELECT id,project_id,worker_id,kind,number,issued,valid_until,note
+             FROM worker_permit WHERE project_id=?1 ORDER BY worker_id,kind",
+            pid,
+            |r| {
+                Ok(WorkerPermit {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    worker_id: r.get(2)?,
+                    kind: PermitKind::parse(&r.get::<_, String>(3)?),
+                    number: r.get(4)?,
+                    issued: date(&r.get::<_, String>(5)?),
+                    valid_until: date(&r.get::<_, String>(6)?),
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_worker_permit(&self, p: &WorkerPermit) -> i64 {
+        self.ins(
+            "INSERT INTO worker_permit (project_id,worker_id,kind,number,issued,valid_until,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                p.project_id,
+                p.worker_id,
+                p.kind.code(),
+                p.number,
+                p.issued.to_string(),
+                p.valid_until.to_string(),
+                p.note
+            ],
+        )
+    }
+
+    pub fn update_worker_permit(&self, p: &WorkerPermit) -> bool {
+        self.upd(
+            "UPDATE worker_permit SET worker_id=?2,kind=?3,number=?4,issued=?5,valid_until=?6,
+                    note=?7 WHERE id=?1",
+            params![
+                p.id,
+                p.worker_id,
+                p.kind.code(),
+                p.number,
+                p.issued.to_string(),
+                p.valid_until.to_string(),
+                p.note
+            ],
+        )
+    }
+
+    pub fn ppe_issues(&self, pid: i64) -> Vec<PpeIssue> {
+        self.list(
+            "SELECT id,project_id,worker_id,item,issued,months,note
+             FROM ppe_issue WHERE project_id=?1 ORDER BY worker_id,item",
+            pid,
+            |r| {
+                Ok(PpeIssue {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    worker_id: r.get(2)?,
+                    item: PpeItem::parse(&r.get::<_, String>(3)?),
+                    issued: date(&r.get::<_, String>(4)?),
+                    months: r.get(5)?,
+                    note: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_ppe_issue(&self, p: &PpeIssue) -> i64 {
+        self.ins(
+            "INSERT INTO ppe_issue (project_id,worker_id,item,issued,months,note)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                p.project_id,
+                p.worker_id,
+                p.item.code(),
+                p.issued.to_string(),
+                p.months,
+                p.note
+            ],
+        )
+    }
+
+    pub fn update_ppe_issue(&self, p: &PpeIssue) -> bool {
+        self.upd(
+            "UPDATE ppe_issue SET worker_id=?2,item=?3,issued=?4,months=?5,note=?6 WHERE id=?1",
+            params![
+                p.id,
+                p.worker_id,
+                p.item.code(),
+                p.issued.to_string(),
+                p.months,
+                p.note
+            ],
+        )
+    }
+
+    pub fn work_permits(&self, pid: i64) -> Vec<WorkPermit> {
+        self.list(
+            "SELECT id,project_id,number,kind,task_id,place,date_from,date_to,issuer,supervisor,
+                    workers,measures,status,note
+             FROM work_permit WHERE project_id=?1 ORDER BY date_from DESC,id DESC",
+            pid,
+            |r| {
+                Ok(WorkPermit {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    number: r.get(2)?,
+                    kind: PermitKind::parse(&r.get::<_, String>(3)?),
+                    task_id: r.get(4)?,
+                    place: r.get(5)?,
+                    date_from: date(&r.get::<_, String>(6)?),
+                    date_to: date(&r.get::<_, String>(7)?),
+                    issuer: r.get(8)?,
+                    supervisor: r.get(9)?,
+                    workers: r.get(10)?,
+                    measures: r.get(11)?,
+                    status: PermitStatus::parse(&r.get::<_, String>(12)?),
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_work_permit(&self, p: &WorkPermit) -> i64 {
+        self.ins(
+            "INSERT INTO work_permit (project_id,number,kind,task_id,place,date_from,date_to,
+                                      issuer,supervisor,workers,measures,status,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                p.project_id,
+                p.number,
+                p.kind.code(),
+                p.task_id,
+                p.place,
+                p.date_from.to_string(),
+                p.date_to.to_string(),
+                p.issuer,
+                p.supervisor,
+                p.workers,
+                p.measures,
+                p.status.code(),
+                p.note
+            ],
+        )
+    }
+
+    pub fn update_work_permit(&self, p: &WorkPermit) -> bool {
+        self.upd(
+            "UPDATE work_permit SET number=?2,kind=?3,task_id=?4,place=?5,date_from=?6,date_to=?7,
+                    issuer=?8,supervisor=?9,workers=?10,measures=?11,status=?12,note=?13
+             WHERE id=?1",
+            params![
+                p.id,
+                p.number,
+                p.kind.code(),
+                p.task_id,
+                p.place,
+                p.date_from.to_string(),
+                p.date_to.to_string(),
+                p.issuer,
+                p.supervisor,
+                p.workers,
+                p.measures,
+                p.status.code(),
+                p.note
+            ],
         )
     }
 
@@ -3602,6 +3817,149 @@ impl Db {
                 };
                 self.update_check_point(&p);
             }
+        }
+
+        // Ruxsatlar va SIZ (TZ XV.4–9). Ataylab uch xil holat qoldirilgan:
+        // hammasi joyida, bittasining muddati o'tgan, bittasida SIZ yo'q.
+        let permit = |worker_id: i64, kind: PermitKind, days_ago: i64, valid_days: i64| {
+            self.insert_worker_permit(&WorkerPermit {
+                id: 0,
+                project_id: pid,
+                worker_id,
+                kind,
+                number: String::new(),
+                issued: today - chrono::Duration::days(days_ago),
+                valid_until: today + chrono::Duration::days(valid_days),
+                note: String::new(),
+            });
+        };
+        let ppe = |worker_id: i64, item: PpeItem, days_ago: i64| {
+            self.insert_ppe_issue(&PpeIssue {
+                id: 0,
+                project_id: pid,
+                worker_id,
+                item,
+                issued: today - chrono::Duration::days(days_ago),
+                months: item.months(),
+                note: String::new(),
+            });
+        };
+        for (i, wid) in ids.iter().enumerate() {
+            if *wid == 0 {
+                continue;
+            }
+            // Oxirgi ishchining kirish instruktaji muddati o'tgan.
+            let induction_left = if i + 1 == ids.len() { -10 } else { 300 };
+            permit(*wid, PermitKind::Induction, 60, induction_left);
+            permit(*wid, PermitKind::Medical, 90, 250);
+            // Monolitchilar balandlikda ishlaydi.
+            if (1..=3).contains(&i) {
+                // Ikkinchisining balandlik ruxsati tez orada tugaydi.
+                permit(*wid, PermitKind::Height, 200, if i == 2 { 12 } else { 160 });
+            }
+            if i == 4 {
+                permit(*wid, PermitKind::Electric, 120, 240);
+            }
+
+            // SIZ: to'rtinchi ishchiga qo'lqop berilmagan.
+            for item in PpeItem::REQUIRED {
+                if i == 3 && *item == PpeItem::Gloves {
+                    continue;
+                }
+                ppe(*wid, *item, 20);
+            }
+            if (1..=3).contains(&i) {
+                ppe(*wid, PpeItem::Harness, 20);
+            }
+        }
+
+        // Naryad-dopusk (TZ XV.10–12): biri to'g'ri, biri kamchilikli.
+        let permit_doc = |number: &str,
+                          kind: PermitKind,
+                          task_id: Option<i64>,
+                          place: &str,
+                          from: i64,
+                          to: i64,
+                          issuer: &str,
+                          supervisor: &str,
+                          workers: &[i64],
+                          measures: &str,
+                          status: PermitStatus| {
+            let mut p = WorkPermit {
+                id: 0,
+                project_id: pid,
+                number: number.into(),
+                kind,
+                task_id,
+                place: place.into(),
+                date_from: today - chrono::Duration::days(from),
+                date_to: today + chrono::Duration::days(to),
+                issuer: issuer.into(),
+                supervisor: supervisor.into(),
+                workers: String::new(),
+                measures: measures.into(),
+                status,
+                note: String::new(),
+            };
+            p.set_workers(workers);
+            self.insert_work_permit(&p);
+        };
+        let ok_workers: Vec<i64> = ids.iter().skip(1).take(2).copied().collect();
+        let bad_workers: Vec<i64> = ids.iter().skip(3).take(2).copied().collect();
+        if ru {
+            permit_doc(
+                "НД-001",
+                PermitKind::Height,
+                by_wbs("7"),
+                "7-9 этаж, ось А-Г",
+                2,
+                5,
+                "Юсупов Б.Р.",
+                "Саидова М.И.",
+                &ok_workers,
+                "Страховочные привязи, ограждение зоны, инструктаж на рабочем месте",
+                PermitStatus::Open,
+            );
+            permit_doc(
+                "НД-002",
+                PermitKind::HotWork,
+                by_wbs("8"),
+                "Кровля",
+                1,
+                3,
+                "Юсупов Б.Р.",
+                "",
+                &bad_workers,
+                "",
+                PermitStatus::Open,
+            );
+        } else {
+            permit_doc(
+                "ND-001",
+                PermitKind::Height,
+                by_wbs("7"),
+                "7-9 qavat, A-G o'qlari",
+                2,
+                5,
+                "Yusupov B.R.",
+                "Saidova M.I.",
+                &ok_workers,
+                "Saqlovchi arqonlar, zonani to'sish, ish joyida instruktaj",
+                PermitStatus::Open,
+            );
+            permit_doc(
+                "ND-002",
+                PermitKind::HotWork,
+                by_wbs("8"),
+                "Tom yopish",
+                1,
+                3,
+                "Yusupov B.R.",
+                "",
+                &bad_workers,
+                "",
+                PermitStatus::Open,
+            );
         }
 
         // ---------- XV. Xavfsizlik ----------

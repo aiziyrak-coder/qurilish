@@ -2688,6 +2688,160 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|p| p.result == crate::domain::PointResult::Fail));
     }
 
+    /// TZ XV.4–9: ruxsat va SIZ holati ishchi bo'yicha yig'iladi.
+    #[test]
+    fn worker_safety_tracks_permits_and_ppe() {
+        use crate::checks::worker_safety;
+        use crate::domain::{PermitKind, PpeItem};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let safety = worker_safety(
+            &t.db.workers(pid),
+            &t.db.worker_permits(pid),
+            &t.db.ppe_issues(pid),
+            today,
+        );
+        assert_eq!(safety.len(), t.db.workers(pid).len());
+
+        // Namunada ataylab qoldirilgan uch holat bor.
+        assert!(
+            safety
+                .iter()
+                .any(|s| s.expired.contains(&PermitKind::Induction)),
+            "muddati o'tgan instruktaj yo'q"
+        );
+        assert!(
+            safety
+                .iter()
+                .any(|s| s.ppe_missing.contains(&PpeItem::Gloves)),
+            "SIZ yetishmasligi yo'q"
+        );
+        assert!(
+            safety.iter().any(|s| !s.expiring.is_empty()),
+            "muddati tugayotgan ruxsat yo'q"
+        );
+        // Ogohlantirish chegarasi hurmat qilinadi.
+        for s in &safety {
+            for k in &s.expiring {
+                assert!(s.valid.contains(k), "tugayotgani hali amal qiladi");
+            }
+        }
+
+        // Instruktaji o'tib ketgan yoki SIZ yo'q ishchini ishga qo'yib bo'lmaydi.
+        assert!(safety.iter().any(|s| s.blocked()));
+    }
+
+    /// TZ XV.12: naryad kamchiliklari topiladi.
+    #[test]
+    fn permit_issues_catch_a_bad_naryad() {
+        use crate::checks::{permit_issues, worker_safety, PermitIssue};
+        use crate::domain::PermitStatus;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let safety = worker_safety(
+            &t.db.workers(pid),
+            &t.db.worker_permits(pid),
+            &t.db.ppe_issues(pid),
+            today,
+        );
+        let permits = t.db.work_permits(pid);
+        assert_eq!(permits.len(), 2);
+
+        // Birinchisi to'g'ri to'ldirilgan.
+        let good = permits
+            .iter()
+            .find(|p| p.number.ends_with("001"))
+            .expect("ND-001");
+        assert!(
+            permit_issues(good, &safety, today).is_empty(),
+            "to'g'ri naryadda kamchilik topildi"
+        );
+
+        // Ikkinchisida chora-tadbir ham, nazoratchi ham yo'q.
+        let bad = permits
+            .iter()
+            .find(|p| p.number.ends_with("002"))
+            .expect("ND-002");
+        let issues = permit_issues(bad, &safety, today);
+        assert!(issues.contains(&PermitIssue::NoMeasures));
+        assert!(issues.contains(&PermitIssue::NoIssuer));
+        // O't ishlariga ruxsati yo'q ishchilar kiritilgan.
+        assert!(issues
+            .iter()
+            .any(|i| matches!(i, PermitIssue::WorkerNotAllowed(_))));
+
+        // Muddati o'tgan ochiq naryad ham belgilanadi.
+        let mut late = bad.clone();
+        late.status = PermitStatus::Open;
+        late.date_to = today - chrono::Duration::days(1);
+        assert!(permit_issues(&late, &safety, today).contains(&PermitIssue::Overdue));
+
+        // Yopilgan naryadda muddat kamchilik emas.
+        late.status = PermitStatus::Closed;
+        assert!(!permit_issues(&late, &safety, today).contains(&PermitIssue::Overdue));
+    }
+
+    /// TZ XV.33: xavfsizlik balli kamchiliklardan pasayadi.
+    #[test]
+    fn safety_score_falls_with_findings() {
+        use crate::checks::{safety_score, worker_safety};
+        use crate::domain::{IssueStatus, SafetyEvent, SafetyKind, Severity};
+
+        let today = chrono::Local::now().date_naive();
+        let event = |kind: SafetyKind, days_ago: i64| SafetyEvent {
+            id: 0,
+            project_id: 1,
+            date: today - chrono::Duration::days(days_ago),
+            kind,
+            severity: Severity::Warning,
+            place: String::new(),
+            description: String::new(),
+            responsible: String::new(),
+            measure: String::new(),
+            deadline: None,
+            status: IssueStatus::Fixed,
+        };
+
+        // Hech narsa yo'q — to'liq ball.
+        assert_eq!(safety_score(&[], &[], &[], today).score, 100.0);
+
+        // Bitta buzilish — 5 ball.
+        let one = vec![event(SafetyKind::Violation, 3)];
+        assert_eq!(safety_score(&one, &[], &[], today).score, 95.0);
+
+        // Hodisa eng og'ir jarima.
+        let incident = vec![event(SafetyKind::Incident, 3)];
+        assert_eq!(safety_score(&incident, &[], &[], today).score, 75.0);
+
+        // 90 kundan eski hodisa hisobga olinmaydi.
+        let old = vec![event(SafetyKind::Incident, 120)];
+        assert_eq!(safety_score(&old, &[], &[], today).score, 100.0);
+
+        // Namunadagi holat: ball 100 dan past, lekin nolga tushmagan.
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let safety = worker_safety(
+            &t.db.workers(pid),
+            &t.db.worker_permits(pid),
+            &t.db.ppe_issues(pid),
+            today,
+        );
+        let s = safety_score(
+            &t.db.safety_events(pid),
+            &safety,
+            &t.db.work_permits(pid),
+            today,
+        );
+        assert!(s.score < 100.0, "namunada kamchilik bor");
+        assert!(s.expired_permits > 0);
+        assert!(s.without_ppe > 0);
+        assert!(s.bad_permits > 0);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

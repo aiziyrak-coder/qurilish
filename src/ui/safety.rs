@@ -42,17 +42,41 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     kpi_row(ui, app);
     ui.add_space(10.0);
 
-    if app.safety.is_empty() {
-        ui.add_space(40.0);
-        ui.vertical_centered(|ui| {
-            ui.label(
-                RichText::new(t("safety_empty"))
-                    .color(theme::muted())
-                    .size(15.0),
-            );
-        });
-    } else {
-        table(ui, app);
+    let tab_key = egui::Id::new("sf_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in [
+            (0u8, t("sf_tab_events")),
+            (1, t("sf_tab_permits")),
+            (2, t("sf_tab_ppe")),
+            (3, t("sf_tab_work_permits")),
+        ] {
+            if ui.selectable_label(tab == i, label).clicked() {
+                tab = i;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(8.0);
+
+    match tab {
+        1 => permits_tab(ui, app, pid),
+        2 => ppe_tab(ui, app, pid),
+        3 => work_permits_tab(ui, app, pid),
+        _ => {
+            if app.safety.is_empty() {
+                ui.add_space(40.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        RichText::new(t("safety_empty"))
+                            .color(theme::muted())
+                            .size(15.0),
+                    );
+                });
+            } else {
+                table(ui, app);
+            }
+        }
     }
 
     if let Some(kind) = add {
@@ -86,23 +110,10 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         )
     };
     let events = app.safety.iter().filter(|s| is_event(s.kind)).count();
-    let incidents = app
-        .safety
-        .iter()
-        .filter(|s| s.kind == SafetyKind::Incident)
-        .count();
     let open = app
         .safety
         .iter()
         .filter(|s| matches!(s.status, IssueStatus::Open | IssueStatus::InWork))
-        .count();
-    let overdue = app
-        .safety
-        .iter()
-        .filter(|s| {
-            matches!(s.status, IssueStatus::Open | IssueStatus::InWork)
-                && s.deadline.is_some_and(|d| d < app.today)
-        })
         .count();
     let trainings = app
         .safety
@@ -110,9 +121,35 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .filter(|s| s.kind == SafetyKind::Training)
         .count();
 
+    let safety = app.worker_safety();
+    let score = crate::checks::safety_score(&app.safety, &safety, &app.work_permits, app.today);
+    // Hodisa va muddat ko'rsatkichlari ham shu hisobdan — ekranda va ballda
+    // bir xil son turishi kerak.
+    let incidents = score.incidents;
+    let overdue = score.overdue;
+
     stat_row(
         ui,
         vec![
+            stat(
+                t("kpi_safety_score"),
+                format!("{:.0}", score.score),
+                // Ball qanday chiqqani ko'rinsin — sirli son bo'lib qolmasin.
+                &format!(
+                    "{} {} · {} {}",
+                    score.expired_permits,
+                    t("kpi_score_permits"),
+                    score.without_ppe,
+                    t("kpi_score_ppe")
+                ),
+                if score.score >= 85.0 {
+                    theme::ok()
+                } else if score.score >= 60.0 {
+                    theme::warn()
+                } else {
+                    theme::danger()
+                },
+            ),
             stat(
                 t("kpi_safety_events"),
                 events.to_string(),
@@ -126,7 +163,14 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             stat(
                 t("kpi_safety_incidents"),
                 incidents.to_string(),
-                t("kpi_safety_incidents_hint"),
+                // Buzilish va near miss ham shu yerda ko'rinsin.
+                &format!(
+                    "{} {} · {} {}",
+                    score.violations,
+                    t("kpi_score_violations"),
+                    score.near_misses,
+                    t("kpi_score_near_miss")
+                ),
                 if incidents == 0 {
                     theme::ok()
                 } else {
@@ -146,7 +190,12 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             stat(
                 t("kpi_safety_overdue"),
                 overdue.to_string(),
-                t("kpi_safety_overdue_hint"),
+                &format!(
+                    "{} · {} {}",
+                    t("kpi_safety_overdue_hint"),
+                    score.bad_permits,
+                    t("kpi_score_bad_permits")
+                ),
                 if overdue == 0 {
                     theme::ok()
                 } else {
@@ -307,6 +356,547 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     if let Some(id) = removed {
         app.db.del("safety_event", id);
         app.reload_modules();
+    }
+}
+
+// ================================================== Ruxsatlar matritsasi
+
+/// Ishchi × ruxsat turi matritsasi (TZ XV.4–5).
+fn permits_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    use crate::domain::{PermitKind, WorkerPermit};
+
+    if app.workers.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("permits_no_workers"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    ui.label(
+        RichText::new(t("permits_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(8.0);
+
+    let today = app.today;
+    let safety = app.worker_safety();
+    // (ishchi, tur) — yangi ruxsat ochiladi yoki muddati uzaytiriladi.
+    let mut issue: Option<(i64, PermitKind)> = None;
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("sf_permits")
+                .num_columns(PermitKind::ALL.len() + 2)
+                .spacing([6.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 200.0, t("col_worker"));
+                    for k in PermitKind::ALL {
+                        // Sarlavha tor: qisqa belgisi va to'liq nomi ustida.
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(78.0, 20.0),
+                            egui::Layout::top_down(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_width(78.0);
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(k.label()).size(10.5).color(theme::muted()),
+                                    )
+                                    .truncate(),
+                                )
+                                .on_hover_text(k.label());
+                            },
+                        );
+                    }
+                    head_l(ui, 150.0, t("col_status"));
+                    ui.end_row();
+
+                    for w in &app.workers {
+                        let st = safety.iter().find(|s| s.worker_id == w.id);
+                        cell_l(
+                            ui,
+                            200.0,
+                            RichText::new(super::issues::truncate(&w.name, 28)).size(12.0),
+                        );
+                        for k in PermitKind::ALL {
+                            let permit = app
+                                .worker_permits
+                                .iter()
+                                .filter(|p| p.worker_id == w.id && p.kind == *k)
+                                .max_by_key(|p| p.valid_until);
+                            let (text, color) = match permit {
+                                None => (t("dash").to_string(), theme::muted()),
+                                Some(p) if p.expired(today) => (
+                                    p.valid_until.format("%d.%m.%y").to_string(),
+                                    theme::danger(),
+                                ),
+                                Some(p)
+                                    if p.expires_soon(today, crate::checks::PERMIT_WARN_DAYS) =>
+                                {
+                                    (p.valid_until.format("%d.%m.%y").to_string(), theme::warn())
+                                }
+                                Some(p) => {
+                                    (p.valid_until.format("%d.%m.%y").to_string(), theme::ok())
+                                }
+                            };
+                            if ui
+                                .add_sized(
+                                    [78.0, 22.0],
+                                    egui::Button::new(RichText::new(text).size(10.5).color(color))
+                                        .frame(permit.is_some()),
+                                )
+                                .on_hover_text(match permit {
+                                    Some(p) if !p.number.is_empty() => {
+                                        format!("{} · {}", p.number, t("permit_extend"))
+                                    }
+                                    Some(_) => t("permit_extend").to_string(),
+                                    None => t("permit_issue").to_string(),
+                                })
+                                .clicked()
+                            {
+                                issue = Some((w.id, *k));
+                            }
+                        }
+                        // Umumiy xulosa: ishga qo'yish mumkinmi.
+                        let (text, color) = match st {
+                            Some(s) if s.blocked() => (t("worker_blocked"), theme::danger()),
+                            Some(s) if !s.expired.is_empty() => {
+                                (t("worker_expired"), theme::warn())
+                            }
+                            Some(s) if !s.expiring.is_empty() => {
+                                (t("worker_expiring"), theme::warn())
+                            }
+                            _ => (t("worker_ok"), theme::ok()),
+                        };
+                        cell_l(ui, 150.0, RichText::new(text).size(11.0).color(color));
+                        ui.end_row();
+                    }
+                });
+        });
+
+    if let Some((worker_id, kind)) = issue {
+        // Bosilganda ruxsat bir yilga ochiladi yoki uzaytiriladi. Aniq sana
+        // va raqam keyin tahrirlanadi — bu yerda tez kiritish muhim.
+        let existing = app
+            .worker_permits
+            .iter()
+            .filter(|p| p.worker_id == worker_id && p.kind == kind)
+            .max_by_key(|p| p.valid_until)
+            .cloned();
+        match existing {
+            Some(mut p) => {
+                p.issued = today;
+                p.valid_until = today + chrono::Duration::days(365);
+                app.db.update_worker_permit(&p);
+            }
+            None => {
+                app.db.insert_worker_permit(&WorkerPermit {
+                    id: 0,
+                    project_id: pid,
+                    worker_id,
+                    kind,
+                    number: String::new(),
+                    issued: today,
+                    valid_until: today + chrono::Duration::days(365),
+                    note: String::new(),
+                });
+            }
+        }
+        app.reload_modules();
+    }
+}
+
+// ================================================================ SIZ
+
+/// Shaxsiy himoya vositalari (TZ XV.8–9).
+fn ppe_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    use crate::domain::{PpeIssue, PpeItem};
+
+    if app.workers.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("permits_no_workers"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    ui.label(
+        RichText::new(t("ppe_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(8.0);
+
+    let today = app.today;
+    let mut issue: Option<(i64, PpeItem)> = None;
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("sf_ppe")
+                .num_columns(PpeItem::ALL.len() + 2)
+                .spacing([6.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 200.0, t("col_worker"));
+                    for item in PpeItem::ALL {
+                        let required = PpeItem::REQUIRED.contains(item);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(78.0, 20.0),
+                            egui::Layout::top_down(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_width(78.0);
+                                ui.add(
+                                    egui::Label::new(RichText::new(item.label()).size(10.5).color(
+                                        if required {
+                                            theme::text()
+                                        } else {
+                                            theme::muted()
+                                        },
+                                    ))
+                                    .truncate(),
+                                )
+                                .on_hover_text(if required {
+                                    t("ppe_required")
+                                } else {
+                                    t("ppe_by_work")
+                                });
+                            },
+                        );
+                    }
+                    head_l(ui, 130.0, t("col_status"));
+                    ui.end_row();
+
+                    for w in &app.workers {
+                        cell_l(
+                            ui,
+                            200.0,
+                            RichText::new(super::issues::truncate(&w.name, 28)).size(12.0),
+                        );
+                        let mut missing = 0usize;
+                        for item in PpeItem::ALL {
+                            let last = app
+                                .ppe_issues
+                                .iter()
+                                .filter(|p| p.worker_id == w.id && p.item == *item)
+                                .max_by_key(|p| p.issued);
+                            let required = PpeItem::REQUIRED.contains(item);
+                            let (text, color) = match last {
+                                None if required => {
+                                    missing += 1;
+                                    (t("ppe_none").to_string(), theme::danger())
+                                }
+                                None => (t("dash").to_string(), theme::muted()),
+                                Some(p) if p.expired(today) => {
+                                    if required {
+                                        missing += 1;
+                                    }
+                                    (
+                                        p.until()
+                                            .map(|d| d.format("%d.%m.%y").to_string())
+                                            .unwrap_or_default(),
+                                        theme::danger(),
+                                    )
+                                }
+                                Some(p) => (
+                                    p.until()
+                                        .map(|d| d.format("%d.%m.%y").to_string())
+                                        .unwrap_or_else(|| t("ppe_no_limit").to_string()),
+                                    theme::ok(),
+                                ),
+                            };
+                            if ui
+                                .add_sized(
+                                    [78.0, 22.0],
+                                    egui::Button::new(RichText::new(text).size(10.5).color(color))
+                                        .frame(last.is_some()),
+                                )
+                                .on_hover_text(t("ppe_issue_hint"))
+                                .clicked()
+                            {
+                                issue = Some((w.id, *item));
+                            }
+                        }
+                        cell_l(
+                            ui,
+                            130.0,
+                            RichText::new(if missing == 0 {
+                                t("worker_ok").to_string()
+                            } else {
+                                format!("{} {missing}", t("ppe_missing"))
+                            })
+                            .size(11.0)
+                            .color(if missing == 0 {
+                                theme::ok()
+                            } else {
+                                theme::danger()
+                            }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+
+    if let Some((worker_id, item)) = issue {
+        app.db.insert_ppe_issue(&PpeIssue {
+            id: 0,
+            project_id: pid,
+            worker_id,
+            item,
+            issued: today,
+            months: item.months(),
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+// ================================================== Naryad-dopusk
+
+/// Yuqori xavfli ishga ruxsat (TZ XV.10–12).
+fn work_permits_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    use crate::domain::{PermitKind, PermitStatus, WorkPermit};
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_work_permit")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("work_permits_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if app.work_permits.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("work_permits_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let today = app.today;
+        let safety = app.worker_safety();
+        let mut edited: Option<WorkPermit> = None;
+        let mut removed: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("sf_work_permits")
+                    .num_columns(12)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 90.0, t("col_number"));
+                        head_l(ui, 130.0, t("col_kind"));
+                        head_l(ui, 190.0, t("col_task"));
+                        head_l(ui, 150.0, t("col_place"));
+                        head_l(ui, 110.0, t("col_from"));
+                        head_l(ui, 110.0, t("col_to"));
+                        head_l(ui, 140.0, t("col_issuer"));
+                        head_l(ui, 140.0, t("col_supervisor"));
+                        head_l(ui, 200.0, t("col_executors"));
+                        head_l(ui, 120.0, t("col_status"));
+                        head_l(ui, 240.0, t("col_permit_issues"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.work_permits {
+                            let mut p = src.clone();
+                            let mut changed = false;
+
+                            changed |= ui
+                                .add_sized([90.0, 22.0], egui::TextEdit::singleline(&mut p.number))
+                                .changed();
+                            egui::ComboBox::from_id_salt(("wp_kind", p.id))
+                                .selected_text(p.kind.label())
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    for k in PermitKind::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut p.kind, *k, k.label())
+                                            .changed();
+                                    }
+                                });
+                            changed |=
+                                task_picker(ui, app, ("wp_task", p.id), &mut p.task_id, 190.0);
+                            changed |= ui
+                                .add_sized([150.0, 22.0], egui::TextEdit::singleline(&mut p.place))
+                                .changed();
+                            changed |= super::passport::date_edit(
+                                ui,
+                                &format!("wpf{}", p.id),
+                                &mut p.date_from,
+                            );
+                            changed |= super::passport::date_edit(
+                                ui,
+                                &format!("wpt{}", p.id),
+                                &mut p.date_to,
+                            );
+                            changed |= ui
+                                .add_sized([140.0, 22.0], egui::TextEdit::singleline(&mut p.issuer))
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [140.0, 22.0],
+                                    egui::TextEdit::singleline(&mut p.supervisor),
+                                )
+                                .changed();
+
+                            // Bajaruvchilar — ro'yxatdan belgilanadi.
+                            let mut ids = p.worker_ids();
+                            let label = if ids.is_empty() {
+                                t("workers_none").to_string()
+                            } else {
+                                format!("{} {}", ids.len(), t("workers_count"))
+                            };
+                            egui::ComboBox::from_id_salt(("wp_w", p.id))
+                                .selected_text(label)
+                                .width(200.0)
+                                .show_ui(ui, |ui| {
+                                    for w in &app.workers {
+                                        let mut on = ids.contains(&w.id);
+                                        if ui.checkbox(&mut on, &w.name).changed() {
+                                            if on {
+                                                ids.push(w.id);
+                                            } else {
+                                                ids.retain(|x| *x != w.id);
+                                            }
+                                            p.set_workers(&ids);
+                                            changed = true;
+                                        }
+                                    }
+                                });
+
+                            egui::ComboBox::from_id_salt(("wp_st", p.id))
+                                .selected_text(
+                                    RichText::new(p.status.label())
+                                        .color(permit_status_color(p.status)),
+                                )
+                                .width(120.0)
+                                .show_ui(ui, |ui| {
+                                    for st in PermitStatus::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut p.status, *st, st.label())
+                                            .changed();
+                                    }
+                                });
+
+                            // Tekshiruv natijasi: nima yetishmaydi.
+                            let issues = crate::checks::permit_issues(&p, &safety, today);
+                            let text = if issues.is_empty() {
+                                t("permit_ok").to_string()
+                            } else {
+                                issues
+                                    .iter()
+                                    .map(|i| issue_label(app, i))
+                                    .collect::<Vec<_>>()
+                                    .join("; ")
+                            };
+                            cell_l(
+                                ui,
+                                240.0,
+                                RichText::new(super::issues::truncate(&text, 40))
+                                    .size(11.0)
+                                    .color(if issues.is_empty() {
+                                        theme::ok()
+                                    } else {
+                                        theme::danger()
+                                    }),
+                            )
+                            .on_hover_text(text);
+
+                            if ui
+                                .small_button(RichText::new("x").color(theme::danger()))
+                                .clicked()
+                            {
+                                removed = Some(p.id);
+                            }
+                            ui.end_row();
+                            if changed {
+                                edited = Some(p);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(p) = edited {
+            app.db.update_work_permit(&p);
+            app.reload_modules();
+        }
+        if let Some(id) = removed {
+            app.db.del("work_permit", id);
+            app.reload_modules();
+        }
+    }
+
+    if add {
+        let n = app.work_permits.len() + 1;
+        app.db.insert_work_permit(&WorkPermit {
+            id: 0,
+            project_id: pid,
+            number: format!("ND-{n:03}"),
+            kind: PermitKind::Height,
+            task_id: None,
+            place: String::new(),
+            date_from: app.today,
+            date_to: app.today + chrono::Duration::days(5),
+            issuer: String::new(),
+            supervisor: String::new(),
+            workers: String::new(),
+            measures: String::new(),
+            status: PermitStatus::Draft,
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+fn permit_status_color(s: crate::domain::PermitStatus) -> Color32 {
+    use crate::domain::PermitStatus;
+    match s {
+        PermitStatus::Draft => theme::muted(),
+        PermitStatus::Open => theme::accent(),
+        PermitStatus::Closed => theme::ok(),
+        PermitStatus::Stopped => theme::danger(),
+    }
+}
+
+/// Naryaddagi kamchilikning o'qiladigan matni.
+fn issue_label(app: &App, i: &crate::checks::PermitIssue) -> String {
+    use crate::checks::PermitIssue;
+    let who = |id: i64| {
+        app.workers
+            .iter()
+            .find(|w| w.id == id)
+            .map(|w| w.name.clone())
+            .unwrap_or_default()
+    };
+    match i {
+        PermitIssue::NoWorkers => t("pi_no_workers").to_string(),
+        PermitIssue::NoMeasures => t("pi_no_measures").to_string(),
+        PermitIssue::NoIssuer => t("pi_no_issuer").to_string(),
+        PermitIssue::BadPeriod => t("pi_bad_period").to_string(),
+        PermitIssue::Overdue => t("pi_overdue").to_string(),
+        PermitIssue::WorkerNotAllowed(id) => format!("{}: {}", who(*id), t("pi_not_allowed")),
+        PermitIssue::WorkerNoPpe(id) => format!("{}: {}", who(*id), t("pi_no_ppe")),
     }
 }
 
