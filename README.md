@@ -1,0 +1,312 @@
+# QURAi — Construction Intelligence Platform
+
+Windows uchun native desktop ilova: **Rust + egui/eframe**, GPU orqali chiziladi.
+Hech qanday webview, HTML yoki o'rnatilgan brauzer yo'q — oyna to'g'ridan-to'g'ri chiziladi.
+
+Texnik topshiriqning **I–V modullari** amalga oshirilgan: qurilish loyihasini
+boshqarish (obyekt pasporti, GPR va PPR), loyihani bo'limlararo tekshirish,
+smetani tekshirish, ijro hujjatlari va kundalik ishlar jurnali.
+
+*Нативное десктоп-приложение для Windows на Rust + egui. Реализованы модули I–V ТЗ:
+паспорт объекта, ГПР с расчетом критического пути, ППР, межразделная проверка
+проекта, проверка смет, исполнительная документация и журнал работ.*
+
+## Ishga tushirish
+
+```bash
+cargo run --release
+```
+
+Tayyor fayl: `target/release/qurai.exe` (~7 MB, tashqi bog'liqliksiz).
+Ma'lumotlar bazasi — exe yonidagi `data/qurai.db`; birinchi ishga tushirishda
+namoyish obyekti yaratiladi: «Navro'z» TJM, 20 ta ish, 25 ta bog'lanish,
+22 ta loyiha elementi, 10 pozitsiyali smeta, 4 ta PPR kartasi, jurnal yozuvlari
+va ijro hujjatlari.
+
+Testlar (CPM, tekshiruv qoidalari, import, ombor):
+
+```bash
+cargo test
+```
+
+Baza fayli sukut bo'yicha dastur yonidagi `data/qurai.db` da. `QURAI_DB` muhit
+o'zgaruvchisi bilan boshqa yo'lni ko'rsatish mumkin — sinov yoki portativ
+ishlatish uchun qulay.
+
+## Umumiy qidiruv
+
+`Ctrl+K` yoki `/` — barcha modullar bo'ylab qidiradi: GPR ishlari, loyiha
+elementlari, smeta pozitsiyalari, nomuvofiqliklar, PPR kartalari va bo'lim
+nomlari. Natija tanlanganda tegishli ekran ochiladi va yozuv ajratiladi.
+Yuqori panelda tugmasi ham bor.
+
+Tekshiruvlar modul ekrani birinchi ochilganda **avtomatik** ishga tushadi —
+bo'sh ro'yxat o'rniga natija darhol ko'rinadi. Saqlangan natija bo'lsa yoki
+foydalanuvchi yozuv holatini o'zgartirgan bo'lsa, u qaytadan hisoblanmaydi.
+
+## Til va ko'rinish
+
+- **Ikki til: o'zbekcha va ruscha.** Standart til — **o'zbekcha**.
+  Interfeysdagi barcha satrlar `src/i18n.rs` da bitta ro'yxatda saqlanadi.
+- **Mavzu: yorug' (standart) va qorong'i.**
+- Til, mavzu va boshqa sozlamalar **Sozlamalar** sahifasida o'zgartiriladi va
+  `settings` jadvalida saqlanadi — ilova qayta ochilganda tiklanadi.
+
+Bo'lim qisqartmalari tilga moslashadi: o'zbekchada `AR / KJ / KM / VK / OV / EOM / SS / PB`,
+ruschada `АР / КЖ / КМ / ВК / ОВ / ЭОМ / СС / ПБ`. Bazada esa tilga bog'liq bo'lmagan
+barqaror kod saqlanadi, shuning uchun til almashtirish ma'lumotni buzmaydi.
+
+## Amalga oshirilgan bo'limlar
+
+### Obyekt pasporti (TZ I.1)
+Bosqichlar chizig'i (loyihalash → tender → qurilish → yakunlangan, alohida
+«to'xtatilgan» holati), obyekt kartochkasi (turi, qavatlar, umumiy maydon),
+muddatlar vaqt chizig'i bilan, moliyalashtirish — shartnoma summasi, to'langan
+summa va to'lov polosasi. Ishtirokchilar TZ dagi olti rol bo'yicha guruhlanadi,
+qo'shilmagan rol darrov taklif qilinadi. O'ng panelda obyekt holati (boshqa
+modullardan yig'ilgan sonlar) va pasport to'ldirilishi nazorati.
+Hujjatlar va foto: fayllar ko'chirilmaydi, bazada yo'li saqlanadi; rasmlar
+galereyada ko'rinadi, fayl joyidan olinsa buni ro'yxat ochiq ko'rsatadi.
+
+### GPR — ishlar grafigi (TZ I.2)
+- **Gantt diagrammasi** o'z chizmasi bilan: kun / hafta / oy masshtabi.
+  Vaqt o'qi sarlavhasi ikki qatorli va zumga moslashadi: pastda kunlar bo'lsa
+  yuqorida oylar, pastda oylar bo'lsa yuqorida yillar turadi. Qadam masshtabga
+  emas, haqiqiy piksel kengligiga qarab tanlanadi — yozuvlar hech qachon
+  bir-birining ustiga chiqmaydi.
+- **Aylantirish**: g'ildirak — ishlar ro'yxati bo'ylab, ro'yxat oynaga to'liq
+  sig'sa g'ildirak vaqt o'qini suradi; `Shift`+g'ildirak yoki gorizontal
+  g'ildirak — doim vaqt o'qi; `Ctrl`+g'ildirak — zum; diagrammaning bo'sh
+  joyini sichqoncha bilan sudrash — panorama; pastda gorizontal polosa.
+- **CPM** — to'g'ri va teskari o'tish, erta/kech sanalar (ES/EF/LS/LF),
+  umumiy zaxira, kritik yo'l qizil rangda ajratiladi.
+- **To'rt xil bog'lanish** (FS, SS, FF, SF) musbat va manfiy lag bilan; strelkalar
+  diagrammada chiziladi. Sikl hosil qiluvchi bog'lanish qabul qilinmaydi —
+  qo'shilgan bog'lanish darhol qaytariladi va foydalanuvchiga aytiladi.
+- **Drag & drop**: polosani surish ishni siljitadi (u avtomatik mahkamlanadi, aks holda
+  CPM uni qaytarib qo'yardi), chekkasidan tortish davomiylikni o'zgartiradi.
+  Sudrash turi sudrash boshlanishida qulflanadi. Grafik darhol qayta hisoblanadi.
+- **Plan/fakt**: bugungi rejadagi foiz va haqiqiy foiz, muddati o'tgan ishlar,
+  bugun bajarilayotgan ishlar, tugash prognozi va kechikish kunlari.
+- **Jadval**: VBS, nom, bo'lim, CPM bo'yicha boshlanish va tugash sanalari,
+  davomiylik, bajarilish (son va polosa), zaxira.
+- **Tahlil oynasi** TZ I.2 savollariga javob beradi: qaysi ishlar muddati o'tgan,
+  mas'ullar kesimida kim qancha kun kechiktirgan, joriy sur'atda obyekt qancha
+  kechikadi, vaqtida topshirish uchun sur'atni necha barobar oshirish kerak va
+  kritik yo'ldagi navbatdagi ishlar qaysilar.
+- **Klaviatura**: strelkalar — tanlov, `Ctrl`+strelka — ishni bir kunga surish,
+  `Alt`+strelka — ro'yxatdagi tartib, `Delete` — o'chirish, `Esc` — bekor qilish.
+- Bo'lim, kritik yo'l, muddati o'tganlar va matn bo'yicha filtrlar.
+
+### PPR — ishlar rejasi (TZ I.3)
+To'rt bo'limdan iborat: **kartalar** (PPR, texnologik, sifat va xavfsizlik
+kartalari — raqami, nomi, bo'limi, GPR ishi, ishlab chiqqan, talab qilinadigan
+odam va texnika, tasdiq sanasi, biriktirilgan fayl), **resurslar**,
+**ishlar qoplanishi** va **nomuvofiqliklar**.
+
+**Resurslar** — kunlik talab gistogrammasi: grafikning har bir kuni uchun o'sha
+kuni ketayotgan ishlarning kartalaridagi odam va texnika yig'indisi. Mavjud
+quvvat yashil punktir chiziq bilan ko'rsatiladi, undan oshgan kunlar qizil
+bo'yaladi va nechta kun ortiqcha yuklangani yoziladi. Hisob tekshiruv bilan
+bir xil funksiyadan olinadi — diagramma va xato matni bir-biriga zid chiqmaydi.
+
+**Ishlar qoplanishi** — har bir GPR ishi qarshisida uning kartasi bor-yo'qligi,
+tasdiqlanganmi va kritik yo'ldami. Kartasi yo'q ish uchun uni shu yerdan bir
+bosishda yaratish mumkin.
+
+TZ I.3 dagi beshta tekshiruv ham bajariladi:
+- **PPR loyihaga mos keladimi** — boshlangan ishda karta bormi, karta mavjud
+  ishga bog'langanmi;
+- **odam va texnika yetadimi** — kunlik cho'qqi mavjud resurs bilan solishtiriladi
+  (resurs ko'rsatilmagan bo'lsa, xulosa chiqarilmaydi);
+- **ketma-ketlik** — ish boshlangan, lekin undan oldin tugashi kerak bo'lgan ish
+  tugallanmagan (oldingisi yarmigacha yetmagan bo'lsa — kritik);
+- **risklar** — kritik yo'ldagi ish 30 kun ichida boshlanadi, tasdiqlangan
+  texnologik kartasi esa yo'q.
+
+### AI loyiha tekshiruvi (TZ II)
+- **Loyiha bilimlar grafi**: element (xona, deraza, teshik, quvur, rigel, kabel…)
+  va ular orasidagi bog'lanish (`tarkibida`, `xizmat qiladi`, `kesib o'tadi`,
+  `tayanadi`, `quvvat oladi`). Elementlar va bog'lanishlar ekrandan tahrirlanadi.
+- **Bo'limlararo tekshiruv (II.11)**: teshigi ko'zda tutilmagan deraza yoki eshik
+  (AR ↔ KJ), muhandislik ta'minotisiz xona (AR ↔ VK / OV / EOM), konstruksiyani
+  teshiksiz kesib o'tuvchi tarmoq, kanalizatsiya ukloni, takrorlangan markalar,
+  varaqsiz va o'lchamsiz elementlar, grafda yolg'iz qolgan elementlar.
+- **O'zgarish ta'siri (II.18)**: element o'zgarganda qaysi bo'limlar va nechta
+  element ta'sirlanishi grafni aylanib chiqib ko'rsatiladi.
+- **Normativ reyestri (II.17)**: dastur normativni **o'ylab topmaydi**. Har bir
+  qoidaning me'yoriy asosi (hujjat, tahriri, band, matn, chegara qiymati, manba)
+  reyestrga qo'lda kiritiladi. Kiritilmagan bo'lsa, nomuvofiqlikda me'yoriy asos
+  maydoni bo'sh qoladi va «muhandis tekshiruvi talab qilinadi» deb yoziladi.
+  Chegara qiymati tasdiqlanmagan bo'lsa, qoida vaqtinchalik qiymatdan foydalanadi
+  va buni xatoning o'zida ochiq aytadi.
+- **Bilimlar grafi ko'rinishi (II.18)**: elementlar bo'limlar bo'yicha ustunlarga
+  joylashtiriladi, bog'lanishlar chiziq bilan chiziladi. Tugun tanlansa, uning
+  aloqalari ajratiladi va qolganlari xiralashadi — bo'limlararo bog'lanishlar
+  shu ko'rinishda bir qarashda o'qiladi.
+- **Bajarish rejasi (II.19 ACTION)**: ochiq nomuvofiqliklar mas'ullar bo'yicha
+  guruhlanadi — kim nima qilishi va qachongacha. Har bir yozuvga bartaraf etish
+  muddati qo'yiladi, muddati o'tgani qizil bilan belgilanadi, holat shu yerdan
+  o'zgartiriladi. Muddat qayta tekshiruvda saqlanib qoladi.
+
+### AI smeta tekshiruvi (TZ III)
+**Import (TZ III.2)**: XLSX, XLS, XLSB, ODS va CSV. Sarlavha qatori faylning
+boshida bo'lishi shart emas — ustunlar nomi bo'yicha ikkala tilda topiladi,
+«Итого» qatori yakuniy summaga tushadi, bo'lim sarlavhalari pozitsiya sifatida
+sanalmaydi. Summa ustuni yo'q bo'lsa, u miqdor × narxdan hisoblanadi, shunda
+arifmetika tekshiruvi soxta xato bermaydi.
+
+Tekshiruvlar: arifmetika (miqdor × narx = summa), yakuniy summaning mosligi,
+takrorlangan pozitsiyalar, o'lchov birliklari, loyiha hajmi bilan solishtirish,
+narx bo'yicha chetlanish, nol va manfiy qiymatlar, GPR da bor-u smetada yo'q
+ishlar. Pozitsiyalar ekranda tahrirlanadi, «Hisoblangan» va «Farq» ustunlari
+darhol qayta hisoblanadi.
+
+**Qiymat nazorati (TZ III.31)** — smetaning pul ko'rinishidagi xulosasi:
+tekshirishga arziydigan umumiy summa, takrorlangan pozitsiyalar qiymati,
+loyihadan oshgan hajmning narxi, arifmetik farqlar yig'indisi va narxni
+tenglashtirishdan kelib chiqadigan tejam. Har bir raqamning yonida u qanday
+hisoblangani yozilgan, pastda esa bo'limlar kesimidagi qiymat diagrammasi.
+
+TZ III.32 talabiga ko'ra dastur hukm chiqarmaydi: fakt, hisob va xulosa ajratilgan,
+sarlavhalar «oshirilgan» emas, «oshirilgan bo'lishi mumkin» deb yoziladi;
+qiymat nazoratidagi sonlar ham «xato» emas, «tekshirishga arziydi» deb beriladi.
+
+### Ijro hujjatlari (TZ IV)
+Hujjat turi, raqami, sanasi, GPR ishi, holati (qoralama → ko'rib chiqishda →
+imzolangan) va mas'ul.
+
+Modulning asosiy g'oyasi — TZ IV.1 dagi «tizim har bosqichda qaysi hujjat kerakligini
+bilishi kerak» — **talablar reyestri** bilan bajarilgan: hujjat turi ishning bo'limiga
+qarab aniqlanadi (KJ va KM uchun yashirin ishlar dalolatnomasi va ijro sxemasi,
+VK/OV/EOM/SS uchun yashirin ishlar va sinov bayonnomasi, PB uchun sinov va qabul,
+AR uchun qabul dalolatnomasi). Yon panelda uch holat ko'rsatiladi: hujjat yo'q va
+ish tugagan (**kechikdi**), hujjat yo'q va ish ketmoqda (**kutilmoqda**), hujjat bor
+lekin **imzolanmagan**. Yo'q hujjat bir bosishda kerakli tur bilan yaratiladi.
+
+### Kundalik ishlar jurnali (TZ V)
+Har kungi yozuv: sana, muallif, ob-havo va harorat, ishchilar va texnika soni,
+bajarilgan ish va hajm, e'tirozlar va **fotofiksatsiya** — fotolar yozuvga
+biriktiriladi va galereyada ko'rinadi (fayl ko'chirilmaydi, yo'li saqlanadi).
+Yuqorida jurnal holati: oxirgi yozuv qachon, oxirgi 30 kunning nechtasi
+to'ldirilgan, o'rtacha ishchi soni va biriktirilgan foto soni.
+«GPR ni fakt bo'yicha yangilash» tugmasi
+jurnaldagi hajmlar yig'indisini ishning bajarilish foiziga aylantiradi va
+boshlanish sanasini qo'yadi — shundan keyin plan/fakt haqiqiy ma'lumotga tayanadi.
+Hajmi ko'rsatilmagan ish tegilmaydi va bu haqda ochiq aytiladi.
+
+### Nomuvofiqliklar bilan ishlash
+Uchala tekshiruv (loyiha, smeta, PPR) bitta ro'yxat va bitta kartochkani ishlatadi: muhimlik darajasi,
+ichki kod, bo'lim, element, joylashuv, varaq, tavsif, me'yoriy asos, tavsiya va
+mas'ul. Holat `Ochiq → Ishlanmoqda → Tuzatilgan / Rad etilgan` bo'yicha yuritiladi;
+holati o'zgartirilgan yozuv qayta tekshiruvda tiklanmaydi. Xato kodlari ishga
+tushirishlar orasida barqaror — buni test tekshiradi.
+
+### Arizalar (TZ IX)
+Ta'minot zanjirining birinchi bo'g'ini: ehtiyoj → ariza → tasdiqlash. Har bir
+arizada raqam, sana, holat, muhimlik, tur, nomi, material, miqdor, kerak bo'lgan
+sana va so'ragan shaxs. Ustunlar nazorat tartibida joylashgan — avval holat va
+qoplanish, keyin tafsilotlar.
+
+«Qoplanish» ustuni bog'langan xaridlardan hisoblanadi: qancha buyurtma qilingan,
+qanchasi kelgan, rejalashtirilgan yetkazish ehtiyoj sanasidan kechikadimi.
+«Zaxira bo'yicha ariza» tugmasi qoldig'i minimal zaxiradan past bo'lgan har bir
+material uchun ariza ochadi — miqdor zaxirani tiklashga yetadigan qilib olinadi;
+o'sha material bo'yicha ochiq ariza bo'lsa dubl yaratilmaydi.
+
+### Xaridlar (TZ X)
+Ikkinchi bo'g'in: ariza → xarid → yetkazish. Yetkazib beruvchi, miqdor, narx,
+summa, yetkazish sanasi va holat. «Arizalar bo'yicha xarid» tasdiqlangan, ammo
+xaridi ochilmagan arizalar uchun xarid yaratadi.
+
+Yetkazilgan xarid omborga tushishi kerak. «Ombor» ustuni har bir xarid uchun
+kirim qilinganmi yoki yo'qmi ko'rsatadi, «Omborga kirim qilish» tugmasi esa
+kirim harakatlarini yaratadi. Bog'lanish hujjat raqami orqali: kirim harakati
+xarid raqami bilan yoziladi, shuning uchun tugma ikki marta bosilsa ham takror
+kirim bo'lmaydi. Miqdori arizadagidan oshib ketgan xaridlar jadval ostida fakt
+sifatida qayd etiladi (TZ III.32: dastur hukm chiqarmaydi).
+
+### Materiallar (TZ XII)
+Obyektning yagona material katalogi: kod, nomi, birlik, bo'lim, texnik tavsif,
+sertifikat raqami va amal qilish muddati, minimal zaxira va narx. Yuqorida beshta
+ko'rsatkich: katalog hajmi, ombor qiymati, zaxiradan kam tushgan pozitsiyalar,
+sertifikat muddati o'tganlar (yaqin 30 kun ichida tugaydiganlar bilan) va
+sertifikati kiritilmaganlar. Har bir qator yonida ombordagi joriy qoldiq
+ko'rsatiladi, shunda katalog va ombor bir-biridan ajralib qolmaydi.
+
+### Ombor (TZ XI)
+Ikki ko'rinish. **Qoldiqlar** — material bo'yicha joriy holat, minimal zaxiraga
+nisbatan polosa, birlik narxi, qoldiq qiymati, kirim/chiqim yig'indisi va oxirgi
+harakat sanasi. **Harakatlar** — kirim, chiqim va hisobdan chiqarish jurnali:
+sana, tur, material, miqdor, narx, hujjat, kontragent va bog'liq ish.
+
+Qoldiq alohida saqlanmaydi — u har safar harakatlardan hisoblanadi
+(`checks::stock_balances`), shuning uchun hujjat bilan qoldiq hech qachon
+bir-biriga zid bo'lmaydi. Birlik narxi kirimlarning vaznlangan o'rtachasidan
+olinadi; kirimda narx ko'rsatilmagan bo'lsa katalogdagi narx ishlatiladi.
+Chiqim kirimdan ko'p yozilsa qoldiq manfiy bo'ladi va bu hujjatdagi xato deb
+alohida ajratib ko'rsatiladi.
+
+### Umumiy ko'rinish
+Obyekt bo'yicha xulosa, muddati o'tgan ishlar mas'ullari va kechikish miqdori bilan
+(bosilsa GPR da ochiladi), bo'limlar kesimidagi bajarilish, bugungi ishlar.
+
+### Sozlamalar
+Interfeys tili, mavzu, interfeys masshtabi (80–160 %), GPR standart masshtabi,
+dam olish kunlarini ajratish, standart valyuta va yangi ish davomiyligi,
+baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida ma'lumot.
+
+## Tuzilishi
+
+| Fayl | Vazifasi |
+|---|---|
+| `src/i18n.rs` | Ikki tilli satrlar ro'yxati, joriy til |
+| `src/theme.rs` | Yorug' va qorong'i palitra |
+| `src/model.rs` | I modul turlari: obyekt, ishtirokchilar, ishlar, bog'lanishlar, bo'limlar |
+| `src/domain.rs` | II–XVI modullar turlari: nomuvofiqlik, element, smeta, jurnal, ombor… |
+| `src/cpm.rs` | Tarmoq grafigi hisobi: CPM, zaxiralar, plan/fakt, prognoz |
+| `src/checks.rs` | Tekshiruv dvigateli: loyiha (II), smeta (III) va PPR (I.3) qoidalari, normativ reyestri |
+| `src/import.rs` | Smeta importi: XLSX/XLS/ODS/CSV, ustunlarni nom bo'yicha aniqlash |
+| `src/db.rs` | SQLite: asosiy sxema, so'rovlar, sozlamalar, namoyish ma'lumoti |
+| `src/store.rs` | II–XVI modullar sxemasi va CRUD |
+| `src/app.rs` | Ilova holati, sozlamalar, UI va omborni bog'lash |
+| `src/ui/gantt.rs` | GPR ekrani: jadval, Gantt, drag & drop, inspektor |
+| `src/ui/passport.rs` | Obyekt pasporti ekrani |
+| `src/ui/dashboard.rs` | Umumiy ko'rinish ekrani |
+| `src/ui/ppr.rs` | PPR va texnologik kartalar, resurs yetarliligi |
+| `src/ui/aicheck.rs` | AI loyiha tekshiruvi: nomuvofiqliklar, elementlar, bog'lanishlar, normativlar |
+| `src/ui/estimate.rs` | AI smeta tekshiruvi: import, pozitsiyalar va natijalar |
+| `src/ui/execdocs.rs` | Ijro hujjatlari va rasmiylashtirilmagan ishlar |
+| `src/ui/journal.rs` | Kundalik ishlar jurnali |
+| `src/ui/documents.rs` | Obyekt hujjatlari va foto galereyasi |
+| `src/ui/requests.rs` | Arizalar, ehtiyoj va qoplanish nazorati |
+| `src/ui/purchases.rs` | Xaridlar, yetkazish va omborga kirim |
+| `src/ui/materials.rs` | Material katalogi, sertifikat nazorati |
+| `src/ui/warehouse.rs` | Ombor: qoldiqlar va harakatlar |
+| `src/ui/issues.rs` | Nomuvofiqliklar uchun umumiy jadval va kartochka |
+| `src/ui/settings.rs` | Sozlamalar ekrani |
+| `src/ui/mod.rs` | Mavzu, navigatsiya, dialoglar, umumiy vidjetlar |
+
+## Ombor
+
+SQLite (`rusqlite`, WAL rejimi), to'liq lokal — server kerak emas.
+Sxema kelajakdagi sinxronizatsiyaga tayyorlangan: har bir yozuvda `updated_at` bor,
+identifikatorlar qayta ishlatilmaydi. Obyekt o'chirilganda bog'liq ma'lumot
+`FOREIGN KEY … ON DELETE CASCADE` bilan ketadi.
+
+## TZ bo'yicha keyingi bosqichlar
+
+IX–XII (arizalar, xaridlar, ombor, materiallar) ekranlari tayyor. Qolgan
+XIII–XVI (tabel, sifat, xavfsizlik, texnika) uchun domen turlari
+(`src/domain.rs`), baza sxemasi va CRUD (`src/store.rs`) allaqachon yozilgan —
+qolgani ekranlarni ulash.
+
+Uchta arxitektura qarori alohida hal qilinishi kerak:
+
+1. **Server va rollar.** VI (prorab mobil ilovasi), VII (texnik nazorat kabineti)
+   va VIII (buyurtmachi kabineti) modullari ko'p foydalanuvchili ishni talab
+   qiladi. Desktop klient native holicha qoladi va serverga API orqali murojaat qiladi.
+2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
+   kutubxona yoki xizmatni talab qiladi. Hozir loyiha elementlari qo'lda kiritiladi.
+3. **LLM integratsiyasi.** TZ da «AI javob beradi» deb yozilgan joylar (I.2
+   tavsiyalari, XVIII Copilot) qoidalar dvigateli bilan yopilmaydi.

@@ -1,0 +1,1975 @@
+//! II–XVI modullarning saqlash qatlami: sxema va CRUD.
+//!
+//! Xatolar yuqoriga chiqarilmaydi — ro'yxatlar bo'sh qaytadi, yozish esa
+//! `bool` bilan javob beradi. Interfeys uchun shu yetarli, chunki lokal
+//! SQLite dagi xato faqat disk muammosida yuz beradi.
+
+// IV-XVI modullar sxemasi va CRUD i tayyor, ekranlari keyingi bosqichda ulanadi.
+#![allow(dead_code)]
+
+use crate::db::Db;
+use crate::domain::*;
+use crate::model::Section;
+use chrono::NaiveDate;
+use rusqlite::{params, Row};
+
+fn date(s: &str) -> NaiveDate {
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_else(|_| chrono::Local::now().date_naive())
+}
+
+fn odate(s: Option<String>) -> Option<NaiveDate> {
+    s.map(|x| date(&x))
+}
+
+fn ods(d: Option<NaiveDate>) -> Option<String> {
+    d.map(|x| x.to_string())
+}
+
+impl Db {
+    /// Modullar jadvallari. Asosiy sxema `db.rs` da yaratilgandan keyin chaqiriladi.
+    pub fn migrate_modules(&self) -> rusqlite::Result<()> {
+        self.conn().execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS issue (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                module TEXT NOT NULL DEFAULT 'project',
+                section TEXT NOT NULL DEFAULT 'NONE',
+                code TEXT NOT NULL DEFAULT '',
+                sheet TEXT NOT NULL DEFAULT '',
+                location TEXT NOT NULL DEFAULT '',
+                element TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                severity TEXT NOT NULL DEFAULT 'warning',
+                norm_doc TEXT NOT NULL DEFAULT '',
+                norm_clause TEXT NOT NULL DEFAULT '',
+                norm_text TEXT NOT NULL DEFAULT '',
+                recommendation TEXT NOT NULL DEFAULT '',
+                responsible TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'open',
+                auto INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT (date('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_issue_project ON issue(project_id);
+
+            CREATE TABLE IF NOT EXISTS element (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                section TEXT NOT NULL DEFAULT 'NONE',
+                kind TEXT NOT NULL DEFAULT 'other',
+                mark TEXT NOT NULL DEFAULT '',
+                room TEXT NOT NULL DEFAULT '',
+                axis TEXT NOT NULL DEFAULT '',
+                level TEXT NOT NULL DEFAULT '',
+                size REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                value REAL NOT NULL DEFAULT 0,
+                value_name TEXT NOT NULL DEFAULT '',
+                sheet TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_element_project ON element(project_id);
+
+            CREATE TABLE IF NOT EXISTS element_link (
+                id INTEGER PRIMARY KEY,
+                from_el INTEGER NOT NULL REFERENCES element(id) ON DELETE CASCADE,
+                to_el INTEGER NOT NULL REFERENCES element(id) ON DELETE CASCADE,
+                relation TEXT NOT NULL DEFAULT 'related',
+                UNIQUE(from_el, to_el, relation)
+            );
+
+            CREATE TABLE IF NOT EXISTS document (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                section TEXT NOT NULL DEFAULT 'NONE',
+                name TEXT NOT NULL DEFAULT '',
+                format TEXT NOT NULL DEFAULT '',
+                path TEXT NOT NULL DEFAULT '',
+                sheets INTEGER NOT NULL DEFAULT 0,
+                added_at TEXT NOT NULL DEFAULT (date('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS estimate (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                currency TEXT NOT NULL DEFAULT 'UZS',
+                declared_total REAL NOT NULL DEFAULT 0,
+                added_at TEXT NOT NULL DEFAULT (date('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS estimate_item (
+                id INTEGER PRIMARY KEY,
+                estimate_id INTEGER NOT NULL REFERENCES estimate(id) ON DELETE CASCADE,
+                pos INTEGER NOT NULL DEFAULT 0,
+                section TEXT NOT NULL DEFAULT 'NONE',
+                code TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                unit TEXT NOT NULL DEFAULT '',
+                qty REAL NOT NULL DEFAULT 0,
+                price REAL NOT NULL DEFAULT 0,
+                cost REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_eitem ON estimate_item(estimate_id);
+
+            CREATE TABLE IF NOT EXISTS ppr (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'ppr',
+                number TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                section TEXT NOT NULL DEFAULT 'NONE',
+                task_id INTEGER,
+                workers INTEGER NOT NULL DEFAULT 0,
+                machines INTEGER NOT NULL DEFAULT 0,
+                path TEXT NOT NULL DEFAULT '',
+                approved INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_ppr_project ON ppr(project_id);
+
+            CREATE TABLE IF NOT EXISTS exec_doc (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'hidden',
+                number TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                task_id INTEGER,
+                status TEXT NOT NULL DEFAULT 'draft',
+                responsible TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS journal (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                author TEXT NOT NULL DEFAULT '',
+                weather TEXT NOT NULL DEFAULT '',
+                temperature REAL NOT NULL DEFAULT 0,
+                workers INTEGER NOT NULL DEFAULT 0,
+                machines INTEGER NOT NULL DEFAULT 0,
+                task_id INTEGER,
+                volume REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                text TEXT NOT NULL DEFAULT '',
+                remarks TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS request (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                number TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'material',
+                title TEXT NOT NULL DEFAULT '',
+                material_id INTEGER,
+                qty REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                requester TEXT NOT NULL DEFAULT '',
+                need_date TEXT NOT NULL,
+                priority TEXT NOT NULL DEFAULT 'normal',
+                status TEXT NOT NULL DEFAULT 'new',
+                task_id INTEGER,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS purchase (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                request_id INTEGER,
+                number TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                supplier TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                qty REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                price REAL NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'UZS',
+                delivery_date TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft',
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS material (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                code TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                unit TEXT NOT NULL DEFAULT '',
+                section TEXT NOT NULL DEFAULT 'NONE',
+                spec TEXT NOT NULL DEFAULT '',
+                cert_no TEXT NOT NULL DEFAULT '',
+                cert_until TEXT,
+                min_stock REAL NOT NULL DEFAULT 0,
+                price REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS stock_move (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'in',
+                qty REAL NOT NULL DEFAULT 0,
+                price REAL NOT NULL DEFAULT 0,
+                document TEXT NOT NULL DEFAULT '',
+                counterparty TEXT NOT NULL DEFAULT '',
+                task_id INTEGER,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_move_mat ON stock_move(material_id);
+
+            CREATE TABLE IF NOT EXISTS worker (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                position TEXT NOT NULL DEFAULT '',
+                org TEXT NOT NULL DEFAULT '',
+                hourly_rate REAL NOT NULL DEFAULT 0,
+                active INTEGER NOT NULL DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS timesheet (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                worker_id INTEGER NOT NULL REFERENCES worker(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                hours REAL NOT NULL DEFAULT 0,
+                task_id INTEGER,
+                note TEXT NOT NULL DEFAULT '',
+                UNIQUE(worker_id, date)
+            );
+
+            CREATE TABLE IF NOT EXISTS quality_check (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'operational',
+                date TEXT NOT NULL,
+                task_id INTEGER,
+                material_id INTEGER,
+                subject TEXT NOT NULL DEFAULT '',
+                inspector TEXT NOT NULL DEFAULT '',
+                result TEXT NOT NULL DEFAULT 'pass',
+                defect TEXT NOT NULL DEFAULT '',
+                deadline TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS safety_event (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'violation',
+                severity TEXT NOT NULL DEFAULT 'warning',
+                place TEXT NOT NULL DEFAULT '',
+                description TEXT NOT NULL DEFAULT '',
+                responsible TEXT NOT NULL DEFAULT '',
+                measure TEXT NOT NULL DEFAULT '',
+                deadline TEXT,
+                status TEXT NOT NULL DEFAULT 'open'
+            );
+
+            CREATE TABLE IF NOT EXISTS machine (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'other',
+                reg_no TEXT NOT NULL DEFAULT '',
+                owner TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'idle',
+                hour_rate REAL NOT NULL DEFAULT 0,
+                operator TEXT NOT NULL DEFAULT '',
+                inspection_until TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS machine_log (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                machine_id INTEGER NOT NULL REFERENCES machine(id) ON DELETE CASCADE,
+                date TEXT NOT NULL,
+                hours REAL NOT NULL DEFAULT 0,
+                fuel REAL NOT NULL DEFAULT 0,
+                task_id INTEGER,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            "#,
+        )?;
+
+        // Keyin qo'shilgan ustunlar: eski bazada bo'lmasa yaratamiz.
+        for sql in [
+            "ALTER TABLE ppr ADD COLUMN author TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE ppr ADD COLUMN approved_at TEXT",
+            "ALTER TABLE issue ADD COLUMN deadline TEXT",
+            "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
+        ] {
+            let _ = self.conn().execute(sql, []);
+        }
+        Ok(())
+    }
+
+    // ---------- Umumiy yordamchilar ----------
+
+    fn list<T>(&self, sql: &str, pid: i64, f: impl Fn(&Row) -> rusqlite::Result<T>) -> Vec<T> {
+        let Ok(mut st) = self.conn().prepare(sql) else { return Vec::new() };
+        let Ok(rows) = st.query_map([pid], |r| f(r)) else { return Vec::new() };
+        rows.filter_map(|x| x.ok()).collect()
+    }
+
+    fn ins(&self, sql: &str, p: &[&dyn rusqlite::ToSql]) -> i64 {
+        match self.conn().execute(sql, p) {
+            Ok(_) => self.conn().last_insert_rowid(),
+            Err(_) => 0,
+        }
+    }
+
+    fn upd(&self, sql: &str, p: &[&dyn rusqlite::ToSql]) -> bool {
+        self.conn().execute(sql, p).is_ok()
+    }
+
+    pub fn del(&self, table: &str, id: i64) -> bool {
+        // Jadval nomi kod ichidan keladi, foydalanuvchidan emas.
+        self.conn()
+            .execute(&format!("DELETE FROM {table} WHERE id=?1"), [id])
+            .is_ok()
+    }
+
+    // ---------- II–III. Nomuvofiqliklar ----------
+
+    pub fn issues(&self, pid: i64) -> Vec<Issue> {
+        self.list(
+            "SELECT id,project_id,module,section,code,sheet,location,element,title,description,
+                    severity,norm_doc,norm_clause,norm_text,recommendation,responsible,status,auto,
+                    created_at,deadline
+             FROM issue WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(Issue {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    module: IssueModule::parse(&r.get::<_, String>(2)?),
+                    section: Section::parse(&r.get::<_, String>(3)?),
+                    code: r.get(4)?,
+                    sheet: r.get(5)?,
+                    location: r.get(6)?,
+                    element: r.get(7)?,
+                    title: r.get(8)?,
+                    description: r.get(9)?,
+                    severity: Severity::parse(&r.get::<_, String>(10)?),
+                    norm_doc: r.get(11)?,
+                    norm_clause: r.get(12)?,
+                    norm_text: r.get(13)?,
+                    recommendation: r.get(14)?,
+                    responsible: r.get(15)?,
+                    status: IssueStatus::parse(&r.get::<_, String>(16)?),
+                    auto: r.get::<_, i64>(17)? != 0,
+                    created_at: r.get(18)?,
+                    deadline: odate(r.get::<_, Option<String>>(19)?),
+                })
+            },
+        )
+    }
+
+    pub fn insert_issue(&self, i: &Issue) -> i64 {
+        self.ins(
+            "INSERT INTO issue (project_id,module,section,code,sheet,location,element,title,
+                                description,severity,norm_doc,norm_clause,norm_text,recommendation,
+                                responsible,status,auto,deadline)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
+            params![
+                i.project_id, i.module.code(), i.section.code(), i.code, i.sheet, i.location,
+                i.element, i.title, i.description, i.severity.code(), i.norm_doc, i.norm_clause,
+                i.norm_text, i.recommendation, i.responsible, i.status.code(), i.auto as i64,
+                ods(i.deadline)
+            ],
+        )
+    }
+
+    pub fn update_issue(&self, i: &Issue) -> bool {
+        self.upd(
+            "UPDATE issue SET module=?2,section=?3,code=?4,sheet=?5,location=?6,element=?7,
+                    title=?8,description=?9,severity=?10,norm_doc=?11,norm_clause=?12,norm_text=?13,
+                    recommendation=?14,responsible=?15,status=?16,deadline=?17 WHERE id=?1",
+            params![
+                i.id, i.module.code(), i.section.code(), i.code, i.sheet, i.location, i.element,
+                i.title, i.description, i.severity.code(), i.norm_doc, i.norm_clause, i.norm_text,
+                i.recommendation, i.responsible, i.status.code(), ods(i.deadline)
+            ],
+        )
+    }
+
+    /// Avtomatik topilgan nomuvofiqliklarni almashtiradi: qo'lda kiritilganlar
+    /// va holati o'zgartirilganlar saqlanib qoladi.
+    pub fn replace_auto_issues(&self, pid: i64, module: IssueModule, found: &[Issue]) {
+        let _ = self.conn().execute(
+            "DELETE FROM issue WHERE project_id=?1 AND module=?2 AND auto=1 AND status='open'",
+            params![pid, module.code()],
+        );
+        for i in found {
+            // Foydalanuvchi allaqachon yopgan xato qayta paydo bo'lmasin.
+            let seen: i64 = self
+                .conn()
+                .query_row(
+                    "SELECT COUNT(*) FROM issue WHERE project_id=?1 AND code=?2 AND status<>'open'",
+                    params![pid, i.code],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            if seen == 0 {
+                self.insert_issue(i);
+            }
+            // Ochiq yozuvga qo'yilgan muddat qayta tekshiruvda yo'qolmasin.
+            let _ = self.conn().execute(
+                "UPDATE issue SET deadline=(SELECT deadline FROM issue old
+                     WHERE old.project_id=?1 AND old.code=?2 AND old.deadline IS NOT NULL
+                     ORDER BY old.id LIMIT 1)
+                 WHERE project_id=?1 AND code=?2 AND deadline IS NULL",
+                params![pid, i.code],
+            );
+        }
+    }
+
+    // ---------- I.3. PPR ----------
+
+    pub fn ppr_docs(&self, pid: i64) -> Vec<PprDoc> {
+        self.list(
+            "SELECT id,project_id,kind,number,name,section,task_id,workers,machines,path,approved,note,
+                    author,approved_at
+             FROM ppr WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(PprDoc {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    kind: PprKind::parse(&r.get::<_, String>(2)?),
+                    number: r.get(3)?,
+                    name: r.get(4)?,
+                    section: Section::parse(&r.get::<_, String>(5)?),
+                    task_id: r.get(6)?,
+                    workers: r.get(7)?,
+                    machines: r.get(8)?,
+                    path: r.get(9)?,
+                    approved: r.get::<_, i64>(10)? != 0,
+                    note: r.get(11)?,
+                    author: r.get(12)?,
+                    approved_at: odate(r.get::<_, Option<String>>(13)?),
+                })
+            },
+        )
+    }
+
+    pub fn insert_ppr(&self, d: &PprDoc) -> i64 {
+        self.ins(
+            "INSERT INTO ppr (project_id,kind,number,name,section,task_id,workers,machines,path,
+                              approved,note,author,approved_at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                d.project_id, d.kind.code(), d.number, d.name, d.section.code(), d.task_id,
+                d.workers, d.machines, d.path, d.approved as i64, d.note, d.author,
+                ods(d.approved_at)
+            ],
+        )
+    }
+
+    pub fn update_ppr(&self, d: &PprDoc) -> bool {
+        self.upd(
+            "UPDATE ppr SET kind=?2,number=?3,name=?4,section=?5,task_id=?6,workers=?7,
+                    machines=?8,path=?9,approved=?10,note=?11,author=?12,approved_at=?13
+             WHERE id=?1",
+            params![
+                d.id, d.kind.code(), d.number, d.name, d.section.code(), d.task_id, d.workers,
+                d.machines, d.path, d.approved as i64, d.note, d.author, ods(d.approved_at)
+            ],
+        )
+    }
+
+    // ---------- II. Elementlar ----------
+
+    pub fn elements(&self, pid: i64) -> Vec<Element> {
+        self.list(
+            "SELECT id,project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note
+             FROM element WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(Element {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    section: Section::parse(&r.get::<_, String>(2)?),
+                    kind: ElementKind::parse(&r.get::<_, String>(3)?),
+                    mark: r.get(4)?,
+                    room: r.get(5)?,
+                    axis: r.get(6)?,
+                    level: r.get(7)?,
+                    size: r.get(8)?,
+                    unit: r.get(9)?,
+                    value: r.get(10)?,
+                    value_name: r.get(11)?,
+                    sheet: r.get(12)?,
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_element(&self, e: &Element) -> i64 {
+        self.ins(
+            "INSERT INTO element (project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                e.project_id, e.section.code(), e.kind.code(), e.mark, e.room, e.axis, e.level,
+                e.size, e.unit, e.value, e.value_name, e.sheet, e.note
+            ],
+        )
+    }
+
+    pub fn update_element(&self, e: &Element) -> bool {
+        self.upd(
+            "UPDATE element SET section=?2,kind=?3,mark=?4,room=?5,axis=?6,level=?7,size=?8,
+                    unit=?9,value=?10,value_name=?11,sheet=?12,note=?13 WHERE id=?1",
+            params![
+                e.id, e.section.code(), e.kind.code(), e.mark, e.room, e.axis, e.level, e.size,
+                e.unit, e.value, e.value_name, e.sheet, e.note
+            ],
+        )
+    }
+
+    pub fn element_links(&self, pid: i64) -> Vec<ElementLink> {
+        self.list(
+            "SELECT l.id,l.from_el,l.to_el,l.relation FROM element_link l
+             JOIN element e ON e.id=l.from_el WHERE e.project_id=?1",
+            pid,
+            |r| {
+                Ok(ElementLink {
+                    id: r.get(0)?,
+                    from_el: r.get(1)?,
+                    to_el: r.get(2)?,
+                    relation: Relation::parse(&r.get::<_, String>(3)?),
+                })
+            },
+        )
+    }
+
+    pub fn insert_element_link(&self, l: &ElementLink) -> i64 {
+        self.ins(
+            "INSERT OR IGNORE INTO element_link (from_el,to_el,relation) VALUES (?1,?2,?3)",
+            params![l.from_el, l.to_el, l.relation.code()],
+        )
+    }
+
+    // ---------- II. Hujjatlar ----------
+
+    pub fn documents(&self, pid: i64) -> Vec<Document> {
+        self.list(
+            "SELECT id,project_id,section,name,format,path,sheets,added_at
+             FROM document WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(Document {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    section: Section::parse(&r.get::<_, String>(2)?),
+                    name: r.get(3)?,
+                    format: r.get(4)?,
+                    path: r.get(5)?,
+                    sheets: r.get(6)?,
+                    added_at: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_document(&self, d: &Document) -> i64 {
+        self.ins(
+            "INSERT INTO document (project_id,section,name,format,path,sheets) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![d.project_id, d.section.code(), d.name, d.format, d.path, d.sheets],
+        )
+    }
+
+    pub fn update_document(&self, d: &Document) -> bool {
+        self.upd(
+            "UPDATE document SET section=?2,name=?3,format=?4,path=?5,sheets=?6 WHERE id=?1",
+            params![d.id, d.section.code(), d.name, d.format, d.path, d.sheets],
+        )
+    }
+
+    // ---------- III. Smeta ----------
+
+    pub fn estimates(&self, pid: i64) -> Vec<Estimate> {
+        self.list(
+            "SELECT id,project_id,name,currency,declared_total,added_at
+             FROM estimate WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(Estimate {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    currency: r.get(3)?,
+                    declared_total: r.get(4)?,
+                    added_at: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_estimate(&self, e: &Estimate) -> i64 {
+        self.ins(
+            "INSERT INTO estimate (project_id,name,currency,declared_total) VALUES (?1,?2,?3,?4)",
+            params![e.project_id, e.name, e.currency, e.declared_total],
+        )
+    }
+
+    pub fn update_estimate(&self, e: &Estimate) -> bool {
+        self.upd(
+            "UPDATE estimate SET name=?2,currency=?3,declared_total=?4 WHERE id=?1",
+            params![e.id, e.name, e.currency, e.declared_total],
+        )
+    }
+
+    pub fn estimate_items(&self, eid: i64) -> Vec<EstimateItem> {
+        self.list(
+            "SELECT id,estimate_id,pos,section,code,name,unit,qty,price,cost,note
+             FROM estimate_item WHERE estimate_id=?1 ORDER BY pos,id",
+            eid,
+            |r| {
+                Ok(EstimateItem {
+                    id: r.get(0)?,
+                    estimate_id: r.get(1)?,
+                    pos: r.get(2)?,
+                    section: Section::parse(&r.get::<_, String>(3)?),
+                    code: r.get(4)?,
+                    name: r.get(5)?,
+                    unit: r.get(6)?,
+                    qty: r.get(7)?,
+                    price: r.get(8)?,
+                    cost: r.get(9)?,
+                    note: r.get(10)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_estimate_item(&self, i: &EstimateItem) -> i64 {
+        self.ins(
+            "INSERT INTO estimate_item (estimate_id,pos,section,code,name,unit,qty,price,cost,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                i.estimate_id, i.pos, i.section.code(), i.code, i.name, i.unit, i.qty, i.price,
+                i.cost, i.note
+            ],
+        )
+    }
+
+    /// Import uchun: barcha pozitsiyani bitta tranzaksiyada yozadi.
+    /// Har bir qator alohida yozilsa, WAL ga yuzlab fsync tushardi.
+    pub fn insert_estimate_items(&self, eid: i64, items: &[EstimateItem]) -> usize {
+        let _ = self.conn().execute_batch("BEGIN");
+        let mut n = 0;
+        for it in items {
+            let mut it = it.clone();
+            it.estimate_id = eid;
+            if self.insert_estimate_item(&it) > 0 {
+                n += 1;
+            }
+        }
+        let _ = self.conn().execute_batch("COMMIT");
+        n
+    }
+
+    pub fn update_estimate_item(&self, i: &EstimateItem) -> bool {
+        self.upd(
+            "UPDATE estimate_item SET pos=?2,section=?3,code=?4,name=?5,unit=?6,qty=?7,price=?8,
+                    cost=?9,note=?10 WHERE id=?1",
+            params![
+                i.id, i.pos, i.section.code(), i.code, i.name, i.unit, i.qty, i.price, i.cost, i.note
+            ],
+        )
+    }
+
+    // ---------- IV. Ijro hujjatlari ----------
+
+    pub fn exec_docs(&self, pid: i64) -> Vec<ExecDoc> {
+        self.list(
+            "SELECT id,project_id,kind,number,name,date,task_id,status,responsible,note
+             FROM exec_doc WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(ExecDoc {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    kind: ExecDocKind::parse(&r.get::<_, String>(2)?),
+                    number: r.get(3)?,
+                    name: r.get(4)?,
+                    date: date(&r.get::<_, String>(5)?),
+                    task_id: r.get(6)?,
+                    status: ExecDocStatus::parse(&r.get::<_, String>(7)?),
+                    responsible: r.get(8)?,
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_exec_doc(&self, d: &ExecDoc) -> i64 {
+        self.ins(
+            "INSERT INTO exec_doc (project_id,kind,number,name,date,task_id,status,responsible,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                d.project_id, d.kind.code(), d.number, d.name, d.date.to_string(), d.task_id,
+                d.status.code(), d.responsible, d.note
+            ],
+        )
+    }
+
+    pub fn update_exec_doc(&self, d: &ExecDoc) -> bool {
+        self.upd(
+            "UPDATE exec_doc SET kind=?2,number=?3,name=?4,date=?5,task_id=?6,status=?7,
+                    responsible=?8,note=?9 WHERE id=?1",
+            params![
+                d.id, d.kind.code(), d.number, d.name, d.date.to_string(), d.task_id,
+                d.status.code(), d.responsible, d.note
+            ],
+        )
+    }
+
+    // ---------- V. Jurnal ----------
+
+    pub fn journal(&self, pid: i64) -> Vec<JournalEntry> {
+        self.list(
+            "SELECT id,project_id,date,author,weather,temperature,workers,machines,task_id,volume,
+                    unit,text,remarks,photos
+             FROM journal WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(JournalEntry {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    date: date(&r.get::<_, String>(2)?),
+                    author: r.get(3)?,
+                    weather: r.get(4)?,
+                    temperature: r.get(5)?,
+                    workers: r.get(6)?,
+                    machines: r.get(7)?,
+                    task_id: r.get(8)?,
+                    volume: r.get(9)?,
+                    unit: r.get(10)?,
+                    text: r.get(11)?,
+                    remarks: r.get(12)?,
+                    photos: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_journal(&self, j: &JournalEntry) -> i64 {
+        self.ins(
+            "INSERT INTO journal (project_id,date,author,weather,temperature,workers,machines,
+                                 task_id,volume,unit,text,remarks,photos)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                j.project_id, j.date.to_string(), j.author, j.weather, j.temperature, j.workers,
+                j.machines, j.task_id, j.volume, j.unit, j.text, j.remarks, j.photos
+            ],
+        )
+    }
+
+    pub fn update_journal(&self, j: &JournalEntry) -> bool {
+        self.upd(
+            "UPDATE journal SET date=?2,author=?3,weather=?4,temperature=?5,workers=?6,machines=?7,
+                    task_id=?8,volume=?9,unit=?10,text=?11,remarks=?12,photos=?13 WHERE id=?1",
+            params![
+                j.id, j.date.to_string(), j.author, j.weather, j.temperature, j.workers,
+                j.machines, j.task_id, j.volume, j.unit, j.text, j.remarks, j.photos
+            ],
+        )
+    }
+
+    // ---------- IX. Arizalar ----------
+
+    pub fn requests(&self, pid: i64) -> Vec<Request> {
+        self.list(
+            "SELECT id,project_id,number,date,kind,title,material_id,qty,unit,requester,need_date,
+                    priority,status,task_id,note
+             FROM request WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(Request {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    number: r.get(2)?,
+                    date: date(&r.get::<_, String>(3)?),
+                    kind: RequestKind::parse(&r.get::<_, String>(4)?),
+                    title: r.get(5)?,
+                    material_id: r.get(6)?,
+                    qty: r.get(7)?,
+                    unit: r.get(8)?,
+                    requester: r.get(9)?,
+                    need_date: date(&r.get::<_, String>(10)?),
+                    priority: Priority::parse(&r.get::<_, String>(11)?),
+                    status: RequestStatus::parse(&r.get::<_, String>(12)?),
+                    task_id: r.get(13)?,
+                    note: r.get(14)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_request(&self, q: &Request) -> i64 {
+        self.ins(
+            "INSERT INTO request (project_id,number,date,kind,title,material_id,qty,unit,requester,
+                                  need_date,priority,status,task_id,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+            params![
+                q.project_id, q.number, q.date.to_string(), q.kind.code(), q.title, q.material_id,
+                q.qty, q.unit, q.requester, q.need_date.to_string(), q.priority.code(),
+                q.status.code(), q.task_id, q.note
+            ],
+        )
+    }
+
+    pub fn update_request(&self, q: &Request) -> bool {
+        self.upd(
+            "UPDATE request SET number=?2,date=?3,kind=?4,title=?5,material_id=?6,qty=?7,unit=?8,
+                    requester=?9,need_date=?10,priority=?11,status=?12,task_id=?13,note=?14 WHERE id=?1",
+            params![
+                q.id, q.number, q.date.to_string(), q.kind.code(), q.title, q.material_id, q.qty,
+                q.unit, q.requester, q.need_date.to_string(), q.priority.code(), q.status.code(),
+                q.task_id, q.note
+            ],
+        )
+    }
+
+    // ---------- X. Xaridlar ----------
+
+    pub fn purchases(&self, pid: i64) -> Vec<Purchase> {
+        self.list(
+            "SELECT id,project_id,request_id,number,date,supplier,title,qty,unit,price,currency,
+                    delivery_date,status,note
+             FROM purchase WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(Purchase {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    request_id: r.get(2)?,
+                    number: r.get(3)?,
+                    date: date(&r.get::<_, String>(4)?),
+                    supplier: r.get(5)?,
+                    title: r.get(6)?,
+                    qty: r.get(7)?,
+                    unit: r.get(8)?,
+                    price: r.get(9)?,
+                    currency: r.get(10)?,
+                    delivery_date: date(&r.get::<_, String>(11)?),
+                    status: PurchaseStatus::parse(&r.get::<_, String>(12)?),
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_purchase(&self, p: &Purchase) -> i64 {
+        self.ins(
+            "INSERT INTO purchase (project_id,request_id,number,date,supplier,title,qty,unit,price,
+                                   currency,delivery_date,status,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                p.project_id, p.request_id, p.number, p.date.to_string(), p.supplier, p.title,
+                p.qty, p.unit, p.price, p.currency, p.delivery_date.to_string(), p.status.code(),
+                p.note
+            ],
+        )
+    }
+
+    pub fn update_purchase(&self, p: &Purchase) -> bool {
+        self.upd(
+            "UPDATE purchase SET request_id=?2,number=?3,date=?4,supplier=?5,title=?6,qty=?7,
+                    unit=?8,price=?9,currency=?10,delivery_date=?11,status=?12,note=?13 WHERE id=?1",
+            params![
+                p.id, p.request_id, p.number, p.date.to_string(), p.supplier, p.title, p.qty,
+                p.unit, p.price, p.currency, p.delivery_date.to_string(), p.status.code(), p.note
+            ],
+        )
+    }
+
+    // ---------- XI–XII. Materiallar va ombor ----------
+
+    pub fn materials(&self, pid: i64) -> Vec<Material> {
+        self.list(
+            "SELECT id,project_id,code,name,unit,section,spec,cert_no,cert_until,min_stock,price,note
+             FROM material WHERE project_id=?1 ORDER BY name",
+            pid,
+            |r| {
+                Ok(Material {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    code: r.get(2)?,
+                    name: r.get(3)?,
+                    unit: r.get(4)?,
+                    section: Section::parse(&r.get::<_, String>(5)?),
+                    spec: r.get(6)?,
+                    cert_no: r.get(7)?,
+                    cert_until: odate(r.get(8)?),
+                    min_stock: r.get(9)?,
+                    price: r.get(10)?,
+                    note: r.get(11)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_material(&self, m: &Material) -> i64 {
+        self.ins(
+            "INSERT INTO material (project_id,code,name,unit,section,spec,cert_no,cert_until,min_stock,price,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                m.project_id, m.code, m.name, m.unit, m.section.code(), m.spec, m.cert_no,
+                ods(m.cert_until), m.min_stock, m.price, m.note
+            ],
+        )
+    }
+
+    pub fn update_material(&self, m: &Material) -> bool {
+        self.upd(
+            "UPDATE material SET code=?2,name=?3,unit=?4,section=?5,spec=?6,cert_no=?7,
+                    cert_until=?8,min_stock=?9,price=?10,note=?11 WHERE id=?1",
+            params![
+                m.id, m.code, m.name, m.unit, m.section.code(), m.spec, m.cert_no,
+                ods(m.cert_until), m.min_stock, m.price, m.note
+            ],
+        )
+    }
+
+    pub fn stock_moves(&self, pid: i64) -> Vec<StockMove> {
+        self.list(
+            "SELECT id,project_id,material_id,date,kind,qty,price,document,counterparty,task_id,note
+             FROM stock_move WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(StockMove {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    material_id: r.get(2)?,
+                    date: date(&r.get::<_, String>(3)?),
+                    kind: MoveKind::parse(&r.get::<_, String>(4)?),
+                    qty: r.get(5)?,
+                    price: r.get(6)?,
+                    document: r.get(7)?,
+                    counterparty: r.get(8)?,
+                    task_id: r.get(9)?,
+                    note: r.get(10)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_stock_move(&self, m: &StockMove) -> i64 {
+        self.ins(
+            "INSERT INTO stock_move (project_id,material_id,date,kind,qty,price,document,counterparty,task_id,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                m.project_id, m.material_id, m.date.to_string(), m.kind.code(), m.qty, m.price,
+                m.document, m.counterparty, m.task_id, m.note
+            ],
+        )
+    }
+
+    pub fn update_stock_move(&self, m: &StockMove) -> bool {
+        self.upd(
+            "UPDATE stock_move SET material_id=?2,date=?3,kind=?4,qty=?5,price=?6,document=?7,
+                    counterparty=?8,task_id=?9,note=?10 WHERE id=?1",
+            params![
+                m.id, m.material_id, m.date.to_string(), m.kind.code(), m.qty, m.price, m.document,
+                m.counterparty, m.task_id, m.note
+            ],
+        )
+    }
+
+    // ---------- XIII. Tabel ----------
+
+    pub fn workers(&self, pid: i64) -> Vec<Worker> {
+        self.list(
+            "SELECT id,project_id,name,position,org,hourly_rate,active
+             FROM worker WHERE project_id=?1 ORDER BY name",
+            pid,
+            |r| {
+                Ok(Worker {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    position: r.get(3)?,
+                    org: r.get(4)?,
+                    hourly_rate: r.get(5)?,
+                    active: r.get::<_, i64>(6)? != 0,
+                })
+            },
+        )
+    }
+
+    pub fn insert_worker(&self, w: &Worker) -> i64 {
+        self.ins(
+            "INSERT INTO worker (project_id,name,position,org,hourly_rate,active) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![w.project_id, w.name, w.position, w.org, w.hourly_rate, w.active as i64],
+        )
+    }
+
+    pub fn update_worker(&self, w: &Worker) -> bool {
+        self.upd(
+            "UPDATE worker SET name=?2,position=?3,org=?4,hourly_rate=?5,active=?6 WHERE id=?1",
+            params![w.id, w.name, w.position, w.org, w.hourly_rate, w.active as i64],
+        )
+    }
+
+    pub fn timesheet(&self, pid: i64) -> Vec<TimesheetEntry> {
+        self.list(
+            "SELECT id,project_id,worker_id,date,hours,task_id,note
+             FROM timesheet WHERE project_id=?1 ORDER BY date",
+            pid,
+            |r| {
+                Ok(TimesheetEntry {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    worker_id: r.get(2)?,
+                    date: date(&r.get::<_, String>(3)?),
+                    hours: r.get(4)?,
+                    task_id: r.get(5)?,
+                    note: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    /// Tabel katakchasi: bir ishchining bir kunlik soati. Nol soat — yozuv o'chiriladi.
+    pub fn set_timesheet(&self, pid: i64, worker: i64, day: NaiveDate, hours: f64) -> bool {
+        if hours <= 0.0 {
+            return self
+                .conn()
+                .execute(
+                    "DELETE FROM timesheet WHERE worker_id=?1 AND date=?2",
+                    params![worker, day.to_string()],
+                )
+                .is_ok();
+        }
+        self.upd(
+            "INSERT INTO timesheet (project_id,worker_id,date,hours) VALUES (?1,?2,?3,?4)
+             ON CONFLICT(worker_id,date) DO UPDATE SET hours=excluded.hours",
+            params![pid, worker, day.to_string(), hours],
+        )
+    }
+
+    // ---------- XIV. Sifat ----------
+
+    pub fn quality_checks(&self, pid: i64) -> Vec<QualityCheck> {
+        self.list(
+            "SELECT id,project_id,kind,date,task_id,material_id,subject,inspector,result,defect,deadline,note
+             FROM quality_check WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(QualityCheck {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    kind: QualityKind::parse(&r.get::<_, String>(2)?),
+                    date: date(&r.get::<_, String>(3)?),
+                    task_id: r.get(4)?,
+                    material_id: r.get(5)?,
+                    subject: r.get(6)?,
+                    inspector: r.get(7)?,
+                    result: QualityResult::parse(&r.get::<_, String>(8)?),
+                    defect: r.get(9)?,
+                    deadline: odate(r.get(10)?),
+                    note: r.get(11)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_quality(&self, q: &QualityCheck) -> i64 {
+        self.ins(
+            "INSERT INTO quality_check (project_id,kind,date,task_id,material_id,subject,inspector,result,defect,deadline,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                q.project_id, q.kind.code(), q.date.to_string(), q.task_id, q.material_id,
+                q.subject, q.inspector, q.result.code(), q.defect, ods(q.deadline), q.note
+            ],
+        )
+    }
+
+    pub fn update_quality(&self, q: &QualityCheck) -> bool {
+        self.upd(
+            "UPDATE quality_check SET kind=?2,date=?3,task_id=?4,material_id=?5,subject=?6,
+                    inspector=?7,result=?8,defect=?9,deadline=?10,note=?11 WHERE id=?1",
+            params![
+                q.id, q.kind.code(), q.date.to_string(), q.task_id, q.material_id, q.subject,
+                q.inspector, q.result.code(), q.defect, ods(q.deadline), q.note
+            ],
+        )
+    }
+
+    // ---------- XV. Xavfsizlik ----------
+
+    pub fn safety_events(&self, pid: i64) -> Vec<SafetyEvent> {
+        self.list(
+            "SELECT id,project_id,date,kind,severity,place,description,responsible,measure,deadline,status
+             FROM safety_event WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(SafetyEvent {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    date: date(&r.get::<_, String>(2)?),
+                    kind: SafetyKind::parse(&r.get::<_, String>(3)?),
+                    severity: Severity::parse(&r.get::<_, String>(4)?),
+                    place: r.get(5)?,
+                    description: r.get(6)?,
+                    responsible: r.get(7)?,
+                    measure: r.get(8)?,
+                    deadline: odate(r.get(9)?),
+                    status: IssueStatus::parse(&r.get::<_, String>(10)?),
+                })
+            },
+        )
+    }
+
+    pub fn insert_safety(&self, s: &SafetyEvent) -> i64 {
+        self.ins(
+            "INSERT INTO safety_event (project_id,date,kind,severity,place,description,responsible,measure,deadline,status)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                s.project_id, s.date.to_string(), s.kind.code(), s.severity.code(), s.place,
+                s.description, s.responsible, s.measure, ods(s.deadline), s.status.code()
+            ],
+        )
+    }
+
+    pub fn update_safety(&self, s: &SafetyEvent) -> bool {
+        self.upd(
+            "UPDATE safety_event SET date=?2,kind=?3,severity=?4,place=?5,description=?6,
+                    responsible=?7,measure=?8,deadline=?9,status=?10 WHERE id=?1",
+            params![
+                s.id, s.date.to_string(), s.kind.code(), s.severity.code(), s.place,
+                s.description, s.responsible, s.measure, ods(s.deadline), s.status.code()
+            ],
+        )
+    }
+
+    // ---------- XVI. Mashinalar ----------
+
+    pub fn machines(&self, pid: i64) -> Vec<Machine> {
+        self.list(
+            "SELECT id,project_id,name,kind,reg_no,owner,status,hour_rate,operator,inspection_until
+             FROM machine WHERE project_id=?1 ORDER BY name",
+            pid,
+            |r| {
+                Ok(Machine {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    kind: MachineKind::parse(&r.get::<_, String>(3)?),
+                    reg_no: r.get(4)?,
+                    owner: r.get(5)?,
+                    status: MachineStatus::parse(&r.get::<_, String>(6)?),
+                    hour_rate: r.get(7)?,
+                    operator: r.get(8)?,
+                    inspection_until: odate(r.get(9)?),
+                })
+            },
+        )
+    }
+
+    pub fn insert_machine(&self, m: &Machine) -> i64 {
+        self.ins(
+            "INSERT INTO machine (project_id,name,kind,reg_no,owner,status,hour_rate,operator,inspection_until)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                m.project_id, m.name, m.kind.code(), m.reg_no, m.owner, m.status.code(),
+                m.hour_rate, m.operator, ods(m.inspection_until)
+            ],
+        )
+    }
+
+    pub fn update_machine(&self, m: &Machine) -> bool {
+        self.upd(
+            "UPDATE machine SET name=?2,kind=?3,reg_no=?4,owner=?5,status=?6,hour_rate=?7,
+                    operator=?8,inspection_until=?9 WHERE id=?1",
+            params![
+                m.id, m.name, m.kind.code(), m.reg_no, m.owner, m.status.code(), m.hour_rate,
+                m.operator, ods(m.inspection_until)
+            ],
+        )
+    }
+
+    pub fn machine_logs(&self, pid: i64) -> Vec<MachineLog> {
+        self.list(
+            "SELECT id,project_id,machine_id,date,hours,fuel,task_id,note
+             FROM machine_log WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(MachineLog {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    machine_id: r.get(2)?,
+                    date: date(&r.get::<_, String>(3)?),
+                    hours: r.get(4)?,
+                    fuel: r.get(5)?,
+                    task_id: r.get(6)?,
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_machine_log(&self, l: &MachineLog) -> i64 {
+        self.ins(
+            "INSERT INTO machine_log (project_id,machine_id,date,hours,fuel,task_id,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![l.project_id, l.machine_id, l.date.to_string(), l.hours, l.fuel, l.task_id, l.note],
+        )
+    }
+
+    pub fn update_machine_log(&self, l: &MachineLog) -> bool {
+        self.upd(
+            "UPDATE machine_log SET machine_id=?2,date=?3,hours=?4,fuel=?5,task_id=?6,note=?7 WHERE id=?1",
+            params![l.id, l.machine_id, l.date.to_string(), l.hours, l.fuel, l.task_id, l.note],
+        )
+    }
+
+    // ---------- Namoyish ma'lumoti: II-III modullar ----------
+
+    /// Loyiha elementlari grafi va smeta namunasi.
+    ///
+    /// Ma'lumot ataylab bir nechta tipik nomuvofiqlik bilan tuzilgan — tekshiruv
+    /// ishlayotganini ko'rsatish uchun: teshiksiz deraza, ta'minotsiz xona,
+    /// rigelni kesib o'tuvchi quvur, uklon yetishmovchiligi, arifmetik xato,
+    /// dublikat va narx anomaliyasi.
+    pub fn seed_demo_modules(&self, pid: i64) {
+        let ru = crate::i18n::lang() == crate::i18n::Lang::Ru;
+        let s = |uz: &'static str, r: &'static str| -> String {
+            if ru { r.to_string() } else { uz.to_string() }
+        };
+
+        // (bo'lim, tur, marka, xona, o'q, qavat, o'lcham, birlik, qiymat, qiymat nomi, varaq)
+        let el = |section: Section,
+                      kind: ElementKind,
+                      mark: &str,
+                      room: String,
+                      axis: &str,
+                      level: &str,
+                      size: f64,
+                      unit: &str,
+                      value: f64,
+                      value_name: &str,
+                      sheet: &str|
+         -> i64 {
+            self.insert_element(&Element {
+                id: 0,
+                project_id: pid,
+                section,
+                kind,
+                mark: mark.into(),
+                room,
+                axis: axis.into(),
+                level: level.into(),
+                size,
+                unit: unit.into(),
+                value,
+                value_name: value_name.into(),
+                sheet: sheet.into(),
+                note: String::new(),
+            })
+        };
+
+        let r101 = el(Section::Ar, ElementKind::Room, "101", s("101-xona, kvartira 1", "Помещение 101, кв. 1"), "A-B/1-2", "1", 0.0, "", 42.5, s("maydon", "площадь").as_str(), "AR-04");
+        let r102 = el(Section::Ar, ElementKind::Room, "102", s("102-xona, kvartira 2", "Помещение 102, кв. 2"), "B-V/1-2", "1", 0.0, "", 38.0, s("maydon", "площадь").as_str(), "AR-04");
+        let r103 = el(Section::Ar, ElementKind::Room, "103", s("103-xona, omborxona", "Помещение 103, кладовая"), "V-G/1-2", "1", 0.0, "", 12.0, s("maydon", "площадь").as_str(), "AR-04");
+
+        // OK-1 uchun teshik bor, OK-2 uchun yo'q -> AR/KJ nomuvofiqligi.
+        let ok1 = el(Section::Ar, ElementKind::Window, "OK-1", s("101-xona", "Помещение 101"), "A/1", "1", 1500.0, "mm", 0.0, "", "AR-06");
+        let ok2 = el(Section::Ar, ElementKind::Window, "OK-2", s("102-xona", "Помещение 102"), "B/1", "1", 1500.0, "mm", 0.0, "", "AR-06");
+        // Marka takrorlangan: bir bo'limda ikkita OK-1.
+        let _ok1b = el(Section::Ar, ElementKind::Window, "OK-1", s("103-xona", "Помещение 103"), "V/1", "1", 900.0, "mm", 0.0, "", "AR-06");
+        let d1 = el(Section::Ar, ElementKind::Door, "D-1", s("101-xona", "Помещение 101"), "A/2", "1", 900.0, "mm", 0.0, "", "AR-06");
+
+        let pr1 = el(Section::Kj, ElementKind::Opening, "PR-1", s("101-xona", "Помещение 101"), "A/1", "1", 1500.0, "mm", 0.0, "", "KJ-12");
+        let pr2 = el(Section::Kj, ElementKind::Opening, "PR-2", s("101-xona", "Помещение 101"), "A/2", "1", 900.0, "mm", 0.0, "", "KJ-12");
+        let b1 = el(Section::Kj, ElementKind::Beam, "B-1", s("Koridor", "Коридор"), "B/1-2", "1", 400.0, "mm", 0.0, "", "KJ-08");
+        let k1 = el(Section::Kj, ElementKind::Column, "K-1", s("101-xona", "Помещение 101"), "A/1", "1", 400.0, "mm", 0.0, "", "KJ-05");
+
+        // Uklon 0.008 — minimal 0.02 dan past.
+        let p1 = el(Section::Vk, ElementKind::Pipe, "K1-1", s("101-xona", "Помещение 101"), "A/1", "1", 110.0, "mm", 0.008, s("uklon", "уклон").as_str(), "VK-03");
+        // Rigelni kesib o'tadi, teshik ko'zda tutilmagan.
+        let p2 = el(Section::Vk, ElementKind::Pipe, "K1-2", s("Koridor", "Коридор"), "B/1-2", "1", 100.0, "mm", 0.025, s("uklon", "уклон").as_str(), "VK-03");
+        let v1 = el(Section::Ov, ElementKind::Duct, "V-1", s("Koridor", "Коридор"), "B/1-2", "1", 200.0, "mm", 0.0, "", "OV-02");
+        // O'lcham nol va varaq ko'rsatilmagan — ikkita alohida qoida.
+        let w1 = el(Section::Eom, ElementKind::Cable, "W-1", s("101-xona", "Помещение 101"), "A/1", "1", 0.0, "mm2", 0.0, "", "");
+        let w2 = el(Section::Eom, ElementKind::Cable, "W-2", s("103-xona", "Помещение 103"), "V/1", "1", 4.0, "mm2", 0.0, "", "EOM-01");
+        // Grafda yolg'iz turgan qurilma.
+        let _sh1 = el(Section::Eom, ElementKind::Device, "SH-1", s("Elektr xonasi", "Электрощитовая"), "G/1", "1", 0.0, "", 25.0, s("quvvat", "мощность").as_str(), "EOM-01");
+        // Elektr ta'minoti ko'zda tutilmagan ventilyator va yong'in izvestchateli.
+        let vn1 = el(Section::Ov, ElementKind::Device, "VN-1", s("Koridor", "Коридор"), "B/2", "1", 0.0, "", 1.5, s("quvvat", "мощность").as_str(), "OV-02");
+        let ip1 = el(Section::Pb, ElementKind::Device, "IP-1", s("103-xona", "Помещение 103"), "V/1", "1", 0.0, "", 0.02, s("quvvat", "мощность").as_str(), "PB-03");
+        // Nasos esa to'g'ri ulangan — ijobiy misol.
+        let n1 = el(Section::Vk, ElementKind::Device, "N-1", s("Nasos xonasi", "Насосная"), "G/2", "0", 0.0, "", 4.0, s("quvvat", "мощность").as_str(), "VK-01");
+        // Metall rigel: KJ bilan tayanch tuguni kelishilmagan.
+        let mb1 = el(Section::Km, ElementKind::Beam, "MB-1", s("Koridor", "Коридор"), "B/1-2", "9", 300.0, "mm", 0.0, "", "KM-02");
+        // Metall ustun: tayanchi KJ ustuniga bog'langan.
+        let mk1 = el(Section::Km, ElementKind::Column, "MK-1", s("101-xona", "Помещение 101"), "A/1", "9", 200.0, "mm", 0.0, "", "KM-02");
+
+        let link = |from_el: i64, to_el: i64, relation: Relation| {
+            self.insert_element_link(&ElementLink { id: 0, from_el, to_el, relation });
+        };
+        link(ok1, pr1, Relation::Contains);
+        link(d1, pr2, Relation::Contains);
+        link(r101, k1, Relation::Contains);
+        link(r101, ok1, Relation::Contains);
+        link(r102, ok2, Relation::Contains);
+        // 101-xona to'liq ta'minlangan, 102 — faqat VK va OV, 103 — faqat EOM.
+        link(p1, r101, Relation::Serves);
+        link(v1, r101, Relation::Serves);
+        link(w1, r101, Relation::Serves);
+        link(p2, r102, Relation::Serves);
+        link(v1, r102, Relation::Serves);
+        link(w2, r103, Relation::Serves);
+        link(p2, b1, Relation::Crosses);
+        link(b1, k1, Relation::SupportedBy);
+        // Qurilmalar xonalarga tegishli, lekin quvvat manbai faqat nasosda bor.
+        link(r102, vn1, Relation::Contains);
+        link(r103, ip1, Relation::Contains);
+        link(r101, mb1, Relation::Contains);
+        link(n1, w2, Relation::PoweredBy);
+        link(mk1, k1, Relation::SupportedBy);
+
+        self.seed_demo_estimate(pid, ru);
+        self.seed_demo_execution(pid, ru);
+        self.seed_demo_stock(pid, ru);
+        self.seed_demo_supply(pid, ru);
+    }
+
+    /// Ariza va xaridlar namunasi (TZ IX-X).
+    ///
+    /// Zanjirning uchta holati ko'rsatilgan: to'liq yopilgan (ariza -> xarid ->
+    /// ombor kirimi), yo'ldagi xarid va hali tasdiqlanmagan ariza. Bittasining
+    /// muddati ataylab o'tkazib yuborilgan.
+    pub fn seed_demo_supply(&self, pid: i64, ru: bool) {
+        if !self.requests(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let materials = self.materials(pid);
+        let by_code = |c: &str| materials.iter().find(|m| m.code == c).map(|m| m.id);
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        let req = |number: &str,
+                   days_ago: i64,
+                   kind: RequestKind,
+                   title: &str,
+                   material_id: Option<i64>,
+                   qty: f64,
+                   unit: &str,
+                   need_in: i64,
+                   priority: Priority,
+                   status: RequestStatus,
+                   task_id: Option<i64>|
+         -> i64 {
+            self.insert_request(&Request {
+                id: 0,
+                project_id: pid,
+                number: number.into(),
+                date: today - chrono::Duration::days(days_ago),
+                kind,
+                title: title.into(),
+                material_id,
+                qty,
+                unit: unit.into(),
+                requester: if ru { "Юсупов Б.Р.".into() } else { "Yusupov B.R.".to_string() },
+                need_date: today + chrono::Duration::days(need_in),
+                priority,
+                status,
+                task_id,
+                note: String::new(),
+            })
+        };
+
+        // 1. Yopilgan zanjir: g'isht so'raldi, xarid qilindi, omborga kirim bo'ldi.
+        let z1 = req(
+            "Z-001",
+            32,
+            RequestKind::Material,
+            if ru { "Кирпич керамический М150" } else { "Keramik g'isht M150" },
+            by_code("M-201"),
+            96_000.0,
+            if ru { "шт" } else { "dona" },
+            -20,
+            Priority::Normal,
+            RequestStatus::Closed,
+            by_wbs("9"),
+        );
+        // 2. Yo'lda: armatura buyurtma qilingan, hali kelmagan.
+        let z2 = req(
+            "Z-002",
+            10,
+            RequestKind::Material,
+            if ru { "Арматура А500С d16" } else { "A500S armatura d16" },
+            by_code("M-102"),
+            24.0,
+            if ru { "т" } else { "t" },
+            6,
+            Priority::High,
+            RequestStatus::InPurchase,
+            by_wbs("7"),
+        );
+        // 3. Muddati o'tgan, ammo yopilmagan — ogohlantirish uchun.
+        let z3 = req(
+            "Z-003",
+            18,
+            RequestKind::Material,
+            if ru { "Труба ПП 110" } else { "PP 110 truba" },
+            by_code("M-401"),
+            300.0,
+            if ru { "м" } else { "m" },
+            -4,
+            Priority::Urgent,
+            RequestStatus::Approved,
+            None,
+        );
+        // 4. Tasdiqlanmagan ariza — texnika.
+        req(
+            "Z-004",
+            2,
+            RequestKind::Machine,
+            if ru { "Автобетононасос, 3 смены" } else { "Avtobetonnasos, 3 smena" },
+            None,
+            3.0,
+            if ru { "смена" } else { "smena" },
+            12,
+            Priority::High,
+            RequestStatus::New,
+            by_wbs("7"),
+        );
+
+        let pur = |number: &str,
+                   request_id: Option<i64>,
+                   days_ago: i64,
+                   supplier: &str,
+                   title: &str,
+                   qty: f64,
+                   unit: &str,
+                   price: f64,
+                   delivery_in: i64,
+                   status: PurchaseStatus| {
+            self.insert_purchase(&Purchase {
+                id: 0,
+                project_id: pid,
+                request_id,
+                number: number.into(),
+                date: today - chrono::Duration::days(days_ago),
+                supplier: supplier.into(),
+                title: title.into(),
+                qty,
+                unit: unit.into(),
+                price,
+                currency: "UZS".into(),
+                delivery_date: today + chrono::Duration::days(delivery_in),
+                status,
+                note: String::new(),
+            });
+        };
+
+        let s1 = if ru { "ООО «СтройБаза»" } else { "«StroyBaza» MChJ" };
+        let s2 = if ru { "ООО «МеталлСнаб»" } else { "«MetallSnab» MChJ" };
+
+        // Z-001 uchun xarid: hujjat raqami TTN-1150 — ombor kirimi bilan bir xil,
+        // shuning uchun «kirim qilingan» deb ko'rsatiladi.
+        pur(
+            "TTN-1150",
+            Some(z1),
+            28,
+            s1,
+            if ru { "Кирпич керамический М150" } else { "Keramik g'isht M150" },
+            96_000.0,
+            if ru { "шт" } else { "dona" },
+            1_400.0,
+            -26,
+            PurchaseStatus::Closed,
+        );
+        // Z-002: buyurtma berilgan, yo'lda.
+        pur(
+            "X-002",
+            Some(z2),
+            8,
+            s2,
+            if ru { "Арматура А500С d16" } else { "A500S armatura d16" },
+            24.0,
+            if ru { "т" } else { "t" },
+            10_200_000.0,
+            5,
+            PurchaseStatus::Paid,
+        );
+        // Z-003: qisman qoplangan xarid, muddati o'tgan.
+        pur(
+            "X-003",
+            Some(z3),
+            12,
+            s1,
+            if ru { "Труба ПП 110" } else { "PP 110 truba" },
+            180.0,
+            if ru { "м" } else { "m" },
+            41_000.0,
+            -2,
+            PurchaseStatus::Ordered,
+        );
+    }
+
+    /// Material katalogi va ombor harakatlari namunasi (TZ XI-XII).
+    ///
+    /// Ataylab uch xil muammoli holat qoldirilgan: bir materialning qoldig'i
+    /// minimal zaxiradan past, bittasining sertifikat muddati o'tgan, yana
+    /// bittasida sertifikat umuman kiritilmagan — ekran bo'sh ko'rinmasin va
+    /// ogohlantirishlar qanday ishlashi ko'rinib tursin.
+    pub fn seed_demo_stock(&self, pid: i64, ru: bool) {
+        // Ombor tarixi bor bo'lsa — bu haqiqiy ma'lumot, tegmaymiz.
+        if !self.stock_moves(pid).is_empty() {
+            return;
+        }
+        let existing = self.materials(pid);
+        let today = chrono::Local::now().date_naive();
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        let mat = |code: &str,
+                   name: &str,
+                   unit: &str,
+                   section: Section,
+                   spec: &str,
+                   cert_no: &str,
+                   cert_days: Option<i64>,
+                   min_stock: f64,
+                   price: f64|
+         -> i64 {
+            // Bir xil kod ikki marta qo'shilmasin.
+            if let Some(m) = existing.iter().find(|m| m.code == code) {
+                return m.id;
+            }
+            self.insert_material(&Material {
+                id: 0,
+                project_id: pid,
+                code: code.into(),
+                name: name.into(),
+                unit: unit.into(),
+                section,
+                spec: spec.into(),
+                cert_no: cert_no.into(),
+                cert_until: cert_days.map(|d| today + chrono::Duration::days(d)),
+                min_stock,
+                price,
+                note: String::new(),
+            })
+        };
+
+        let concrete = mat(
+            "M-101",
+            if ru { "Бетон товарный" } else { "Tayyor beton" },
+            if ru { "м3" } else { "m3" },
+            Section::Kj,
+            "B25 W6 F150",
+            "SS-2411/24",
+            Some(180),
+            120.0,
+            720_000.0,
+        );
+        // Sertifikat muddati o'tgan — armatura ishlatilishi to'xtatilishi kerak.
+        let rebar = mat(
+            "M-102",
+            if ru { "Арматура А500С" } else { "A500S armatura" },
+            if ru { "т" } else { "t" },
+            Section::Kj,
+            "d12-d32, GOST 34028-2016",
+            "SS-1907/23",
+            Some(-25),
+            8.0,
+            9_800_000.0,
+        );
+        // Qoldiq minimal zaxiradan past — buyurtma kerak.
+        let brick = mat(
+            "M-201",
+            if ru { "Кирпич керамический" } else { "Keramik g'isht" },
+            if ru { "шт" } else { "dona" },
+            Section::Ar,
+            if ru { "М150, 250х120х65" } else { "M150, 250x120x65" },
+            "SS-3302/25",
+            Some(400),
+            40_000.0,
+            1_450.0,
+        );
+        // Sertifikat kiritilmagan.
+        let cable = mat(
+            "M-301",
+            if ru { "Кабель ВВГнг 3x4" } else { "VVGng 3x4 kabel" },
+            if ru { "м" } else { "m" },
+            Section::Eom,
+            "0.66 kV",
+            "",
+            None,
+            500.0,
+            28_000.0,
+        );
+        let pipe = mat(
+            "M-401",
+            if ru { "Труба канализационная ПП 110" } else { "PP 110 kanalizatsiya trubasi" },
+            if ru { "м" } else { "m" },
+            Section::Vk,
+            if ru { "SN4, раструбная" } else { "SN4, rastrubli" },
+            "SS-2210/24",
+            Some(95),
+            120.0,
+            41_000.0,
+        );
+
+        let mv = |material_id: i64,
+                  days_ago: i64,
+                  kind: MoveKind,
+                  qty: f64,
+                  price: f64,
+                  document: &str,
+                  counterparty: &str,
+                  task_id: Option<i64>| {
+            self.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id,
+                date: today - chrono::Duration::days(days_ago),
+                kind,
+                qty,
+                price,
+                document: document.into(),
+                counterparty: counterparty.into(),
+                task_id,
+                note: String::new(),
+            });
+        };
+
+        let karkas = by_wbs("7");
+        let plita = by_wbs("3");
+        let devor = by_wbs("9");
+        let supplier = if ru { "ООО «СтройБаза»" } else { "«StroyBaza» MChJ" };
+        let supplier2 = if ru { "ООО «МеталлСнаб»" } else { "«MetallSnab» MChJ" };
+
+        mv(concrete, 40, MoveKind::In, 900.0, 700_000.0, "TTN-1120", supplier, None);
+        mv(concrete, 22, MoveKind::In, 600.0, 745_000.0, "TTN-1188", supplier, None);
+        mv(concrete, 30, MoveKind::Out, 640.0, 0.0, "M-29/03", "", plita);
+        mv(concrete, 5, MoveKind::Out, 720.0, 0.0, "M-29/08", "", karkas);
+        mv(concrete, 4, MoveKind::WriteOff, 12.0, 0.0, "AKT-07", "", karkas);
+
+        mv(rebar, 45, MoveKind::In, 62.0, 9_600_000.0, "TTN-0914", supplier2, None);
+        mv(rebar, 12, MoveKind::In, 18.0, 10_100_000.0, "TTN-1201", supplier2, None);
+        mv(rebar, 28, MoveKind::Out, 41.0, 0.0, "M-29/04", "", plita);
+        mv(rebar, 3, MoveKind::Out, 24.0, 0.0, "M-29/09", "", karkas);
+
+        mv(brick, 26, MoveKind::In, 96_000.0, 1_400.0, "TTN-1150", supplier, None);
+        mv(brick, 8, MoveKind::Out, 68_000.0, 0.0, "M-29/06", "", devor);
+        mv(brick, 2, MoveKind::WriteOff, 2_400.0, 0.0, "AKT-09", "", devor);
+
+        mv(cable, 18, MoveKind::In, 1_800.0, 27_500.0, "TTN-1174", supplier, None);
+        mv(cable, 6, MoveKind::Out, 640.0, 0.0, "M-29/07", "", None);
+
+        mv(pipe, 20, MoveKind::In, 740.0, 40_000.0, "TTN-1179", supplier, None);
+        mv(pipe, 7, MoveKind::Out, 310.0, 0.0, "M-29/05", "", None);
+    }
+
+    /// PPR kartalari, jurnal yozuvlari va ijro hujjatlari namunasi.
+    /// Bu yerda ham bir nechta nomuvofiqlik ataylab qoldirilgan.
+    fn seed_demo_execution(&self, pid: i64, ru: bool) {
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).cloned();
+        let today = chrono::Local::now().date_naive();
+
+        let author = if ru { "ПТО: Саидова М.И." } else { "PTO: Saidova M.I." };
+        let card = |kind: PprKind,
+                        number: &str,
+                        name: &str,
+                        section: Section,
+                        task_id: Option<i64>,
+                        workers: i64,
+                        machines: i64,
+                        approved: bool| {
+            self.insert_ppr(&PprDoc {
+                id: 0,
+                project_id: pid,
+                kind,
+                number: number.into(),
+                name: name.into(),
+                section,
+                task_id,
+                workers,
+                machines,
+                path: String::new(),
+                approved,
+                author: author.into(),
+                approved_at: approved.then(|| today - chrono::Duration::days(60)),
+                note: String::new(),
+            });
+        };
+
+        // Tasdiqlangan karta — to'g'ri holat.
+        card(
+            PprKind::TechCard,
+            "TK-03",
+            if ru { "Устройство фундаментной плиты" } else { "Poydevor plitasini qurish" },
+            Section::Kj,
+            by_wbs("3").map(|t| t.id),
+            24,
+            3,
+            true,
+        );
+        // Ish 65 % bajarilgan, karta esa tasdiqlanmagan — kritik nomuvofiqlik.
+        card(
+            PprKind::TechCard,
+            "TK-07",
+            if ru { "Монолитный каркас, этажи 7-9" } else { "Monolit karkas, 7-9 qavat" },
+            Section::Kj,
+            by_wbs("7").map(|t| t.id),
+            32,
+            4,
+            false,
+        );
+        card(
+            PprKind::QualityCard,
+            "KK-02",
+            if ru { "Контроль бетонных работ" } else { "Beton ishlarini nazorat qilish" },
+            Section::Kj,
+            by_wbs("3").map(|t| t.id),
+            0,
+            0,
+            true,
+        );
+        card(
+            PprKind::TechCard,
+            "TK-09",
+            if ru { "Кладка наружных стен" } else { "Tashqi devorlar g'ishtligi" },
+            Section::Ar,
+            by_wbs("9").map(|t| t.id),
+            18,
+            2,
+            true,
+        );
+        card(
+            PprKind::TechCard,
+            "TK-14",
+            if ru { "Электромонтажные работы" } else { "Elektromontaj ishlari" },
+            Section::Eom,
+            by_wbs("14").map(|t| t.id),
+            14,
+            1,
+            true,
+        );
+        // Ishga bog'lanmagan karta.
+        card(
+            PprKind::SafetyCard,
+            "XK-01",
+            if ru { "Работы на высоте" } else { "Balandlikdagi ishlar" },
+            Section::None,
+            None,
+            0,
+            0,
+            true,
+        );
+
+        // Jurnal: oxirgi uch kun.
+        let entry = |days_ago: i64, task_id: Option<i64>, volume: f64, unit: &str, text: &str, workers: i64, machines: i64| {
+            self.insert_journal(&JournalEntry {
+                id: 0,
+                project_id: pid,
+                date: today - chrono::Duration::days(days_ago),
+                author: if ru { "Юсупов Б.Р.".into() } else { "Yusupov B.R.".to_string() },
+                weather: if ru { "Ясно".into() } else { "Ochiq".to_string() },
+                temperature: 24.0,
+                workers,
+                machines,
+                task_id,
+                volume,
+                unit: unit.into(),
+                text: text.into(),
+                remarks: String::new(),
+                photos: String::new(),
+            });
+        };
+        // 7-ish hozir bajarilmoqda — jurnal yozuvlari shunga tegishli.
+        let karkas = by_wbs("7").map(|t| t.id);
+        entry(
+            2,
+            karkas,
+            420.0,
+            "m3",
+            if ru { "Бетонирование колонн 8 этажа" } else { "8-qavat ustunlarini betonlash" },
+            28,
+            3,
+        );
+        entry(
+            1,
+            karkas,
+            380.0,
+            "m3",
+            if ru { "Бетонирование перекрытия 8 этажа" } else { "8-qavat oralig'ini betonlash" },
+            31,
+            4,
+        );
+        entry(
+            0,
+            karkas,
+            365.0,
+            "m3",
+            if ru { "Армирование колонн 9 этажа" } else { "9-qavat ustunlarini armaturalash" },
+            26,
+            2,
+        );
+
+        // Ijro hujjatlari: 2 va 3-ishlar hujjatlangan, 1-ish esa yo'q.
+        let doc = |kind: ExecDocKind, number: &str, name: &str, task_id: Option<i64>, status: ExecDocStatus| {
+            self.insert_exec_doc(&ExecDoc {
+                id: 0,
+                project_id: pid,
+                kind,
+                number: number.into(),
+                name: name.into(),
+                date: today - chrono::Duration::days(30),
+                task_id,
+                status,
+                responsible: if ru { "Рахимов Ш.А.".into() } else { "Rahimov Sh.A.".to_string() },
+                note: String::new(),
+            });
+        };
+        doc(
+            ExecDocKind::Hidden,
+            "AOSR-014",
+            if ru { "Акт на устройство котлована" } else { "Kotlovan qurilishi dalolatnomasi" },
+            by_wbs("2").map(|t| t.id),
+            ExecDocStatus::Signed,
+        );
+        doc(
+            ExecDocKind::Hidden,
+            "AOSR-021",
+            if ru { "Акт на армирование плиты" } else { "Plita armaturasi dalolatnomasi" },
+            by_wbs("3").map(|t| t.id),
+            ExecDocStatus::OnReview,
+        );
+    }
+
+    /// Smeta namunasi. Pozitsiyalar nomi GPR ishlari nomiga mos qilib olinadi —
+    /// shunda hajm va birlik bo'yicha solishtirish ishlaydi (TZ III.5-III.6).
+    fn seed_demo_estimate(&self, pid: i64, ru: bool) {
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).cloned();
+
+        let eid = self.insert_estimate(&Estimate {
+            id: 0,
+            project_id: pid,
+            name: if ru {
+                "Смета № 1 — общестроительные работы".into()
+            } else {
+                "1-son smeta — umumiy qurilish ishlari".into()
+            },
+            currency: "UZS".into(),
+            declared_total: 0.0,
+            added_at: String::new(),
+        });
+        if eid == 0 {
+            return;
+        }
+
+        let mut pos = 0;
+        let mut total = 0.0;
+        let mut add = |section: Section, code: &str, name: String, unit: &str, qty: f64, price: f64, cost: f64| {
+            pos += 1;
+            total += cost;
+            self.insert_estimate_item(&EstimateItem {
+                id: 0,
+                estimate_id: eid,
+                pos,
+                section,
+                code: code.into(),
+                name,
+                unit: unit.into(),
+                qty,
+                price,
+                cost,
+                note: String::new(),
+            });
+        };
+
+        // 1. To'g'ri pozitsiya: hajm ham, arifmetika ham loyihaga mos.
+        if let Some(t) = by_wbs("3") {
+            add(Section::Kj, "E6-1-1", t.name.clone(), "m3", t.volume, 1_250_000.0, t.volume * 1_250_000.0);
+        }
+        // 2. Hajm loyihadagidan 18 % ga oshirilgan.
+        if let Some(t) = by_wbs("5") {
+            let qty = t.volume * 1.18;
+            add(Section::Kj, "E6-1-22", t.name.clone(), "m3", qty, 1_480_000.0, qty * 1_480_000.0);
+        }
+        // 3. Birlik loyihadagiga mos emas: m2 o'rniga m3.
+        if let Some(t) = by_wbs("9") {
+            add(Section::Ar, "E8-2-1", t.name.clone(), "m3", 950.0, 2_100_000.0, 950.0 * 2_100_000.0);
+        }
+        // 4. Arifmetik xato: miqdor x narx summaga teng emas.
+        if let Some(t) = by_wbs("17") {
+            add(Section::Ar, "E10-1-4", t.name.clone(), "m2", 1450.0, 1_850_000.0, 2_900_000_000.0);
+        }
+        // 5-6. Dublikat: bir xil nom, bir xil miqdor.
+        let dup = if ru {
+            "Устройство стяжки пола, 50 мм".to_string()
+        } else {
+            "Pol styashkasini qurish, 50 mm".to_string()
+        };
+        add(Section::Ar, "E11-1-9", dup.clone(), "m2", 4200.0, 185_000.0, 4200.0 * 185_000.0);
+        add(Section::Ar, "E11-1-9", dup, "m2", 4200.0, 185_000.0, 4200.0 * 185_000.0);
+        // 7. Noma'lum o'lchov birligi.
+        add(
+            Section::Ar,
+            "E12-3-2",
+            if ru { "Гидроизоляция рулонная".into() } else { "Rulonli gidroizolyatsiya".to_string() },
+            if ru { "рулон" } else { "rulon" },
+            860.0,
+            420_000.0,
+            860.0 * 420_000.0,
+        );
+        // 8. Nol miqdor.
+        add(
+            Section::Km,
+            "E9-1-3",
+            if ru { "Монтаж закладных деталей".into() } else { "Zakladnoy detallarni montaj qilish".to_string() },
+            "t",
+            0.0,
+            9_800_000.0,
+            0.0,
+        );
+        // 9-10. Bir xil rasenka kodi, narx 42 % ga farq qiladi.
+        add(
+            Section::Eom,
+            "E21-1-5",
+            if ru { "Прокладка кабеля ВВГнг 3х2,5".into() } else { "VVGng 3x2,5 kabelini yotqizish".to_string() },
+            "m",
+            9200.0,
+            38_000.0,
+            9200.0 * 38_000.0,
+        );
+        add(
+            Section::Eom,
+            "E21-1-5",
+            if ru { "Прокладка кабеля ВВГнг 3х2,5 (2 этап)".into() } else { "VVGng 3x2,5 kabelini yotqizish (2-bosqich)".to_string() },
+            "m",
+            9300.0,
+            54_000.0,
+            9300.0 * 54_000.0,
+        );
+
+        // Hujjatdagi yakun pozitsiyalar yig'indisiga teng emas — TZ III.4.
+        let declared = total + 145_000_000.0;
+        let _ = self.conn().execute(
+            "UPDATE estimate SET declared_total=?2 WHERE id=?1",
+            params![eid, declared],
+        );
+    }
+}

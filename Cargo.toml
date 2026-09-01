@@ -1,0 +1,25 @@
+[package]
+name = "qurai"
+version = "0.1.0"
+edition = "2021"
+description = "Construction Intelligence Platform — native desktop client"
+
+[dependencies]
+eframe = "0.31"
+egui = "0.31"
+rusqlite = { version = "0.40", features = ["bundled", "chrono"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+directories = "6"
+rfd = "0.15"
+calamine = "0.36.1"
+# egui bilan bir xil versiya bo'lishi shart.
+egui_extras = { version = "0.31", features = ["image"] }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
