@@ -15,10 +15,13 @@ kvartiralarni sotish.
 - `src/cpm.rs` — tarmoq grafigi · `src/checks.rs` — tekshiruv qoidalari
 - `src/sales.rs` — sotuv hisobi · `src/analytics.rs` — kesishgan tahlil
 - `src/copilot.rs` — savol-javob · `src/backup.rs` — zaxira nusxa
+- `src/ifc.rs` — IFC o'qish · `src/roles.rs` — rollar · `src/package.rs` — almashish
+- `src/llm.rs` — til modeli nuqtasi (ixtiyoriy `llm` xususiyati)
 - `src/import.rs` — smeta importi · `src/db.rs` + `src/store.rs` — ombor
 - `src/ui/` — har bir ekran alohida fayl · `src/i18n.rs` — uz/ru satrlar
 
 Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo clippy`
+Til modeli bilan: `cargo build --release --features llm` (sukut bo'yicha kirmaydi)
 
 Diagnostika: `QURAI_SCREEN=<ekran>` kerakli ekranda ochadi, `QURAI_DB=<yo'l>`
 boshqa bazada ishga tushiradi (sinov uchun).
@@ -41,6 +44,10 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
 - [x] **XVIII Yordamchi** — savol-javob, faqat o'z bazasidan (til modelisiz)
 - [x] **XIX Sotuv — shaxmatka** · **XX Shartnomalar va to'lovlar**
 - [x] **Umumiy ko'rinish**, **umumiy qidiruv** (Ctrl+K), **zaxira nusxa**
+- [x] **II.1–2 Chizmani tanish** — IFC (ochiq format) o'qiladi va grafga tushadi
+- [x] **Rollar** — 5 rol, ekran bo'yicha yozish huquqi, faqat-o'qish tasmasi
+- [x] **Loyiha paketi** — qurilmalar orasida fayl orqali almashish
+- [x] **Til modeli** — integratsiya nuqtasi, sukut bo'yicha o'chiq
 
 ## Muhim qarorlar
 
@@ -65,15 +72,36 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
 - **Zaxira nusxa `VACUUM INTO` orqali.** WAL rejimida `.db` faylini shunchaki
   ko'chirish yetarli emas — yozilmagan tranzaksiyalar tushib qolishi mumkin.
 
-## Qolgan yo'nalishlar (arxitektura qarori kerak)
+## Uch yo'nalish bo'yicha qabul qilingan yechim
 
-Bular ilovaning ichida emas, undan tashqarida turadi:
+TZ ning uchta «bloklangan» qismi ilova ichida hal qilindi. Har birida chegara
+ochiq aytilgan — nima qilinadi va nima qilinmaydi.
 
-1. **Server va ko'p foydalanuvchi.** VI–VIII kabinetlari hozir shu kompyuterdagi
-   bazada ishlaydi. Bir nechta qurilma o'rtasida sinxronizatsiya, rollar bo'yicha
-   kirish va masofadan imzolash uchun server qismi kerak.
-2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
-   kutubxonani talab qiladi. Hozir loyiha elementlari qo'lda kiritiladi.
-   IFC dan boshlash mantiqan to'g'ri — ochiq format, grafga to'g'ridan-to'g'ri tushadi.
-3. **Til modeli (LLM).** Erkin matnli savol-javob va hujjat matnini tahlil qilish
-   uchun. Qaror kerak: qaysi model, qayerda ishlaydi, ma'lumot chetga chiqadimi.
+**1. Chizmani tanish (II.1–2) → IFC.** IFC ochiq matnli format, shuning uchun
+`src/ifc.rs` da STEP parseri yozildi: 30 dan ortiq IFC turi element turlari va
+bo'limlarga moslashtirildi, bog'lanishlar (qavat → element, devor → teshik →
+eshik/deraza) grafga tushadi. **DWG va RVT yopiq formatlar** — ular hujjat
+sifatida biriktiriladi, tanilmaydi.
+
+**2. Rollar va ko'p qurilma.** Rol (`src/roles.rs`) ekranni yashirmaydi, balki
+**yozish huquqini** belgilaydi: buyurtmachi ko'radi lekin o'zgartirmaydi, prorab
+ijroni to'ldiradi lekin smetani emas. Qurilmalar orasida ma'lumot **fayl orqali**
+ko'chadi (`src/package.rs`): maydonchada to'ldirilgan kunlik ijro paketga
+chiqariladi va ofisdagi bazaga qo'shiladi. **Bu parol bilan himoya emas** va
+jonli sinxronizatsiya emas — baza fayli ochiq, buni sozlamalar ham aytadi.
+Haqiqiy kirish nazorati server qismi bilan keladi.
+
+**3. Til modeli.** `src/llm.rs` — integratsiya nuqtasi, **sukut bo'yicha o'chiq
+va yig'ilishga umuman kirmaydi**: tarmoq kutubxonasi `llm` xususiyati bilan
+qo'shiladi (`cargo build --features llm`). Yoqilganda savol va unga biriktirilgan
+sonlar tashqi xizmatga jo'natiladi — sozlamalarda bu ochiq ogohlantirish bilan
+yozilgan va yoqishni foydalanuvchi o'zi tanlaydi. Modelga beriladigan ko'rsatma
+qat'iy: **sonni o'ylab topma, bilmasang ochiq ayt**. So'rov tuzish va javobni
+o'qish tarmoqsiz sinaladi.
+
+## Keyingi qadamlar (ilovadan tashqarida)
+
+1. **Server**: jonli sinxronizatsiya, rollar bo'yicha kirish, masofadan imzolash.
+2. **DWG/RVT**: yopiq formatlar uchun kutubxona yoki konvertor.
+3. **Til modeli tanlovi**: qaysi model, qayerda ishlaydi (lokal yoki bulut),
+   ma'lumot chetga chiqishi bo'yicha tashkiliy qaror.

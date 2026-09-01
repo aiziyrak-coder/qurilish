@@ -394,6 +394,40 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Этот экран в этой роли только для просмотра",
         ),
         "role_current" => ("Joriy rol", "Текущая роль"),
+        // ---------- Til modeli ----------
+        "set_group_llm" => ("Til modeli (ixtiyoriy)", "Языковая модель (необязательно)"),
+        "set_llm_warning" => (
+            "Yoqilsa, savol va unga biriktirilgan obyekt ma'lumoti tashqi xizmatga jo'natiladi. Ma'lumot kompyuterdan chiqadi va uni qaytarib bo'lmaydi. O'chiq turganda ilova hech qayerga ulanmaydi.",
+            "При включении вопрос и приложенные к нему данные объекта отправляются во внешний сервис. Данные покидают компьютер, и вернуть их нельзя. В выключенном состоянии программа никуда не подключается.",
+        ),
+        "set_llm_not_built" => (
+            "Bu yig'ilishda tarmoq qismi yo'q: ilova `llm` xususiyatisiz yig'ilgan, shuning uchun ulanish umuman mumkin emas.",
+            "В этой сборке нет сетевой части: программа собрана без функции `llm`, поэтому подключение невозможно в принципе.",
+        ),
+        "set_llm_enabled" => ("Yoqilgan", "Включено"),
+        "set_llm_endpoint" => ("Xizmat manzili", "Адрес сервиса"),
+        "set_llm_model" => ("Model nomi", "Название модели"),
+        "set_llm_key" => ("API kaliti", "API-ключ"),
+        "set_llm_ready" => (
+            "Yoqilgan: yordamchida «Modeldan so'rash» tugmasi chiqadi.",
+            "Включено: в помощнике появится кнопка «Спросить модель».",
+        ),
+        "set_llm_off" => (
+            "O'chiq: yordamchi faqat o'z bazasidan javob beradi.",
+            "Выключено: помощник отвечает только по своей базе.",
+        ),
+        "cp_ask_model" => ("Modeldan so'rash", "Спросить модель"),
+        "cp_ask_model_hint" => (
+            "Savol va yuqoridagi sonlar tashqi xizmatga jo'natiladi.",
+            "Вопрос и приведенные выше числа будут отправлены во внешний сервис.",
+        ),
+        "cp_llm_answer" => ("Model javobi", "Ответ модели"),
+        "cp_llm_note" => (
+            "Bu javob tashqi model tomonidan yozilgan. Sonlar yuqoridagi hisobdan olingan — javobni shu bilan solishtiring.",
+            "Этот ответ написан внешней моделью. Числа взяты из расчета выше — сверяйте ответ с ним.",
+        ),
+        "cp_llm_failed" => ("Model javob bermadi", "Модель не ответила"),
+
         "set_group_roles" => ("Foydalanuvchilar va rollar", "Пользователи и роли"),
         "set_roles_note" => (
             "Rol ish taqsimoti uchun: kim nimani to'ldirishini belgilaydi. Baza fayli ochiq, shuning uchun bu parol bilan himoya emas — haqiqiy kirish nazorati server qismi bilan keladi.",

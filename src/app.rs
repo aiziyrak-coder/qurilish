@@ -421,6 +421,8 @@ pub struct App {
     /// Tabelda ko'rsatilayotgan hafta boshi (dushanba).
     pub timesheet_week: Option<chrono::NaiveDate>,
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
+    /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
+    pub llm: crate::llm::Config,
     pub users: Vec<crate::roles::User>,
     pub current_user: Option<i64>,
     pub sales_block: Option<i64>,
@@ -498,6 +500,7 @@ impl App {
                 Ok("supervision") => Screen::TechSupervision,
                 Ok("client") => Screen::Client,
                 Ok("copilot") => Screen::Copilot,
+                Ok("settings") => Screen::Settings,
                 _ => Screen::Dashboard,
             },
             today: chrono::Local::now().date_naive(),
@@ -535,6 +538,7 @@ impl App {
             machines: Vec::new(),
             machine_logs: Vec::new(),
             timesheet_week: None,
+            llm: crate::llm::Config::default(),
             users: Vec::new(),
             current_user: None,
             sales_block: None,
@@ -571,6 +575,15 @@ impl App {
                 app.select_project(p.id);
             }
         }
+        // Til modeli sozlamasi. Yig'ilishda tarmoq qismi bo'lmasa — doim o'chiq.
+        app.llm = crate::llm::Config {
+            enabled: cfg!(feature = "llm")
+                && app.db.get_setting("llm_enabled").as_deref() == Some("1"),
+            endpoint: app.db.get_setting("llm_endpoint").unwrap_or_default(),
+            model: app.db.get_setting("llm_model").unwrap_or_default(),
+            api_key: app.db.get_setting("llm_key").unwrap_or_default(),
+        };
+
         // Rollar: oxirgi tanlangan foydalanuvchi tiklanadi.
         app.reload_users();
         app.current_user = app
@@ -812,6 +825,19 @@ impl App {
         }
         self.notify(format!("{} — {}", t("role_readonly"), self.role().label()));
         false
+    }
+
+    /// Til modeli sozlamasini saqlaydi.
+    ///
+    /// Kalit bazada saqlanadi va boshqa hech qayerga chiqmaydi: hisobotga ham,
+    /// logga ham tushmaydi. Zaxira nusxada esa u ham bo'ladi — bu sozlamalarda
+    /// ochiq yozilgan.
+    pub fn save_llm(&mut self) {
+        let db = &self.db;
+        let _ = db.set_setting("llm_enabled", if self.llm.enabled { "1" } else { "0" });
+        let _ = db.set_setting("llm_endpoint", &self.llm.endpoint);
+        let _ = db.set_setting("llm_model", &self.llm.model);
+        let _ = db.set_setting("llm_key", &self.llm.api_key);
     }
 
     pub fn reload_users(&mut self) {

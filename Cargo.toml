@@ -18,6 +18,14 @@ calamine = "0.36.1"
 # egui bilan bir xil versiya bo'lishi shart.
 egui_extras = { version = "0.31", features = ["image"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+# Faqat `llm` xususiyati bilan yig'iladi.
+ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
+
+[features]
+# Til modeliga ulanish sukut bo'yicha yig'ilishga kirmaydi: `llm` xususiyati
+# yoqilmasa ilovada tarmoq kutubxonasi umuman bo'lmaydi.
+default = []
+llm = ["dep:ureq"]
 
 [profile.release]
 opt-level = 3

@@ -11,6 +11,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut make_backup = false;
     let mut add_user = false;
     let mut export_pkg = false;
+    let mut llm_changed = false;
     let mut import_pkg = false;
     let mut edited_user: Option<crate::roles::User> = None;
     let mut removed_user: Option<i64> = None;
@@ -268,6 +269,84 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
         ui.add_space(10.0);
 
+        // ---------- Til modeli (ixtiyoriy) ----------
+        card_frame(ui, t("set_group_llm"), w, |ui| {
+            let built = cfg!(feature = "llm");
+            if !built {
+                // Tarmoq qismi yig'ilishga umuman kirmagan — buni ochiq aytamiz.
+                ui.label(
+                    RichText::new(t("set_llm_not_built"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+            }
+            ui.label(
+                RichText::new(t("set_llm_warning"))
+                    .size(11.5)
+                    .color(theme::warn()),
+            );
+            ui.add_space(8.0);
+
+            ui.add_enabled_ui(built, |ui| {
+                field(ui, t("set_llm_enabled"), |ui| {
+                    if ui.checkbox(&mut app.llm.enabled, "").changed() {
+                        llm_changed = true;
+                    }
+                });
+                field(ui, t("set_llm_endpoint"), |ui| {
+                    if ui
+                        .add_sized(
+                            [360.0, 22.0],
+                            egui::TextEdit::singleline(&mut app.llm.endpoint)
+                                .hint_text("https://…/v1/chat/completions"),
+                        )
+                        .changed()
+                    {
+                        llm_changed = true;
+                    }
+                });
+                field(ui, t("set_llm_model"), |ui| {
+                    if ui
+                        .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut app.llm.model))
+                        .changed()
+                    {
+                        llm_changed = true;
+                    }
+                });
+                field(ui, t("set_llm_key"), |ui| {
+                    // Kalit ekranda ochiq turmasin.
+                    if ui
+                        .add_sized(
+                            [260.0, 22.0],
+                            egui::TextEdit::singleline(&mut app.llm.api_key).password(true),
+                        )
+                        .changed()
+                    {
+                        llm_changed = true;
+                    }
+                    let masked = app.llm.masked_key();
+                    if !masked.is_empty() {
+                        ui.label(RichText::new(masked).size(11.0).color(theme::muted()));
+                    }
+                });
+            });
+
+            ui.add_space(6.0);
+            let ready = app.llm.is_ready();
+            ui.label(
+                RichText::new(if ready {
+                    t("set_llm_ready")
+                } else {
+                    t("set_llm_off")
+                })
+                .size(11.5)
+                .color(if ready { theme::ok() } else { theme::muted() }),
+            );
+        });
+
+        ui.add_space(10.0);
+
         // ---------- Dastur haqida ----------
         card_frame(ui, t("set_group_about"), w, |ui| {
             field(ui, t("set_version"), |ui| {
@@ -310,6 +389,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             app.set_user(None);
         }
         app.reload_users();
+    }
+
+    if llm_changed {
+        app.save_llm();
     }
 
     if export_pkg {

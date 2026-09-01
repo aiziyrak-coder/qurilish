@@ -315,6 +315,49 @@ to'lanmagan qator qizil undov bilan ajraladi. Qarz shartnoma summasidan
 hisoblanadi, grafikdan emas — grafik to'ldirilmagan bo'lsa ham qarz to'g'ri
 ko'rinadi.
 
+### Chizmadan o'qish — IFC (TZ II.1–2)
+«AI loyiha tekshiruvi» ekranidagi **«IFC dan o'qish»** tugmasi IFC faylini o'qib,
+elementlarni bilimlar grafiga qo'shadi. IFC — ochiq matnli format (ISO 10303-21),
+shuning uchun u tashqi kutubxonasiz o'qiladi.
+
+O'qiladigan narsa: devor, eshik, deraza, ustun, rigel, plita, teshik, xona,
+truba, vozduxovod, kabel va qurilmalar — jami 30 dan ortiq IFC turi. Har element
+o'z bo'limiga (AR, KJ, VK, OV, EOM…) tushadi, qavat nomi va xona `IFC` manbasi
+belgisi bilan saqlanadi. Bog'lanishlar ham quriladi: qavat → element,
+devor → teshik → eshik/deraza, xona → chegaradagi elementlar.
+
+Import **qo'shadi, o'chirmaydi**; qayta import dublikat yaratmaydi (marka
+bo'yicha solishtiriladi). Buzilgan qator butun faylni yo'qotmaydi. **DWG va RVT
+yopiq formatlar** — ular tanilmaydi va hujjat sifatida biriktiriladi.
+
+### Rollar (TZ VI–VIII)
+Yuqori panelda rol tanlanadi. Rol ekranni **yashirmaydi** — nimani o'zgartirish
+mumkinligini belgilaydi, chunki yashirilgan ma'lumot ishonchni yo'qotadi.
+
+| Rol | Nimani o'zgartiradi |
+|---|---|
+| Administrator | Hammasini |
+| Prorab | Jurnal, tabel, texnika smenalari, grafik, arizalar, ombor, xavfsizlik |
+| Texnik nazorat | Ijro hujjatlari, sifat, xavfsizlik, tekshiruv natijalari, PPR, smeta |
+| Sotuv | Kvartiralar, shartnomalar, to'lovlar |
+| Buyurtmachi | Hech narsani — faqat ko'radi |
+
+O'zgartirish mumkin bo'lmagan ekranda tepada sariq tasma chiqadi. Foydalanuvchilar
+sozlamalarda qo'shiladi. **Bu parol bilan himoya emas**: baza fayli ochiq turibdi,
+shuning uchun rol — ish taqsimoti vositasi. Haqiqiy kirish nazorati server qismi
+bilan keladi va sozlamalarda shu ochiq yozilgan.
+
+### Loyiha paketi — qurilmalar orasida almashish
+Server yo'q, shuning uchun ma'lumot **fayl orqali** ko'chadi. Sozlamalardagi
+«Paketga chiqarish» maydonchada to'ldirilgan **kunlik ijroni** (jurnal, tabel,
+texnika smenalari, sifat, xavfsizlik) matn fayliga yozadi; «Paketdan olish» uni
+boshqa kompyuterdagi bazaga qo'shadi.
+
+Grafik, smeta va shartnomalar paketga **kirmaydi** — ular ofisda yuritiladi va
+ikki tomondan tahrirlansa ziddiyat tug'iladi. Import qo'shadi, mavjud yozuvlarni
+qayta yozmaydi: ikki marta olib kirilsa dublikat bo'lmaydi. Paket odam o'qiy
+oladigan matn — nima ko'chganini ko'zdan kechirish mumkin.
+
 ### AI analitika (TZ XVII)
 Barcha modullardan yig'ilgan bitta ko'rinish. Yuqorida **sog'lomlik indeksi**:
 100 dan topilmalar og'irligi ayriladi (kritik −15, jiddiy −8, ogohlantirish −4) —
@@ -348,12 +391,21 @@ kesimidagi bajarilish, moliya (shartnoma, smeta, bajarilgan ish qiymati,
 to'langan va to'lanmagan qism), oxirgi ish kunlari va sotuv holati.
 
 ### Yordamchi (TZ XVIII)
-Savol beriladi — javob shu bazadagi ma'lumotdan hisoblanadi. **Til modeli
-ishlatilmaydi va bu ekranda ochiq aytiladi.** 13 ta tayyor savol bor; erkin
+Savol beriladi — javob shu bazadagi ma'lumotdan hisoblanadi. **Til modeli sukut
+bo'yicha ishlatilmaydi va bu ekranda ochiq aytiladi.** 13 ta tayyor savol bor; erkin
 yozilgan savol kalit so'zlar bo'yicha shulardan biriga bog'lanadi. Aniq mavzuli
 savol umumiy so'zlardan ustun turadi — «ombor holati qanday?» ombor haqidagi
 savol deb tushuniladi. Savol tanilmasa javob **o'ylab topilmaydi**: ekran buni
 ochiq aytadi. Har javobda «Tekshirish» tugmasi manba ekranini ochadi.
+
+**Til modeli — ixtiyoriy va o'chiq.** Tarmoq qismi yig'ilishga umuman kirmaydi:
+u `cargo build --features llm` bilan qo'shiladi. Yoqilganda savol va unga
+biriktirilgan **hisoblangan sonlar** tashqi xizmatga jo'natiladi — sozlamalarda
+bu ochiq ogohlantirish bilan yozilgan. Modelga beriladigan ko'rsatma qat'iy:
+ma'lumotda yo'q sonni yoki normativni o'ylab topmaslik, bilmagan narsani ochiq
+aytish, aybdorni belgilamaslik. Model javobi alohida ramkada chiqadi — u ilova
+hisobi emasligi ko'rinib tursin. API kaliti bazada saqlanadi, ekranda yopiq
+ko'rsatiladi va so'rov tanasiga tushmaydi.
 
 ### Umumiy ko'rinish
 Obyekt bo'yicha xulosa, muddati o'tgan ishlar mas'ullari va kechikish miqdori bilan
@@ -391,6 +443,10 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/quality.rs` | Sifat nazorati: uch bosqich va nuqson muddati |
 | `src/ui/safety.rs` | Mehnat xavfsizligi hodisalari jurnali |
 | `src/ui/machines.rs` | Texnika parki va smenalar |
+| `src/ifc.rs` | IFC (ISO 10303-21) o'qish va bilimlar grafiga o'girish |
+| `src/roles.rs` | Rollar va ekran bo'yicha yozish huquqi |
+| `src/package.rs` | Qurilmalar orasida almashish paketi |
+| `src/llm.rs` | Til modeli nuqtasi (ixtiyoriy, sukut bo'yicha o'chiq) |
 | `src/analytics.rs` | Kesishgan tahlil: 24 qoida, sog'lomlik indeksi, hisobot |
 | `src/copilot.rs` | Savol-javob: niyatni tanish va javob hisobi |
 | `src/backup.rs` | Bazaning izchil zaxira nusxasi |
@@ -419,16 +475,18 @@ identifikatorlar qayta ishlatilmaydi. Obyekt o'chirilganda bog'liq ma'lumot
 
 ## TZ bo'yicha keyingi bosqichlar
 
-TZ ning I–XVIII modullari va XIX–XX sotuv bo'limi qurilgan. Uch yo'nalish
-ilovadan tashqarida turadi va alohida qaror talab qiladi:
+TZ ning I–XVIII modullari va XIX–XX sotuv bo'limi qurilgan. Avval alohida qaror
+kutayotgan uch yo'nalish ham ilova ichida hal qilindi: **IFC** o'qish (II.1–2),
+**rollar** va **loyiha paketi** (VI–VIII), hamda **til modeli nuqtasi** (XVIII).
 
-1. **Server va ko'p foydalanuvchi.** VI–VIII kabinetlari hozir shu kompyuterdagi
-   bazada ishlaydi. Qurilmalar o'rtasida sinxronizatsiya, rollar bo'yicha kirish
-   va masofadan imzolash server qismini talab qiladi.
-2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
-   kutubxonani talab qiladi; hozir loyiha elementlari qo'lda kiritiladi.
-3. **Til modeli.** Erkin matnli savol-javob va hujjat matnini tahlil qilish
-   uchun. XVIII moduli hozir qoidalar bilan ishlaydi va buni ochiq aytadi.
+Ilovadan tashqarida qolgani:
+
+1. **Server**: jonli sinxronizatsiya, rollar bo'yicha kirish va masofadan
+   imzolash. Hozir ma'lumot qurilmalar orasida fayl orqali ko'chadi.
+2. **DWG va RVT**: yopiq formatlar, ular uchun kutubxona yoki konvertor kerak.
+   IFC esa o'qiladi.
+3. **Til modeli tanlovi**: qaysi model, lokal yoki bulut, ma'lumot chetga
+   chiqishi bo'yicha tashkiliy qaror. Integratsiya nuqtasi tayyor va o'chiq.
 
 Uchta arxitektura qarori alohida hal qilinishi kerak:
 

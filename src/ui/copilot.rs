@@ -125,14 +125,74 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let a = copilot::answer(i, &inp);
 
     let mut go: Option<Screen> = None;
-    answer_card(ui, &a, &mut go);
+    let mut ask_model = false;
+    answer_card(ui, &a, &mut go, app.llm.is_ready(), &mut ask_model);
+
+    // Modeldan olingan javob shu ekranda saqlanadi.
+    let reply_key = egui::Id::new("cp_reply");
+    if ask_model {
+        // Modelga savol va ilova hisoblab bergan sonlar birga boradi.
+        let context = a
+            .lines
+            .iter()
+            .map(|l| format!("{}: {}", l.label, l.value))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let question = if text.trim().is_empty() {
+            a.title.clone()
+        } else {
+            text.clone()
+        };
+        let out = match crate::llm::ask(&app.llm, &question, &context) {
+            Ok(v) => v,
+            Err(e) => format!("{}: {e}", t("cp_llm_failed")),
+        };
+        ui.data_mut(|d| d.insert_temp(reply_key, out));
+    }
+    if let Some(reply) = ui.data(|d| d.get_temp::<String>(reply_key)) {
+        ui.add_space(8.0);
+        llm_card(ui, &reply);
+    }
 
     if let Some(s) = go {
         app.screen = s;
     }
 }
 
-fn answer_card(ui: &mut egui::Ui, a: &Answer, go: &mut Option<Screen>) {
+/// Modeldan kelgan javob. Alohida ramkada — bu ilova hisobi emas.
+fn llm_card(ui: &mut egui::Ui, text: &str) {
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::accent()))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(16, 14))
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(t("cp_llm_answer"))
+                        .size(12.5)
+                        .strong()
+                        .color(theme::accent()),
+                );
+                ui.add_space(4.0);
+                ui.label(RichText::new(text).size(13.0));
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(t("cp_llm_note"))
+                        .size(10.5)
+                        .color(theme::muted()),
+                );
+            });
+        });
+}
+
+fn answer_card(
+    ui: &mut egui::Ui,
+    a: &Answer,
+    go: &mut Option<Screen>,
+    llm_ready: bool,
+    ask_model: &mut bool,
+) {
     egui::Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0_f32, theme::line()))
@@ -145,6 +205,15 @@ fn answer_card(ui: &mut egui::Ui, a: &Answer, go: &mut Option<Screen>) {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(t("cp_check")).clicked() {
                             *go = Some(a.screen);
+                        }
+                        // Til modeli yoqilgan bo'lsagina ko'rinadi.
+                        if llm_ready
+                            && ui
+                                .small_button(t("cp_ask_model"))
+                                .on_hover_text(t("cp_ask_model_hint"))
+                                .clicked()
+                        {
+                            *ask_model = true;
                         }
                         // Javob qaysi bo'limdan olingani — tekshirish uchun.
                         ui.label(

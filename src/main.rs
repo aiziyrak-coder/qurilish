@@ -12,6 +12,7 @@ mod domain;
 mod i18n;
 mod ifc;
 mod import;
+mod llm;
 mod model;
 mod package;
 mod roles;
