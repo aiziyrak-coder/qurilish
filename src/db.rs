@@ -2155,10 +2155,13 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             &t.db.timesheet(pid),
             &t.db.materials(pid),
             &t.db.stock_moves(pid),
+            &t.db.machines(pid),
+            &t.db.machine_logs(pid),
         );
         let c = costs.iter().find(|c| c.task_id == tid).expect("qator");
         assert_eq!(c.labour, 80_000.0);
         assert_eq!(c.material, 100_000.0);
+        assert_eq!(c.machine, 0.0, "bu ishda texnika ishlamagan");
         assert_eq!(c.total, 180_000.0);
         assert_eq!(c.per_unit, 1_800.0);
     }
@@ -2840,6 +2843,202 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(s.expired_permits > 0);
         assert!(s.without_ppe > 0);
         assert!(s.bad_permits > 0);
+    }
+
+    /// TZ XVI.36–38: foydalanish koeffitsiyenti ish kunlariga nisbatan.
+    #[test]
+    fn machine_utilization_counts_work_days_only() {
+        use crate::checks::{machine_lines, SHIFT_HOURS};
+        use crate::domain::{Machine, MachineKind, MachineLog, MachineStatus};
+
+        // Dushanbadan yakshanbagacha bir hafta: olti ish kuni.
+        let from = chrono::NaiveDate::from_ymd_opt(2026, 3, 2).expect("sana");
+        let to = from + chrono::Duration::days(6);
+
+        let machine = Machine {
+            id: 1,
+            project_id: 1,
+            name: "Sinov".into(),
+            kind: MachineKind::Excavator,
+            reg_no: String::new(),
+            owner: String::new(),
+            status: MachineStatus::Working,
+            hour_rate: 100_000.0,
+            operator: String::new(),
+            inspection_until: None,
+            fuel_norm: 10.0,
+            service_hours: 100.0,
+            service_done: 0.0,
+            rented: false,
+        };
+        let log = |days: i64, hours: f64, fuel: f64, odo: (f64, f64)| MachineLog {
+            id: 0,
+            project_id: 1,
+            machine_id: 1,
+            date: from + chrono::Duration::days(days),
+            hours,
+            fuel,
+            task_id: None,
+            number: "YV-1".into(),
+            driver: String::new(),
+            route: String::new(),
+            odo_start: odo.0,
+            odo_end: odo.1,
+            trips: 0,
+            cargo: 0.0,
+            note: String::new(),
+        };
+        // Uch kun ishlagan, kuniga 8 soat.
+        let logs = vec![
+            log(0, 8.0, 100.0, (1000.0, 1040.0)),
+            log(1, 8.0, 100.0, (1040.0, 1075.0)),
+            log(2, 8.0, 100.0, (1075.0, 1075.0)),
+        ];
+
+        let lines = machine_lines(std::slice::from_ref(&machine), &logs, from, to, from);
+        let l = &lines[0];
+        assert_eq!(l.hours, 24.0);
+        assert_eq!(l.work_days, 3);
+        assert_eq!(l.idle_days, 3, "yakshanba bo'sh kun hisoblanmaydi");
+        // 24 soat / (6 kun × 8 soat) = 50%.
+        assert_eq!(l.utilization, 24.0 / (6.0 * SHIFT_HOURS) * 100.0);
+        assert_eq!(l.distance, 75.0, "spidometrsiz smena masofaga qo'shilmaydi");
+        assert_eq!(l.cost, 2_400_000.0);
+
+        // Yoqilg'i: norma 10 l/soat → 240 litr, fakt 300 → ortiqcha.
+        assert_eq!(l.fuel_norm, 240.0);
+        assert_eq!(l.fuel_diff, 60.0);
+        assert!(l.fuel_over);
+
+        // TX: oralig'i 100 soat, 24 soat ishlangan → 76 qoldi.
+        assert_eq!(l.service_left, Some(76.0));
+        assert!(!l.blocked());
+    }
+
+    /// TZ XVI.27: texnik ko'rik va TX muddati ishlatishga to'sqinlik qiladi.
+    #[test]
+    fn machine_blocks_stop_operation() {
+        use crate::checks::{machine_lines, MachineBlock};
+        use crate::domain::{Machine, MachineKind, MachineStatus};
+
+        let today = chrono::Local::now().date_naive();
+        let base = Machine {
+            id: 1,
+            project_id: 1,
+            name: "Sinov".into(),
+            kind: MachineKind::Crane,
+            reg_no: String::new(),
+            owner: String::new(),
+            status: MachineStatus::Working,
+            hour_rate: 0.0,
+            operator: String::new(),
+            inspection_until: Some(today + chrono::Duration::days(30)),
+            fuel_norm: 0.0,
+            service_hours: 0.0,
+            service_done: 0.0,
+            rented: false,
+        };
+        let at = |m: &Machine| {
+            machine_lines(std::slice::from_ref(m), &[], today, today, today)[0]
+                .blocks
+                .clone()
+        };
+        assert!(at(&base).is_empty());
+
+        let mut expired = base.clone();
+        expired.inspection_until = Some(today - chrono::Duration::days(1));
+        assert_eq!(at(&expired), vec![MachineBlock::Inspection]);
+
+        // TX oralig'i tugagan: 100 soat reja, 100 soat ishlangan.
+        let mut due = base.clone();
+        due.service_hours = 100.0;
+        due.service_done = 0.0;
+        let lines = machine_lines(
+            std::slice::from_ref(&due),
+            &[crate::domain::MachineLog {
+                id: 0,
+                project_id: 1,
+                machine_id: 1,
+                date: today,
+                hours: 100.0,
+                fuel: 0.0,
+                task_id: None,
+                number: String::new(),
+                driver: String::new(),
+                route: String::new(),
+                odo_start: 0.0,
+                odo_end: 0.0,
+                trips: 0,
+                cargo: 0.0,
+                note: String::new(),
+            }],
+            today,
+            today,
+            today,
+        );
+        assert_eq!(lines[0].blocks, vec![MachineBlock::Service]);
+
+        let mut repair = base.clone();
+        repair.status = MachineStatus::Repair;
+        assert_eq!(at(&repair), vec![MachineBlock::Repair]);
+    }
+
+    /// TZ XVI.35: texnika xarajati ish tannarxiga kiradi.
+    #[test]
+    fn machine_cost_reaches_the_task() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let costs = crate::checks::task_costs(
+            &t.db.tasks(pid).unwrap_or_default(),
+            &t.db.workers(pid),
+            &t.db.timesheet(pid),
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.machines(pid),
+            &t.db.machine_logs(pid),
+        );
+        let with_machine: Vec<_> = costs.iter().filter(|c| c.machine > 0.0).collect();
+        assert!(
+            !with_machine.is_empty(),
+            "texnika hech qaysi ishga tushmadi"
+        );
+        for c in with_machine {
+            assert!(c.total >= c.machine);
+            assert_eq!(c.total, c.labour + c.material + c.machine);
+        }
+    }
+
+    /// Namunada yo'l varaqalari to'ldirilgan va ortiqcha sarf ko'rinadi.
+    #[test]
+    fn demo_waybills_show_fuel_overuse() {
+        use crate::checks::machine_lines;
+        use crate::domain::WaybillState;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let logs = t.db.machine_logs(pid);
+        assert!(!logs.is_empty());
+        for l in &logs {
+            assert_eq!(l.state(), WaybillState::Closed, "yo'l varaqasi yopilmagan");
+            assert!(!l.driver.is_empty(), "haydovchi ko'rsatilmagan");
+            assert!(!l.route.is_empty(), "marshrut ko'rsatilmagan");
+        }
+        // Spidometr bo'lgan smenalarda masofa hisoblanadi.
+        assert!(logs.iter().any(|l| l.distance() > 0.0));
+
+        let lines = machine_lines(
+            &t.db.machines(pid),
+            &logs,
+            today - chrono::Duration::days(30),
+            today,
+            today,
+        );
+        assert!(
+            lines.iter().any(|l| l.fuel_over),
+            "namunada ortiqcha yoqilg'i sarfi yo'q"
+        );
+        assert!(lines.iter().any(|l| l.blocked()), "to'siq ko'rinmadi");
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

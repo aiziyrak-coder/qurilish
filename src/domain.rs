@@ -1197,9 +1197,28 @@ pub struct Machine {
     pub operator: String,
     /// Navbatdagi texnik ko'rik sanasi.
     pub inspection_until: Option<NaiveDate>,
+    /// Yoqilg'i sarf normasi, litr/motosoat (TZ XVI.17). Nol — norma yo'q.
+    pub fuel_norm: f64,
+    /// Rejali TX oralig'i, motosoatda (TZ XVI.25). Nol — reja yuritilmaydi.
+    pub service_hours: f64,
+    /// Oxirgi TX o'tkazilgandagi umumiy motosoat.
+    pub service_done: f64,
+    /// Ijaraga olingan texnika (TZ XVI.32).
+    pub rented: bool,
 }
 
-/// Texnika smenasi.
+/// Yo'l varaqasining holati (TZ XVI.19).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WaybillState {
+    /// Raqami yo'q — bu shunchaki smena yozuvi.
+    None,
+    /// Ochiq: qaytish ko'rsatkichlari to'ldirilmagan.
+    Open,
+    /// Yopilgan.
+    Closed,
+}
+
+/// Texnika smenasi — yo'l varaqasi (TZ XVI.19–22).
 #[derive(Debug, Clone)]
 pub struct MachineLog {
     pub id: i64,
@@ -1209,5 +1228,33 @@ pub struct MachineLog {
     pub hours: f64,
     pub fuel: f64,
     pub task_id: Option<i64>,
+    /// Yo'l varaqasi raqami. Bo'sh bo'lsa — oddiy smena yozuvi.
+    pub number: String,
+    pub driver: String,
+    /// Marshrut: qayerdan qayerga.
+    pub route: String,
+    /// Spidometr ko'rsatkichi smena boshida va oxirida (TZ XVI.14).
+    pub odo_start: f64,
+    pub odo_end: f64,
+    /// Reys soni va tashilgan yuk (TZ XVI.22).
+    pub trips: i64,
+    pub cargo: f64,
     pub note: String,
+}
+
+impl MachineLog {
+    /// Yurgan masofa. Spidometr orqaga ketgan bo'lsa nol qaytadi.
+    pub fn distance(&self) -> f64 {
+        (self.odo_end - self.odo_start).max(0.0)
+    }
+
+    pub fn state(&self) -> WaybillState {
+        if self.number.trim().is_empty() {
+            WaybillState::None
+        } else if self.odo_end > 0.0 || self.hours > 0.0 {
+            WaybillState::Closed
+        } else {
+            WaybillState::Open
+        }
+    }
 }

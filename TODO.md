@@ -30,10 +30,10 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIII. Tabel | 44 | 15 | 10 | 19 |
 | XIV. Sifat | 41 | 18 | 12 | 11 |
 | XV. Xavfsizlik | 41 | 19 | 8 | 14 |
-| XVI. Mashinalar | 50 | 10 | 7 | 33 |
+| XVI. Mashinalar | 50 | 26 | 6 | 18 |
 | XVII. AI analitika | 51 | 12 | 9 | 30 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **214** | **132** | **336** |
+| **Jami** | **682** | **230** | **131** | **321** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -667,7 +667,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Modul maqsadi
 - [x] 2. Bosh ekran
 - [x] 3. Mashina kartochkasi
-- [~] 4. Har mashina uchun saqlanadigan ma'lumot
+- [x] 4. Har mashina uchun saqlanadigan ma'lumot
 - [x] 5. Texnika toifalari
 - [ ] 🔒 6. Texnika qayerda — *GPS*
 - [x] 7. Holatlar
@@ -677,34 +677,34 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 11. Texnikani rejalashtirish
 - [ ] 12. To'qnashuvlarning oldini olish
 - [x] 13. **Motosoat**
-- [ ] 14. Yurgan masofa
-- [~] 15. AI motosoat nazorati
+- [x] 14. Yurgan masofa — *spidometr farqidan*
+- [x] 15. Motosoat nazorati — *foydalanish koeffitsiyenti*
 - [x] 16. **Yoqilg'i**
-- [ ] 17. Sarf normasi
-- [ ] 18. AI yoqilg'i tahlili
-- [ ] 19. **Yo'l varaqalari**
-- [ ] 20. Mashinaga topshiriq
-- [ ] 21. Bajarilishni nazorat qilish
-- [ ] 22. Tashishni nazorat qilish
+- [x] 17. Sarf normasi — *litr/motosoat*
+- [x] 18. Yoqilg'i tahlili — *fakt / norma, 10% dan oshgani qizil*
+- [x] 19. **Yo'l varaqalari** — *raqam, haydovchi, marshrut, spidometr*
+- [x] 20. Mashinaga topshiriq — *smena ishga bog'lanadi*
+- [~] 21. Bajarilishni nazorat qilish — *soat, masofa, reys*
+- [x] 22. Tashishni nazorat qilish — *reys soni va yuk*
 - [~] 23. **Ta'mir** — *holat sifatida*
 - [ ] 24. Ta'mirga ariza
-- [ ] 25. Rejali TX
+- [x] 25. Rejali TX — *motosoat oralig'i, qolgani*
 - [ ] 26. AI ta'mir prognozi
-- [ ] 27. Ekspluatatsiyani taqiqlash
+- [x] 27. Ekspluatatsiyani taqiqlash — *ko'rik, TX, ta'mir*
 - [ ] 28. Kunlik ko'rik
 - [x] 29. Xavfsizlik bilan bog'lanish — *AN-R1 qoidasi*
 - [x] 30. **Operator**
 - [ ] 31. AI operatorni tekshirishi
-- [ ] 32. Ijaraga olingan texnika
-- [ ] 33. Ijara va o'z texnikasini solishtirish
+- [x] 32. Ijaraga olingan texnika — *belgisi bor*
+- [~] 33. Ijara va o'z texnikasini solishtirish — *soatning qiymati*
 - [x] 34. **Mashina-soat qiymati**
-- [ ] 35. Ishning tannarxi
-- [ ] 36. Texnika unumdorligi
-- [~] 37. Texnika bo'sh turishi — *AN-R3 qoidasi*
-- [ ] 38. Foydalanish koeffitsiyenti
+- [x] 35. Ishning tannarxi — *tabel tannarxiga kiradi*
+- [x] 36. Texnika unumdorligi — *soat, masofa, reys*
+- [x] 37. Texnika bo'sh turishi — *bo'sh kunlar soni*
+- [x] 38. Foydalanish koeffitsiyenti — *ish kunlariga nisbatan*
 - [ ] 39. AI parkni optimallashtirishi
 - [ ] 🔒 40. Texnika xaritasi
-- [~] 41. Mashina tarixi — *smenalar*
+- [x] 41. Mashina tarixi — *yo'l varaqalari*
 - [ ] 42. AI samaradorlik tahlili
 - [ ] 43. «Ta'mirlash yoki almashtirish» qarori
 - [~] 44. Mashina hujjatlari — *texnik ko'rik*
@@ -826,6 +826,6 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 5. ~~Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi~~ (IX.8–10, 31–32) — **bajarildi**
 6. ~~Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili~~ (XIV.8–10, 30–35) — **bajarildi**
 7. ~~Xavfsizlik: naryad-dopusk, SIZ, ruxsatlar matritsasi, Safety Score~~ (XV.4–13, 20, 33) — **bajarildi**
-8. **Mashinalar: yo'l varaqalari, TX rejasi, tannarx, foydalanish koeffitsiyenti** (XVI.19–27, 34–38)
+8. ~~Mashinalar: yo'l varaqalari, TX rejasi, tannarx, foydalanish koeffitsiyenti~~ (XVI.14–27, 32–38) — **bajarildi**
 9. **Analitika: pul oqimi, kassa uzilishi, Daily Briefing, drill-down** (XVII.30–31, 37–38, 48)
 10. **Hujjat generatsiyasi va Excel eksporti** (IV.5–7, umumiy)

@@ -606,6 +606,13 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
             hours: 8.0,
             fuel: 0.0,
             task_id: running_today(app).first().copied(),
+            number: String::new(),
+            driver: String::new(),
+            route: String::new(),
+            odo_start: 0.0,
+            odo_end: 0.0,
+            trips: 0,
+            cargo: 0.0,
             note: String::new(),
         });
         app.reload_modules();

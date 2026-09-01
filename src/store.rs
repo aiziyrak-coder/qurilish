@@ -576,6 +576,17 @@ impl Db {
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
             "ALTER TABLE request ADD COLUMN reject_reason TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE quality_check ADD COLUMN checklist_id INTEGER",
+            "ALTER TABLE machine ADD COLUMN fuel_norm REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE machine ADD COLUMN service_hours REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE machine ADD COLUMN service_done REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE machine ADD COLUMN rented INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE machine_log ADD COLUMN number TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE machine_log ADD COLUMN driver TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE machine_log ADD COLUMN route TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE machine_log ADD COLUMN odo_start REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE machine_log ADD COLUMN odo_end REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE machine_log ADD COLUMN trips INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE machine_log ADD COLUMN cargo REAL NOT NULL DEFAULT 0",
             "ALTER TABLE quality_check ADD COLUMN fixed_at TEXT",
             "ALTER TABLE purchase ADD COLUMN section TEXT NOT NULL DEFAULT 'none'",
             "ALTER TABLE timesheet ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'",
@@ -2942,7 +2953,8 @@ impl Db {
 
     pub fn machines(&self, pid: i64) -> Vec<Machine> {
         self.list(
-            "SELECT id,project_id,name,kind,reg_no,owner,status,hour_rate,operator,inspection_until
+            "SELECT id,project_id,name,kind,reg_no,owner,status,hour_rate,operator,inspection_until,
+                    fuel_norm,service_hours,service_done,rented
              FROM machine WHERE project_id=?1 ORDER BY name",
             pid,
             |r| {
@@ -2957,6 +2969,10 @@ impl Db {
                     hour_rate: r.get(7)?,
                     operator: r.get(8)?,
                     inspection_until: odate(r.get(9)?),
+                    fuel_norm: r.get(10)?,
+                    service_hours: r.get(11)?,
+                    service_done: r.get(12)?,
+                    rented: r.get::<_, i64>(13)? != 0,
                 })
             },
         )
@@ -2964,11 +2980,23 @@ impl Db {
 
     pub fn insert_machine(&self, m: &Machine) -> i64 {
         self.ins(
-            "INSERT INTO machine (project_id,name,kind,reg_no,owner,status,hour_rate,operator,inspection_until)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            "INSERT INTO machine (project_id,name,kind,reg_no,owner,status,hour_rate,operator,
+                                  inspection_until,fuel_norm,service_hours,service_done,rented)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                m.project_id, m.name, m.kind.code(), m.reg_no, m.owner, m.status.code(),
-                m.hour_rate, m.operator, ods(m.inspection_until)
+                m.project_id,
+                m.name,
+                m.kind.code(),
+                m.reg_no,
+                m.owner,
+                m.status.code(),
+                m.hour_rate,
+                m.operator,
+                ods(m.inspection_until),
+                m.fuel_norm,
+                m.service_hours,
+                m.service_done,
+                i64::from(m.rented)
             ],
         )
     }
@@ -2976,7 +3004,8 @@ impl Db {
     pub fn update_machine(&self, m: &Machine) -> bool {
         self.upd(
             "UPDATE machine SET name=?2,kind=?3,reg_no=?4,owner=?5,status=?6,hour_rate=?7,
-                    operator=?8,inspection_until=?9 WHERE id=?1",
+                    operator=?8,inspection_until=?9,fuel_norm=?10,service_hours=?11,
+                    service_done=?12,rented=?13 WHERE id=?1",
             params![
                 m.id,
                 m.name,
@@ -2986,14 +3015,19 @@ impl Db {
                 m.status.code(),
                 m.hour_rate,
                 m.operator,
-                ods(m.inspection_until)
+                ods(m.inspection_until),
+                m.fuel_norm,
+                m.service_hours,
+                m.service_done,
+                i64::from(m.rented)
             ],
         )
     }
 
     pub fn machine_logs(&self, pid: i64) -> Vec<MachineLog> {
         self.list(
-            "SELECT id,project_id,machine_id,date,hours,fuel,task_id,note
+            "SELECT id,project_id,machine_id,date,hours,fuel,task_id,number,driver,route,
+                    odo_start,odo_end,trips,cargo,note
              FROM machine_log WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -3005,7 +3039,14 @@ impl Db {
                     hours: r.get(4)?,
                     fuel: r.get(5)?,
                     task_id: r.get(6)?,
-                    note: r.get(7)?,
+                    number: r.get(7)?,
+                    driver: r.get(8)?,
+                    route: r.get(9)?,
+                    odo_start: r.get(10)?,
+                    odo_end: r.get(11)?,
+                    trips: r.get(12)?,
+                    cargo: r.get(13)?,
+                    note: r.get(14)?,
                 })
             },
         )
@@ -3013,8 +3054,9 @@ impl Db {
 
     pub fn insert_machine_log(&self, l: &MachineLog) -> i64 {
         self.ins(
-            "INSERT INTO machine_log (project_id,machine_id,date,hours,fuel,task_id,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            "INSERT INTO machine_log (project_id,machine_id,date,hours,fuel,task_id,number,driver,
+                                      route,odo_start,odo_end,trips,cargo,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 l.project_id,
                 l.machine_id,
@@ -3022,6 +3064,13 @@ impl Db {
                 l.hours,
                 l.fuel,
                 l.task_id,
+                l.number,
+                l.driver,
+                l.route,
+                l.odo_start,
+                l.odo_end,
+                l.trips,
+                l.cargo,
                 l.note
             ],
         )
@@ -3029,8 +3078,25 @@ impl Db {
 
     pub fn update_machine_log(&self, l: &MachineLog) -> bool {
         self.upd(
-            "UPDATE machine_log SET machine_id=?2,date=?3,hours=?4,fuel=?5,task_id=?6,note=?7 WHERE id=?1",
-            params![l.id, l.machine_id, l.date.to_string(), l.hours, l.fuel, l.task_id, l.note],
+            "UPDATE machine_log SET machine_id=?2,date=?3,hours=?4,fuel=?5,task_id=?6,number=?7,
+                    driver=?8,route=?9,odo_start=?10,odo_end=?11,trips=?12,cargo=?13,note=?14
+             WHERE id=?1",
+            params![
+                l.id,
+                l.machine_id,
+                l.date.to_string(),
+                l.hours,
+                l.fuel,
+                l.task_id,
+                l.number,
+                l.driver,
+                l.route,
+                l.odo_start,
+                l.odo_end,
+                l.trips,
+                l.cargo,
+                l.note
+            ],
         )
     }
 
@@ -4086,13 +4152,18 @@ impl Db {
         } else {
             "«StroyMexanizatsiya» MChJ"
         };
+        #[allow(clippy::too_many_arguments)]
         let mch = |name: &str,
                    kind: MachineKind,
                    reg_no: &str,
                    status: MachineStatus,
                    hour_rate: f64,
                    operator: &str,
-                   inspection_in: Option<i64>|
+                   inspection_in: Option<i64>,
+                   fuel_norm: f64,
+                   service_hours: f64,
+                   service_done: f64,
+                   rented: bool|
          -> i64 {
             self.insert_machine(&Machine {
                 id: 0,
@@ -4105,6 +4176,10 @@ impl Db {
                 hour_rate,
                 operator: operator.into(),
                 inspection_until: inspection_in.map(|d| today + chrono::Duration::days(d)),
+                fuel_norm,
+                service_hours,
+                service_done,
+                rented,
             })
         };
         let crane = mch(
@@ -4123,6 +4198,11 @@ impl Db {
                 "Toshmatov A."
             },
             Some(120),
+            // Minorali kran elektrda ishlaydi — yoqilg'i normasi yo'q.
+            0.0,
+            500.0,
+            0.0,
+            false,
         );
         // Texnik ko'rik muddati o'tgan — ishlatib bo'lmaydi.
         let excavator = mch(
@@ -4141,6 +4221,11 @@ impl Db {
                 "Rahimov Sh."
             },
             Some(-14),
+            12.0,
+            250.0,
+            // TX oralig'i tugashiga oz qoldi — ogohlantirish ko'rinsin.
+            60.0,
+            false,
         );
         let pump = mch(
             if ru {
@@ -4154,6 +4239,11 @@ impl Db {
             340_000.0,
             if ru { "Аминов Р." } else { "Aminov R." },
             Some(45),
+            18.0,
+            300.0,
+            0.0,
+            // Nasos ijaraga olingan.
+            true,
         );
         // Lift ta'mirda — smenasi yo'q, faqat parkda turadi.
         let _lift = mch(
@@ -4168,6 +4258,10 @@ impl Db {
             90_000.0,
             String::new().as_str(),
             Some(200),
+            0.0,
+            0.0,
+            0.0,
+            false,
         );
 
         // Oxirgi 20 kunlik smenalar.
@@ -4178,7 +4272,19 @@ impl Db {
             if day.weekday().num_days_from_monday() == 6 {
                 continue;
             }
-            let log = |machine_id: i64, hours: f64, fuel: f64, task_id: Option<i64>| {
+            // Har bir smena — yo'l varaqasi: raqami, haydovchisi, marshruti.
+            #[allow(clippy::too_many_arguments)]
+            let log = |seq: i64,
+                       machine_id: i64,
+                       hours: f64,
+                       fuel: f64,
+                       task_id: Option<i64>,
+                       driver: &str,
+                       route: &str,
+                       odo: f64,
+                       km: f64,
+                       trips: i64,
+                       cargo: f64| {
                 if machine_id > 0 && hours > 0.0 {
                     self.insert_machine_log(&MachineLog {
                         id: 0,
@@ -4188,17 +4294,70 @@ impl Db {
                         hours,
                         fuel,
                         task_id,
+                        // Raqam kun va texnika bo'yicha noyob bo'lishi kerak:
+                        // bir kunda ikki mashina bir raqam ostida yura olmaydi.
+                        number: format!("YV-{:04}", (100 - back) * 10 + seq),
+                        driver: driver.into(),
+                        route: route.into(),
+                        odo_start: odo,
+                        odo_end: if km > 0.0 { odo + km } else { 0.0 },
+                        trips,
+                        cargo,
                         note: String::new(),
                     });
                 }
             };
-            log(crane, 8.0, 0.0, karkas);
+            let (op_crane, op_pump, op_exc) = if ru {
+                ("Тошматов А.", "Аминов Р.", "Рахимов Ш.")
+            } else {
+                ("Toshmatov A.", "Aminov R.", "Rahimov Sh.")
+            };
+            let (r_site, r_concrete, r_soil) = if ru {
+                ("Объект, стройплощадка", "РБУ — объект", "Объект — отвал")
+            } else {
+                (
+                    "Obyekt, qurilish maydoni",
+                    "BTZ — obyekt",
+                    "Obyekt — to'kish joyi",
+                )
+            };
+            // Kran maydonda turadi — spidometri yo'q.
+            log(
+                1, crane, 8.0, 0.0, karkas, op_crane, r_site, 0.0, 0.0, 0, 0.0,
+            );
             // Nasos faqat betonlash kunlarida chiqadi.
             if back % 3 == 0 {
-                log(pump, 5.0, 90.0, karkas);
+                // Yoqilg'i normasi 18 l/soat: 5 soatga 90 litr — normada.
+                log(
+                    2,
+                    pump,
+                    5.0,
+                    90.0,
+                    karkas,
+                    op_pump,
+                    r_concrete,
+                    12_000.0 + (20 - back) as f64 * 40.0,
+                    36.0,
+                    3,
+                    45.0,
+                );
             }
             if back % 4 == 1 {
-                log(excavator, 6.0, 70.0, devor);
+                // Ekskavatorda ortiqcha sarf ataylab qoldirilgan:
+                // norma 12 l/soat, 6 soatga 72 litr, faktda 90.
+                log(
+                    3,
+                    excavator,
+                    6.0,
+                    90.0,
+                    devor,
+                    op_exc,
+                    r_soil,
+                    8_400.0 + (20 - back) as f64 * 25.0,
+                    22.0,
+                    0,
+                    0.0,
+                );
             }
         }
     }

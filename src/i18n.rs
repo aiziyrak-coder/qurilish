@@ -2695,6 +2695,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_labour_cost_hint" => ("ishlarga taqsimlangan", "распределено по работам"),
         "kpi_material_cost" => ("Material", "Материал"),
         "kpi_material_cost_hint" => ("ishlarga berilgan", "выдано на работы"),
+        "kpi_task_machine" => ("Texnika", "Техника"),
+        "kpi_task_machine_hint" => ("ishlarda ishlagan", "работала на работах"),
         "kpi_total_cost" => ("Jami tannarx", "Итого себестоимость"),
         "kpi_total_cost_hint" => ("ish haqi va material", "зарплата и материал"),
 
@@ -2939,6 +2941,60 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_safety_overdue_hint" => ("chora ko'rilmagan", "меры не приняты"),
         "kpi_safety_training" => ("Instruktajlar", "Инструктажей"),
         "kpi_safety_training_hint" => ("o'tkazilgan", "проведено"),
+
+        // ---------- XVI.14, 17-27, 32-38. Yo'l varaqasi, TX, foydalanish ----------
+        "mch_tab_usage" => ("Foydalanish", "Использование"),
+
+        "col_fuel_norm" => ("Norma, l/soat", "Норма, л/м-ч"),
+        "fuel_norm_hint" => (
+            "Bir motosoatga yoqilg'i sarf normasi. Nol — norma yuritilmaydi.",
+            "Норма расхода топлива на один машино-час. Ноль — норма не ведётся.",
+        ),
+        "col_service_hours" => ("TX oralig'i", "Интервал ТО"),
+        "service_hours_hint" => (
+            "Rejali texnik xizmat oralig'i, motosoatda. Nol — reja yuritilmaydi.",
+            "Интервал планового ТО в машино-часах. Ноль — план не ведётся.",
+        ),
+        "col_service_left" => ("TX gacha qoldi", "До ТО осталось"),
+        "col_rented" => ("Ijara", "Аренда"),
+        "rented_hint" => (
+            "Ijaraga olingan texnika — o'z texnikasi bilan solishtirish uchun.",
+            "Арендованная техника — для сравнения со своей.",
+        ),
+        "machine_blocked" => ("ishlatib bo'lmaydi", "нельзя использовать"),
+        "machine_ok" => ("ishlatish mumkin", "можно использовать"),
+        "block_inspection" => ("texnik ko'rik muddati o'tgan", "техосмотр просрочен"),
+        "block_service" => ("TX muddati o'tgan", "ТО просрочено"),
+        "block_repair" => ("ta'mirda", "в ремонте"),
+
+        // Yo'l varaqasi (TZ XVI.19-22)
+        "col_driver" => ("Haydovchi", "Водитель"),
+        "col_route_way" => ("Marshrut", "Маршрут"),
+        "route_hint" => ("qayerdan — qayerga", "откуда — куда"),
+        "col_odometer" => ("Spidometr: chiqish / qaytish", "Спидометр: выезд / возврат"),
+        "col_distance" => ("Masofa", "Пробег"),
+        "distance_hint" => (
+            "Spidometr farqidan hisoblanadi — alohida kiritilmaydi.",
+            "Считается из разницы спидометра — отдельно не вводится.",
+        ),
+        "odo_back_hint" => (
+            "Qaytish ko'rsatkichi chiqishdan kam — raqamda xato bor",
+            "Показание на возврате меньше, чем на выезде — ошибка в цифрах",
+        ),
+        "fuel_over_hint" => ("Normadan ortiqcha:", "Сверх нормы:"),
+        "col_trips_cargo" => ("Reys / yuk", "Рейсы / груз"),
+        "trips_hint" => ("Reys soni", "Количество рейсов"),
+        "cargo_hint" => ("Tashilgan yuk", "Перевезённый груз"),
+
+        // Foydalanish (TZ XVI.36-38)
+        "usage_machines_hint" => (
+            "Oxirgi 30 kun bo'yicha. Foydalanish koeffitsiyenti ish kunlariga nisbatan: 60% dan past — texnika bekor turibdi.",
+            "За последние 30 дней. Коэффициент использования — к рабочим дням: ниже 60% техника простаивает.",
+        ),
+        "col_work_days" => ("Ishlagan kun", "Рабочих дней"),
+        "col_idle_days" => ("Bo'sh kun", "Простой, дней"),
+        "col_utilization" => ("Foydalanish", "Использование"),
+        "col_fuel_fact_norm" => ("Yoqilg'i: fakt / norma", "Топливо: факт / норма"),
 
         // ---------- XVI. Mashinalar ----------
         "add_machine" => ("+ Texnika", "+ Техника"),

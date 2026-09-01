@@ -1250,6 +1250,10 @@ impl App {
                             hour_rate: 0.0,
                             operator: String::new(),
                             inspection_until: None,
+                            fuel_norm: 0.0,
+                            service_hours: 0.0,
+                            service_done: 0.0,
+                            rented: false,
                         });
                         self.machines = self.db.machines(pid);
                         id
@@ -1271,6 +1275,13 @@ impl App {
                     hours: num(m.get("hours").copied().unwrap_or("")),
                     fuel: num(m.get("fuel").copied().unwrap_or("")),
                     task_id: self.task_id_by_name(m.get("task").copied().unwrap_or("")),
+                    number: String::new(),
+                    driver: String::new(),
+                    route: String::new(),
+                    odo_start: 0.0,
+                    odo_end: 0.0,
+                    trips: 0,
+                    cargo: 0.0,
                     note: String::new(),
                 });
                 added += 1;

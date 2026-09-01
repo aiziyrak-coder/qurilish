@@ -1623,6 +1623,8 @@ pub struct TaskCost {
     pub labour: f64,
     /// Shu ishga berilgan materialning qiymati.
     pub material: f64,
+    /// Shu ishda ishlagan texnika xarajati (TZ XVI.35).
+    pub machine: f64,
     pub total: f64,
     /// Bir birlik ish hajmining tannarxi. Hajm nol bo'lsa — 0.
     pub per_unit: f64,
@@ -1638,6 +1640,8 @@ pub fn task_costs(
     entries: &[TimesheetEntry],
     materials: &[Material],
     moves: &[StockMove],
+    machines: &[Machine],
+    logs: &[MachineLog],
 ) -> Vec<TaskCost> {
     tasks
         .iter()
@@ -1672,12 +1676,25 @@ pub fn task_costs(
                     m.qty * price
                 })
                 .sum();
-            let total = labour + material;
+            // Texnika: shu ishda ishlagan motosoat × soatlik stavka.
+            let machine: f64 = logs
+                .iter()
+                .filter(|l| l.task_id == Some(t.id))
+                .map(|l| {
+                    let rate = machines
+                        .iter()
+                        .find(|m| m.id == l.machine_id)
+                        .map_or(0.0, |m| m.hour_rate);
+                    l.hours * rate
+                })
+                .sum();
+            let total = labour + material + machine;
             TaskCost {
                 task_id: t.id,
                 hours,
                 labour,
                 material,
+                machine,
                 total,
                 per_unit: if t.volume > 0.0 {
                     total / t.volume
@@ -2426,6 +2443,142 @@ pub fn safety_score(
         without_ppe,
         bad_permits,
     }
+}
+
+// ================= XVI. Texnika: foydalanish, yoqilg'i, TX =================
+
+/// Bir smenadagi normal ish vaqti — foydalanish koeffitsiyenti shunga nisbatan.
+pub const SHIFT_HOURS: f64 = 8.0;
+
+/// Yoqilg'i normadan shu foizga oshsa — ortiqcha sarf (TZ XVI.18).
+pub const FUEL_OVERUSE_PCT: f64 = 10.0;
+
+/// Texnikani ishlatishga to'sqinlik (TZ XVI.27).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MachineBlock {
+    /// Texnik ko'rik muddati o'tgan.
+    Inspection,
+    /// Rejali TX muddati o'tgan.
+    Service,
+    /// Ta'mirda turibdi.
+    Repair,
+}
+
+/// Bitta texnikaning davr bo'yicha yakuni (TZ XVI.34–38).
+#[derive(Debug, Clone)]
+pub struct MachineLine {
+    pub machine_id: i64,
+    /// Ishlangan motosoat.
+    pub hours: f64,
+    /// Yurgan masofa.
+    pub distance: f64,
+    /// Sarflangan yoqilg'i.
+    pub fuel: f64,
+    /// Normativ yoqilg'i (norma × motosoat). Norma yo'q bo'lsa 0.
+    pub fuel_norm: f64,
+    /// Normadan ortiqcha sarf. Manfiy — tejalgan.
+    pub fuel_diff: f64,
+    /// Ortiqcha sarf chegaradan oshgan.
+    pub fuel_over: bool,
+    /// Xarajat: motosoat × soatlik stavka.
+    pub cost: f64,
+    /// Smena bo'lgan kunlar soni.
+    pub work_days: usize,
+    /// Foydalanish koeffitsiyenti, foizda: ishlangan soat / mavjud soat.
+    pub utilization: f64,
+    /// Bo'sh turgan kunlar.
+    pub idle_days: usize,
+    /// Keyingi TX gacha qolgan motosoat. Reja yo'q bo'lsa `None`.
+    pub service_left: Option<f64>,
+    /// Ishlatishga to'siq.
+    pub blocks: Vec<MachineBlock>,
+}
+
+impl MachineLine {
+    pub fn blocked(&self) -> bool {
+        !self.blocks.is_empty()
+    }
+}
+
+/// TZ XVI.34–38: texnika bo'yicha soat, yoqilg'i, xarajat va foydalanish.
+///
+/// Foydalanish koeffitsiyenti davrdagi **ish kunlariga** nisbatan hisoblanadi:
+/// dam olish kunida turgan kran bo'sh turgan hisoblanmaydi, aks holda har bir
+/// texnika bir xil «yomon» ko'rinardi.
+pub fn machine_lines(
+    machines: &[Machine],
+    logs: &[MachineLog],
+    from: NaiveDate,
+    to: NaiveDate,
+    today: NaiveDate,
+) -> Vec<MachineLine> {
+    // Davrdagi ish kunlari (yakshanbadan boshqa hammasi).
+    let mut work_days_total = 0usize;
+    let mut d = from;
+    while d <= to {
+        if chrono::Datelike::weekday(&d) != chrono::Weekday::Sun {
+            work_days_total += 1;
+        }
+        d += chrono::Duration::days(1);
+    }
+    let available = work_days_total as f64 * SHIFT_HOURS;
+
+    machines
+        .iter()
+        .map(|m| {
+            let mine: Vec<&MachineLog> = logs
+                .iter()
+                .filter(|l| l.machine_id == m.id && l.date >= from && l.date <= to)
+                .collect();
+            let hours: f64 = mine.iter().map(|l| l.hours).sum();
+            let fuel: f64 = mine.iter().map(|l| l.fuel).sum();
+            let fuel_norm = m.fuel_norm * hours;
+            let fuel_diff = fuel - fuel_norm;
+            let mut days: Vec<NaiveDate> = mine.iter().map(|l| l.date).collect();
+            days.sort_unstable();
+            days.dedup();
+
+            // Rejali TX: umumiy motosoatdan hisoblanadi, davrdan emas.
+            let total_hours: f64 = logs
+                .iter()
+                .filter(|l| l.machine_id == m.id)
+                .map(|l| l.hours)
+                .sum();
+            let service_left =
+                (m.service_hours > 0.0).then_some(m.service_done + m.service_hours - total_hours);
+
+            let mut blocks = Vec::new();
+            if m.inspection_until.is_some_and(|d| d < today) {
+                blocks.push(MachineBlock::Inspection);
+            }
+            if service_left.is_some_and(|v| v <= 0.0) {
+                blocks.push(MachineBlock::Service);
+            }
+            if m.status == MachineStatus::Repair {
+                blocks.push(MachineBlock::Repair);
+            }
+
+            MachineLine {
+                machine_id: m.id,
+                hours,
+                distance: mine.iter().map(|l| l.distance()).sum(),
+                fuel,
+                fuel_norm,
+                fuel_diff,
+                fuel_over: fuel_norm > 0.0 && fuel_diff > fuel_norm * FUEL_OVERUSE_PCT / 100.0,
+                cost: hours * m.hour_rate,
+                work_days: days.len(),
+                utilization: if available > 0.0 {
+                    hours / available * 100.0
+                } else {
+                    0.0
+                },
+                idle_days: work_days_total.saturating_sub(days.len()),
+                service_left,
+                blocks,
+            }
+        })
+        .collect()
 }
 
 // ================= IV. Ijro hujjatlari =================

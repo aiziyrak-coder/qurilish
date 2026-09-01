@@ -711,6 +711,8 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
         &app.timesheet,
         &app.materials,
         &app.stock_moves,
+        &app.machines,
+        &app.machine_logs,
     );
     if lines.is_empty() {
         ui.add_space(40.0);
@@ -726,6 +728,7 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
 
     let labour: f64 = lines.iter().map(|l| l.labour).sum();
     let material: f64 = lines.iter().map(|l| l.material).sum();
+    let machine: f64 = lines.iter().map(|l| l.machine).sum();
     stat_row(
         ui,
         vec![
@@ -742,8 +745,14 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
                 theme::text(),
             ),
             stat(
+                t("kpi_task_machine"),
+                money(machine),
+                t("kpi_task_machine_hint"),
+                theme::text(),
+            ),
+            stat(
                 t("kpi_total_cost"),
-                money(labour + material),
+                money(labour + material + machine),
                 t("kpi_total_cost_hint"),
                 theme::ok(),
             ),
@@ -761,7 +770,7 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("ts_costs")
-                .num_columns(7)
+                .num_columns(8)
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -769,6 +778,7 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
                     head_r(ui, 90.0, t("col_total_hours"));
                     head_r(ui, 140.0, t("col_labour"));
                     head_r(ui, 150.0, t("col_material_cost"));
+                    head_r(ui, 140.0, t("col_machine_cost"));
                     head_r(ui, 150.0, t("col_total"));
                     head_r(ui, 130.0, t("col_per_volume"));
                     head_l(ui, 60.0, t("col_unit"));
@@ -793,6 +803,17 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
                         );
                         cell_r(ui, 140.0, RichText::new(money(l.labour)).size(12.0));
                         cell_r(ui, 150.0, RichText::new(money(l.material)).size(12.0));
+                        cell_r(
+                            ui,
+                            140.0,
+                            RichText::new(money(l.machine))
+                                .size(12.0)
+                                .color(if l.machine > 0.0 {
+                                    theme::text()
+                                } else {
+                                    theme::muted()
+                                }),
+                        );
                         cell_r(ui, 150.0, RichText::new(money(l.total)).size(12.5).strong());
                         cell_r(
                             ui,
