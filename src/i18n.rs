@@ -2248,6 +2248,168 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cl_sales" => ("Sotuv holati", "Состояние продаж"),
         "cl_sold" => ("Sotilgan birliklar", "Продано единиц"),
 
+        // ---------- XI. Omborlar, partiyalar, rezerv, inventarizatsiya ----------
+        // Ombor turlari (TZ XI.3)
+        "wk_central" => ("Markaziy", "Центральный"),
+        "wk_object" => ("Obyekt ombori", "Склад объекта"),
+        "wk_temp" => ("Vaqtinchalik", "Временный"),
+        "wk_open" => ("Ochiq maydon", "Открытая площадка"),
+        "wk_fuel" => ("YoMM", "ГСМ"),
+        "wk_tool" => ("Asboblar", "Инструмент"),
+        "wk_equip" => ("Jihozlar", "Оборудование"),
+        "wk_wear" => ("Ish kiyimi va SIZ", "Спецодежда и СИЗ"),
+        "wk_returns" => ("Qaytgan material", "Возвратные материалы"),
+
+        "mk_return" => ("Qaytarish", "Возврат"),
+        "wh_all" => ("Barcha omborlar", "Все склады"),
+        "add_warehouse" => ("+ Ombor", "+ Склад"),
+        "add_warehouse_hint" => (
+            "Obyektda bir nechta ombor bo'lishi mumkin: markaziy, vaqtinchalik, YoMM, asbob va boshqalar. Har birining qoldig'i alohida yuritiladi.",
+            "На объекте может быть несколько складов: центральный, временный, ГСМ, инструмент и другие. Остаток каждого ведется отдельно.",
+        ),
+        "warehouse_new_name" => ("Ombor", "Склад"),
+        "wh_add_return" => ("+ Qaytarish", "+ Возврат"),
+        "wh_add_transfer" => ("+ Ko'chirish", "+ Перемещение"),
+        "writeoff_blind" => (
+            "Sababi yozilmagan hisobdan chiqarish bor — «Izoh» ustuniga sababni yozing",
+            "Есть списания без причины — укажите причину в графе «Примечание»",
+        ),
+        "stock_idle_hint" => (
+            "90 kundan beri harakat yo'q — material uzoq turibdi. Boshqa obyektga berish yoki sotishni ko'rib chiqing.",
+            "Более 90 дней нет движения — материал залежался. Рассмотрите передачу на другой объект или продажу.",
+        ),
+        "wh_transfer_hint" => (
+            "Ikki yozuv yaratiladi: bir ombordan chiqim, ikkinchisiga kirim. Ikkalasi bir hujjat raqami ostida turadi.",
+            "Создаются две записи: расход с одного склада и приход на другой. Обе под одним номером документа.",
+        ),
+        "wh_transfer_need_two" => (
+            "Ko'chirish uchun kamida ikkita ombor kerak",
+            "Для перемещения нужно минимум два склада",
+        ),
+        "wh_tab_batches" => ("Partiyalar", "Партии"),
+        "wh_tab_reserve" => ("Rezerv", "Резерв"),
+        "wh_tab_inventory" => ("Inventarizatsiya", "Инвентаризация"),
+
+        "col_warehouse" => ("Ombor", "Склад"),
+        "col_batch" => ("Partiya", "Партия"),
+        "col_reserved" => ("Rezervda", "В резерве"),
+        "col_available" => ("Erkin qoldiq", "Свободный остаток"),
+        "col_received" => ("Kelgan sana", "Дата прихода"),
+        "col_expires" => ("Yaroqlilik", "Годен до"),
+        "col_fefo" => ("Navbat", "Очередь"),
+        "col_until" => ("Muddat", "Срок"),
+        "col_book" => ("Hisob bo'yicha", "По учету"),
+
+        "kpi_reserved" => ("Rezervda", "В резерве"),
+        "kpi_reserved_hint" => ("ta material band", "материалов забронировано"),
+
+        // Partiyalar (TZ XI.9-10, XI.28)
+        "add_batch" => ("+ Partiya", "+ Партия"),
+        "batches_hint" => (
+            "Sertifikat va yaroqlilik muddati partiyaga bog'lanadi. Navbat FEFO bo'yicha: muddati birinchi tugaydigan partiya birinchi ishlatiladi.",
+            "Сертификат и срок годности привязаны к партии. Очередь по FEFO: первой используется партия, у которой раньше истекает срок.",
+        ),
+        "batches_empty" => (
+            "Partiya yozilmagan — «+ Partiya» bilan boshlang",
+            "Партии не внесены — начните с «+ Партия»",
+        ),
+        "batch_next" => ("keyingi ishlatiladi", "используется следующей"),
+        "batch_expired" => ("muddati o'tgan", "срок истек"),
+        "cert_stale" => ("sertifikat muddati o'tgan", "сертификат просрочен"),
+        "cert_stale_hint" => (
+            "Sertifikat amal qilish muddati tugagan — bunday partiyani ishga bermaslik kerak.",
+            "Срок действия сертификата истек — такую партию нельзя выдавать в работу.",
+        ),
+
+        // Rezerv (TZ XI.17)
+        "add_reservation" => ("+ Rezerv", "+ Резерв"),
+        "reserve_hint" => (
+            "Rezerv qoldiqni kamaytirmaydi, erkin qoldiqni kamaytiradi: material aniq ishga band qilinadi.",
+            "Резерв не уменьшает остаток, он уменьшает свободный остаток: материал бронируется под конкретную работу.",
+        ),
+        "reserve_empty" => (
+            "Rezerv yo'q — material aniq ishga band qilinmagan",
+            "Резервов нет — материал не забронирован под работу",
+        ),
+        "reserve_expired" => ("muddati o'tgan", "срок истек"),
+        "reserve_over" => ("yetishmaydi:", "не хватает:"),
+
+        // Inventarizatsiya (TZ XI.24-25)
+        "start_inventory" => ("Inventarizatsiya boshlash", "Начать инвентаризацию"),
+        "start_inventory_hint" => (
+            "Hozirgi qoldiq «hisob bo'yicha» ustuniga yozib qo'yiladi; siz faqat haqiqiy miqdorni kiritasiz.",
+            "Текущий остаток записывается в графу «по учету»; вы вносите только фактическое количество.",
+        ),
+        "inventory_hint" => (
+            "Yopilgandan keyin farqlar tuzatuvchi harakatga aylanadi va o'zgartirilmaydi.",
+            "После закрытия расхождения превращаются в корректирующие движения и не изменяются.",
+        ),
+        "inventory_empty" => (
+            "Inventarizatsiya o'tkazilmagan",
+            "Инвентаризация не проводилась",
+        ),
+        "inventory_started" => ("Inventarizatsiya boshlandi", "Инвентаризация начата"),
+        "inventory_closed" => ("Inventarizatsiya yopildi, farqlar:", "Инвентаризация закрыта, расхождений:"),
+        "close_inventory" => ("Yopish", "Закрыть"),
+        "close_inventory_hint" => (
+            "Farqlar bo'yicha tuzatuvchi harakat yoziladi: kamomad — hisobdan chiqarish, ortiqcha — kirim.",
+            "По расхождениям записываются корректирующие движения: недостача — списание, излишек — приход.",
+        ),
+        "inv_open" => ("ochiq", "открыта"),
+        "inv_closed" => ("yopilgan", "закрыта"),
+        "inv_closed_note" => (
+            "Yopilgan — o'zgartirib bo'lmaydi",
+            "Закрыта — изменить нельзя",
+        ),
+        "inv_no_diff" => ("Farq yo'q", "Расхождений нет"),
+        "inv_diff_count" => ("Farqlar", "Расхождений"),
+        "inv_short" => ("Kamomad", "Недостача"),
+        "inv_over" => ("Ortiqcha", "Излишек"),
+        "inv_document" => ("Inventarizatsiya", "Инвентаризация"),
+        "inv_adjust_note" => (
+            "Inventarizatsiya bo'yicha tuzatish",
+            "Корректировка по инвентаризации",
+        ),
+
+        // ---------- XI.14-15, XII.21-22. Sarf normalari ----------
+        "mat_tab_catalog" => ("Katalog", "Каталог"),
+        "mat_tab_norms" => ("Sarf normalari", "Нормы расхода"),
+        "mat_tab_usage" => ("Normativ / fakt", "Норма / факт"),
+
+        "add_norm" => ("+ Norma", "+ Норма"),
+        "norms_hint" => (
+            "Ishning bir birligiga qancha material ketishi. Normativ sarf shundan hisoblanadi: norma × bajarilgan hajm.",
+            "Сколько материала уходит на единицу работы. Нормативный расход считается отсюда: норма × выполненный объем.",
+        ),
+        "norms_empty" => (
+            "Norma kiritilmagan — «Norma» bilan boshlang",
+            "Нормы не заданы — начните с «Норма»",
+        ),
+        "norm_needs_task" => (
+            "Norma uchun avval GPRda ish va katalogda material bo'lishi kerak",
+            "Для нормы сначала нужна работа в ГПР и материал в каталоге",
+        ),
+        "col_per_unit" => ("Bir birlikka", "На единицу"),
+        "col_tolerance" => ("Ruxsat", "Допуск"),
+        "col_done_volume" => ("Bajarilgan", "Выполнено"),
+        "col_norm" => ("Normativ", "Норматив"),
+        "col_over_cost" => ("Ortiqcha summa", "Сумма перерасхода"),
+
+        "usage_empty" => (
+            "Taqqoslash uchun sarf normasi kerak — «Sarf normalari» ko'rinishiga o'ting",
+            "Для сравнения нужна норма расхода — перейдите в «Нормы расхода»",
+        ),
+        "usage_hint" => (
+            "Normativ sarf bajarilgan hajmga qarab hisoblanadi. Ruxsat etilgan foizdan oshgani qizil bo'ladi.",
+            "Нормативный расход считается по выполненному объему. Превышение сверх допуска выделено красным.",
+        ),
+        "kpi_norm_lines" => ("Normalar", "Норм"),
+        "kpi_norm_lines_hint" => ("ish × material", "работа × материал"),
+        "kpi_overuse" => ("Ortiqcha sarf", "Перерасход"),
+        "kpi_overuse_hint" => ("ruxsatdan oshgan", "сверх допуска"),
+        "kpi_overuse_cost" => ("Ortiqcha summa", "Сумма перерасхода"),
+        "kpi_overuse_cost_hint" => ("ortiqcha sarf qiymati", "стоимость перерасхода"),
+
         // ---------- XIII. Tabel ----------
         "add_worker" => ("+ Ishchi", "+ Рабочий"),
         "worker_new_name" => ("Yangi ishchi", "Новый рабочий"),

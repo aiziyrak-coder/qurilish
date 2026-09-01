@@ -188,6 +188,11 @@ fn post_to_stock(app: &App, pid: i64) -> usize {
         })
         .collect();
     let n = list.len();
+    // Kelgan material omborga tushadi (TZ XI.3): ombor tanlangan bo'lsa o'shanga,
+    // aks holda birinchi omborga. Ombor umuman yo'q bo'lsa — bog'lanmagan qoladi.
+    let warehouse = app
+        .warehouse_filter
+        .or_else(|| app.warehouses.first().map(|w| w.id));
     for (material_id, qty, price, date, document, counterparty) in list {
         app.db.insert_stock_move(&StockMove {
             id: 0,
@@ -201,6 +206,8 @@ fn post_to_stock(app: &App, pid: i64) -> usize {
             counterparty,
             task_id: None,
             note: String::new(),
+            warehouse_id: warehouse,
+            batch_id: None,
         });
     }
     n

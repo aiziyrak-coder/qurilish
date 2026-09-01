@@ -1880,6 +1880,380 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(l4.ordered, 0.0);
     }
 
+    /// Yordamchi: sinov uchun bitta material.
+    #[cfg(test)]
+    fn test_material(pid: i64, code: &str, min_stock: f64) -> crate::domain::Material {
+        crate::domain::Material {
+            id: 0,
+            project_id: pid,
+            code: code.into(),
+            name: code.into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: String::new(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock,
+            price: 1_000.0,
+            note: String::new(),
+        }
+    }
+
+    /// TZ XI.14–15: normativ sarf bajarilgan hajmga qarab hisoblanadi va
+    /// ruxsat etilgan foizdan oshgani ortiqcha sarf deb belgilanadi.
+    #[test]
+    fn consumption_compares_norm_with_fact() {
+        use crate::domain::{MaterialNorm, MoveKind, StockMove};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mid = t.db.insert_material(&test_material(pid, "N-1", 0.0));
+        let today = chrono::Local::now().date_naive();
+
+        // Ish: hajmi 100, yarmi bajarilgan → normativ hajm 50.
+        let mut tasks = t.db.tasks(pid).unwrap_or_default();
+        let task = tasks.first_mut().expect("ish");
+        task.volume = 100.0;
+        task.unit = "m3".into();
+        task.progress = 50.0;
+        t.db.update_task(task).unwrap();
+        let tid = task.id;
+
+        // Norma: bir birlikka 2.0 → normativ sarf 100.0, ruxsat 5% → 105.0.
+        t.db.insert_material_norm(&MaterialNorm {
+            id: 0,
+            project_id: pid,
+            task_id: tid,
+            material_id: mid,
+            per_unit: 2.0,
+            tolerance: 5.0,
+            note: String::new(),
+        });
+
+        let out = |kind: MoveKind, qty: f64| {
+            t.db.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id: mid,
+                date: today,
+                kind,
+                qty,
+                price: 0.0,
+                document: String::new(),
+                counterparty: String::new(),
+                task_id: Some(tid),
+                note: String::new(),
+                warehouse_id: None,
+                batch_id: None,
+            });
+        };
+        out(MoveKind::Out, 110.0);
+        // Qaytarilgan material sarf hisobidan chiqadi.
+        out(MoveKind::Return, 4.0);
+
+        let calc = |db: &crate::db::Db| {
+            crate::checks::consumption(
+                &db.material_norms(pid),
+                &db.tasks(pid).unwrap_or_default(),
+                &db.materials(pid),
+                &db.stock_moves(pid),
+            )
+            .into_iter()
+            .find(|l| l.material_id == mid)
+            .expect("qator")
+        };
+
+        let l = calc(&t.db);
+        assert_eq!(l.done_volume, 50.0);
+        assert_eq!(l.norm, 100.0);
+        assert_eq!(l.fact, 106.0, "qaytarilgani ayriladi");
+        assert_eq!(l.diff, 6.0);
+        assert!(l.over, "105.0 ruxsatdan oshgan");
+
+        // Ruxsatni kengaytirsak — endi ortiqcha sarf emas.
+        // Namunada ham normalar bor — o'zimiznikini material bo'yicha topamiz.
+        let mut n =
+            t.db.material_norms(pid)
+                .into_iter()
+                .find(|n| n.material_id == mid)
+                .expect("norma");
+        n.tolerance = 10.0;
+        t.db.update_material_norm(&n);
+        let l = calc(&t.db);
+        assert!(!l.over);
+        assert_eq!(l.over_cost, 0.0);
+    }
+
+    /// TZ XI.21: qaytarish qoldiqni oshiradi.
+    #[test]
+    fn return_increases_the_balance() {
+        use crate::domain::{MoveKind, StockMove};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mid = t.db.insert_material(&test_material(pid, "R-1", 0.0));
+        let today = chrono::Local::now().date_naive();
+        let mv = |kind: MoveKind, qty: f64| {
+            t.db.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id: mid,
+                date: today,
+                kind,
+                qty,
+                price: 0.0,
+                document: String::new(),
+                counterparty: String::new(),
+                task_id: None,
+                note: String::new(),
+                warehouse_id: None,
+                batch_id: None,
+            });
+        };
+        mv(MoveKind::In, 100.0);
+        mv(MoveKind::Out, 40.0);
+        mv(MoveKind::Return, 10.0);
+
+        let lines =
+            crate::checks::stock_balances(&t.db.materials(pid), &t.db.stock_moves(pid), &[], today);
+        let l = lines.iter().find(|l| l.material_id == mid).unwrap();
+        assert_eq!(l.balance, 70.0);
+        assert_eq!(l.returned, 10.0);
+    }
+
+    /// TZ XI.17: rezerv erkin qoldiqni kamaytiradi, lekin qoldiqni emas.
+    #[test]
+    fn reservation_reduces_available_not_balance() {
+        use crate::domain::{MoveKind, Reservation, StockMove};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        // Minimal zaxira 30: rezervdan keyin erkin qoldiq undan pastga tushadi.
+        let mid = t.db.insert_material(&test_material(pid, "R-2", 30.0));
+        let today = chrono::Local::now().date_naive();
+        t.db.insert_stock_move(&StockMove {
+            id: 0,
+            project_id: pid,
+            material_id: mid,
+            date: today,
+            kind: MoveKind::In,
+            qty: 50.0,
+            price: 0.0,
+            document: String::new(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+            warehouse_id: None,
+            batch_id: None,
+        });
+        t.db.insert_reservation(&Reservation {
+            id: 0,
+            project_id: pid,
+            material_id: mid,
+            task_id: None,
+            qty: 30.0,
+            date: today,
+            until: None,
+            note: String::new(),
+        });
+
+        let lines = crate::checks::stock_balances(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.reservations(pid),
+            today,
+        );
+        let l = lines.iter().find(|l| l.material_id == mid).unwrap();
+        assert_eq!(l.balance, 50.0, "qoldiq o'zgarmasligi kerak");
+        assert_eq!(l.reserved, 30.0);
+        assert_eq!(l.available, 20.0);
+        // Ogohlantirish erkin qoldiqqa qaraydi.
+        assert!(l.below_min);
+
+        // Muddati o'tgan rezerv hisobga olinmaydi.
+        // Namuna ma'lumotida ham rezerv bor — o'zimiznikini material bo'yicha topamiz.
+        let mut r =
+            t.db.reservations(pid)
+                .into_iter()
+                .find(|r| r.material_id == mid)
+                .expect("rezerv");
+        r.until = Some(today - chrono::Duration::days(1));
+        t.db.update_reservation(&r);
+        let lines = crate::checks::stock_balances(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.reservations(pid),
+            today,
+        );
+        let l = lines.iter().find(|l| l.material_id == mid).unwrap();
+        assert_eq!(l.reserved, 0.0);
+        assert_eq!(l.available, 50.0);
+        assert!(!l.below_min);
+    }
+
+    /// TZ XI.3: har bir ombor o'z qoldig'ini yuritadi.
+    #[test]
+    fn balances_are_split_by_warehouse() {
+        use crate::domain::{MoveKind, StockMove, Warehouse, WarehouseKind};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mid = t.db.insert_material(&test_material(pid, "R-3", 0.0));
+        let today = chrono::Local::now().date_naive();
+        let wh = |name: &str, kind: WarehouseKind| {
+            t.db.insert_warehouse(&Warehouse {
+                id: 0,
+                project_id: pid,
+                name: name.into(),
+                kind,
+                responsible: String::new(),
+                note: String::new(),
+            })
+        };
+        let central = wh("Markaziy", WarehouseKind::Central);
+        let site = wh("Obyekt", WarehouseKind::Object);
+
+        let mv = |w: i64, kind: MoveKind, qty: f64| {
+            t.db.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id: mid,
+                date: today,
+                kind,
+                qty,
+                price: 0.0,
+                document: String::new(),
+                counterparty: String::new(),
+                task_id: None,
+                note: String::new(),
+                warehouse_id: Some(w),
+                batch_id: None,
+            });
+        };
+        mv(central, MoveKind::In, 100.0);
+        mv(site, MoveKind::In, 40.0);
+        mv(site, MoveKind::Out, 15.0);
+
+        let materials = t.db.materials(pid);
+        let moves = t.db.stock_moves(pid);
+        let at = |w: Option<i64>| {
+            crate::checks::stock_balances_in(&materials, &moves, &[], today, w)
+                .into_iter()
+                .find(|l| l.material_id == mid)
+                .unwrap()
+                .balance
+        };
+        assert_eq!(at(Some(central)), 100.0);
+        assert_eq!(at(Some(site)), 25.0);
+        assert_eq!(
+            at(None),
+            125.0,
+            "umumiy qoldiq — barcha omborlar yig'indisi"
+        );
+    }
+
+    /// TZ XI.9 va XI.28: partiya qoldig'i va FEFO navbati.
+    #[test]
+    fn batches_track_balance_and_fefo_order() {
+        use crate::domain::{Batch, MoveKind, StockMove};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mid = t.db.insert_material(&test_material(pid, "R-4", 0.0));
+        let today = chrono::Local::now().date_naive();
+
+        let mk = |number: &str, days_ago: i64, expires_in: Option<i64>| {
+            t.db.insert_batch(&Batch {
+                id: 0,
+                project_id: pid,
+                material_id: mid,
+                number: number.into(),
+                received: today - chrono::Duration::days(days_ago),
+                supplier: String::new(),
+                cert_no: String::new(),
+                cert_until: None,
+                expires: expires_in.map(|d| today + chrono::Duration::days(d)),
+                note: String::new(),
+            })
+        };
+        // Birinchi kelgan, lekin kech tugaydi.
+        let old = mk("P-001", 30, Some(90));
+        // Keyin kelgan, ammo tezroq tugaydi — FEFO shuni birinchi beradi.
+        let soon = mk("P-002", 5, Some(10));
+
+        let mv = |b: i64, kind: MoveKind, qty: f64| {
+            t.db.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id: mid,
+                date: today,
+                kind,
+                qty,
+                price: 0.0,
+                document: String::new(),
+                counterparty: String::new(),
+                task_id: None,
+                note: String::new(),
+                warehouse_id: None,
+                batch_id: Some(b),
+            });
+        };
+        mv(old, MoveKind::In, 20.0);
+        mv(soon, MoveKind::In, 30.0);
+        mv(old, MoveKind::Out, 5.0);
+
+        let lines =
+            crate::checks::batch_balances(&t.db.batches(pid), &t.db.stock_moves(pid), today);
+        let get = |id: i64| lines.iter().find(|l| l.batch_id == id).unwrap();
+        assert_eq!(get(old).balance, 15.0);
+        assert_eq!(get(soon).balance, 30.0);
+        assert!(
+            get(soon).next_to_use,
+            "FEFO: muddati yaqin partiya birinchi"
+        );
+        assert!(!get(old).next_to_use);
+        assert!(!get(soon).expired);
+    }
+
+    /// TZ XI.25: inventarizatsiya farqlari.
+    #[test]
+    fn inventory_reports_only_real_differences() {
+        use crate::domain::{Inventory, InventoryLine};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let a = t.db.insert_material(&test_material(pid, "R-5", 0.0));
+        let b = t.db.insert_material(&test_material(pid, "R-6", 0.0));
+        let today = chrono::Local::now().date_naive();
+
+        let inv = t.db.insert_inventory(&Inventory {
+            id: 0,
+            project_id: pid,
+            warehouse_id: None,
+            date: today,
+            responsible: "Omborchi".into(),
+            closed: false,
+            note: String::new(),
+        });
+        let line = |mid: i64, book: f64, fact: f64| {
+            t.db.insert_inventory_line(&InventoryLine {
+                id: 0,
+                inventory_id: inv,
+                material_id: mid,
+                book,
+                fact,
+                note: String::new(),
+            });
+        };
+        line(a, 100.0, 96.0);
+        line(b, 50.0, 50.0);
+
+        let diffs = crate::checks::inventory_diffs(&t.db.inventory_lines(pid), inv);
+        assert_eq!(diffs.len(), 1, "faqat haqiqiy farq chiqishi kerak");
+        assert_eq!(diffs[0].material_id, a);
+        assert_eq!(diffs[0].diff, -4.0, "kamomad manfiy bo'ladi");
+    }
+
     /// TZ XI: qoldiq = kirim - chiqim - hisobdan chiqarish; qiymati kirim
     /// narxlarining vaznlangan o'rtachasi bo'yicha hisoblanadi.
     #[test]
@@ -1917,6 +2291,8 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 counterparty: String::new(),
                 task_id: None,
                 note: String::new(),
+                warehouse_id: None,
+                batch_id: None,
             });
         };
         mv(MoveKind::In, 100.0, 800.0);
@@ -1924,7 +2300,12 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         mv(MoveKind::Out, 130.0, 0.0);
         mv(MoveKind::WriteOff, 10.0, 0.0);
 
-        let lines = crate::checks::stock_balances(&t.db.materials(pid), &t.db.stock_moves(pid));
+        let lines = crate::checks::stock_balances(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.reservations(pid),
+            today,
+        );
         let l = lines.iter().find(|l| l.material_id == mid).expect("qator");
         assert_eq!(l.balance, 60.0);
         // Kirimlar o'rtachasi: (100*800 + 100*1200) / 200 = 1000.
@@ -1936,7 +2317,12 @@ ENDSEC;\nEND-ISO-10303-21;\n";
 
         // Ortiqcha chiqim manfiy qoldiq beradi va shu holat belgilanadi.
         mv(MoveKind::Out, 100.0, 0.0);
-        let lines = crate::checks::stock_balances(&t.db.materials(pid), &t.db.stock_moves(pid));
+        let lines = crate::checks::stock_balances(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.reservations(pid),
+            today,
+        );
         let l = lines.iter().find(|l| l.material_id == mid).unwrap();
         assert_eq!(l.balance, -40.0);
         assert!(l.negative);

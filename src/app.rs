@@ -4,10 +4,10 @@ use crate::checks::{self, Norm};
 use crate::cpm::{self, Progress, Schedule};
 use crate::db::Db;
 use crate::domain::{
-    Block, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Issue,
-    IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material, Payment, PprDoc,
-    Purchase, QualityCheck, Request, SafetyEvent, Severity, StockMove, TimesheetEntry, Unit,
-    Worker,
+    Batch, Block, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Inventory,
+    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material,
+    Payment, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent, Severity,
+    StockMove, TimesheetEntry, Unit, Warehouse, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -404,6 +404,15 @@ pub struct App {
     pub journal: Vec<JournalEntry>,
     pub materials: Vec<Material>,
     pub stock_moves: Vec<StockMove>,
+    pub warehouses: Vec<Warehouse>,
+    pub batches: Vec<Batch>,
+    pub reservations: Vec<Reservation>,
+    pub inventories: Vec<Inventory>,
+    pub inventory_lines: Vec<InventoryLine>,
+    /// Ishga material sarf normalari (TZ XI.15).
+    pub material_norms: Vec<crate::domain::MaterialNorm>,
+    /// Omborda tanlangan bo'lim (barcha omborlar — `None`).
+    pub warehouse_filter: Option<i64>,
     pub requests: Vec<Request>,
     pub purchases: Vec<Purchase>,
     pub blocks: Vec<Block>,
@@ -524,6 +533,13 @@ impl App {
             journal: Vec::new(),
             materials: Vec::new(),
             stock_moves: Vec::new(),
+            warehouses: Vec::new(),
+            batches: Vec::new(),
+            reservations: Vec::new(),
+            inventories: Vec::new(),
+            inventory_lines: Vec::new(),
+            material_norms: Vec::new(),
+            warehouse_filter: None,
             requests: Vec::new(),
             purchases: Vec::new(),
             blocks: Vec::new(),
@@ -666,6 +682,13 @@ impl App {
         self.journal.clear();
         self.materials.clear();
         self.stock_moves.clear();
+        self.warehouses.clear();
+        self.batches.clear();
+        self.reservations.clear();
+        self.inventories.clear();
+        self.inventory_lines.clear();
+        self.material_norms.clear();
+        self.warehouse_filter = None;
         self.requests.clear();
         self.purchases.clear();
         self.blocks.clear();
@@ -701,6 +724,12 @@ impl App {
         self.journal = self.db.journal(id);
         self.materials = self.db.materials(id);
         self.stock_moves = self.db.stock_moves(id);
+        self.warehouses = self.db.warehouses(id);
+        self.batches = self.db.batches(id);
+        self.reservations = self.db.reservations(id);
+        self.inventories = self.db.inventories(id);
+        self.inventory_lines = self.db.inventory_lines(id);
+        self.material_norms = self.db.material_norms(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);
         self.workers = self.db.workers(id);
@@ -1394,9 +1423,40 @@ impl App {
         checks::supply_status(&self.requests, &self.purchases, self.today)
     }
 
-    /// TZ XI: ombor qoldiqlari. Materiallar va harakatlar ro'yxatidan hisoblanadi.
+    /// TZ XI: ombor qoldiqlari. Materiallar, harakatlar va rezervlardan hisoblanadi.
     pub fn stock(&self) -> Vec<checks::StockLine> {
-        checks::stock_balances(&self.materials, &self.stock_moves)
+        checks::stock_balances(
+            &self.materials,
+            &self.stock_moves,
+            &self.reservations,
+            self.today,
+        )
+    }
+
+    /// Bitta ombor kesimidagi qoldiq (TZ XI.3).
+    pub fn stock_in(&self, warehouse: Option<i64>) -> Vec<checks::StockLine> {
+        checks::stock_balances_in(
+            &self.materials,
+            &self.stock_moves,
+            &self.reservations,
+            self.today,
+            warehouse,
+        )
+    }
+
+    /// Partiyalar bo'yicha qoldiq va FEFO navbati (TZ XI.9, XI.28).
+    /// Normativ va haqiqiy sarf (TZ XI.14–15).
+    pub fn consumption(&self) -> Vec<crate::checks::ConsumptionLine> {
+        crate::checks::consumption(
+            &self.material_norms,
+            &self.tasks,
+            &self.materials,
+            &self.stock_moves,
+        )
+    }
+
+    pub fn batch_lines(&self) -> Vec<checks::BatchLine> {
+        checks::batch_balances(&self.batches, &self.stock_moves, self.today)
     }
 
     /// TZ III.31: smetaning pul ko'rinishidagi xulosasi.

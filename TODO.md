@@ -25,15 +25,15 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VIII. Buyurtmachi | 37 | 9 | 6 | 22 |
 | IX. Arizalar | 42 | 10 | 8 | 24 |
 | X. Xaridlar | 48 | 9 | 7 | 32 |
-| XI. Ombor | 48 | 12 | 6 | 30 |
-| XII. Materiallar | 41 | 9 | 6 | 26 |
+| XI. Ombor | 48 | 25 | 6 | 17 |
+| XII. Materiallar | 41 | 12 | 6 | 23 |
 | XIII. Tabel | 44 | 9 | 6 | 29 |
 | XIV. Sifat | 41 | 8 | 6 | 27 |
 | XV. Xavfsizlik | 41 | 7 | 6 | 28 |
 | XVI. Mashinalar | 50 | 10 | 7 | 33 |
 | XVII. AI analitika | 51 | 12 | 9 | 30 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **154** | **112** | **416** |
+| **Jami** | **682** | **170** | **112** | **400** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -108,7 +108,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 25. Smeta → Ombor (avtomatik)
 - [ ] 26. Smeta → GPR (avtomatik bog'lanish)
 - [ ] 27. Smeta → Prorabning kunlik hisoboti
-- [~] 28. Ortiqcha sarfni nazorat qilish — *hajm oshishi topiladi*
+- [x] 28. Ortiqcha sarfni nazorat qilish — *sarf normalari bilan*
 - [ ] 29. AI yakuniy qiymat prognozi
 - [~] 30. Tejashni izlash — *eng past narxga keltirish hisobi*
 - [~] 31. AI-smetachining bosh ekrani — *KPI bor, to'liq COST CONTROL paneli yo'q*
@@ -426,32 +426,32 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 - [x] 1. Modul maqsadi
 - [x] 2. Omborning bosh ekrani
-- [ ] 3. **Bir necha ombor**
+- [x] 3. **Bir necha ombor** — *tur, mas'ul, ombor kesimida qoldiq*
 - [x] 4. Material kartochkasi
 - [ ] 🔒 5. QR / shtrix-kod
 - [x] 6. Materialni qabul qilish
 - [~] 7. Kirish nazorati — *sifat moduli orqali*
 - [ ] 8. AI material tekshiruvi
-- [ ] 9. **Partiyalar**
-- [~] 10. Sertifikatlar — *materialda; partiyada emas*
+- [x] 9. **Partiyalar** — *raqam, kelgan sana, yetkazib beruvchi, qoldiq*
+- [x] 10. Sertifikatlar — *partiyada; muddati o'tgani qizil*
 - [x] 11. Material berish
 - [x] 12. Aniq ish bo'yicha berish
 - [ ] 13. Smeta bilan bog'lanish
-- [ ] 14. Ortiqcha sarfni nazorat qilish
-- [ ] 15. Normativ sarf
+- [x] 14. Ortiqcha sarfni nazorat qilish — *«Normativ / fakt», ruxsat foizi*
+- [x] 15. Normativ sarf — *bajarilgan hajmga qarab*
 - [x] 16. Real vaqtdagi qoldiqlar
-- [ ] 17. **Rezervlash**
+- [x] 17. **Rezervlash** — *erkin qoldiq = qoldiq − rezerv*
 - [x] 18. Kamomadni avtomatik aniqlash
 - [x] 19. Avtomatik ariza yaratish
-- [ ] 20. Omborlar orasida ko'chirish
-- [ ] 21. **Qaytarish**
+- [x] 20. Omborlar orasida ko'chirish — *bitta hujjat, ikki yozuv*
+- [x] 21. **Qaytarish** — *MoveKind::Return, qoldiqni oshiradi*
 - [x] 22. Hisobdan chiqarish
-- [ ] 23. Nazoratsiz hisobdan chiqarishni taqiqlash
-- [ ] 24. **Inventarizatsiya**
-- [ ] 25. Farqlar
+- [~] 23. Nazoratsiz hisobdan chiqarishni taqiqlash — *sababsizlari ogohlantiriladi*
+- [x] 24. **Inventarizatsiya** — *hisob/fakt, yopilgach o'zgarmas*
+- [x] 25. Farqlar — *tuzatuvchi harakatga aylanadi*
 - [ ] 26. AI kamomad sababini izlashi
-- [~] 27. Yaroqlilik muddati — *sertifikat muddati*
-- [ ] 28. FIFO / FEFO
+- [x] 27. Yaroqlilik muddati — *partiyada*
+- [x] 28. FIFO / FEFO — *navbatdagi partiya belgilanadi*
 - [ ] 29. Harorat nazorati
 - [~] 30. **YoMM** — *texnika modulida yoqilg'i*
 - [ ] 31. AI YoMM nazorati
@@ -464,9 +464,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 38. Materialning o'rtacha qiymati — *vaznlangan o'rtacha*
 - [~] 39. Narxlarni nazorat qilish
 - [~] 40. Rahbar paneli
-- [ ] 41. Uzoq turgan materiallar
+- [x] 41. Uzoq turgan materiallar — *90 kun harakatsiz → sariq*
 - [ ] 42. Obyektlar orasida qayta taqsimlash
-- [ ] 43. Nolikvidlarni nazorat qilish
+- [~] 43. Nolikvidlarni nazorat qilish — *uzoq turganlar orqali*
 - [ ] 44. Ombor fotosi
 - [~] 45. Omborchining AI-yordamchisi
 - [~] 46. Direktorning AI-yordamchisi
@@ -493,12 +493,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 14. AI OCR sertifikatlar
 - [ ] 15. AI sertifikatni tekshiradi
 - [x] 16. Hujjat amal qilish muddati
-- [ ] 17. Material → partiya
+- [x] 17. Material → partiya — *ombor partiyalari*
 - [~] 18. Material → yetkazib beruvchi — *xarid orqali*
 - [ ] 19. Narx tarixi
 - [ ] 🔒 20. Bozor narxi
-- [ ] 21. Material → sarf normalari
-- [ ] 22. AI ortiqcha sarfni tahlil qilishi
+- [x] 21. Material → sarf normalari
+- [~] 22. AI ortiqcha sarfni tahlil qilishi — *farq va summa hisoblanadi*
 - [~] 23. Obyektlar bo'yicha materiallar
 - [ ] 24. Materiallarni qayta taqsimlash
 - [~] 25. Tez orada kerak bo'ladigan materiallar — *analitikada*
@@ -819,8 +819,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 
-1. **Ombor: partiyalar, rezervlash, inventarizatsiya, qaytarish, bir necha ombor** (XI.3, 9, 17, 21, 24–26)
-2. **Normativ sarf va ortiqcha sarf nazorati** (XI.14–15, XII.21–22, III.28)
+1. ~~Ombor: partiyalar, rezervlash, inventarizatsiya, qaytarish, bir necha ombor~~ (XI.3, 9, 17, 20–21, 24–28) — **bajarildi**
+2. ~~Normativ sarf va ortiqcha sarf nazorati~~ (XI.14–15, XII.21–22, III.28) — **bajarildi**
 3. **Tabel: brigadalar, smenalar, yo'qliklar, bo'sh turish, tannarx** (XIII.8–31)
 4. **Xaridlar: KP, yetkazib beruvchilar, qisman yetkazish, byudjet** (X.7–15, 30, 35)
 5. **Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi** (IX.8–10, 31–32)

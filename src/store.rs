@@ -366,6 +366,72 @@ impl Db {
                 role TEXT NOT NULL DEFAULT 'admin',
                 note TEXT NOT NULL DEFAULT ''
             );
+
+            CREATE TABLE IF NOT EXISTS warehouse (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'object',
+                responsible TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS batch (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                number TEXT NOT NULL DEFAULT '',
+                received TEXT NOT NULL,
+                supplier TEXT NOT NULL DEFAULT '',
+                cert_no TEXT NOT NULL DEFAULT '',
+                cert_until TEXT,
+                expires TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_batch_mat ON batch(material_id);
+
+            CREATE TABLE IF NOT EXISTS reservation (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                task_id INTEGER,
+                qty REAL NOT NULL DEFAULT 0,
+                date TEXT NOT NULL,
+                until TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
+
+            CREATE TABLE IF NOT EXISTS material_norm (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                task_id INTEGER NOT NULL REFERENCES task(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                per_unit REAL NOT NULL DEFAULT 0,
+                tolerance REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_norm_task ON material_norm(task_id);
+
+            CREATE TABLE IF NOT EXISTS inventory (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                warehouse_id INTEGER,
+                date TEXT NOT NULL,
+                responsible TEXT NOT NULL DEFAULT '',
+                closed INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory_line (
+                id INTEGER PRIMARY KEY,
+                inventory_id INTEGER NOT NULL REFERENCES inventory(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                book REAL NOT NULL DEFAULT 0,
+                fact REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_invline ON inventory_line(inventory_id);
             "#,
         )?;
 
@@ -375,6 +441,8 @@ impl Db {
             "ALTER TABLE ppr ADD COLUMN approved_at TEXT",
             "ALTER TABLE issue ADD COLUMN deadline TEXT",
             "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
+            "ALTER TABLE stock_move ADD COLUMN batch_id INTEGER",
         ] {
             let _ = self.conn().execute(sql, []);
         }
@@ -664,6 +732,287 @@ impl Db {
         self.upd(
             "UPDATE app_user SET name=?2,role=?3,note=?4 WHERE id=?1",
             params![u.id, u.name, u.role.code(), u.note],
+        )
+    }
+
+    // ---------- XI. Omborlar, partiyalar, rezerv, inventarizatsiya ----------
+
+    pub fn warehouses(&self, pid: i64) -> Vec<Warehouse> {
+        self.list(
+            "SELECT id,project_id,name,kind,responsible,note
+             FROM warehouse WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(Warehouse {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    kind: WarehouseKind::parse(&r.get::<_, String>(3)?),
+                    responsible: r.get(4)?,
+                    note: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_warehouse(&self, w: &Warehouse) -> i64 {
+        self.ins(
+            "INSERT INTO warehouse (project_id,name,kind,responsible,note)
+             VALUES (?1,?2,?3,?4,?5)",
+            params![w.project_id, w.name, w.kind.code(), w.responsible, w.note],
+        )
+    }
+
+    pub fn update_warehouse(&self, w: &Warehouse) -> bool {
+        self.upd(
+            "UPDATE warehouse SET name=?2,kind=?3,responsible=?4,note=?5 WHERE id=?1",
+            params![w.id, w.name, w.kind.code(), w.responsible, w.note],
+        )
+    }
+
+    pub fn batches(&self, pid: i64) -> Vec<Batch> {
+        self.list(
+            "SELECT id,project_id,material_id,number,received,supplier,cert_no,cert_until,
+                    expires,note
+             FROM batch WHERE project_id=?1 ORDER BY received,id",
+            pid,
+            |r| {
+                Ok(Batch {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    material_id: r.get(2)?,
+                    number: r.get(3)?,
+                    received: date(&r.get::<_, String>(4)?),
+                    supplier: r.get(5)?,
+                    cert_no: r.get(6)?,
+                    cert_until: odate(r.get(7)?),
+                    expires: odate(r.get(8)?),
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_batch(&self, b: &Batch) -> i64 {
+        self.ins(
+            "INSERT INTO batch (project_id,material_id,number,received,supplier,cert_no,
+                                cert_until,expires,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                b.project_id,
+                b.material_id,
+                b.number,
+                b.received.to_string(),
+                b.supplier,
+                b.cert_no,
+                b.cert_until.map(|d| d.to_string()),
+                b.expires.map(|d| d.to_string()),
+                b.note
+            ],
+        )
+    }
+
+    pub fn update_batch(&self, b: &Batch) -> bool {
+        self.upd(
+            "UPDATE batch SET material_id=?2,number=?3,received=?4,supplier=?5,cert_no=?6,
+                              cert_until=?7,expires=?8,note=?9
+             WHERE id=?1",
+            params![
+                b.id,
+                b.material_id,
+                b.number,
+                b.received.to_string(),
+                b.supplier,
+                b.cert_no,
+                b.cert_until.map(|d| d.to_string()),
+                b.expires.map(|d| d.to_string()),
+                b.note
+            ],
+        )
+    }
+
+    pub fn reservations(&self, pid: i64) -> Vec<Reservation> {
+        self.list(
+            "SELECT id,project_id,material_id,task_id,qty,date,until,note
+             FROM reservation WHERE project_id=?1 ORDER BY date,id",
+            pid,
+            |r| {
+                Ok(Reservation {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    material_id: r.get(2)?,
+                    task_id: r.get(3)?,
+                    qty: r.get(4)?,
+                    date: date(&r.get::<_, String>(5)?),
+                    until: odate(r.get(6)?),
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_reservation(&self, r: &Reservation) -> i64 {
+        self.ins(
+            "INSERT INTO reservation (project_id,material_id,task_id,qty,date,until,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                r.project_id,
+                r.material_id,
+                r.task_id,
+                r.qty,
+                r.date.to_string(),
+                r.until.map(|d| d.to_string()),
+                r.note
+            ],
+        )
+    }
+
+    pub fn update_reservation(&self, r: &Reservation) -> bool {
+        self.upd(
+            "UPDATE reservation SET material_id=?2,task_id=?3,qty=?4,date=?5,until=?6,note=?7
+             WHERE id=?1",
+            params![
+                r.id,
+                r.material_id,
+                r.task_id,
+                r.qty,
+                r.date.to_string(),
+                r.until.map(|d| d.to_string()),
+                r.note
+            ],
+        )
+    }
+
+    pub fn material_norms(&self, pid: i64) -> Vec<MaterialNorm> {
+        self.list(
+            "SELECT id,project_id,task_id,material_id,per_unit,tolerance,note
+             FROM material_norm WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(MaterialNorm {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    task_id: r.get(2)?,
+                    material_id: r.get(3)?,
+                    per_unit: r.get(4)?,
+                    tolerance: r.get(5)?,
+                    note: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_material_norm(&self, n: &MaterialNorm) -> i64 {
+        self.ins(
+            "INSERT INTO material_norm (project_id,task_id,material_id,per_unit,tolerance,note)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                n.project_id,
+                n.task_id,
+                n.material_id,
+                n.per_unit,
+                n.tolerance,
+                n.note
+            ],
+        )
+    }
+
+    pub fn update_material_norm(&self, n: &MaterialNorm) -> bool {
+        self.upd(
+            "UPDATE material_norm SET task_id=?2,material_id=?3,per_unit=?4,tolerance=?5,note=?6
+             WHERE id=?1",
+            params![
+                n.id,
+                n.task_id,
+                n.material_id,
+                n.per_unit,
+                n.tolerance,
+                n.note
+            ],
+        )
+    }
+
+    pub fn inventories(&self, pid: i64) -> Vec<Inventory> {
+        self.list(
+            "SELECT id,project_id,warehouse_id,date,responsible,closed,note
+             FROM inventory WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(Inventory {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    warehouse_id: r.get(2)?,
+                    date: date(&r.get::<_, String>(3)?),
+                    responsible: r.get(4)?,
+                    closed: r.get::<_, i64>(5)? != 0,
+                    note: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_inventory(&self, v: &Inventory) -> i64 {
+        self.ins(
+            "INSERT INTO inventory (project_id,warehouse_id,date,responsible,closed,note)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                v.project_id,
+                v.warehouse_id,
+                v.date.to_string(),
+                v.responsible,
+                i64::from(v.closed),
+                v.note
+            ],
+        )
+    }
+
+    pub fn update_inventory(&self, v: &Inventory) -> bool {
+        self.upd(
+            "UPDATE inventory SET warehouse_id=?2,date=?3,responsible=?4,closed=?5,note=?6
+             WHERE id=?1",
+            params![
+                v.id,
+                v.warehouse_id,
+                v.date.to_string(),
+                v.responsible,
+                i64::from(v.closed),
+                v.note
+            ],
+        )
+    }
+
+    pub fn inventory_lines(&self, pid: i64) -> Vec<InventoryLine> {
+        self.list(
+            "SELECT l.id,l.inventory_id,l.material_id,l.book,l.fact,l.note
+             FROM inventory_line l
+             JOIN inventory v ON v.id = l.inventory_id
+             WHERE v.project_id=?1 ORDER BY l.id",
+            pid,
+            |r| {
+                Ok(InventoryLine {
+                    id: r.get(0)?,
+                    inventory_id: r.get(1)?,
+                    material_id: r.get(2)?,
+                    book: r.get(3)?,
+                    fact: r.get(4)?,
+                    note: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_inventory_line(&self, l: &InventoryLine) -> i64 {
+        self.ins(
+            "INSERT INTO inventory_line (inventory_id,material_id,book,fact,note)
+             VALUES (?1,?2,?3,?4,?5)",
+            params![l.inventory_id, l.material_id, l.book, l.fact, l.note],
+        )
+    }
+
+    pub fn update_inventory_line(&self, l: &InventoryLine) -> bool {
+        self.upd(
+            "UPDATE inventory_line SET material_id=?2,book=?3,fact=?4,note=?5 WHERE id=?1",
+            params![l.id, l.material_id, l.book, l.fact, l.note],
         )
     }
 
@@ -1441,7 +1790,8 @@ impl Db {
 
     pub fn stock_moves(&self, pid: i64) -> Vec<StockMove> {
         self.list(
-            "SELECT id,project_id,material_id,date,kind,qty,price,document,counterparty,task_id,note
+            "SELECT id,project_id,material_id,date,kind,qty,price,document,counterparty,task_id,
+                    note,warehouse_id,batch_id
              FROM stock_move WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -1457,6 +1807,8 @@ impl Db {
                     counterparty: r.get(8)?,
                     task_id: r.get(9)?,
                     note: r.get(10)?,
+                    warehouse_id: r.get(11)?,
+                    batch_id: r.get(12)?,
                 })
             },
         )
@@ -1464,11 +1816,22 @@ impl Db {
 
     pub fn insert_stock_move(&self, m: &StockMove) -> i64 {
         self.ins(
-            "INSERT INTO stock_move (project_id,material_id,date,kind,qty,price,document,counterparty,task_id,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO stock_move (project_id,material_id,date,kind,qty,price,document,
+                                     counterparty,task_id,note,warehouse_id,batch_id)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
             params![
-                m.project_id, m.material_id, m.date.to_string(), m.kind.code(), m.qty, m.price,
-                m.document, m.counterparty, m.task_id, m.note
+                m.project_id,
+                m.material_id,
+                m.date.to_string(),
+                m.kind.code(),
+                m.qty,
+                m.price,
+                m.document,
+                m.counterparty,
+                m.task_id,
+                m.note,
+                m.warehouse_id,
+                m.batch_id
             ],
         )
     }
@@ -1476,7 +1839,8 @@ impl Db {
     pub fn update_stock_move(&self, m: &StockMove) -> bool {
         self.upd(
             "UPDATE stock_move SET material_id=?2,date=?3,kind=?4,qty=?5,price=?6,document=?7,
-                    counterparty=?8,task_id=?9,note=?10 WHERE id=?1",
+                    counterparty=?8,task_id=?9,note=?10,warehouse_id=?11,batch_id=?12
+             WHERE id=?1",
             params![
                 m.id,
                 m.material_id,
@@ -1487,7 +1851,9 @@ impl Db {
                 m.document,
                 m.counterparty,
                 m.task_id,
-                m.note
+                m.note,
+                m.warehouse_id,
+                m.batch_id
             ],
         )
     }
@@ -3197,6 +3563,34 @@ impl Db {
                 counterparty: counterparty.into(),
                 task_id,
                 note: String::new(),
+                warehouse_id: None,
+                batch_id: None,
+            });
+        };
+        // Ombor va partiyasi ko'rsatilgan harakat.
+        let mvw = |material_id: i64,
+                   days_ago: i64,
+                   kind: MoveKind,
+                   qty: f64,
+                   price: f64,
+                   document: &str,
+                   counterparty: &str,
+                   warehouse_id: Option<i64>,
+                   batch_id: Option<i64>| {
+            self.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id,
+                date: today - chrono::Duration::days(days_ago),
+                kind,
+                qty,
+                price,
+                document: document.into(),
+                counterparty: counterparty.into(),
+                task_id: None,
+                note: String::new(),
+                warehouse_id,
+                batch_id,
             });
         };
 
@@ -3213,6 +3607,75 @@ impl Db {
         } else {
             "«MetallSnab» MChJ"
         };
+
+        // Omborlar (TZ XI.3): obyektdagi ombor va ochiq maydon.
+        let main_wh = self.insert_warehouse(&Warehouse {
+            id: 0,
+            project_id: pid,
+            name: if ru {
+                "Склад объекта"
+            } else {
+                "Obyekt ombori"
+            }
+            .into(),
+            kind: WarehouseKind::Object,
+            responsible: if ru {
+                "Кладовщик: Азимов Р."
+            } else {
+                "Omborchi: Azimov R."
+            }
+            .into(),
+            note: String::new(),
+        });
+        let open_wh = self.insert_warehouse(&Warehouse {
+            id: 0,
+            project_id: pid,
+            name: if ru {
+                "Открытая площадка"
+            } else {
+                "Ochiq maydon"
+            }
+            .into(),
+            kind: WarehouseKind::Open,
+            responsible: String::new(),
+            note: String::new(),
+        });
+
+        // Partiyalar (TZ XI.9): armatura ikki partiyada kelgan, birinchisining
+        // sertifikati muddati o'tgan; betonning yaroqlilik muddati qisqa —
+        // shunda FEFO navbati ko'rinadi.
+        let batch = |material_id: i64,
+                     number: &str,
+                     days_ago: i64,
+                     supplier: &str,
+                     cert: &str,
+                     cert_days: Option<i64>,
+                     expires_in: Option<i64>|
+         -> i64 {
+            self.insert_batch(&Batch {
+                id: 0,
+                project_id: pid,
+                material_id,
+                number: number.into(),
+                received: today - chrono::Duration::days(days_ago),
+                supplier: supplier.into(),
+                cert_no: cert.into(),
+                cert_until: cert_days.map(|d| today + chrono::Duration::days(d)),
+                expires: expires_in.map(|d| today + chrono::Duration::days(d)),
+                note: String::new(),
+            })
+        };
+        let rebar_a = batch(rebar, "P-001", 45, supplier2, "SS-1907/23", Some(-25), None);
+        let rebar_b = batch(rebar, "P-002", 12, supplier2, "SS-2604/25", Some(240), None);
+        let concrete_a = batch(
+            concrete,
+            "P-010",
+            5,
+            supplier,
+            "SS-2411/24",
+            Some(180),
+            Some(2),
+        );
 
         mv(
             concrete,
@@ -3333,6 +3796,104 @@ impl Db {
             None,
         );
         mv(pipe, 7, MoveKind::Out, 310.0, 0.0, "M-29/05", "", None);
+
+        // Ombor va partiya ko'rsatilgan harakatlar: armatura ikki partiyada,
+        // beton — muddati yaqin partiyada (FEFO shu partiyani birinchi beradi).
+        mvw(
+            rebar,
+            45,
+            MoveKind::In,
+            62.0,
+            9_600_000.0,
+            "TTN-0914",
+            supplier2,
+            Some(main_wh),
+            Some(rebar_a),
+        );
+        mvw(
+            rebar,
+            12,
+            MoveKind::In,
+            18.0,
+            10_100_000.0,
+            "TTN-1201",
+            supplier2,
+            Some(main_wh),
+            Some(rebar_b),
+        );
+        mvw(
+            rebar,
+            3,
+            MoveKind::Out,
+            24.0,
+            0.0,
+            "M-29/09",
+            "",
+            Some(main_wh),
+            Some(rebar_a),
+        );
+        mvw(
+            concrete,
+            5,
+            MoveKind::In,
+            60.0,
+            745_000.0,
+            "TTN-1190",
+            supplier,
+            Some(open_wh),
+            Some(concrete_a),
+        );
+        // Ishdan ortgan material omborga qaytdi (TZ XI.21).
+        mvw(
+            brick,
+            2,
+            MoveKind::Return,
+            1_200.0,
+            0.0,
+            "V-01",
+            "",
+            Some(main_wh),
+            None,
+        );
+
+        // Rezerv (TZ XI.17): beton keyingi bosqich uchun band qilingan.
+        self.insert_reservation(&Reservation {
+            id: 0,
+            project_id: pid,
+            material_id: concrete,
+            task_id: by_wbs("7"),
+            qty: 80.0,
+            date: today - chrono::Duration::days(2),
+            until: Some(today + chrono::Duration::days(14)),
+            note: if ru {
+                "Под бетонирование 9 этажа"
+            } else {
+                "9-qavat betonlash uchun"
+            }
+            .into(),
+        });
+
+        // Sarf normalari (TZ XI.15): armaturada ortiqcha sarf ataylab
+        // qoldirilgan — «Normativ / fakt» ko'rinishi shuni ko'rsatadi.
+        let norm = |task: Option<i64>, material_id: i64, per_unit: f64, tolerance: f64| {
+            if let Some(task_id) = task {
+                self.insert_material_norm(&MaterialNorm {
+                    id: 0,
+                    project_id: pid,
+                    task_id,
+                    material_id,
+                    per_unit,
+                    tolerance,
+                    note: String::new(),
+                });
+            }
+        };
+        // Armaturada karkas bo'yicha ortiqcha sarf ataylab qoldirilgan —
+        // qolgan uchtasi ruxsat chegarasida.
+        norm(karkas, rebar, 0.0235, 3.0);
+        norm(karkas, concrete, 0.75, 2.0);
+        norm(plita, rebar, 0.0225, 3.0);
+        norm(devor, brick, 18.0, 4.0);
     }
 
     /// PPR kartalari, jurnal yozuvlari va ijro hujjatlari namunasi.

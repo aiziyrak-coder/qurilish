@@ -43,7 +43,27 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.materials.is_empty() {
         empty_screen(ui, t("materials_empty"));
     } else {
-        table(ui, app);
+        // Uch ko'rinish: katalog, sarf normalari va normativ/fakt taqqoslash.
+        let tab_key = egui::Id::new("mat_tab");
+        let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+        ui.horizontal_wrapped(|ui| {
+            for (i, label) in [
+                (0u8, t("mat_tab_catalog")),
+                (1, t("mat_tab_norms")),
+                (2, t("mat_tab_usage")),
+            ] {
+                if ui.selectable_label(tab == i, label).clicked() {
+                    tab = i;
+                }
+            }
+        });
+        ui.data_mut(|d| d.insert_temp(tab_key, tab));
+        ui.add_space(8.0);
+        match tab {
+            1 => norms_tab(ui, app),
+            2 => usage_tab(ui, app),
+            _ => table(ui, app),
+        }
     }
 
     if add {
@@ -351,6 +371,323 @@ pub fn material_label(app: &App, id: i64) -> String {
             }
         })
         .unwrap_or_else(|| t("dash").to_string())
+}
+
+// ================================================================ Normalar
+
+/// Sarf normalari (TZ XI.15, XII.21): bir birlik ishga qancha material.
+fn norms_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::cell_l;
+    let pid = match app.current {
+        Some(p) => p,
+        None => return,
+    };
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_norm")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("norms_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if app.material_norms.is_empty() {
+        empty_screen(ui, t("norms_empty"));
+    } else {
+        let mut edited: Option<crate::domain::MaterialNorm> = None;
+        let mut removed: Option<i64> = None;
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("mat_norms")
+                    .num_columns(7)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 250.0, t("col_task"));
+                        head_l(ui, 220.0, t("col_material"));
+                        head_r(ui, 110.0, t("col_per_unit"));
+                        head_l(ui, 90.0, t("col_unit"));
+                        head_r(ui, 90.0, t("col_tolerance"));
+                        head_l(ui, 200.0, t("col_note"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.material_norms {
+                            let mut n = src.clone();
+                            let mut changed = false;
+
+                            let mut task = Some(n.task_id);
+                            if task_picker(ui, app, ("nm_task", n.id), &mut task, 250.0) {
+                                // Bo'sh tanlov normani ma'nosiz qiladi — eskisi qoladi.
+                                if let Some(id) = task {
+                                    n.task_id = id;
+                                    changed = true;
+                                }
+                            }
+                            changed |= material_picker(
+                                ui,
+                                app,
+                                ("nm_mat", n.id),
+                                &mut n.material_id,
+                                220.0,
+                            );
+                            changed |= num_edit(ui, 110.0, &mut n.per_unit, 0.001, 1_000_000.0);
+
+                            // Norma o'lchov birligi: material birligi / ish birligi.
+                            let mu = app
+                                .materials
+                                .iter()
+                                .find(|m| m.id == n.material_id)
+                                .map(|m| m.unit.clone())
+                                .unwrap_or_default();
+                            let tu = app
+                                .task(n.task_id)
+                                .map(|x| x.unit.clone())
+                                .unwrap_or_default();
+                            cell_l(
+                                ui,
+                                90.0,
+                                RichText::new(if mu.is_empty() && tu.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("{mu}/{tu}")
+                                })
+                                .size(11.0)
+                                .color(theme::muted()),
+                            );
+
+                            ui.horizontal(|ui| {
+                                changed |= num_edit(ui, 58.0, &mut n.tolerance, 0.1, 100.0);
+                                ui.label(RichText::new("%").size(11.0).color(theme::muted()));
+                            });
+                            changed |= ui
+                                .add_sized([200.0, 22.0], egui::TextEdit::singleline(&mut n.note))
+                                .changed();
+                            if ui
+                                .small_button(RichText::new("x").color(theme::danger()))
+                                .clicked()
+                            {
+                                removed = Some(n.id);
+                            }
+                            ui.end_row();
+                            if changed {
+                                edited = Some(n);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(n) = edited {
+            app.db.update_material_norm(&n);
+            app.reload_modules();
+        }
+        if let Some(id) = removed {
+            app.db.del("material_norm", id);
+            app.reload_modules();
+        }
+    }
+
+    if add {
+        // Yangi norma birinchi ish va birinchi materialdan boshlanadi —
+        // foydalanuvchi keyin o'zgartiradi.
+        if let (Some(task), Some(mat)) = (
+            app.tasks.first().map(|x| x.id),
+            app.materials.first().map(|m| m.id),
+        ) {
+            app.db.insert_material_norm(&crate::domain::MaterialNorm {
+                id: 0,
+                project_id: pid,
+                task_id: task,
+                material_id: mat,
+                per_unit: 0.0,
+                tolerance: 5.0,
+                note: String::new(),
+            });
+            app.reload_modules();
+        } else {
+            app.notify(t("norm_needs_task").to_string());
+        }
+    }
+}
+
+// ================================================================ Sarf
+
+/// Normativ va haqiqiy sarf taqqoslanadi (TZ XI.14, XII.22, III.28).
+fn usage_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let lines = app.consumption();
+    if lines.is_empty() {
+        empty_screen(ui, t("usage_empty"));
+        return;
+    }
+
+    let over: Vec<_> = lines.iter().filter(|l| l.over).collect();
+    let over_cost: f64 = over.iter().map(|l| l.over_cost).sum();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_norm_lines"),
+                lines.len().to_string(),
+                t("kpi_norm_lines_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_overuse"),
+                over.len().to_string(),
+                t("kpi_overuse_hint"),
+                if over.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_overuse_cost"),
+                money(over_cost),
+                t("kpi_overuse_cost_hint"),
+                if over_cost > 0.0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+    ui.label(
+        RichText::new(t("usage_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("mat_usage")
+                .num_columns(8)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 250.0, t("col_task"));
+                    head_l(ui, 200.0, t("col_material"));
+                    head_r(ui, 100.0, t("col_done_volume"));
+                    head_r(ui, 100.0, t("col_norm"));
+                    head_r(ui, 100.0, t("col_fact"));
+                    head_r(ui, 100.0, t("col_diff"));
+                    head_r(ui, 80.0, "%");
+                    head_r(ui, 120.0, t("col_over_cost"));
+                    ui.end_row();
+
+                    for l in &lines {
+                        let task = app
+                            .task(l.task_id)
+                            .map(|x| format!("{} {}", x.wbs, x.name))
+                            .unwrap_or_default();
+                        cell_l(
+                            ui,
+                            250.0,
+                            RichText::new(super::issues::truncate(&task, 36)).size(12.0),
+                        );
+                        cell_l(
+                            ui,
+                            200.0,
+                            RichText::new(super::issues::truncate(
+                                &material_label(app, l.material_id),
+                                28,
+                            ))
+                            .size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(trim_num(l.done_volume))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(ui, 100.0, RichText::new(trim_num(l.norm)).size(12.0));
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(trim_num(l.fact)).size(12.0).strong(),
+                        );
+                        // Ortiqcha — qizil, tejalgan — yashil.
+                        let color = if l.over {
+                            theme::danger()
+                        } else if l.diff < 0.0 {
+                            theme::ok()
+                        } else {
+                            theme::muted()
+                        };
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(format!(
+                                "{}{}",
+                                if l.diff > 0.0 { "+" } else { "" },
+                                trim_num(l.diff)
+                            ))
+                            .size(12.0)
+                            .color(color),
+                        );
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(if l.norm > 0.0 {
+                                format!("{:+.0}%", l.diff_pct)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(11.5)
+                            .color(color),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(if l.over_cost > 0.0 {
+                                money(l.over_cost)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(11.5)
+                            .color(if l.over_cost > 0.0 {
+                                theme::danger()
+                            } else {
+                                theme::muted()
+                            }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+}
+
+fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_l(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
+}
+
+fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_r(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
+}
+
+/// Son kiritish maydoni. `DragValue` ishlatilgan — sarf normasi 0.0235 kabi
+/// kichik son bo'lishi mumkin, matnli maydon esa uni yaxlitlab yuborardi.
+fn num_edit(ui: &mut egui::Ui, w: f32, v: &mut f64, speed: f64, max: f64) -> bool {
+    ui.add_sized(
+        [w, 22.0],
+        egui::DragValue::new(v)
+            .speed(speed)
+            .range(0.0..=max)
+            .max_decimals(4),
+    )
+    .changed()
 }
 
 /// Material tanlash ro'yxati. O'zgargan bo'lsa `true`.

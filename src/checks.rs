@@ -1182,20 +1182,33 @@ pub fn supply_status(
 #[derive(Debug, Clone)]
 pub struct StockLine {
     pub material_id: i64,
-    /// Kirim minus chiqim va hisobdan chiqarish.
+    /// Kirim va qaytarish minus chiqim va hisobdan chiqarish.
     pub balance: f64,
     pub incoming: f64,
     pub outgoing: f64,
     pub written_off: f64,
+    /// Ishdan qaytarilgan miqdor (TZ XI.21).
+    pub returned: f64,
+    /// Aniq ish uchun band qilingan miqdor (TZ XI.17).
+    pub reserved: f64,
+    /// Erkin qoldiq: qoldiqdan rezerv ayrilgan.
+    pub available: f64,
     /// Qoldiqning taxminiy qiymati.
     pub value: f64,
     /// Hisobda ishlatilgan birlik narxi (kirimlarning o'rtachasi yoki katalog narxi).
     pub unit_price: f64,
     pub last_move: Option<NaiveDate>,
-    /// Qoldiq minimal zaxiradan past.
+    /// Erkin qoldiq minimal zaxiradan past.
     pub below_min: bool,
     /// Chiqim kirimdan ko'p — hujjatlarda xato bor.
     pub negative: bool,
+}
+
+/// Harakat qoldiqni oshiradimi.
+///
+/// Qaytarish ham kirim: ishdan ortgan material omborga qaytadi (TZ XI.21).
+fn adds_to_stock(k: MoveKind) -> bool {
+    matches!(k, MoveKind::In | MoveKind::Return)
 }
 
 /// TZ XI: har bir material bo'yicha qoldiq va uning qiymati.
@@ -1204,20 +1217,47 @@ pub struct StockLine {
 /// ko'rsatilmagan bo'lsa katalogdagi narx ishlatiladi. Shunday qilinganining
 /// sababi: ombor qiymati haqiqiy xaridga tayanishi kerak, katalog narxi esa
 /// eskirgan bo'lishi mumkin.
-pub fn stock_balances(materials: &[Material], moves: &[StockMove]) -> Vec<StockLine> {
+///
+/// `warehouse` berilsa — faqat shu omborning qoldig'i hisoblanadi (TZ XI.3).
+/// Rezervlar omborga bog'lanmagani uchun ular faqat umumiy hisobda ayriladi.
+pub fn stock_balances_in(
+    materials: &[Material],
+    moves: &[StockMove],
+    reservations: &[Reservation],
+    today: NaiveDate,
+    warehouse: Option<i64>,
+) -> Vec<StockLine> {
     let mut out = Vec::with_capacity(materials.len());
     for m in materials {
-        let mine: Vec<&StockMove> = moves.iter().filter(|x| x.material_id == m.id).collect();
+        let mine: Vec<&StockMove> = moves
+            .iter()
+            .filter(|x| x.material_id == m.id)
+            .filter(|x| warehouse.is_none_or(|w| x.warehouse_id == Some(w)))
+            .collect();
         let sum = |k: MoveKind| -> f64 { mine.iter().filter(|x| x.kind == k).map(|x| x.qty).sum() };
         let incoming = sum(MoveKind::In);
+        let returned = sum(MoveKind::Return);
         let outgoing = sum(MoveKind::Out);
         let written_off = sum(MoveKind::WriteOff);
-        let balance = incoming - outgoing - written_off;
+        let balance = incoming + returned - outgoing - written_off;
+
+        // Rezerv: muddati o'tmagan va shu materialga tegishli.
+        let reserved: f64 = if warehouse.is_some() {
+            0.0
+        } else {
+            reservations
+                .iter()
+                .filter(|r| r.material_id == m.id)
+                .filter(|r| r.until.is_none_or(|d| d >= today))
+                .map(|r| r.qty)
+                .sum()
+        };
+        let available = balance - reserved;
 
         // Kirimlarning vaznlangan o'rtacha narxi.
         let priced: Vec<&&StockMove> = mine
             .iter()
-            .filter(|x| x.kind == MoveKind::In && x.price > 0.0 && x.qty > 0.0)
+            .filter(|x| adds_to_stock(x.kind) && x.price > 0.0 && x.qty > 0.0)
             .collect();
         let unit_price = if priced.is_empty() {
             m.price
@@ -1237,14 +1277,202 @@ pub fn stock_balances(materials: &[Material], moves: &[StockMove]) -> Vec<StockL
             incoming,
             outgoing,
             written_off,
+            returned,
+            reserved,
+            available,
             value: balance.max(0.0) * unit_price,
             unit_price,
             last_move: mine.iter().map(|x| x.date).max(),
-            below_min: m.min_stock > 0.0 && balance < m.min_stock,
+            // Ogohlantirish erkin qoldiqqa qaraydi: rezervdagi material
+            // boshqa ishga tegishli va uni ishlatib bo'lmaydi.
+            below_min: m.min_stock > 0.0 && available < m.min_stock,
             negative: balance < -0.0001,
         });
     }
     out
+}
+
+/// Barcha omborlar bo'yicha umumiy qoldiq.
+pub fn stock_balances(
+    materials: &[Material],
+    moves: &[StockMove],
+    reservations: &[Reservation],
+    today: NaiveDate,
+) -> Vec<StockLine> {
+    stock_balances_in(materials, moves, reservations, today, None)
+}
+
+/// Bitta partiyaning qoldig'i (TZ XI.9).
+#[derive(Debug, Clone)]
+pub struct BatchLine {
+    pub batch_id: i64,
+    pub material_id: i64,
+    pub incoming: f64,
+    pub outgoing: f64,
+    pub balance: f64,
+    /// Yaroqlilik muddati o'tgan.
+    pub expired: bool,
+    /// FEFO/FIFO tartibida navbatdagi partiya.
+    pub next_to_use: bool,
+}
+
+/// Partiyalar bo'yicha qoldiq va navbat (TZ XI.28: FIFO / FEFO).
+///
+/// Navbat FEFO bo'yicha: yaroqlilik muddati birinchi tugaydigan partiya
+/// birinchi ishlatiladi. Muddat ko'rsatilmagan partiyalarda FIFO — qaysi
+/// birinchi kelgan bo'lsa, o'sha.
+pub fn batch_balances(batches: &[Batch], moves: &[StockMove], today: NaiveDate) -> Vec<BatchLine> {
+    let mut out: Vec<BatchLine> = batches
+        .iter()
+        .map(|b| {
+            let mine: Vec<&StockMove> = moves.iter().filter(|m| m.batch_id == Some(b.id)).collect();
+            let incoming: f64 = mine
+                .iter()
+                .filter(|m| adds_to_stock(m.kind))
+                .map(|m| m.qty)
+                .sum();
+            let outgoing: f64 = mine
+                .iter()
+                .filter(|m| !adds_to_stock(m.kind))
+                .map(|m| m.qty)
+                .sum();
+            BatchLine {
+                batch_id: b.id,
+                material_id: b.material_id,
+                incoming,
+                outgoing,
+                balance: incoming - outgoing,
+                expired: b.expires.is_some_and(|d| d < today),
+                next_to_use: false,
+            }
+        })
+        .collect();
+
+    // Har material bo'yicha navbatdagi partiyani belgilaymiz.
+    let mut materials: Vec<i64> = out.iter().map(|l| l.material_id).collect();
+    materials.sort_unstable();
+    materials.dedup();
+    for mid in materials {
+        let mut candidates: Vec<(usize, Option<NaiveDate>, NaiveDate, i64)> = out
+            .iter()
+            .enumerate()
+            .filter(|(_, l)| l.material_id == mid && l.balance > 0.0)
+            .filter_map(|(i, l)| {
+                let b = batches.iter().find(|b| b.id == l.batch_id)?;
+                Some((i, b.expires, b.received, b.id))
+            })
+            .collect();
+        // Muddati borlar oldinda; keyin kelgan sana; oxirida id — tartib barqaror.
+        candidates.sort_by(|a, b| match (a.1, b.1) {
+            (Some(x), Some(y)) => x.cmp(&y).then(a.2.cmp(&b.2)).then(a.3.cmp(&b.3)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => a.2.cmp(&b.2).then(a.3.cmp(&b.3)),
+        });
+        if let Some((i, _, _, _)) = candidates.first() {
+            out[*i].next_to_use = true;
+        }
+    }
+    out
+}
+
+/// Inventarizatsiya farqlari (TZ XI.25).
+#[derive(Debug, Clone)]
+pub struct InventoryDiff {
+    pub material_id: i64,
+    pub book: f64,
+    pub fact: f64,
+    pub diff: f64,
+}
+
+/// Nolga teng bo'lmagan farqlar. Bo'sh ro'yxat — hamma narsa joyida.
+pub fn inventory_diffs(lines: &[InventoryLine], inventory_id: i64) -> Vec<InventoryDiff> {
+    lines
+        .iter()
+        .filter(|l| l.inventory_id == inventory_id)
+        .filter(|l| l.diff().abs() > 0.0001)
+        .map(|l| InventoryDiff {
+            material_id: l.material_id,
+            book: l.book,
+            fact: l.fact,
+            diff: l.diff(),
+        })
+        .collect()
+}
+
+/// Bitta ish + material bo'yicha normativ va haqiqiy sarf (TZ XI.14–15, XII.21–22).
+#[derive(Debug, Clone)]
+pub struct ConsumptionLine {
+    pub task_id: i64,
+    pub material_id: i64,
+    /// Bajarilgan hajm — ish hajmining progress ulushi.
+    pub done_volume: f64,
+    /// Normativ sarf: `per_unit × bajarilgan hajm`.
+    pub norm: f64,
+    /// Haqiqiy sarf: shu ishga berilgan material.
+    pub fact: f64,
+    /// Fakt minus norma. Manfiy — tejalgan.
+    pub diff: f64,
+    /// Normadan foizda og'ish. Norma nol bo'lsa — 0.
+    pub diff_pct: f64,
+    /// Ruxsat etilgan chegaradan oshgan.
+    pub over: bool,
+    /// Ortiqcha sarfning puldagi qiymati (faqat oshgan qismi).
+    pub over_cost: f64,
+}
+
+/// TZ XI.14–15: normativ sarf bilan haqiqiy sarfni solishtirish.
+///
+/// Normativ sarf **bajarilgan** hajmga qarab hisoblanadi, rejadagi hajmga emas:
+/// ish yarim bitgan bo'lsa, materialning ham yarmi ketishi kerak. Aks holda har
+/// bir tugallanmagan ish «tejab ishlayapti» ko'rinib qolardi.
+///
+/// Ortiqcha sarf normaning `tolerance` foizidan oshganda belgilanadi —
+/// texnologik yo'qotish (kesim qoldig'i, to'kilish) normal hisoblanadi.
+pub fn consumption(
+    norms: &[MaterialNorm],
+    tasks: &[Task],
+    materials: &[Material],
+    moves: &[StockMove],
+) -> Vec<ConsumptionLine> {
+    norms
+        .iter()
+        .filter_map(|n| {
+            let task = tasks.iter().find(|t| t.id == n.task_id)?;
+            let done_volume = task.volume * (task.progress / 100.0);
+            let norm = n.per_unit * done_volume;
+            // Haqiqiy sarf — shu ishga berilgan va hisobdan chiqarilgan material,
+            // qaytarilgani ayriladi.
+            let fact: f64 = moves
+                .iter()
+                .filter(|m| m.task_id == Some(n.task_id) && m.material_id == n.material_id)
+                .map(|m| match m.kind {
+                    MoveKind::Out | MoveKind::WriteOff => m.qty,
+                    MoveKind::Return => -m.qty,
+                    MoveKind::In => 0.0,
+                })
+                .sum();
+            let diff = fact - norm;
+            let diff_pct = if norm > 0.0 { diff / norm * 100.0 } else { 0.0 };
+            let price = materials
+                .iter()
+                .find(|m| m.id == n.material_id)
+                .map_or(0.0, |m| m.price);
+            let allowed = norm * (1.0 + n.tolerance / 100.0);
+            let over = fact > allowed + 0.0001;
+            Some(ConsumptionLine {
+                task_id: n.task_id,
+                material_id: n.material_id,
+                done_volume,
+                norm,
+                fact,
+                diff,
+                diff_pct,
+                over,
+                over_cost: if over { (fact - allowed) * price } else { 0.0 },
+            })
+        })
+        .collect()
 }
 
 // ================= IV. Ijro hujjatlari =================

@@ -419,6 +419,7 @@ pub struct Material {
 
 enum_kind!(MoveKind {
     In       => "in",       "mk_in";
+    Return   => "return",   "mk_return";
     Out      => "out",      "mk_out";
     WriteOff => "writeoff", "mk_writeoff";
 });
@@ -429,6 +430,10 @@ pub struct StockMove {
     pub id: i64,
     pub project_id: i64,
     pub material_id: i64,
+    /// Qaysi omborda (TZ XI.3). Eski yozuvlarda bo'lmasligi mumkin.
+    pub warehouse_id: Option<i64>,
+    /// Qaysi partiyadan (TZ XI.9).
+    pub batch_id: Option<i64>,
     pub date: NaiveDate,
     pub kind: MoveKind,
     pub qty: f64,
@@ -577,6 +582,117 @@ pub struct Payment {
     pub kind: PayKind,
     pub document: String,
     pub note: String,
+}
+
+// ---------- XI. Omborlar, partiyalar, rezerv ----------
+
+enum_kind!(WarehouseKind {
+    Central   => "central",   "wk_central";
+    Object    => "object",    "wk_object";
+    Temporary => "temporary", "wk_temp";
+    Open      => "open",      "wk_open";
+    Fuel      => "fuel",      "wk_fuel";
+    Tool      => "tool",      "wk_tool";
+    Equipment => "equipment", "wk_equip";
+    Workwear  => "workwear",  "wk_wear";
+    Returns   => "returns",   "wk_returns";
+});
+
+/// Ombor (TZ XI.3). Bir obyektda bir nechta bo'lishi mumkin: markaziy,
+/// obyektdagi, vaqtinchalik, ochiq maydon, YoMM, asbob, jihoz, ish kiyimi va
+/// qaytgan material ombori.
+#[derive(Debug, Clone)]
+pub struct Warehouse {
+    pub id: i64,
+    pub project_id: i64,
+    pub name: String,
+    pub kind: WarehouseKind,
+    pub responsible: String,
+    pub note: String,
+}
+
+/// Material partiyasi (TZ XI.9–10).
+///
+/// Sertifikat va yaroqlilik muddati aynan partiyaga bog'lanadi: bir material
+/// turli partiyalarda turli sertifikat bilan kelishi mumkin.
+#[derive(Debug, Clone)]
+pub struct Batch {
+    pub id: i64,
+    pub project_id: i64,
+    pub material_id: i64,
+    pub number: String,
+    pub received: NaiveDate,
+    pub supplier: String,
+    pub cert_no: String,
+    pub cert_until: Option<NaiveDate>,
+    /// Yaroqlilik muddati — FEFO shu bo'yicha ishlaydi.
+    pub expires: Option<NaiveDate>,
+    pub note: String,
+}
+
+/// Rezerv (TZ XI.17): material aniq ish uchun band qilinadi.
+#[derive(Debug, Clone)]
+pub struct Reservation {
+    pub id: i64,
+    pub project_id: i64,
+    pub material_id: i64,
+    pub task_id: Option<i64>,
+    pub qty: f64,
+    pub date: NaiveDate,
+    /// Shu sanadan keyin rezerv o'z-o'zidan kuchini yo'qotadi.
+    pub until: Option<NaiveDate>,
+    pub note: String,
+}
+
+/// Ishga material sarf normasi (TZ XI.15, XII.21).
+///
+/// Bir birlik ish hajmiga qancha material ketishi kerakligi. Normativ sarf
+/// shundan hisoblanadi: `per_unit × bajarilgan hajm`. Norma smetadan yoki
+/// SNiP/ГЭСН dan olinadi, lekin bu yerda qo'lda kiritiladi — obyektning
+/// haqiqiy sharoiti normadan farq qilishi mumkin.
+#[derive(Debug, Clone)]
+pub struct MaterialNorm {
+    pub id: i64,
+    pub project_id: i64,
+    pub task_id: i64,
+    pub material_id: i64,
+    /// Ishning bir birligiga sarf (masalan 1 m3 monolitga 0.105 t armatura).
+    pub per_unit: f64,
+    /// Ruxsat etilgan ortiqcha sarf, foizda (texnologik yo'qotish).
+    pub tolerance: f64,
+    pub note: String,
+}
+
+/// Inventarizatsiya (TZ XI.24–25).
+#[derive(Debug, Clone)]
+pub struct Inventory {
+    pub id: i64,
+    pub project_id: i64,
+    pub warehouse_id: Option<i64>,
+    pub date: NaiveDate,
+    pub responsible: String,
+    /// Yopilgan inventarizatsiya o'zgartirilmaydi va farqlar harakatga aylanadi.
+    pub closed: bool,
+    pub note: String,
+}
+
+/// Inventarizatsiyaning bir qatori: hisobdagi va haqiqiy miqdor.
+#[derive(Debug, Clone)]
+pub struct InventoryLine {
+    pub id: i64,
+    pub inventory_id: i64,
+    pub material_id: i64,
+    /// Hisob bo'yicha qoldiq — inventarizatsiya ochilganda yozib qo'yiladi.
+    pub book: f64,
+    pub fact: f64,
+    pub note: String,
+}
+
+impl InventoryLine {
+    /// Farq: manfiy — kamomad, musbat — ortiqcha.
+    pub fn diff(&self) -> f64 {
+        self.fact - self.book
+    }
 }
 
 // ---------- XIII. Tabel ----------
