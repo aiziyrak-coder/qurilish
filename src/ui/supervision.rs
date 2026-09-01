@@ -27,11 +27,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     ui.horizontal(|ui| {
         ui.label(RichText::new(t("sv_title")).size(14.0).strong());
-        ui.label(
-            RichText::new(t("sv_hint"))
-                .size(11.0)
-                .color(theme::muted()),
-        );
+        ui.label(RichText::new(t("sv_hint")).size(11.0).color(theme::muted()));
     });
     ui.add_space(8.0);
 
@@ -87,43 +83,61 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         })
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("sv_kpi_docs"),
-            waiting.to_string(),
-            t("sv_kpi_docs_hint"),
-            if waiting == 0 { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("sv_kpi_rejected"),
-            rejected.to_string(),
-            t("sv_kpi_rejected_hint"),
-            if rejected == 0 { theme::ok() } else { theme::danger() },
-        );
-        stat_card(
-            ui,
-            t("sv_kpi_quality"),
-            quality.to_string(),
-            t("sv_kpi_quality_hint"),
-            if quality == 0 { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("sv_kpi_issues"),
-            issues.to_string(),
-            t("sv_kpi_issues_hint"),
-            if issues == 0 { theme::ok() } else { theme::danger() },
-        );
-        stat_card(
-            ui,
-            t("sv_kpi_safety"),
-            safety.to_string(),
-            t("sv_kpi_safety_hint"),
-            if safety == 0 { theme::ok() } else { theme::danger() },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("sv_kpi_docs"),
+                waiting.to_string(),
+                t("sv_kpi_docs_hint"),
+                if waiting == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("sv_kpi_rejected"),
+                rejected.to_string(),
+                t("sv_kpi_rejected_hint"),
+                if rejected == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("sv_kpi_quality"),
+                quality.to_string(),
+                t("sv_kpi_quality_hint"),
+                if quality == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("sv_kpi_issues"),
+                issues.to_string(),
+                t("sv_kpi_issues_hint"),
+                if issues == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("sv_kpi_safety"),
+                safety.to_string(),
+                t("sv_kpi_safety_hint"),
+                if safety == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
 }
 
 fn block(ui: &mut egui::Ui, title: &str, n: usize, add: impl FnOnce(&mut egui::Ui)) {
@@ -183,7 +197,9 @@ fn docs_queue(ui: &mut egui::Ui, app: &mut App) {
                     cell_l(
                         ui,
                         150.0,
-                        RichText::new(d.kind.label()).size(11.5).color(theme::muted()),
+                        RichText::new(d.kind.label())
+                            .size(11.5)
+                            .color(theme::muted()),
                     );
                     cell_l(
                         ui,
@@ -274,17 +290,19 @@ fn quality_queue(ui: &mut egui::Ui, app: &mut App) {
             let overdue = q.deadline.is_some_and(|d| d < today);
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(if q.result == QualityResult::Fail { "!" } else { "·" })
-                        .color(if q.result == QualityResult::Fail {
-                            theme::danger()
-                        } else {
-                            theme::warn()
-                        })
-                        .strong(),
+                    RichText::new(if q.result == QualityResult::Fail {
+                        "!"
+                    } else {
+                        "·"
+                    })
+                    .color(if q.result == QualityResult::Fail {
+                        theme::danger()
+                    } else {
+                        theme::warn()
+                    })
+                    .strong(),
                 );
-                ui.label(
-                    RichText::new(format!("{} — {}", q.kind.label(), q.subject)).size(12.5),
-                );
+                ui.label(RichText::new(format!("{} — {}", q.kind.label(), q.subject)).size(12.5));
                 if !q.defect.is_empty() {
                     ui.label(
                         RichText::new(super::issues::truncate(&q.defect, 60))
@@ -297,7 +315,11 @@ fn quality_queue(ui: &mut egui::Ui, app: &mut App) {
                         RichText::new(d.format("%d.%m.%Y").to_string())
                             .size(11.0)
                             .monospace()
-                            .color(if overdue { theme::danger() } else { theme::muted() }),
+                            .color(if overdue {
+                                theme::danger()
+                            } else {
+                                theme::muted()
+                            }),
                     );
                 }
             });
@@ -348,7 +370,12 @@ fn issues_queue(ui: &mut egui::Ui, app: &mut App) {
             };
             ui.horizontal(|ui| {
                 ui.label(RichText::new(i.severity.label()).size(11.0).color(color));
-                ui.label(RichText::new(&i.code).size(10.5).monospace().color(theme::muted()));
+                ui.label(
+                    RichText::new(&i.code)
+                        .size(10.5)
+                        .monospace()
+                        .color(theme::muted()),
+                );
                 ui.label(RichText::new(super::issues::truncate(&i.title, 70)).size(12.5));
             });
         }
@@ -399,10 +426,18 @@ fn safety_queue(ui: &mut egui::Ui, app: &mut App) {
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(if overdue { "!" } else { "·" })
-                        .color(if overdue { theme::danger() } else { theme::warn() })
+                        .color(if overdue {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        })
                         .strong(),
                 );
-                ui.label(RichText::new(s.kind.label()).size(11.5).color(theme::muted()));
+                ui.label(
+                    RichText::new(s.kind.label())
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
                 ui.label(RichText::new(super::issues::truncate(&s.description, 60)).size(12.5));
                 if !s.measure.is_empty() {
                     ui.label(

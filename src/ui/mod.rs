@@ -8,8 +8,8 @@ mod dashboard;
 mod deals;
 mod documents;
 mod estimate;
-mod foreman;
 mod execdocs;
+mod foreman;
 mod gantt;
 mod issues;
 mod journal;
@@ -135,30 +135,30 @@ pub fn draw(ctx: &Context, app: &mut App) {
             readonly_banner(ui, app);
         }
         match app.screen {
-        Screen::Dashboard => dashboard::show(ui, app),
-        Screen::Passport => passport::show(ui, app),
-        Screen::Gantt => gantt::show(ui, app),
-        Screen::Ppr => ppr::show(ui, app),
-        Screen::AiCheck => aicheck::show(ui, app),
-        Screen::Estimate => estimate::show(ui, app),
-        Screen::ExecDocs => execdocs::show(ui, app),
-        Screen::Journal => journal::show(ui, app),
-        Screen::Warehouse => warehouse::show(ui, app),
-        Screen::Materials => materials::show(ui, app),
-        Screen::Requests => requests::show(ui, app),
-        Screen::Purchases => purchases::show(ui, app),
-        Screen::Sales => sales::show(ui, app),
-        Screen::Deals => deals::show(ui, app),
-        Screen::Timesheet => timesheet::show(ui, app),
-        Screen::Quality => quality::show(ui, app),
-        Screen::Safety => safety::show(ui, app),
-        Screen::Machines => machines::show(ui, app),
-        Screen::Analytics => analytics::show(ui, app),
-        Screen::Foreman => foreman::show(ui, app),
-        Screen::TechSupervision => supervision::show(ui, app),
-        Screen::Client => client::show(ui, app),
-        Screen::Copilot => copilot::show(ui, app),
-        Screen::Settings => settings::show(ui, app),
+            Screen::Dashboard => dashboard::show(ui, app),
+            Screen::Passport => passport::show(ui, app),
+            Screen::Gantt => gantt::show(ui, app),
+            Screen::Ppr => ppr::show(ui, app),
+            Screen::AiCheck => aicheck::show(ui, app),
+            Screen::Estimate => estimate::show(ui, app),
+            Screen::ExecDocs => execdocs::show(ui, app),
+            Screen::Journal => journal::show(ui, app),
+            Screen::Warehouse => warehouse::show(ui, app),
+            Screen::Materials => materials::show(ui, app),
+            Screen::Requests => requests::show(ui, app),
+            Screen::Purchases => purchases::show(ui, app),
+            Screen::Sales => sales::show(ui, app),
+            Screen::Deals => deals::show(ui, app),
+            Screen::Timesheet => timesheet::show(ui, app),
+            Screen::Quality => quality::show(ui, app),
+            Screen::Safety => safety::show(ui, app),
+            Screen::Machines => machines::show(ui, app),
+            Screen::Analytics => analytics::show(ui, app),
+            Screen::Foreman => foreman::show(ui, app),
+            Screen::TechSupervision => supervision::show(ui, app),
+            Screen::Client => client::show(ui, app),
+            Screen::Copilot => copilot::show(ui, app),
+            Screen::Settings => settings::show(ui, app),
         }
     });
 
@@ -177,6 +177,12 @@ fn top_bar(ctx: &Context, app: &mut App) {
                 .inner_margin(egui::Margin::symmetric(14, 8)),
         )
         .show(ctx, |ui| {
+            // Oyna kengligiga qarab nima ko'rsatilishini hal qilamiz: tor oynada
+            // elementlar bir-birining ustiga chiqib ketmasligi kerak.
+            let w = ui.available_width();
+            let wide = w > 1240.0;
+            let medium = w > 1000.0;
+
             ui.horizontal_centered(|ui| {
                 ui.label(
                     RichText::new("QURAi")
@@ -184,14 +190,18 @@ fn top_bar(ctx: &Context, app: &mut App) {
                         .strong()
                         .color(theme::accent()),
                 );
-                ui.label(
-                    RichText::new(t("app_subtitle"))
-                        .size(12.0)
-                        .color(theme::muted()),
-                );
-                ui.add_space(20.0);
+                if wide {
+                    ui.label(
+                        RichText::new(t("app_subtitle"))
+                            .size(12.0)
+                            .color(theme::muted()),
+                    );
+                }
+                ui.add_space(if wide { 20.0 } else { 10.0 });
 
-                ui.label(RichText::new(t("object")).color(theme::muted()));
+                if medium {
+                    ui.label(RichText::new(t("object")).color(theme::muted()));
+                }
                 let current_name = app
                     .project()
                     .map(|p| format!("{} [{}]", p.name, p.code))
@@ -199,7 +209,7 @@ fn top_bar(ctx: &Context, app: &mut App) {
                 let mut pick: Option<i64> = None;
                 egui::ComboBox::from_id_salt("project_picker")
                     .selected_text(current_name)
-                    .width(330.0)
+                    .width(if wide { 330.0 } else { 240.0 })
                     .show_ui(ui, |ui| {
                         for p in &app.projects {
                             let sel = app.current == Some(p.id);
@@ -215,11 +225,16 @@ fn top_bar(ctx: &Context, app: &mut App) {
                     app.select_project(id);
                 }
 
-                ui.add_space(12.0);
+                ui.add_space(10.0);
                 // Qidiruv har doim ko'rinib tursin — aks holda Ctrl+K ni
-                // hech kim topmaydi.
+                // hech kim topmaydi. Tor oynada faqat belgisi qoladi.
+                let label = if medium {
+                    t("search_button").to_string()
+                } else {
+                    t("search_short").to_string()
+                };
                 if ui
-                    .button(RichText::new(t("search_button")).size(13.0))
+                    .button(RichText::new(label).size(13.0))
                     .on_hover_text(t("search_keys"))
                     .clicked()
                 {
@@ -229,22 +244,26 @@ fn top_bar(ctx: &Context, app: &mut App) {
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(app.today.format("%d.%m.%Y").to_string())
-                            .color(theme::muted())
-                            .size(13.0),
-                    );
-                    ui.separator();
-                    role_picker(ui, app);
-                    ui.separator();
-                    if let Some(p) = app.project() {
-                        let c = match p.status {
-                            crate::model::ObjectStatus::InProgress => theme::ok(),
-                            crate::model::ObjectStatus::Suspended => theme::danger(),
-                            crate::model::ObjectStatus::Completed => theme::accent(),
-                            _ => theme::warn(),
-                        };
-                        ui.label(RichText::new(p.status.label()).color(c).strong());
+                    if wide {
+                        ui.label(
+                            RichText::new(app.today.format("%d.%m.%Y").to_string())
+                                .color(theme::muted())
+                                .size(13.0),
+                        );
+                        ui.separator();
+                    }
+                    role_picker(ui, app, medium);
+                    if medium {
+                        ui.separator();
+                        if let Some(p) = app.project() {
+                            let c = match p.status {
+                                crate::model::ObjectStatus::InProgress => theme::ok(),
+                                crate::model::ObjectStatus::Suspended => theme::danger(),
+                                crate::model::ObjectStatus::Completed => theme::accent(),
+                                _ => theme::warn(),
+                            };
+                            ui.label(RichText::new(p.status.label()).color(c).strong());
+                        }
                     }
                 });
             });
@@ -252,7 +271,7 @@ fn top_bar(ctx: &Context, app: &mut App) {
 }
 
 /// Joriy foydalanuvchi va rol. Bosilsa — almashtirish ro'yxati.
-fn role_picker(ui: &mut egui::Ui, app: &mut App) {
+fn role_picker(ui: &mut egui::Ui, app: &mut App, wide: bool) {
     let role = app.role();
     let name = app
         .current_user
@@ -267,9 +286,15 @@ fn role_picker(ui: &mut egui::Ui, app: &mut App) {
     };
 
     let mut pick: Option<Option<i64>> = None;
+    // Tor oynada faqat rol nomi qoladi — ism kesilgandan ko'ra tushib qolgani yaxshi.
+    let text = if wide {
+        format!("{name} · {}", role.label())
+    } else {
+        role.label().to_string()
+    };
     egui::ComboBox::from_id_salt("role_picker")
-        .selected_text(RichText::new(format!("{name} · {}", role.label())).color(color))
-        .width(220.0)
+        .selected_text(RichText::new(text).color(color))
+        .width(if wide { 220.0 } else { 150.0 })
         .show_ui(ui, |ui| {
             ui.label(
                 RichText::new(t("role_switch_hint"))
@@ -732,6 +757,67 @@ fn toast(ctx: &Context, app: &mut App) {
 /// Raqamni qisqa ko'rinishda: 12.0 -> «12», 4.5 -> «4.5».
 pub fn trim(v: f64) -> String {
     materials::trim_num(v)
+}
+
+/// Bitta ko'rsatkich kartochkasining tavsifi.
+pub struct Stat {
+    pub title: String,
+    pub value: String,
+    pub hint: String,
+    pub color: Color32,
+    /// Kartochka bosiladigan bo'lsa — kursor va javob o'zgaradi.
+    pub link: bool,
+}
+
+/// Ko'rsatkich kartochkasi tavsifini yaratadi.
+pub fn stat(title: &str, value: String, hint: &str, color: Color32) -> Stat {
+    Stat {
+        title: title.to_string(),
+        value,
+        hint: hint.to_string(),
+        color,
+        link: false,
+    }
+}
+
+impl Stat {
+    /// Kartochkani bosiladigan qiladi.
+    pub fn link(mut self) -> Stat {
+        self.link = true;
+        self
+    }
+}
+
+/// Ko'rsatkichlar qatori. Bosilgan kartochkaning tartib raqamini qaytaradi.
+///
+/// `horizontal_wrapped` kartochka kengligini oldindan bilmaydi va shu sababli
+/// o'ramaydi — tor oynada oxirgi kartochkalar chetga chiqib ketardi. Shuning
+/// uchun qatorga nechtasi sig'ishini o'zimiz hisoblaymiz.
+pub fn stat_row(ui: &mut egui::Ui, cards: Vec<Stat>) -> Option<usize> {
+    if cards.is_empty() {
+        return None;
+    }
+    // Kartochka kengligi 168 + hoshiya 28 + oraliq 8.
+    const SLOT: f32 = 204.0;
+    let per_row = ((ui.available_width() / SLOT).floor() as usize).max(1);
+    let mut clicked = None;
+    for (chunk_i, chunk) in cards.chunks(per_row).enumerate() {
+        ui.horizontal(|ui| {
+            for (i, c) in chunk.iter().enumerate() {
+                let hit = if c.link {
+                    stat_card_link(ui, &c.title, c.value.clone(), &c.hint, c.color)
+                } else {
+                    stat_card(ui, &c.title, c.value.clone(), &c.hint, c.color);
+                    false
+                };
+                if hit {
+                    clicked = Some(chunk_i * per_row + i);
+                }
+            }
+        });
+        ui.add_space(6.0);
+    }
+    clicked
 }
 
 /// Bosiladigan ko'rsatkich kartochkasi — bosilganda `true` qaytaradi.

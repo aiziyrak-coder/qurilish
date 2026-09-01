@@ -200,71 +200,69 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     let aw = app.settings.avail_workers;
     let am = app.settings.avail_machines;
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_ppr_cards"),
-            total.to_string(),
-            &format!("{approved} {}", t("kpi_ppr_approved")),
-            if total > 0 && approved == total {
-                theme::ok()
-            } else {
-                theme::accent()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_ppr_coverage"),
-            format!("{cov_pct:.0} %"),
-            &format!("{cov_n} / {tasks_n} {}", t("tasks_short")),
-            if cov_pct >= 99.0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_ppr_crit_cov"),
-            format!("{crit_pct:.0} %"),
-            &format!("{crit_cov} / {} {}", crit.len(), t("kpi_ppr_crit_tasks")),
-            if crit_pct >= 99.0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_ppr_peak_workers"),
-            wpeak.to_string(),
-            &if aw > 0 {
-                format!("{} {aw}", t("chk_ppr_have"))
-            } else {
-                t("avail_not_set").to_string()
-            },
-            if aw > 0 && wpeak > aw {
-                theme::danger()
-            } else {
-                theme::text()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_ppr_peak_machines"),
-            mpeak.to_string(),
-            &if am > 0 {
-                format!("{} {am}", t("chk_ppr_have"))
-            } else {
-                t("avail_not_set").to_string()
-            },
-            if am > 0 && mpeak > am {
-                theme::danger()
-            } else {
-                theme::text()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_ppr_cards"),
+                total.to_string(),
+                &format!("{approved} {}", t("kpi_ppr_approved")),
+                if total > 0 && approved == total {
+                    theme::ok()
+                } else {
+                    theme::accent()
+                },
+            ),
+            stat(
+                t("kpi_ppr_coverage"),
+                format!("{cov_pct:.0} %"),
+                &format!("{cov_n} / {tasks_n} {}", t("tasks_short")),
+                if cov_pct >= 99.0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_ppr_crit_cov"),
+                format!("{crit_pct:.0} %"),
+                &format!("{crit_cov} / {} {}", crit.len(), t("kpi_ppr_crit_tasks")),
+                if crit_pct >= 99.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_ppr_peak_workers"),
+                wpeak.to_string(),
+                &if aw > 0 {
+                    format!("{} {aw}", t("chk_ppr_have"))
+                } else {
+                    t("avail_not_set").to_string()
+                },
+                if aw > 0 && wpeak > aw {
+                    theme::danger()
+                } else {
+                    theme::text()
+                },
+            ),
+            stat(
+                t("kpi_ppr_peak_machines"),
+                mpeak.to_string(),
+                &if am > 0 {
+                    format!("{} {am}", t("chk_ppr_have"))
+                } else {
+                    t("avail_not_set").to_string()
+                },
+                if am > 0 && mpeak > am {
+                    theme::danger()
+                } else {
+                    theme::text()
+                },
+            ),
+        ],
+    );
 }
 
 // ================================================================ Kartalar

@@ -137,36 +137,35 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, week: NaiveDate) {
         .max(1);
     let avg = hours / worked_days as f64;
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_workers"),
-            active.to_string(),
-            &format!("{} {}", app.workers.len(), t("kpi_workers_hint")),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_hours_week"),
-            super::materials::trim_num(hours),
-            t("kpi_hours_week_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_avg_day"),
-            super::materials::trim_num(avg),
-            t("kpi_avg_day_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_payroll"),
-            money(payroll),
-            t("kpi_payroll_hint"),
-            theme::ok(),
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_workers"),
+                active.to_string(),
+                &format!("{} {}", app.workers.len(), t("kpi_workers_hint")),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_hours_week"),
+                super::materials::trim_num(hours),
+                t("kpi_hours_week_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_avg_day"),
+                super::materials::trim_num(avg),
+                t("kpi_avg_day_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_payroll"),
+                money(payroll),
+                t("kpi_payroll_hint"),
+                theme::ok(),
+            ),
+        ],
+    );
 }
 
 fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
@@ -207,9 +206,7 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                             |ui| {
                                 ui.set_min_width(56.0);
                                 ui.spacing_mut().item_spacing.y = 0.0;
-                                ui.label(
-                                    RichText::new(t(weekday_key(*d))).size(11.0).color(color),
-                                );
+                                ui.label(RichText::new(t(weekday_key(*d))).size(11.0).color(color));
                                 ui.label(
                                     RichText::new(d.format("%d.%m").to_string())
                                         .size(9.5)
@@ -231,10 +228,7 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut w.active, "").changed();
                             changed |= ui
-                                .add_sized(
-                                    [160.0, 22.0],
-                                    egui::TextEdit::singleline(&mut w.name),
-                                )
+                                .add_sized([160.0, 22.0], egui::TextEdit::singleline(&mut w.name))
                                 .changed();
                         });
                         changed |= ui
@@ -301,7 +295,9 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                     cell_l(
                         ui,
                         190.0,
-                        RichText::new(t("total_row")).size(11.5).color(theme::muted()),
+                        RichText::new(t("total_row"))
+                            .size(11.5)
+                            .color(theme::muted()),
                     );
                     cell_l(ui, 140.0, RichText::new(""));
                     cell_l(ui, 110.0, RichText::new(""));

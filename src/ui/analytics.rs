@@ -35,7 +35,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     // Yo'nalish filtri.
     let filter_key = egui::Id::new("an_filter");
-    let mut filter = ui.data(|d| d.get_temp::<Option<Area>>(filter_key)).flatten();
+    let mut filter = ui
+        .data(|d| d.get_temp::<Option<Area>>(filter_key))
+        .flatten();
 
     let mut go: Option<Screen> = None;
 
@@ -59,21 +61,21 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     header(ui, score, &found);
     ui.add_space(10.0);
 
-    // Ko'rsatkichlar. `horizontal_wrapped` kartochka kengligini oldindan
-    // bilmaydi, shuning uchun qatorga nechtasi sig'ishini o'zimiz hisoblaymiz.
-    const CARD: f32 = 212.0;
-    let per_row = ((ui.available_width() / CARD).floor() as usize).max(1);
-    for chunk in metrics.chunks(per_row) {
-        ui.horizontal(|ui| {
-            for m in chunk {
-                let color = severity_color(m.severity);
-                // Kartochka bosilsa — o'sha yo'nalish ekraniga o'tamiz.
-                if stat_card_link(ui, &m.title, m.value.clone(), &m.hint, color) {
-                    go = Some(m.area.screen());
-                }
-            }
-        });
-        ui.add_space(6.0);
+    // Kartochka bosilsa — o'sha yo'nalish ekraniga o'tamiz.
+    let cards: Vec<Stat> = metrics
+        .iter()
+        .map(|m| {
+            stat(
+                &m.title,
+                m.value.clone(),
+                &m.hint,
+                severity_color(m.severity),
+            )
+            .link()
+        })
+        .collect();
+    if let Some(i) = stat_row(ui, cards) {
+        go = metrics.get(i).map(|m| m.area.screen());
     }
     ui.add_space(12.0);
 
@@ -98,7 +100,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 .selectable_label(filter == Some(*area), RichText::new(text).color(color))
                 .clicked()
             {
-                filter = if filter == Some(*area) { None } else { Some(*area) };
+                filter = if filter == Some(*area) {
+                    None
+                } else {
+                    Some(*area)
+                };
             }
         }
     });
@@ -113,11 +119,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if list.is_empty() {
         ui.add_space(30.0);
         ui.vertical_centered(|ui| {
-            ui.label(
-                RichText::new(t("an_nothing"))
-                    .color(theme::ok())
-                    .size(15.0),
-            );
+            ui.label(RichText::new(t("an_nothing")).color(theme::ok()).size(15.0));
             ui.add_space(4.0);
             ui.label(
                 RichText::new(t("an_nothing_hint"))
@@ -230,8 +232,7 @@ fn arc(p: &egui::Painter, c: egui::Pos2, r: f32, frac: f32, color: Color32) {
     }
     let mut points = Vec::with_capacity(n + 1);
     for i in 0..=n {
-        let a = -std::f32::consts::FRAC_PI_2
-            + std::f32::consts::TAU * (i as f32 / steps as f32);
+        let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU * (i as f32 / steps as f32);
         points.push(pos2(c.x + r * a.cos(), c.y + r * a.sin()));
     }
     p.add(egui::Shape::line(points, Stroke::new(6.0_f32, color)));
@@ -282,7 +283,12 @@ fn card(ui: &mut egui::Ui, f: &Finding) -> bool {
                             .size(11.0)
                             .color(theme::muted()),
                     );
-                    ui.label(RichText::new(f.code).size(10.5).monospace().color(theme::muted()));
+                    ui.label(
+                        RichText::new(f.code)
+                            .size(10.5)
+                            .monospace()
+                            .color(theme::muted()),
+                    );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if ui.small_button(t("an_open")).clicked() {
                             open = true;

@@ -2200,7 +2200,11 @@ impl Db {
                 ("Sobirov N.A.", "Yordamchi ishchi", 22_000.0),
             ]
         };
-        let org = if ru { "ООО «Навруз Курилиш»" } else { "«Navro'z Qurilish» MChJ" };
+        let org = if ru {
+            "ООО «Навруз Курилиш»"
+        } else {
+            "«Navro'z Qurilish» MChJ"
+        };
         let mut ids = Vec::new();
         for (name, position, rate) in crew {
             ids.push(self.insert_worker(&Worker {
@@ -2243,7 +2247,11 @@ impl Db {
         }
 
         // ---------- XIV. Sifat nazorati ----------
-        let inspector = if ru { "ПТО: Саидова М.И." } else { "PTO: Saidova M.I." };
+        let inspector = if ru {
+            "ПТО: Саидова М.И."
+        } else {
+            "PTO: Saidova M.I."
+        };
         let qc = |kind: QualityKind,
                   days_ago: i64,
                   subject: &str,
@@ -2270,7 +2278,11 @@ impl Db {
         qc(
             QualityKind::Input,
             26,
-            if ru { "Приемка кирпича М150" } else { "M150 g'ishtni qabul qilish" },
+            if ru {
+                "Приемка кирпича М150"
+            } else {
+                "M150 g'ishtni qabul qilish"
+            },
             None,
             by_code("M-201"),
             QualityResult::Pass,
@@ -2281,7 +2293,11 @@ impl Db {
         qc(
             QualityKind::Input,
             12,
-            if ru { "Приемка арматуры А500С" } else { "A500S armaturani qabul qilish" },
+            if ru {
+                "Приемка арматуры А500С"
+            } else {
+                "A500S armaturani qabul qilish"
+            },
             None,
             by_code("M-102"),
             QualityResult::Fail,
@@ -2295,7 +2311,11 @@ impl Db {
         qc(
             QualityKind::Operational,
             8,
-            if ru { "Опалубка колонн 9 этажа" } else { "9-qavat ustunlari opalubkasi" },
+            if ru {
+                "Опалубка колонн 9 этажа"
+            } else {
+                "9-qavat ustunlari opalubkasi"
+            },
             by_wbs("7"),
             None,
             QualityResult::Conditional,
@@ -2309,7 +2329,11 @@ impl Db {
         qc(
             QualityKind::Acceptance,
             30,
-            if ru { "Приемка фундаментной плиты" } else { "Poydevor plitasini qabul qilish" },
+            if ru {
+                "Приемка фундаментной плиты"
+            } else {
+                "Poydevor plitasini qabul qilish"
+            },
             by_wbs("3"),
             None,
             QualityResult::Pass,
@@ -2319,7 +2343,11 @@ impl Db {
         qc(
             QualityKind::Operational,
             3,
-            if ru { "Кладка наружных стен, оси А-В" } else { "Tashqi devor g'ishtligi, A-B o'qlari" },
+            if ru {
+                "Кладка наружных стен, оси А-В"
+            } else {
+                "Tashqi devor g'ishtligi, A-B o'qlari"
+            },
             by_wbs("9"),
             None,
             QualityResult::Pass,
@@ -2328,7 +2356,11 @@ impl Db {
         );
 
         // ---------- XV. Xavfsizlik ----------
-        let safety_resp = if ru { "Инженер по ТБ: Эргашев К." } else { "TX muhandisi: Ergashev K." };
+        let safety_resp = if ru {
+            "Инженер по ТБ: Эргашев К."
+        } else {
+            "TX muhandisi: Ergashev K."
+        };
         let se = |days_ago: i64,
                   kind: SafetyKind,
                   severity: Severity,
@@ -2355,9 +2387,21 @@ impl Db {
             21,
             SafetyKind::Training,
             Severity::Info,
-            if ru { "Штаб строительства" } else { "Qurilish shtabi" },
-            if ru { "Первичный инструктаж, 12 человек" } else { "Boshlang'ich instruktaj, 12 kishi" },
-            if ru { "Журнал заполнен" } else { "Jurnal to'ldirildi" },
+            if ru {
+                "Штаб строительства"
+            } else {
+                "Qurilish shtabi"
+            },
+            if ru {
+                "Первичный инструктаж, 12 человек"
+            } else {
+                "Boshlang'ich instruktaj, 12 kishi"
+            },
+            if ru {
+                "Журнал заполнен"
+            } else {
+                "Jurnal to'ldirildi"
+            },
             None,
             IssueStatus::Fixed,
         );
@@ -2366,13 +2410,21 @@ impl Db {
             9,
             SafetyKind::Violation,
             Severity::Warning,
-            if ru { "8 этаж, ось Б" } else { "8-qavat, B o'qi" },
+            if ru {
+                "8 этаж, ось Б"
+            } else {
+                "8-qavat, B o'qi"
+            },
             if ru {
                 "Работа на высоте без страховочной привязи"
             } else {
                 "Balandlikda strahovka kamarisiz ishlash"
             },
-            if ru { "Выдать привязи, повторный инструктаж" } else { "Kamar berish, takroriy instruktaj" },
+            if ru {
+                "Выдать привязи, повторный инструктаж"
+            } else {
+                "Kamar berish, takroriy instruktaj"
+            },
             Some(-2),
             IssueStatus::Open,
         );
@@ -2380,13 +2432,21 @@ impl Db {
             5,
             SafetyKind::NearMiss,
             Severity::Warning,
-            if ru { "Зона крана" } else { "Kran zonasi" },
+            if ru {
+                "Зона крана"
+            } else {
+                "Kran zonasi"
+            },
             if ru {
                 "Падение доски с 7 этажа, пострадавших нет"
             } else {
                 "7-qavatdan taxta tushdi, jabrlangan yo'q"
             },
-            if ru { "Установить защитный козырек" } else { "Himoya kozirkasi o'rnatish" },
+            if ru {
+                "Установить защитный козырек"
+            } else {
+                "Himoya kozirkasi o'rnatish"
+            },
             Some(3),
             IssueStatus::InWork,
         );
@@ -2394,15 +2454,31 @@ impl Db {
             2,
             SafetyKind::Inspection,
             Severity::Info,
-            if ru { "Объект целиком" } else { "Butun obyekt" },
-            if ru { "Плановая проверка ТБ" } else { "Rejali TX tekshiruvi" },
-            if ru { "Замечания устранены на месте" } else { "Kamchiliklar joyida bartaraf etildi" },
+            if ru {
+                "Объект целиком"
+            } else {
+                "Butun obyekt"
+            },
+            if ru {
+                "Плановая проверка ТБ"
+            } else {
+                "Rejali TX tekshiruvi"
+            },
+            if ru {
+                "Замечания устранены на месте"
+            } else {
+                "Kamchiliklar joyida bartaraf etildi"
+            },
             None,
             IssueStatus::Fixed,
         );
 
         // ---------- XVI. Texnika ----------
-        let owner = if ru { "ООО «СтройМеханизация»" } else { "«StroyMexanizatsiya» MChJ" };
+        let owner = if ru {
+            "ООО «СтройМеханизация»"
+        } else {
+            "«StroyMexanizatsiya» MChJ"
+        };
         let mch = |name: &str,
                    kind: MachineKind,
                    reg_no: &str,
@@ -2425,26 +2501,46 @@ impl Db {
             })
         };
         let crane = mch(
-            if ru { "Башенный кран КБ-403" } else { "KB-403 minorali kran" },
+            if ru {
+                "Башенный кран КБ-403"
+            } else {
+                "KB-403 minorali kran"
+            },
             MachineKind::Crane,
             "01 A 123 BC",
             MachineStatus::Working,
             180_000.0,
-            if ru { "Тошматов А." } else { "Toshmatov A." },
+            if ru {
+                "Тошматов А."
+            } else {
+                "Toshmatov A."
+            },
             Some(120),
         );
         // Texnik ko'rik muddati o'tgan — ishlatib bo'lmaydi.
         let excavator = mch(
-            if ru { "Экскаватор Hyundai R220" } else { "Hyundai R220 ekskavator" },
+            if ru {
+                "Экскаватор Hyundai R220"
+            } else {
+                "Hyundai R220 ekskavator"
+            },
             MachineKind::Excavator,
             "01 B 456 CD",
             MachineStatus::Idle,
             210_000.0,
-            if ru { "Рахимов Ш." } else { "Rahimov Sh." },
+            if ru {
+                "Рахимов Ш."
+            } else {
+                "Rahimov Sh."
+            },
             Some(-14),
         );
         let pump = mch(
-            if ru { "Автобетононасос 37 м" } else { "37 m avtobetonnasos" },
+            if ru {
+                "Автобетононасос 37 м"
+            } else {
+                "37 m avtobetonnasos"
+            },
             MachineKind::Concrete,
             "01 C 789 DE",
             MachineStatus::Working,
@@ -2454,7 +2550,11 @@ impl Db {
         );
         // Lift ta'mirda — smenasi yo'q, faqat parkda turadi.
         let _lift = mch(
-            if ru { "Строительный подъемник" } else { "Qurilish liftlari" },
+            if ru {
+                "Строительный подъемник"
+            } else {
+                "Qurilish liftlari"
+            },
             MachineKind::Lift,
             "01 D 012 EF",
             MachineStatus::Repair,
@@ -2495,7 +2595,6 @@ impl Db {
             }
         }
     }
-
 
     /// Sotuv namunasi: ikkita blok, kvartiralar va turli holatdagi shartnomalar
     /// (TZ XIX-XX). Bir shartnomada to'lov ataylab kechiktirilgan — muddati

@@ -1596,7 +1596,10 @@ mod tests {
         app.save_task(edited);
         let after = t.db.tasks(pid).unwrap();
         let saved = after.iter().find(|x| x.id == task.id).unwrap();
-        assert_eq!(saved.progress, task.progress, "buyurtmachi ishni o'zgartirdi");
+        assert_eq!(
+            saved.progress, task.progress,
+            "buyurtmachi ishni o'zgartirdi"
+        );
 
         // Prorab: grafikda ishlay oladi.
         app.set_user(Some(foreman));
@@ -1649,11 +1652,8 @@ ENDSEC;\nEND-ISO-10303-21;\n";
 
         app.import_ifc(&path);
 
-        let added: Vec<&crate::domain::Element> = app
-            .elements
-            .iter()
-            .filter(|e| e.sheet == "IFC")
-            .collect();
+        let added: Vec<&crate::domain::Element> =
+            app.elements.iter().filter(|e| e.sheet == "IFC").collect();
         assert_eq!(added.len(), 4, "IFC dan 4 element kutilgan");
         assert!(app.elements.len() > before);
 
@@ -1712,7 +1712,9 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let quality = t.db.quality_checks(pid);
         assert!(quality.len() >= 5);
         assert!(quality.iter().any(|q| q.result == QualityResult::Fail));
-        assert!(quality.iter().any(|q| q.result == QualityResult::Conditional));
+        assert!(quality
+            .iter()
+            .any(|q| q.result == QualityResult::Conditional));
 
         // Xavfsizlik: muddati o'tgan yopilmagan yozuv bor.
         let safety = t.db.safety_events(pid);

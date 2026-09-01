@@ -122,7 +122,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
 
     // Oxirgi 30 kundagi motosoat, yoqilg'i va xarajat.
     let since = app.today - chrono::Duration::days(30);
-    let recent: Vec<&MachineLog> = app.machine_logs.iter().filter(|l| l.date >= since).collect();
+    let recent: Vec<&MachineLog> = app
+        .machine_logs
+        .iter()
+        .filter(|l| l.date >= since)
+        .collect();
     let hours: f64 = recent.iter().map(|l| l.hours).sum();
     let fuel: f64 = recent.iter().map(|l| l.fuel).sum();
     let cost: f64 = recent
@@ -153,51 +157,49 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         }
     }
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_machines"),
-            app.machines.len().to_string(),
-            &format!(
-                "{working} {} · {repair} {}",
-                t("ms_working"),
-                t("ms_repair")
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_machines"),
+                app.machines.len().to_string(),
+                &format!(
+                    "{working} {} · {repair} {}",
+                    t("ms_working"),
+                    t("ms_repair")
+                ),
+                theme::accent(),
             ),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_machine_hours"),
-            super::materials::trim_num(hours),
-            t("kpi_machine_hours_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_machine_fuel"),
-            super::materials::trim_num(fuel),
-            t("kpi_machine_fuel_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_machine_cost"),
-            money(cost),
-            t("kpi_machine_cost_hint"),
-            theme::warn(),
-        );
-        stat_card(
-            ui,
-            t("kpi_inspection"),
-            expired.to_string(),
-            &format!("{soon} {}", t("kpi_inspection_hint")),
-            if expired == 0 && soon == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-    });
+            stat(
+                t("kpi_machine_hours"),
+                super::materials::trim_num(hours),
+                t("kpi_machine_hours_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_machine_fuel"),
+                super::materials::trim_num(fuel),
+                t("kpi_machine_fuel_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_machine_cost"),
+                money(cost),
+                t("kpi_machine_cost_hint"),
+                theme::warn(),
+            ),
+            stat(
+                t("kpi_inspection"),
+                expired.to_string(),
+                &format!("{soon} {}", t("kpi_inspection_hint")),
+                if expired == 0 && soon == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
 }
 
 fn status_color(s: MachineStatus) -> Color32 {
@@ -393,11 +395,7 @@ fn logs_tab(ui: &mut egui::Ui, app: &mut App) {
 
                         changed |=
                             super::passport::date_edit(ui, &format!("ml{}", l.id), &mut l.date);
-                        let cur = app
-                            .machines
-                            .iter()
-                            .find(|m| m.id == l.machine_id)
-                            .cloned();
+                        let cur = app.machines.iter().find(|m| m.id == l.machine_id).cloned();
                         egui::ComboBox::from_id_salt(("ml_mch", l.id))
                             .selected_text(
                                 cur.as_ref()
@@ -415,13 +413,17 @@ fn logs_tab(ui: &mut egui::Ui, app: &mut App) {
                         changed |= ui
                             .add_sized(
                                 [90.0, 22.0],
-                                egui::DragValue::new(&mut l.hours).speed(0.5).range(0.0..=24.0),
+                                egui::DragValue::new(&mut l.hours)
+                                    .speed(0.5)
+                                    .range(0.0..=24.0),
                             )
                             .changed();
                         changed |= ui
                             .add_sized(
                                 [90.0, 22.0],
-                                egui::DragValue::new(&mut l.fuel).speed(1.0).range(0.0..=1e6),
+                                egui::DragValue::new(&mut l.fuel)
+                                    .speed(1.0)
+                                    .range(0.0..=1e6),
                             )
                             .changed();
                         // Smena qiymati — soat va stavkadan.

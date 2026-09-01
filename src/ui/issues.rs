@@ -37,16 +37,14 @@ pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, Strin
         .filter(|i| i.status == IssueStatus::Open)
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
+    let mut cards = vec![
+        stat(
             t("kpi_issues_total"),
             total.to_string(),
             t("kpi_issues_hint"),
             theme::accent(),
-        );
-        stat_card(
-            ui,
+        ),
+        stat(
             t("kpi_issues_critical"),
             crit.to_string(),
             t("kpi_issues_critical_hint"),
@@ -55,9 +53,8 @@ pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, Strin
             } else {
                 theme::danger()
             },
-        );
-        stat_card(
-            ui,
+        ),
+        stat(
             t("kpi_issues_major"),
             major.to_string(),
             t("kpi_issues_major_hint"),
@@ -66,9 +63,8 @@ pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, Strin
             } else {
                 theme::warn()
             },
-        );
-        stat_card(
-            ui,
+        ),
+        stat(
             t("kpi_issues_open"),
             open.to_string(),
             t("kpi_issues_open_hint"),
@@ -77,11 +73,13 @@ pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, Strin
             } else {
                 theme::accent()
             },
-        );
-        if let Some((title, value, hint)) = extra {
-            stat_card(ui, title, value, hint, theme::text());
-        }
-    });
+        ),
+    ];
+    // Modulga xos qo'shimcha ko'rsatkich (masalan smeta summasi).
+    if let Some((title, value, hint)) = extra {
+        cards.push(stat(title, value, hint, theme::text()));
+    }
+    stat_row(ui, cards);
 }
 
 /// TZ II.15: yakuniy hisobot — bo'limlar kesimida muhimlik bo'yicha sanoq.

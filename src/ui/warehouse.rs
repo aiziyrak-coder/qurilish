@@ -112,44 +112,43 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     let since = app.today - chrono::Duration::days(30);
     let recent = app.stock_moves.iter().filter(|m| m.date >= since).count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_stock_value"),
-            money(value),
-            t("kpi_stock_value_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_below_min"),
-            below.to_string(),
-            t("kpi_below_min_hint"),
-            if below == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_negative"),
-            negative.to_string(),
-            t("kpi_negative_hint"),
-            if negative == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_moves_30"),
-            recent.to_string(),
-            t("kpi_moves_30_hint"),
-            theme::accent(),
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_stock_value"),
+                money(value),
+                t("kpi_stock_value_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_below_min"),
+                below.to_string(),
+                t("kpi_below_min_hint"),
+                if below == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_negative"),
+                negative.to_string(),
+                t("kpi_negative_hint"),
+                if negative == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_moves_30"),
+                recent.to_string(),
+                t("kpi_moves_30_hint"),
+                theme::accent(),
+            ),
+        ],
+    );
 }
 
 // ================================================================ Qoldiqlar

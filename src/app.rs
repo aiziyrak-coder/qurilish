@@ -6,7 +6,8 @@ use crate::db::Db;
 use crate::domain::{
     Block, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Issue,
     IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material, Payment, PprDoc,
-    Purchase, QualityCheck, Request, SafetyEvent, Severity, StockMove, TimesheetEntry, Unit, Worker,
+    Purchase, QualityCheck, Request, SafetyEvent, Severity, StockMove, TimesheetEntry, Unit,
+    Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -149,10 +150,8 @@ impl Screen {
             | Screen::Client
             | Screen::Copilot
             | Screen::Settings => Readiness::Ready,
-
         }
     }
-
 }
 
 /// Navigatsiya guruhlari — TZ ning mantiqiy bloklari.
@@ -843,7 +842,10 @@ impl App {
     pub fn reload_users(&mut self) {
         self.users = self.db.users();
         // Tanlangan foydalanuvchi o'chirilgan bo'lsa — tanlovni bo'shatamiz.
-        if self.current_user.is_some_and(|id| !self.users.iter().any(|u| u.id == id)) {
+        if self
+            .current_user
+            .is_some_and(|id| !self.users.iter().any(|u| u.id == id))
+        {
             self.current_user = None;
         }
     }
@@ -851,7 +853,10 @@ impl App {
     /// Foydalanuvchini almashtirish: rolning uy ekrani ochiladi.
     pub fn set_user(&mut self, id: Option<i64>) {
         self.current_user = id;
-        let _ = self.db.set_setting("current_user", &id.map(|v| v.to_string()).unwrap_or_default());
+        let _ = self.db.set_setting(
+            "current_user",
+            &id.map(|v| v.to_string()).unwrap_or_default(),
+        );
         self.screen = self.role().home();
     }
 
@@ -1032,9 +1037,7 @@ impl App {
             return (0, 0);
         };
         let (mut added, mut existing) = (0usize, 0usize);
-        let date = |s: &str| {
-            chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or(self.today)
-        };
+        let date = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or(self.today);
         let num = |s: &str| s.parse::<f64>().unwrap_or(0.0);
         let int = |s: &str| s.parse::<i64>().unwrap_or(0);
 

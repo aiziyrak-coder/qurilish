@@ -76,52 +76,51 @@ fn action_tab(ui: &mut egui::Ui, app: &mut App) {
         .filter(|i| i.severity == Severity::Critical)
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("act_open"),
-            open.len().to_string(),
-            t("act_open_hint"),
-            if open.is_empty() {
-                theme::ok()
-            } else {
-                theme::accent()
-            },
-        );
-        stat_card(
-            ui,
-            t("act_critical"),
-            crit.to_string(),
-            t("act_critical_hint"),
-            if crit == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("act_with_deadline"),
-            format!("{with_deadline} / {}", open.len()),
-            t("act_with_deadline_hint"),
-            if with_deadline == open.len() {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("act_overdue"),
-            overdue.to_string(),
-            t("act_overdue_hint"),
-            if overdue == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("act_open"),
+                open.len().to_string(),
+                t("act_open_hint"),
+                if open.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::accent()
+                },
+            ),
+            stat(
+                t("act_critical"),
+                crit.to_string(),
+                t("act_critical_hint"),
+                if crit == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("act_with_deadline"),
+                format!("{with_deadline} / {}", open.len()),
+                t("act_with_deadline_hint"),
+                if with_deadline == open.len() {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("act_overdue"),
+                overdue.to_string(),
+                t("act_overdue_hint"),
+                if overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
     ui.add_space(10.0);
 
     if open.is_empty() {

@@ -90,59 +90,57 @@ fn kpis(ui: &mut egui::Ui, app: &App) {
     // Ish tugagan, hujjat esa yo'q — eng jiddiy holat.
     let overdue = need.iter().filter(|r| !r.exists && r.task_done).count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_docs_total"),
-            total.to_string(),
-            t("kpi_docs_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_docs_signed"),
-            signed.to_string(),
-            t("kpi_docs_signed_hint"),
-            if signed == total && total > 0 {
-                theme::ok()
-            } else {
-                theme::text()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_docs_review"),
-            review.to_string(),
-            t("kpi_docs_review_hint"),
-            if review == 0 {
-                theme::muted()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_docs_missing"),
-            missing.to_string(),
-            t("kpi_docs_missing_hint"),
-            if missing == 0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_docs_overdue"),
-            overdue.to_string(),
-            t("kpi_docs_overdue_hint"),
-            if overdue == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_docs_total"),
+                total.to_string(),
+                t("kpi_docs_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_docs_signed"),
+                signed.to_string(),
+                t("kpi_docs_signed_hint"),
+                if signed == total && total > 0 {
+                    theme::ok()
+                } else {
+                    theme::text()
+                },
+            ),
+            stat(
+                t("kpi_docs_review"),
+                review.to_string(),
+                t("kpi_docs_review_hint"),
+                if review == 0 {
+                    theme::muted()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_docs_missing"),
+                missing.to_string(),
+                t("kpi_docs_missing_hint"),
+                if missing == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_docs_overdue"),
+                overdue.to_string(),
+                t("kpi_docs_overdue_hint"),
+                if overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
 }
 
 /// TZ IV.1: boshlangan ishlar bo'yicha talab qilinadigan hujjatlar reyestri.

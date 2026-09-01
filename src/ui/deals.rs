@@ -87,62 +87,60 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .filter(|(_, _, n)| *n > 0)
         .max_by(|a, b| a.1.total_cmp(&b.1));
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_contracted"),
-            money(s.contracted),
-            &format!(
-                "{} {}",
-                app.deals
-                    .iter()
-                    .filter(|d| d.status != DealStatus::Cancelled)
-                    .count(),
-                t("kpi_deals_hint")
+    let top_hint = match top {
+        Some((k, _, n)) => format!("{} · {n}", k.label()),
+        None => t("dash").to_string(),
+    };
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_contracted"),
+                money(s.contracted),
+                &format!(
+                    "{} {}",
+                    app.deals
+                        .iter()
+                        .filter(|d| d.status != DealStatus::Cancelled)
+                        .count(),
+                    t("kpi_deals_hint")
+                ),
+                theme::text(),
             ),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_received"),
-            money(s.received),
-            t("kpi_received_hint2"),
-            theme::ok(),
-        );
-        stat_card(
-            ui,
-            t("kpi_debt"),
-            money(s.debt),
-            t("kpi_debt_hint"),
-            if s.debt <= 0.0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_overdue_pay"),
-            money(s.overdue),
-            t("kpi_overdue_pay_hint"),
-            if s.overdue <= 0.0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        let top_hint = match top {
-            Some((k, _, n)) => format!("{} · {n}", k.label()),
-            None => t("dash").to_string(),
-        };
-        stat_card(
-            ui,
-            t("kpi_avg_m2"),
-            money(s.avg_price_m2),
-            &top_hint,
-            theme::accent(),
-        );
-    });
+            stat(
+                t("kpi_received"),
+                money(s.received),
+                t("kpi_received_hint2"),
+                theme::ok(),
+            ),
+            stat(
+                t("kpi_debt"),
+                money(s.debt),
+                t("kpi_debt_hint"),
+                if s.debt <= 0.0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_overdue_pay"),
+                money(s.overdue),
+                t("kpi_overdue_pay_hint"),
+                if s.overdue <= 0.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_avg_m2"),
+                money(s.avg_price_m2),
+                &top_hint,
+                theme::accent(),
+            ),
+        ],
+    );
 }
 
 fn status_color(s: DealStatus) -> Color32 {

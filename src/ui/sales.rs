@@ -257,47 +257,45 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         0.0
     };
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_units"),
-            s.units.to_string(),
-            &format!("{} {} · {} {}", s.free, t("us_free"), s.sold, t("us_sold")),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_sales_value"),
-            money(s.value_total),
-            &format!("{} m²", super::materials::trim_num(s.area_total)),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_contracted"),
-            money(s.contracted),
-            &format!("{deals} {}", t("kpi_deals_hint")),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_received"),
-            money(s.received),
-            &format!("{pct:.0}% {}", t("kpi_received_hint")),
-            theme::ok(),
-        );
-        stat_card(
-            ui,
-            t("kpi_overdue_pay"),
-            money(s.overdue),
-            t("kpi_overdue_pay_hint"),
-            if s.overdue <= 0.0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_units"),
+                s.units.to_string(),
+                &format!("{} {} · {} {}", s.free, t("us_free"), s.sold, t("us_sold")),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_sales_value"),
+                money(s.value_total),
+                &format!("{} m²", super::materials::trim_num(s.area_total)),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_contracted"),
+                money(s.contracted),
+                &format!("{deals} {}", t("kpi_deals_hint")),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_received"),
+                money(s.received),
+                &format!("{pct:.0}% {}", t("kpi_received_hint")),
+                theme::ok(),
+            ),
+            stat(
+                t("kpi_overdue_pay"),
+                money(s.overdue),
+                t("kpi_overdue_pay_hint"),
+                if s.overdue <= 0.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
 }
 
 // ================================================================ Shaxmatka

@@ -47,7 +47,11 @@ impl Config {
         if k.is_empty() {
             return String::new();
         }
-        let tail: String = k.chars().rev().take(4).collect::<Vec<_>>()
+        let tail: String = k
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<Vec<_>>()
             .into_iter()
             .rev()
             .collect();
@@ -149,8 +153,7 @@ pub fn build_request(cfg: &Config, question: &str, context: &str) -> Result<Stri
 
 /// Javob tanasidan matnni ajratadi.
 pub fn parse_reply(body: &str) -> Result<String, Error> {
-    let reply: Reply =
-        serde_json::from_str(body).map_err(|e| Error::BadReply(e.to_string()))?;
+    let reply: Reply = serde_json::from_str(body).map_err(|e| Error::BadReply(e.to_string()))?;
     let text = reply
         .choices
         .first()
@@ -207,7 +210,10 @@ mod tests {
         let mut c = cfg();
         c.enabled = false;
         assert!(!c.is_ready());
-        assert_eq!(build_request(&c, "savol", "ma'lumot"), Err(Error::NotConfigured));
+        assert_eq!(
+            build_request(&c, "savol", "ma'lumot"),
+            Err(Error::NotConfigured)
+        );
         // Yoqilgan, ammo to'ldirilmagan sozlama ham tayyor emas.
         let mut c = cfg();
         c.api_key = "  ".into();
@@ -246,14 +252,21 @@ mod tests {
 
     #[test]
     fn reply_text_is_extracted() {
-        let body = r#"{"choices":[{"message":{"role":"assistant","content":"  Uch ish kechikkan.  "}}]}"#;
+        let body =
+            r#"{"choices":[{"message":{"role":"assistant","content":"  Uch ish kechikkan.  "}}]}"#;
         assert_eq!(parse_reply(body).unwrap(), "Uch ish kechikkan.");
     }
 
     #[test]
     fn broken_reply_is_reported_not_panicked() {
-        assert!(matches!(parse_reply("bu json emas"), Err(Error::BadReply(_))));
-        assert!(matches!(parse_reply(r#"{"choices":[]}"#), Err(Error::BadReply(_))));
+        assert!(matches!(
+            parse_reply("bu json emas"),
+            Err(Error::BadReply(_))
+        ));
+        assert!(matches!(
+            parse_reply(r#"{"choices":[]}"#),
+            Err(Error::BadReply(_))
+        ));
         assert!(matches!(
             parse_reply(r#"{"choices":[{"message":{"content":"   "}}]}"#),
             Err(Error::BadReply(_))

@@ -25,7 +25,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut text = ui
         .data(|d| d.get_temp::<String>(text_key))
         .unwrap_or_default();
-    let mut intent = ui.data(|d| d.get_temp::<Option<Intent>>(intent_key)).flatten();
+    let mut intent = ui
+        .data(|d| d.get_temp::<Option<Intent>>(intent_key))
+        .flatten();
     // Savol yozilmagan bo'lsa — birinchi savol namuna sifatida ochiladi.
     let mut unknown = false;
 
@@ -93,7 +95,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             .inner_margin(egui::Margin::symmetric(14, 12))
             .show(ui, |ui| {
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(t("cp_unknown")).size(13.0).color(theme::warn()));
+                    ui.label(
+                        RichText::new(t("cp_unknown"))
+                            .size(13.0)
+                            .color(theme::warn()),
+                    );
                     ui.label(
                         RichText::new(t("cp_unknown_hint"))
                             .size(11.5)
@@ -234,30 +240,20 @@ fn answer_card(
                                 ui.add_sized(
                                     [280.0, 20.0],
                                     egui::Label::new(
-                                        RichText::new(&l.label)
-                                            .size(12.5)
-                                            .color(theme::muted()),
+                                        RichText::new(&l.label).size(12.5).color(theme::muted()),
                                     ),
                                 );
-                                ui.label(
-                                    RichText::new(&l.value)
-                                        .size(13.5)
-                                        .color(if l.alert {
-                                            theme::danger()
-                                        } else {
-                                            theme::text()
-                                        }),
-                                );
+                                ui.label(RichText::new(&l.value).size(13.5).color(if l.alert {
+                                    theme::danger()
+                                } else {
+                                    theme::text()
+                                }));
                             });
                         }
                     });
 
                 ui.add_space(8.0);
-                ui.label(
-                    RichText::new(&a.note)
-                        .size(10.5)
-                        .color(theme::muted()),
-                );
+                ui.label(RichText::new(&a.note).size(10.5).color(theme::muted()));
             });
         });
 }

@@ -89,19 +89,107 @@ impl Intent {
     /// Savolni tanish uchun kalit so'zlar (o'zbekcha va ruscha).
     fn keywords(self) -> &'static [&'static str] {
         match self {
-            Intent::Overview => &["umumiy", "holat", "qanday ket", "ahvol", "общ", "как дела", "состоян"],
-            Intent::Attention => &["diqqat", "e'tibor", "muammo", "risk", "вниман", "проблем", "риск"],
+            Intent::Overview => &[
+                "umumiy",
+                "holat",
+                "qanday ket",
+                "ahvol",
+                "общ",
+                "как дела",
+                "состоян",
+            ],
+            Intent::Attention => &[
+                "diqqat",
+                "e'tibor",
+                "muammo",
+                "risk",
+                "вниман",
+                "проблем",
+                "риск",
+            ],
             Intent::Delays => &["kechik", "muddat", "kech qol", "просроч", "отстава", "срок"],
             Intent::Critical => &["kritik", "kritik yo'l", "критич", "критическ"],
-            Intent::Money => &["pul", "smeta", "summa", "moliya", "to'lov", "деньг", "смет", "сумм", "финанс", "оплат"],
-            Intent::Docs => &["hujjat", "dalolatnoma", "akt", "imzo", "документ", "акт", "подпис"],
-            Intent::Supply => &["ariza", "xarid", "ta'minot", "yetkaz", "заявк", "закупк", "снабж", "постав"],
-            Intent::Stock => &["ombor", "qoldiq", "material", "zaxira", "склад", "остат", "материал", "запас"],
-            Intent::Crew => &["ishchi", "brigada", "tabel", "soat", "рабоч", "бригад", "табел", "час"],
-            Intent::Machines => &["texnika", "mashina", "kran", "motosoat", "техник", "машин", "кран", "моточас"],
+            Intent::Money => &[
+                "pul",
+                "smeta",
+                "summa",
+                "moliya",
+                "to'lov",
+                "деньг",
+                "смет",
+                "сумм",
+                "финанс",
+                "оплат",
+            ],
+            Intent::Docs => &[
+                "hujjat",
+                "dalolatnoma",
+                "akt",
+                "imzo",
+                "документ",
+                "акт",
+                "подпис",
+            ],
+            Intent::Supply => &[
+                "ariza",
+                "xarid",
+                "ta'minot",
+                "yetkaz",
+                "заявк",
+                "закупк",
+                "снабж",
+                "постав",
+            ],
+            Intent::Stock => &[
+                "ombor",
+                "qoldiq",
+                "material",
+                "zaxira",
+                "склад",
+                "остат",
+                "материал",
+                "запас",
+            ],
+            Intent::Crew => &[
+                "ishchi",
+                "brigada",
+                "tabel",
+                "soat",
+                "рабоч",
+                "бригад",
+                "табел",
+                "час",
+            ],
+            Intent::Machines => &[
+                "texnika",
+                "mashina",
+                "kran",
+                "motosoat",
+                "техник",
+                "машин",
+                "кран",
+                "моточас",
+            ],
             Intent::Quality => &["sifat", "nuqson", "brak", "качеств", "дефект", "брак"],
-            Intent::Safety => &["xavfsizlik", "hodisa", "instruktaj", "безопасн", "происшеств", "инструктаж", "тб"],
-            Intent::Sales => &["sotuv", "kvartira", "shartnoma", "mijoz", "продаж", "квартир", "договор", "клиент"],
+            Intent::Safety => &[
+                "xavfsizlik",
+                "hodisa",
+                "instruktaj",
+                "безопасн",
+                "происшеств",
+                "инструктаж",
+                "тб",
+            ],
+            Intent::Sales => &[
+                "sotuv",
+                "kvartira",
+                "shartnoma",
+                "mijoz",
+                "продаж",
+                "квартир",
+                "договор",
+                "клиент",
+            ],
         }
     }
 }
@@ -267,10 +355,7 @@ fn delays(inp: &Input) -> Vec<Line> {
         })
         .collect();
     if p.overdue.len() > 8 {
-        out.push(line(
-            t("sv_more"),
-            format!("{}", p.overdue.len() - 8),
-        ));
+        out.push(line(t("sv_more"), format!("{}", p.overdue.len() - 8)));
     }
     out
 }
@@ -293,10 +378,7 @@ fn critical(inp: &Input) -> Vec<Line> {
             alert: task.progress < 99.99,
         })
         .collect();
-    out.insert(
-        0,
-        line(t("cp_l_count"), format!("{}", list.len())),
-    );
+    out.insert(0, line(t("cp_l_count"), format!("{}", list.len())));
     out
 }
 
@@ -450,7 +532,10 @@ fn crew(inp: &Input) -> Vec<Line> {
         .sum();
 
     let mut out = vec![
-        line(t("kpi_workers"), inp.workers.iter().filter(|w| w.active).count().to_string()),
+        line(
+            t("kpi_workers"),
+            inp.workers.iter().filter(|w| w.active).count().to_string(),
+        ),
         line(t("cp_l_today_people"), today_people.to_string()),
         line(t("cp_l_today_hours"), trim(today_hours)),
         line(t("kpi_hours_week"), trim(week_hours)),
@@ -554,8 +639,14 @@ fn safety(inp: &Input) -> Vec<Line> {
         .count();
 
     let mut out = vec![
-        line(t("kpi_safety_events"), count(SafetyKind::Violation).to_string()),
-        line(t("kpi_safety_training"), count(SafetyKind::Training).to_string()),
+        line(
+            t("kpi_safety_events"),
+            count(SafetyKind::Violation).to_string(),
+        ),
+        line(
+            t("kpi_safety_training"),
+            count(SafetyKind::Training).to_string(),
+        ),
         line(t("kpi_safety_open"), open.to_string()),
     ];
     if count(SafetyKind::Incident) > 0 {

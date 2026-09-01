@@ -47,10 +47,29 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(14.0);
 
         let avail = ui.available_width() - 24.0;
-        let right_w = (avail * 0.30).clamp(280.0, 380.0);
-        let left_w = (avail - right_w - 24.0).max(360.0);
+        // Tor oynada ikki ustun siqilib, o'ng ustun kesilib qolardi —
+        // shunda bloklar ustma-ust joylashadi.
+        let two_col = avail > 900.0;
+        let right_w = if two_col {
+            (avail * 0.30).clamp(280.0, 380.0)
+        } else {
+            avail
+        };
+        let left_w = if two_col {
+            (avail - right_w - 24.0).max(360.0)
+        } else {
+            avail
+        };
 
-        ui.horizontal_top(|ui| {
+        let columns = |ui: &mut egui::Ui, add: &mut dyn FnMut(&mut egui::Ui)| {
+            if two_col {
+                ui.horizontal_top(|ui| add(ui));
+            } else {
+                add(ui);
+            }
+        };
+
+        columns(ui, &mut |ui| {
             // ---- Chap ustun: karta, muddatlar, moliya ----
             ui.vertical(|ui| {
                 ui.set_width(left_w);

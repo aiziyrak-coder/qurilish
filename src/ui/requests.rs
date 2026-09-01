@@ -155,44 +155,43 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, supply: &[SupplyLine]) {
         })
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_requests"),
-            total.to_string(),
-            t("kpi_requests_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_req_new"),
-            new.to_string(),
-            t("kpi_req_new_hint"),
-            if new == 0 { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("kpi_req_late"),
-            late.to_string(),
-            t("kpi_req_late_hint"),
-            if late == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_req_uncovered"),
-            uncovered.to_string(),
-            t("kpi_req_uncovered_hint"),
-            if uncovered == 0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_requests"),
+                total.to_string(),
+                t("kpi_requests_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_req_new"),
+                new.to_string(),
+                t("kpi_req_new_hint"),
+                if new == 0 { theme::ok() } else { theme::warn() },
+            ),
+            stat(
+                t("kpi_req_late"),
+                late.to_string(),
+                t("kpi_req_late_hint"),
+                if late == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_req_uncovered"),
+                uncovered.to_string(),
+                t("kpi_req_uncovered_hint"),
+                if uncovered == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
 }
 
 /// Holat rangi: yakunlangan — yashil, rad etilgan — kulrang, qolgani — ish jarayonida.

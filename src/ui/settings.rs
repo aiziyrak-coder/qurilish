@@ -308,7 +308,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 });
                 field(ui, t("set_llm_model"), |ui| {
                     if ui
-                        .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut app.llm.model))
+                        .add_sized(
+                            [220.0, 22.0],
+                            egui::TextEdit::singleline(&mut app.llm.model),
+                        )
                         .changed()
                     {
                         llm_changed = true;

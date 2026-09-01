@@ -224,44 +224,43 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .count();
     let waiting = unposted(app).len();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_purchase_total"),
-            money(total),
-            t("kpi_purchase_total_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_purchase_open"),
-            money(open),
-            t("kpi_purchase_open_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_purchase_late"),
-            late.to_string(),
-            t("kpi_purchase_late_hint"),
-            if late == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_purchase_unposted"),
-            waiting.to_string(),
-            t("kpi_purchase_unposted_hint"),
-            if waiting == 0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_purchase_total"),
+                money(total),
+                t("kpi_purchase_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_purchase_open"),
+                money(open),
+                t("kpi_purchase_open_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_purchase_late"),
+                late.to_string(),
+                t("kpi_purchase_late_hint"),
+                if late == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_purchase_unposted"),
+                waiting.to_string(),
+                t("kpi_purchase_unposted_hint"),
+                if waiting == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
 }
 
 fn status_color(s: PurchaseStatus) -> Color32 {

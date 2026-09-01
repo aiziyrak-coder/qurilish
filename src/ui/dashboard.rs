@@ -36,70 +36,121 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(14.0);
 
         let avail = ui.available_width() - 24.0;
-        let right_w = (avail * 0.32).clamp(300.0, 430.0);
-        let left_w = (avail - right_w - 24.0).max(320.0);
+        // Tor oynada ikki ustun siqilib ketadi — bloklarni ustma-ust qo'yamiz.
+        let two_col = avail > 900.0;
+        let right_w = if two_col {
+            (avail * 0.32).clamp(300.0, 430.0)
+        } else {
+            avail
+        };
+        let left_w = if two_col {
+            (avail - right_w - 24.0).max(320.0)
+        } else {
+            avail
+        };
+
+        // Ikki blokni yonma-yon yoki ustma-ust chizadi. Makro sifatida —
+        // funksiya ikkala blokni bir vaqtda ushlab turishi kerak bo'lardi va
+        // ular bitta o'zgaruvchini o'zgartira olmasdi.
+        //
+        // `ui` makros parametri sifatida beriladi: makros gigiyenasi tufayli
+        // ichkarida yaratilgan nom chaqiruv joyidagi `ui` ga bog'lanmaydi.
+        macro_rules! pair {
+            ($u:ident, $left:block, $right:block) => {
+                if two_col {
+                    $u.horizontal_top(|$u| {
+                        $left;
+                        $right;
+                    });
+                } else {
+                    $left;
+                    $u.add_space(12.0);
+                    $right;
+                }
+            };
+        }
 
         // ---- Egri chiziq + diqqat paneli ----
-        ui.horizontal_top(|ui| {
-            card_frame(ui, t("sc_title"), left_w, |ui| {
-                if app.tasks.is_empty() {
-                    ui.add_space(60.0);
-                    ui.vertical_centered(|ui| {
-                        ui.label(RichText::new(t("no_tasks")).color(theme::muted()));
-                    });
-                    ui.add_space(60.0);
-                } else {
-                    s_curve(ui, app, 236.0);
+        pair!(
+            ui,
+            {
+                card_frame(ui, t("sc_title"), left_w, |ui| {
+                    if app.tasks.is_empty() {
+                        ui.add_space(60.0);
+                        ui.vertical_centered(|ui| {
+                            ui.label(RichText::new(t("no_tasks")).color(theme::muted()));
+                        });
+                        ui.add_space(60.0);
+                    } else {
+                        s_curve(ui, app, 236.0);
+                    }
+                })
+            },
+            {
+                if let Some(s) = attention_card(ui, app, &p, right_w) {
+                    goto_screen = Some(s);
                 }
-            });
-            if let Some(s) = attention_card(ui, app, &p, right_w) {
-                goto_screen = Some(s);
             }
-        });
+        );
 
         ui.add_space(12.0);
 
         // ---- Muddati o'tganlar + bo'limlar ----
-        ui.horizontal_top(|ui| {
-            card_frame(ui, t("block_overdue"), left_w, |ui| {
-                if let Some(id) = overdue_table(ui, app, &p) {
-                    goto_task = Some(id);
-                }
-            });
-            card_frame(ui, t("block_sections"), right_w, |ui| {
-                sections_card(ui, app);
-            });
-        });
+        pair!(
+            ui,
+            {
+                card_frame(ui, t("block_overdue"), left_w, |ui| {
+                    if let Some(id) = overdue_table(ui, app, &p) {
+                        goto_task = Some(id);
+                    }
+                })
+            },
+            {
+                card_frame(ui, t("block_sections"), right_w, |ui| {
+                    sections_card(ui, app);
+                })
+            }
+        );
 
         ui.add_space(12.0);
 
         // ---- Tahlil xulosasi + sotuv (agar obyekt sotuvda bo'lsa) ----
-        ui.horizontal_top(|ui| {
-            card_frame(ui, t("block_analytics"), left_w, |ui| {
-                if let Some(sc) = analytics_card(ui, app) {
-                    goto_screen = Some(sc);
-                }
-            });
-            card_frame(ui, t("block_sales"), right_w, |ui| {
-                if sales_card(ui, app) {
-                    goto_screen = Some(Screen::Sales);
-                }
-            });
-        });
+        pair!(
+            ui,
+            {
+                card_frame(ui, t("block_analytics"), left_w, |ui| {
+                    if let Some(sc) = analytics_card(ui, app) {
+                        goto_screen = Some(sc);
+                    }
+                })
+            },
+            {
+                card_frame(ui, t("block_sales"), right_w, |ui| {
+                    if sales_card(ui, app) {
+                        goto_screen = Some(Screen::Sales);
+                    }
+                })
+            }
+        );
 
         ui.add_space(12.0);
 
         // ---- Bugungi ishlar + yaqin 14 kun ----
-        ui.horizontal_top(|ui| {
-            card_frame(ui, t("block_today"), left_w, |ui| {
-                if let Some(id) = today_card(ui, app, &p) {
-                    goto_task = Some(id);
-                }
-            });
-            card_frame(ui, t("upcoming_title"), right_w, |ui| {
-                upcoming_card(ui, app);
-            });
-        });
+        pair!(
+            ui,
+            {
+                card_frame(ui, t("block_today"), left_w, |ui| {
+                    if let Some(id) = today_card(ui, app, &p) {
+                        goto_task = Some(id);
+                    }
+                })
+            },
+            {
+                card_frame(ui, t("upcoming_title"), right_w, |ui| {
+                    upcoming_card(ui, app);
+                })
+            }
+        );
 
         ui.add_space(24.0);
     });
@@ -218,79 +269,76 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
         .max()
         .unwrap_or(0);
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_progress"),
-            format!("{:.1} %", pr.fact_pct),
-            &format!("{} {:.1} %", t("kpi_plan_is"), pr.plan_pct),
-            if behind { theme::danger() } else { theme::ok() },
-        );
-        stat_card(
-            ui,
-            t("kpi_overdue"),
-            pr.overdue.len().to_string(),
-            &if pr.overdue.is_empty() {
-                t("no_overdue_short").to_string()
-            } else {
-                format!("{}: {max_delay} {}", t("kpi_max_delay"), t("days_short"))
-            },
-            if pr.overdue.is_empty() {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_today"),
-            pr.in_progress.len().to_string(),
-            t("kpi_in_progress"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_critical"),
-            format!("{crit_count} {}", t("kpi_tasks_count")),
-            &format!(
-                "{} {} {}",
-                t("kpi_cpm_length"),
-                app.schedule.project_days,
-                t("days_short")
+    let delay = pr.delay_days;
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_progress"),
+                format!("{:.1} %", pr.fact_pct),
+                &format!("{} {:.1} %", t("kpi_plan_is"), pr.plan_pct),
+                if behind { theme::danger() } else { theme::ok() },
             ),
-            theme::warn(),
-        );
-        stat_card(
-            ui,
-            t("kpi_gpr_end"),
-            sched_end.format("%d.%m.%Y").to_string(),
-            &format!("{} {}", t("kpi_contract"), p.planned_end.format("%d.%m.%Y")),
-            if sched_end > p.planned_end {
-                theme::danger()
-            } else {
-                theme::ok()
-            },
-        );
-        let delay = pr.delay_days;
-        stat_card(
-            ui,
-            t("kpi_forecast"),
-            pr.forecast_end
-                .unwrap_or(sched_end)
-                .format("%d.%m.%Y")
-                .to_string(),
-            &if delay > 0 {
-                format!("{} {delay} {}", t("kpi_delay"), t("days_short"))
-            } else {
-                t("kpi_on_track").to_string()
-            },
-            if delay > 0 {
-                theme::danger()
-            } else {
-                theme::ok()
-            },
-        );
-    });
+            stat(
+                t("kpi_overdue"),
+                pr.overdue.len().to_string(),
+                &if pr.overdue.is_empty() {
+                    t("no_overdue_short").to_string()
+                } else {
+                    format!("{}: {max_delay} {}", t("kpi_max_delay"), t("days_short"))
+                },
+                if pr.overdue.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_today"),
+                pr.in_progress.len().to_string(),
+                t("kpi_in_progress"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_critical"),
+                format!("{crit_count} {}", t("kpi_tasks_count")),
+                &format!(
+                    "{} {} {}",
+                    t("kpi_cpm_length"),
+                    app.schedule.project_days,
+                    t("days_short")
+                ),
+                theme::warn(),
+            ),
+            stat(
+                t("kpi_gpr_end"),
+                sched_end.format("%d.%m.%Y").to_string(),
+                &format!("{} {}", t("kpi_contract"), p.planned_end.format("%d.%m.%Y")),
+                if sched_end > p.planned_end {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("kpi_forecast"),
+                pr.forecast_end
+                    .unwrap_or(sched_end)
+                    .format("%d.%m.%Y")
+                    .to_string(),
+                &if delay > 0 {
+                    format!("{} {delay} {}", t("kpi_delay"), t("days_short"))
+                } else {
+                    t("kpi_on_track").to_string()
+                },
+                if delay > 0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+        ],
+    );
 }
 
 // ================================================================ S-egri
@@ -712,10 +760,14 @@ fn att_row(ui: &mut egui::Ui, color: Color32, count: i64, text: &str) -> egui::R
             egui::FontId::proportional(13.5),
             color,
         );
+        // Qatorning haqiqiy kengligiga qarab qisqartiramiz: belgilangan
+        // uzunlik tor kartochkada chetga chiqib ketardi.
+        let text_w = (rect.width() - 74.0).max(40.0);
+        let max_chars = (text_w / 6.2) as usize;
         p.text(
             pos2(badge.max.x + 10.0, rect.center().y),
             Align2::LEFT_CENTER,
-            super::issues::truncate(text, 44),
+            super::issues::truncate(text, max_chars),
             egui::FontId::proportional(12.5),
             theme::text(),
         );
@@ -1141,11 +1193,7 @@ fn analytics_card(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
     ui.add_space(8.0);
 
     if found.is_empty() {
-        ui.label(
-            RichText::new(t("an_nothing"))
-                .size(12.5)
-                .color(theme::ok()),
-        );
+        ui.label(RichText::new(t("an_nothing")).size(12.5).color(theme::ok()));
     } else {
         for f in found.iter().take(4) {
             let c = match f.severity {
@@ -1193,13 +1241,17 @@ fn sales_card(ui: &mut egui::Ui, app: &App) -> bool {
         0.0
     };
 
-    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width().min(360.0), 10.0), Sense::hover());
+    let (rect, _) =
+        ui.allocate_exact_size(vec2(ui.available_width().min(360.0), 10.0), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, 3.0, theme::track());
     p.rect_filled(
         Rect::from_min_size(
             rect.min,
-            vec2(rect.width() * (pct / 100.0).clamp(0.0, 1.0) as f32, rect.height()),
+            vec2(
+                rect.width() * (pct / 100.0).clamp(0.0, 1.0) as f32,
+                rect.height(),
+            ),
         ),
         3.0,
         theme::accent(),
@@ -1227,7 +1279,11 @@ fn sales_card(ui: &mut egui::Ui, app: &App) -> bool {
         ui,
         t("kpi_debt"),
         money(s.debt),
-        if s.debt > 0.0 { theme::warn() } else { theme::ok() },
+        if s.debt > 0.0 {
+            theme::warn()
+        } else {
+            theme::ok()
+        },
     );
     if s.overdue > 0.0 {
         line(ui, t("kpi_overdue_pay"), money(s.overdue), theme::danger());

@@ -105,55 +105,53 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .filter(|m| m.cert_no.trim().is_empty())
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_materials"),
-            app.materials.len().to_string(),
-            t("kpi_materials_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_stock_value"),
-            money(total_value),
-            t("kpi_stock_value_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_below_min"),
-            below.to_string(),
-            t("kpi_below_min_hint"),
-            if below == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_cert_expired"),
-            expired.to_string(),
-            &format!("{soon} {}", t("kpi_cert_soon")),
-            if expired == 0 && soon == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_no_cert"),
-            no_cert.to_string(),
-            t("kpi_no_cert_hint"),
-            if no_cert == 0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_materials"),
+                app.materials.len().to_string(),
+                t("kpi_materials_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_stock_value"),
+                money(total_value),
+                t("kpi_stock_value_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_below_min"),
+                below.to_string(),
+                t("kpi_below_min_hint"),
+                if below == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_cert_expired"),
+                expired.to_string(),
+                &format!("{soon} {}", t("kpi_cert_soon")),
+                if expired == 0 && soon == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_no_cert"),
+                no_cert.to_string(),
+                t("kpi_no_cert_hint"),
+                if no_cert == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
 }
 
 fn table(ui: &mut egui::Ui, app: &mut App) {

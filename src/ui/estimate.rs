@@ -82,53 +82,52 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
         0.0
     };
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(ui, t("cc_total"), money(s.total), &cur, theme::text());
-        stat_card(
-            ui,
-            t("cc_attention"),
-            money(attention),
-            &format!("{pct:.1} % {}", t("cc_of_total")),
-            if attention > 0.0 {
-                theme::danger()
-            } else {
-                theme::ok()
-            },
-        );
-        stat_card(
-            ui,
-            t("cc_duplicates"),
-            s.duplicate_count.to_string(),
-            &format!("{} {cur}", money(s.duplicate_cost)),
-            if s.duplicate_count == 0 {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("cc_mismatch"),
-            s.mismatch_count.to_string(),
-            t("cc_mismatch_hint"),
-            if s.mismatch_count == 0 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("cc_saving"),
-            money(s.price_saving),
-            t("cc_saving_hint"),
-            if s.price_saving > 0.0 {
-                theme::accent()
-            } else {
-                theme::muted()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(t("cc_total"), money(s.total), &cur, theme::text()),
+            stat(
+                t("cc_attention"),
+                money(attention),
+                &format!("{pct:.1} % {}", t("cc_of_total")),
+                if attention > 0.0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("cc_duplicates"),
+                s.duplicate_count.to_string(),
+                &format!("{} {cur}", money(s.duplicate_cost)),
+                if s.duplicate_count == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("cc_mismatch"),
+                s.mismatch_count.to_string(),
+                t("cc_mismatch_hint"),
+                if s.mismatch_count == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("cc_saving"),
+                money(s.price_saving),
+                t("cc_saving_hint"),
+                if s.price_saving > 0.0 {
+                    theme::accent()
+                } else {
+                    theme::muted()
+                },
+            ),
+        ],
+    );
     ui.add_space(12.0);
 
     let w = (ui.available_width() - 26.0).min(1000.0);

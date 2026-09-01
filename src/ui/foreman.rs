@@ -29,9 +29,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     ui.horizontal(|ui| {
         ui.label(
-            RichText::new(format!("{} — {}", t("foreman_today"), today.format("%d.%m.%Y")))
-                .size(14.0)
-                .strong(),
+            RichText::new(format!(
+                "{} — {}",
+                t("foreman_today"),
+                today.format("%d.%m.%Y")
+            ))
+            .size(14.0)
+            .strong(),
         );
         ui.label(
             RichText::new(t("foreman_hint"))
@@ -82,11 +86,7 @@ fn running_today(app: &App) -> Vec<i64> {
 
 fn kpi_row(ui: &mut egui::Ui, app: &App) {
     let running = running_today(app).len();
-    let workers_today = app
-        .timesheet
-        .iter()
-        .filter(|e| e.date == app.today)
-        .count();
+    let workers_today = app.timesheet.iter().filter(|e| e.date == app.today).count();
     let machines_today = app
         .machine_logs
         .iter()
@@ -99,43 +99,57 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .filter(|s| matches!(s.status, IssueStatus::Open | IssueStatus::InWork))
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_running_today"),
-            running.to_string(),
-            t("kpi_running_today_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_crew_today"),
-            workers_today.to_string(),
-            t("kpi_crew_today_hint"),
-            if workers_today == 0 { theme::warn() } else { theme::ok() },
-        );
-        stat_card(
-            ui,
-            t("kpi_machines_today"),
-            machines_today.to_string(),
-            t("kpi_machines_today_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("kpi_journal_today"),
-            if journal_done { t("yes").into() } else { t("no").into() },
-            t("kpi_journal_today_hint"),
-            if journal_done { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("kpi_open_safety"),
-            open_safety.to_string(),
-            t("kpi_open_safety_hint"),
-            if open_safety == 0 { theme::ok() } else { theme::danger() },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_running_today"),
+                running.to_string(),
+                t("kpi_running_today_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_crew_today"),
+                workers_today.to_string(),
+                t("kpi_crew_today_hint"),
+                if workers_today == 0 {
+                    theme::warn()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("kpi_machines_today"),
+                machines_today.to_string(),
+                t("kpi_machines_today_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_journal_today"),
+                if journal_done {
+                    t("yes").into()
+                } else {
+                    t("no").into()
+                },
+                t("kpi_journal_today_hint"),
+                if journal_done {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_open_safety"),
+                open_safety.to_string(),
+                t("kpi_open_safety_hint"),
+                if open_safety == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
 }
 
 /// Sarlavhali blok — barcha bo'limlar bir xil ko'rinishda.
@@ -175,11 +189,39 @@ fn today_tasks(ui: &mut egui::Ui, app: &mut App) {
             .spacing([10.0, 6.0])
             .striped(true)
             .show(ui, |ui| {
-                cell_l(ui, 60.0, RichText::new(t("col_wbs")).size(11.0).color(theme::muted()));
-                cell_l(ui, 300.0, RichText::new(t("col_task")).size(11.0).color(theme::muted()));
-                cell_l(ui, 70.0, RichText::new(t("col_section_short")).size(11.0).color(theme::muted()));
-                cell_r(ui, 140.0, RichText::new(t("col_progress")).size(11.0).color(theme::muted()));
-                cell_l(ui, 170.0, RichText::new(t("col_responsible")).size(11.0).color(theme::muted()));
+                cell_l(
+                    ui,
+                    60.0,
+                    RichText::new(t("col_wbs")).size(11.0).color(theme::muted()),
+                );
+                cell_l(
+                    ui,
+                    300.0,
+                    RichText::new(t("col_task"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                cell_l(
+                    ui,
+                    70.0,
+                    RichText::new(t("col_section_short"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                cell_r(
+                    ui,
+                    140.0,
+                    RichText::new(t("col_progress"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                cell_l(
+                    ui,
+                    170.0,
+                    RichText::new(t("col_responsible"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
                 cell_l(ui, 70.0, RichText::new("").size(11.0));
                 ui.end_row();
 
@@ -188,7 +230,11 @@ fn today_tasks(ui: &mut egui::Ui, app: &mut App) {
                         continue;
                     };
                     let mut task = src.clone();
-                    cell_l(ui, 60.0, RichText::new(&task.wbs).size(12.0).color(theme::muted()));
+                    cell_l(
+                        ui,
+                        60.0,
+                        RichText::new(&task.wbs).size(12.0).color(theme::muted()),
+                    );
                     cell_l(
                         ui,
                         300.0,
@@ -246,70 +292,90 @@ fn journal_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
     let mut edited: Option<JournalEntry> = None;
     let mut open_journal = false;
 
-    block(ui, t("foreman_journal"), |ui| {
-        match existing.clone() {
-            Some(mut j) => {
-                let mut changed = false;
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(t("col_task")).size(11.5).color(theme::muted()));
-                    changed |= task_picker(ui, app, "fm_j_task", &mut j.task_id, 260.0);
-                    ui.label(RichText::new(t("col_volume")).size(11.5).color(theme::muted()));
-                    changed |= ui
-                        .add_sized(
-                            [90.0, 22.0],
-                            egui::DragValue::new(&mut j.volume).speed(1.0).range(0.0..=1e9),
-                        )
-                        .changed();
-                    changed |= ui
-                        .add_sized([60.0, 22.0], egui::TextEdit::singleline(&mut j.unit))
-                        .changed();
-                    ui.label(RichText::new(t("col_workers")).size(11.5).color(theme::muted()));
-                    changed |= ui
-                        .add_sized(
-                            [60.0, 22.0],
-                            egui::DragValue::new(&mut j.workers).speed(1.0).range(0.0..=999.0),
-                        )
-                        .changed();
-                    ui.label(RichText::new(t("col_machines")).size(11.5).color(theme::muted()));
-                    changed |= ui
-                        .add_sized(
-                            [60.0, 22.0],
-                            egui::DragValue::new(&mut j.machines).speed(1.0).range(0.0..=999.0),
-                        )
-                        .changed();
-                });
-                ui.add_space(4.0);
-                changed |= ui
-                    .add_sized(
-                        [ui.available_width().min(760.0), 46.0],
-                        egui::TextEdit::multiline(&mut j.text).hint_text(t("journal_text_hint")),
-                    )
-                    .changed();
-                ui.add_space(4.0);
-                ui.horizontal(|ui| {
-                    if ui.button(t("open_journal")).clicked() {
-                        open_journal = true;
-                    }
-                    ui.label(
-                        RichText::new(t("foreman_journal_saved"))
-                            .size(11.0)
-                            .color(theme::ok()),
-                    );
-                });
-                if changed {
-                    edited = Some(j);
-                }
-            }
-            None => {
+    block(ui, t("foreman_journal"), |ui| match existing.clone() {
+        Some(mut j) => {
+            let mut changed = false;
+            ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(t("foreman_no_journal"))
-                        .size(12.0)
+                    RichText::new(t("col_task"))
+                        .size(11.5)
                         .color(theme::muted()),
                 );
-                ui.add_space(6.0);
-                if ui.button(t("foreman_start_journal")).clicked() {
-                    create = true;
+                changed |= task_picker(ui, app, "fm_j_task", &mut j.task_id, 260.0);
+                ui.label(
+                    RichText::new(t("col_volume"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+                changed |= ui
+                    .add_sized(
+                        [90.0, 22.0],
+                        egui::DragValue::new(&mut j.volume)
+                            .speed(1.0)
+                            .range(0.0..=1e9),
+                    )
+                    .changed();
+                changed |= ui
+                    .add_sized([60.0, 22.0], egui::TextEdit::singleline(&mut j.unit))
+                    .changed();
+                ui.label(
+                    RichText::new(t("col_workers"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+                changed |= ui
+                    .add_sized(
+                        [60.0, 22.0],
+                        egui::DragValue::new(&mut j.workers)
+                            .speed(1.0)
+                            .range(0.0..=999.0),
+                    )
+                    .changed();
+                ui.label(
+                    RichText::new(t("col_machines"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+                changed |= ui
+                    .add_sized(
+                        [60.0, 22.0],
+                        egui::DragValue::new(&mut j.machines)
+                            .speed(1.0)
+                            .range(0.0..=999.0),
+                    )
+                    .changed();
+            });
+            ui.add_space(4.0);
+            changed |= ui
+                .add_sized(
+                    [ui.available_width().min(760.0), 46.0],
+                    egui::TextEdit::multiline(&mut j.text).hint_text(t("journal_text_hint")),
+                )
+                .changed();
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if ui.button(t("open_journal")).clicked() {
+                    open_journal = true;
                 }
+                ui.label(
+                    RichText::new(t("foreman_journal_saved"))
+                        .size(11.0)
+                        .color(theme::ok()),
+                );
+            });
+            if changed {
+                edited = Some(j);
+            }
+        }
+        None => {
+            ui.label(
+                RichText::new(t("foreman_no_journal"))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if ui.button(t("foreman_start_journal")).clicked() {
+                create = true;
             }
         }
     });
@@ -474,7 +540,9 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                             let mut changed = false;
                             ui.horizontal(|ui| {
                                 ui.label(
-                                    RichText::new(t("col_hours")).size(11.0).color(theme::muted()),
+                                    RichText::new(t("col_hours"))
+                                        .size(11.0)
+                                        .color(theme::muted()),
                                 );
                                 changed |= ui
                                     .add_sized(
@@ -485,7 +553,9 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                                     )
                                     .changed();
                                 ui.label(
-                                    RichText::new(t("col_fuel")).size(11.0).color(theme::muted()),
+                                    RichText::new(t("col_fuel"))
+                                        .size(11.0)
+                                        .color(theme::muted()),
                                 );
                                 changed |= ui
                                     .add_sized(
@@ -580,12 +650,15 @@ fn attention_block(ui: &mut egui::Ui, app: &mut App) {
                 let overdue = s.deadline.is_some_and(|d| d < today);
                 ui.label(
                     RichText::new(if overdue { "!" } else { "·" })
-                        .color(if overdue { theme::danger() } else { theme::warn() })
+                        .color(if overdue {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        })
                         .strong(),
                 );
                 ui.label(
-                    RichText::new(format!("{} — {}", s.kind.label(), s.description))
-                        .size(12.0),
+                    RichText::new(format!("{} — {}", s.kind.label(), s.description)).size(12.0),
                 );
                 if ui.small_button(t("an_open")).clicked() {
                     go = Some(Screen::Safety);
@@ -597,8 +670,7 @@ fn attention_block(ui: &mut egui::Ui, app: &mut App) {
             ui.horizontal(|ui| {
                 ui.label(RichText::new("·").color(theme::warn()).strong());
                 ui.label(
-                    RichText::new(format!("{}: {}", t("an_below_min"), low.join(", ")))
-                        .size(12.0),
+                    RichText::new(format!("{}: {}", t("an_below_min"), low.join(", "))).size(12.0),
                 );
                 if ui.small_button(t("an_open")).clicked() {
                     go = Some(Screen::Warehouse);

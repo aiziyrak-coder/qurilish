@@ -12,12 +12,12 @@
 use crate::app::Screen;
 use crate::checks::{CostSummary, StockLine, SupplyLine};
 use crate::cpm::{Progress, Schedule};
+use crate::domain::{Deal, MachineStatus, Purchase};
 use crate::domain::{
     ExecDoc, ExecDocStatus, Issue, IssueStatus, Machine, MachineLog, Material, Payment,
     PurchaseStatus, QualityCheck, QualityResult, Request, SafetyEvent, SafetyKind, Severity,
     StockMove, TimesheetEntry, Unit, Worker,
 };
-use crate::domain::{Deal, MachineStatus, Purchase};
 use crate::i18n::t;
 use crate::model::Task;
 use crate::sales::SalesSummary;
@@ -171,7 +171,11 @@ pub fn findings(inp: &Input) -> Vec<Finding> {
     resource_rules(inp, &mut out);
     sales_rules(inp, &mut out);
     // Kod bo'yicha ikkilamchi saralash — tartib ishga tushirishlar orasida barqaror.
-    out.sort_by(|a, b| rank(a.severity).cmp(&rank(b.severity)).then(a.code.cmp(b.code)));
+    out.sort_by(|a, b| {
+        rank(a.severity)
+            .cmp(&rank(b.severity))
+            .then(a.code.cmp(b.code))
+    });
     out
 }
 
@@ -542,9 +546,7 @@ fn quality_rules(inp: &Input, out: &mut Vec<Finding>) {
     let overdue = inp
         .quality
         .iter()
-        .filter(|q| {
-            q.result != QualityResult::Pass && q.deadline.is_some_and(|d| d < inp.today)
-        })
+        .filter(|q| q.result != QualityResult::Pass && q.deadline.is_some_and(|d| d < inp.today))
         .count();
 
     if overdue > 0 {
@@ -580,8 +582,7 @@ fn quality_rules(inp: &Input, out: &mut Vec<Finding>) {
         .filter(|t| t.progress >= 99.99)
         .filter(|t| {
             !inp.quality.iter().any(|q| {
-                q.task_id == Some(t.id)
-                    && q.kind == crate::domain::QualityKind::Acceptance
+                q.task_id == Some(t.id) && q.kind == crate::domain::QualityKind::Acceptance
             })
         })
         .count();
@@ -875,7 +876,11 @@ pub fn metrics(inp: &Input) -> Vec<Metric> {
         Area::Cost,
         t("an_m_estimate"),
         crate::ui::money(inp.cost.total),
-        format!("{} {}", t("an_contract"), crate::ui::money(inp.contract_sum)),
+        format!(
+            "{} {}",
+            t("an_contract"),
+            crate::ui::money(inp.contract_sum)
+        ),
         if inp.contract_sum > 0.0 && inp.cost.total > inp.contract_sum {
             Severity::Critical
         } else {
@@ -986,7 +991,11 @@ pub fn metrics(inp: &Input) -> Vec<Metric> {
             Area::Sales,
             t("an_m_sales"),
             format!("{sold_pct:.0}%"),
-            format!("{} {}", t("an_received"), crate::ui::money(inp.sales.received)),
+            format!(
+                "{} {}",
+                t("an_received"),
+                crate::ui::money(inp.sales.received)
+            ),
             if inp.sales.overdue > 0.0 {
                 Severity::Warning
             } else {

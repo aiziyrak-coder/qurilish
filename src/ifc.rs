@@ -347,7 +347,11 @@ fn decode_x2(s: &str) -> String {
             }
         }
         out.push_str(&String::from_utf16_lossy(&units));
-        rest = if end < rest.len() { &rest[end + 4..] } else { "" };
+        rest = if end < rest.len() {
+            &rest[end + 4..]
+        } else {
+            ""
+        };
     }
     out.push_str(rest);
     out
@@ -381,9 +385,7 @@ fn map_kind(ifc: &str) -> Option<(ElementKind, Section)> {
         "IFCSLAB" | "IFCSLABSTANDARDCASE" | "IFCFOOTING" => (ElementKind::Slab, Section::Kj),
         "IFCOPENINGELEMENT" | "IFCOPENINGSTANDARDCASE" => (ElementKind::Opening, Section::Kj),
         "IFCMEMBER" | "IFCPLATE" => (ElementKind::Beam, Section::Km),
-        "IFCPIPESEGMENT" | "IFCPIPEFITTING" | "IFCFLOWSEGMENT" => {
-            (ElementKind::Pipe, Section::Vk)
-        }
+        "IFCPIPESEGMENT" | "IFCPIPEFITTING" | "IFCFLOWSEGMENT" => (ElementKind::Pipe, Section::Vk),
         "IFCSANITARYTERMINAL" | "IFCPUMP" | "IFCTANK" | "IFCVALVE" => {
             (ElementKind::Device, Section::Vk)
         }
@@ -394,10 +396,12 @@ fn map_kind(ifc: &str) -> Option<(ElementKind, Section)> {
         "IFCCABLESEGMENT" | "IFCCABLECARRIERSEGMENT" | "IFCCABLEFITTING" => {
             (ElementKind::Cable, Section::Eom)
         }
-        "IFCLIGHTFIXTURE" | "IFCELECTRICAPPLIANCE" | "IFCOUTLET" | "IFCSWITCHINGDEVICE"
-        | "IFCELECTRICDISTRIBUTIONBOARD" | "IFCDISTRIBUTIONBOARD" => {
-            (ElementKind::Device, Section::Eom)
-        }
+        "IFCLIGHTFIXTURE"
+        | "IFCELECTRICAPPLIANCE"
+        | "IFCOUTLET"
+        | "IFCSWITCHINGDEVICE"
+        | "IFCELECTRICDISTRIBUTIONBOARD"
+        | "IFCDISTRIBUTIONBOARD" => (ElementKind::Device, Section::Eom),
         "IFCALARM" | "IFCSENSOR" | "IFCFIRESUPPRESSIONTERMINAL" => {
             (ElementKind::Device, Section::Pb)
         }
@@ -449,7 +453,11 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
 
     // ---- Xonalar: element qaysi xonaga tegishli (IFCRELSPACEBOUNDARY).
     let mut room_of: HashMap<u64, String> = HashMap::new();
-    for rel in model.by_kind(&["IFCRELSPACEBOUNDARY", "IFCRELSPACEBOUNDARY1STLEVEL", "IFCRELSPACEBOUNDARY2NDLEVEL"]) {
+    for rel in model.by_kind(&[
+        "IFCRELSPACEBOUNDARY",
+        "IFCRELSPACEBOUNDARY1STLEVEL",
+        "IFCRELSPACEBOUNDARY2NDLEVEL",
+    ]) {
         let (Some(space), Some(elem)) = (
             rel.arg(4).and_then(|v| v.as_ref_id()),
             rel.arg(5).and_then(|v| v.as_ref_id()),
@@ -521,7 +529,11 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
         }
     }
     // Xona o'z chegarasidagi elementlarni o'z ichiga oladi.
-    for rel in model.by_kind(&["IFCRELSPACEBOUNDARY", "IFCRELSPACEBOUNDARY1STLEVEL", "IFCRELSPACEBOUNDARY2NDLEVEL"]) {
+    for rel in model.by_kind(&[
+        "IFCRELSPACEBOUNDARY",
+        "IFCRELSPACEBOUNDARY1STLEVEL",
+        "IFCRELSPACEBOUNDARY2NDLEVEL",
+    ]) {
         if let (Some(space), Some(elem)) = (
             rel.arg(4).and_then(|v| v.as_ref_id()),
             rel.arg(5).and_then(|v| v.as_ref_id()),
@@ -666,7 +678,12 @@ END-ISO-10303-21;
         let m = parse(SAMPLE);
         let a = to_graph(&m, 1);
         let b = to_graph(&m, 1);
-        let marks = |g: &Graph| g.elements.iter().map(|e| e.mark.clone()).collect::<Vec<_>>();
+        let marks = |g: &Graph| {
+            g.elements
+                .iter()
+                .map(|e| e.mark.clone())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(marks(&a), marks(&b));
         assert_eq!(a.links, b.links);
     }

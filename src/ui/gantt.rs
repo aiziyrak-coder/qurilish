@@ -113,6 +113,10 @@ fn keyboard(ui: &egui::Ui, app: &mut App) {
 }
 
 fn toolbar(ui: &mut egui::Ui, app: &mut App) {
+    // Tor oynada hamma narsa bitta qatorga sig'maydi va ustma-ust chiqadi,
+    // shuning uchun panel ikkiga bo'linadi.
+    let wide = ui.available_width() > 1180.0;
+
     ui.horizontal(|ui| {
         if ui.button(t("add_task")).clicked() {
             app.add_task();
@@ -154,30 +158,9 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
             }
         }
 
-        ui.separator();
-        ui.checkbox(&mut app.show_critical_only, t("only_critical"));
-        ui.checkbox(&mut app.filter_overdue, t("filter_overdue"));
-
-        ui.separator();
-        egui::ComboBox::from_id_salt("sec_filter")
-            .selected_text(if app.filter_section == Section::None {
-                t("all_sections").to_string()
-            } else {
-                app.filter_section.label().to_string()
-            })
-            .width(130.0)
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut app.filter_section, Section::None, t("all_sections"));
-                for s in Section::ALL.into_iter().skip(1) {
-                    ui.selectable_value(&mut app.filter_section, s, s.label());
-                }
-            });
-
-        ui.add(
-            egui::TextEdit::singleline(&mut app.search)
-                .hint_text(t("search_tasks"))
-                .desired_width(180.0),
-        );
+        if wide {
+            filters(ui, app);
+        }
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // TZ I.2: «kim aybdor, nima qilish kerak» — tahlil oynasi.
@@ -201,6 +184,42 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
             }
         });
     });
+
+    if !wide {
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            filters(ui, app);
+        });
+    }
+}
+
+/// Filtrlar va qidiruv — keng oynada asosiy qatorda, torida pastda.
+fn filters(ui: &mut egui::Ui, app: &mut App) {
+    ui.checkbox(&mut app.show_critical_only, t("only_critical"));
+    ui.checkbox(&mut app.filter_overdue, t("filter_overdue"));
+
+    ui.separator();
+    {
+        egui::ComboBox::from_id_salt("sec_filter")
+            .selected_text(if app.filter_section == Section::None {
+                t("all_sections").to_string()
+            } else {
+                app.filter_section.label().to_string()
+            })
+            .width(130.0)
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut app.filter_section, Section::None, t("all_sections"));
+                for s in Section::ALL.into_iter().skip(1) {
+                    ui.selectable_value(&mut app.filter_section, s, s.label());
+                }
+            });
+    }
+
+    ui.add(
+        egui::TextEdit::singleline(&mut app.search)
+            .hint_text(t("search_tasks"))
+            .desired_width(180.0),
+    );
 }
 
 fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
@@ -212,74 +231,72 @@ fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
         .filter(|t| app.schedule.is_critical(t.id))
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_plan_today"),
-            format!("{:.1} %", pr.plan_pct),
-            t("kpi_by_durations"),
-            theme::accent(),
-        );
-        let fact_color = if pr.fact_pct + 0.5 < pr.plan_pct {
-            theme::danger()
-        } else {
-            theme::ok()
-        };
-        stat_card(
-            ui,
-            t("kpi_fact"),
-            format!("{:.1} %", pr.fact_pct),
-            &format!(
-                "{} {:+.1} {}",
-                t("kpi_deviation"),
-                pr.fact_pct - pr.plan_pct,
-                t("kpi_pp")
+    let fact_color = if pr.fact_pct + 0.5 < pr.plan_pct {
+        theme::danger()
+    } else {
+        theme::ok()
+    };
+    let delay = pr.delay_days;
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_plan_today"),
+                format!("{:.1} %", pr.plan_pct),
+                t("kpi_by_durations"),
+                theme::accent(),
             ),
-            fact_color,
-        );
-        stat_card(
-            ui,
-            t("kpi_overdue_tasks"),
-            pr.overdue.len().to_string(),
-            t("kpi_overdue_hint"),
-            if pr.overdue.is_empty() {
-                theme::ok()
-            } else {
-                theme::danger()
-            },
-        );
-        stat_card(
-            ui,
-            t("kpi_critical"),
-            format!("{crit_count} {}", t("kpi_tasks_count")),
-            &format!(
-                "{} {} {}",
-                t("kpi_cpm_length"),
-                app.schedule.project_days,
-                t("days_short")
+            stat(
+                t("kpi_fact"),
+                format!("{:.1} %", pr.fact_pct),
+                &format!(
+                    "{} {:+.1} {}",
+                    t("kpi_deviation"),
+                    pr.fact_pct - pr.plan_pct,
+                    t("kpi_pp")
+                ),
+                fact_color,
             ),
-            theme::warn(),
-        );
-        let delay = pr.delay_days;
-        stat_card(
-            ui,
-            t("kpi_forecast"),
-            pr.forecast_end
-                .unwrap_or(sched_end)
-                .format("%d.%m.%Y")
-                .to_string(),
-            &if delay > 0 {
-                format!("{} {delay} {}", t("kpi_delay"), t("days_short"))
-            } else {
-                t("kpi_on_track").to_string()
-            },
-            if delay > 0 {
-                theme::danger()
-            } else {
-                theme::ok()
-            },
-        );
-    });
+            stat(
+                t("kpi_overdue_tasks"),
+                pr.overdue.len().to_string(),
+                t("kpi_overdue_hint"),
+                if pr.overdue.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_critical"),
+                format!("{crit_count} {}", t("kpi_tasks_count")),
+                &format!(
+                    "{} {} {}",
+                    t("kpi_cpm_length"),
+                    app.schedule.project_days,
+                    t("days_short")
+                ),
+                theme::warn(),
+            ),
+            stat(
+                t("kpi_forecast"),
+                pr.forecast_end
+                    .unwrap_or(sched_end)
+                    .format("%d.%m.%Y")
+                    .to_string(),
+                &if delay > 0 {
+                    format!("{} {delay} {}", t("kpi_delay"), t("days_short"))
+                } else {
+                    t("kpi_on_track").to_string()
+                },
+                if delay > 0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+        ],
+    );
 
     if !app.schedule.cycles.is_empty() {
         ui.label(

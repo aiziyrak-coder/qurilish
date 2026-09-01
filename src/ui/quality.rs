@@ -90,10 +90,7 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     let overdue = app
         .quality
         .iter()
-        .filter(|q| {
-            q.result != QualityResult::Pass
-                && q.deadline.is_some_and(|d| d < app.today)
-        })
+        .filter(|q| q.result != QualityResult::Pass && q.deadline.is_some_and(|d| d < app.today))
         .count();
     let pct = if total > 0 {
         (total - fail - conditional) as f64 / total as f64 * 100.0
@@ -101,36 +98,47 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         100.0
     };
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_quality_total"),
-            total.to_string(),
-            t("kpi_quality_total_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("kpi_quality_pass"),
-            format!("{pct:.0}%"),
-            t("kpi_quality_pass_hint"),
-            if pct >= 90.0 { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("kpi_quality_fail"),
-            fail.to_string(),
-            &format!("{conditional} {}", t("kpi_quality_cond_hint")),
-            if fail == 0 { theme::ok() } else { theme::danger() },
-        );
-        stat_card(
-            ui,
-            t("kpi_quality_overdue"),
-            overdue.to_string(),
-            t("kpi_quality_overdue_hint"),
-            if overdue == 0 { theme::ok() } else { theme::danger() },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_quality_total"),
+                total.to_string(),
+                t("kpi_quality_total_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_quality_pass"),
+                format!("{pct:.0}%"),
+                t("kpi_quality_pass_hint"),
+                if pct >= 90.0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_quality_fail"),
+                fail.to_string(),
+                &format!("{conditional} {}", t("kpi_quality_cond_hint")),
+                if fail == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_quality_overdue"),
+                overdue.to_string(),
+                t("kpi_quality_overdue_hint"),
+                if overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
 }
 
 fn result_color(r: QualityResult) -> Color32 {

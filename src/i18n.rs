@@ -356,27 +356,88 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "set_open_folder" => ("Papkani ochish", "Открыть папку"),
         "set_objects_count" => ("Obyektlar soni", "Объектов в базе"),
         // ---------- Rollar ----------
-        "role_admin" => ("Administrator", "Администратор"),
-        "role_admin_hint" => (
+        "ur_admin" => ("Administrator", "Администратор"),
+        "ur_admin_hint" => (
             "Hamma bo'limni ko'radi va o'zgartiradi.",
             "Видит и изменяет все разделы.",
         ),
-        "role_foreman" => ("Prorab", "Прораб"),
-        "role_foreman_hint" => (
-            "Ijro: jurnal, tabel, texnika smenalari, bajarilish foizi, arizalar.",
-            "Исполнение: журнал, табель, смены техники, процент выполнения, заявки.",
+        "ur_director" => ("Direktor", "Директор"),
+        "ur_director_hint" => (
+            "Hammasini ko'radi; pasport, moliya, smeta, xaridlar va shartnomalar bo'yicha qaror qabul qiladi.",
+            "Видит все; принимает решения по паспорту, финансам, смете, закупкам и договорам.",
         ),
-        "role_supervisor" => ("Texnik nazorat", "Технадзор"),
-        "role_supervisor_hint" => (
-            "Nazorat: ijro hujjatlari, sifat, xavfsizlik, tekshiruv natijalari.",
-            "Контроль: исполнительная документация, качество, ТБ, результаты проверок.",
+        "ur_pm" => ("Loyiha rahbari", "Руководитель проекта"),
+        "ur_pm_hint" => (
+            "Muddat va reja: GPR, PPR, arizalar, ijro hujjatlari, pasport.",
+            "Сроки и план: график, ППР, заявки, исполнительная документация, паспорт.",
         ),
-        "role_sales" => ("Sotuv", "Продажи"),
-        "role_sales_hint" => (
+        "ur_foreman" => ("Prorab", "Прораб"),
+        "ur_foreman_hint" => (
+            "Kunlik ijro: jurnal, tabel, texnika smenalari, bajarilish foizi, arizalar, ombor, xavfsizlik.",
+            "Ежедневное исполнение: журнал, табель, смены техники, процент выполнения, заявки, склад, ТБ.",
+        ),
+        "ur_brigadier" => ("Brigadir", "Бригадир"),
+        "ur_brigadier_hint" => (
+            "Prorabdan tor: faqat kunlik yozuv va o'z brigadasining tabeli.",
+            "Уже прораба: только ежедневная запись и табель своей бригады.",
+        ),
+        "ur_supervisor" => ("Texnik nazorat", "Технадзор"),
+        "ur_supervisor_hint" => (
+            "Nazorat: ijro hujjatlari, sifat, xavfsizlik, loyiha tekshiruvi, PPR.",
+            "Контроль: исполнительная документация, качество, ТБ, проверка проекта, ППР.",
+        ),
+        "ur_designer" => ("Mualliflik nazorati", "Авторский надзор"),
+        "ur_designer_hint" => (
+            "Loyiha yechimlari: elementlar, nomuvofiqliklar, PPR. Ijroga tegmaydi.",
+            "Проектные решения: элементы, несоответствия, ППР. Исполнения не касается.",
+        ),
+        "ur_estimator" => ("Smetachi", "Сметчик"),
+        "ur_estimator_hint" => (
+            "Smeta, qiymat va material narxlari; xaridlar bo'yicha kelishuv.",
+            "Смета, стоимость и цены материалов; согласование по закупкам.",
+        ),
+        "ur_supply" => ("Ta'minotchi", "Снабженец"),
+        "ur_supply_hint" => (
+            "Arizalar, xaridlar, material katalogi va ombor kirimi.",
+            "Заявки, закупки, каталог материалов и приход на склад.",
+        ),
+        "ur_storekeeper" => ("Omborchi", "Кладовщик"),
+        "ur_storekeeper_hint" => (
+            "Ombor harakatlari va material katalogi.",
+            "Движения склада и каталог материалов.",
+        ),
+        "ur_mechanic" => ("Mexanik", "Механик"),
+        "ur_mechanic_hint" => (
+            "Texnika parki, smenalar, motosoat va texnik ko'rik.",
+            "Парк техники, смены, моточасы и техосмотр.",
+        ),
+        "ur_quality" => ("Sifat muhandisi", "Инженер по качеству"),
+        "ur_quality_hint" => (
+            "Kirish, operatsion va qabul nazorati; ijro hujjatlari.",
+            "Входной, операционный и приемочный контроль; исполнительная документация.",
+        ),
+        "ur_safety" => ("Mehnat muhofazasi", "Охрана труда"),
+        "ur_safety_hint" => (
+            "Hodisalar, instruktajlar, chora-tadbirlar.",
+            "События, инструктажи, мероприятия.",
+        ),
+        "ur_hr" => ("Kadrlar / tabelchi", "Кадры / табельщик"),
+        "ur_hr_hint" => (
+            "Ishchilar ro'yxati va tabel.",
+            "Список рабочих и табель.",
+        ),
+        "ur_accountant" => ("Buxgalter", "Бухгалтер"),
+        "ur_accountant_hint" => (
+            "Pul harakatini ko'radi, lekin o'zgartirmaydi: yozuv boshqa modullardan keladi.",
+            "Видит движение денег, но не изменяет: записи приходят из других модулей.",
+        ),
+        "ur_sales" => ("Sotuv menejeri", "Менеджер продаж"),
+        "ur_sales_hint" => (
             "Kvartiralar, shartnomalar va to'lovlar.",
             "Квартиры, договоры и платежи.",
         ),
-        "role_client_hint" => (
+        "ur_client" => ("Buyurtmachi", "Заказчик"),
+        "ur_client_hint" => (
             "Faqat ko'rish: hech narsani o'zgartirmaydi.",
             "Только просмотр: ничего не изменяет.",
         ),
@@ -1497,6 +1558,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Ish, element, smeta pozitsiyasi, nomuvofiqlik, karta yoki bo'lim nomi...",
             "Работа, элемент, позиция сметы, несоответствие, карта или название раздела...",
         ),
+        "search_short" => ("Qidiruv", "Поиск"),
         "search_keys" => (
             "Ctrl+K yoki / — ochish, Esc — yopish",
             "Ctrl+K или / — открыть, Esc — закрыть",

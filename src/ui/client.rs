@@ -35,11 +35,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             );
         }
     });
-    ui.label(
-        RichText::new(t("cl_hint"))
-            .size(11.0)
-            .color(theme::muted()),
-    );
+    ui.label(RichText::new(t("cl_hint")).size(11.0).color(theme::muted()));
     ui.add_space(10.0);
 
     egui::ScrollArea::vertical()
@@ -66,66 +62,72 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, project: &crate::model::Project) {
     let p = &app.progress;
     let left = (project.planned_end - app.today).num_days();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("cl_progress"),
-            format!("{:.0}%", p.fact_pct),
-            &format!("{} {:.0}%", t("an_plan"), p.plan_pct),
-            if p.fact_pct + 2.0 >= p.plan_pct {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("cl_deadline"),
-            project.planned_end.format("%d.%m.%Y").to_string(),
-            &if left >= 0 {
-                format!("{left} {}", t("cl_days_left"))
-            } else {
-                format!("{} {}", -left, t("cl_days_over"))
-            },
-            if left >= 0 { theme::text() } else { theme::danger() },
-        );
-        stat_card(
-            ui,
-            t("cl_forecast"),
-            match p.forecast_end {
-                Some(d) => d.format("%d.%m.%Y").to_string(),
-                None => t("dash").to_string(),
-            },
-            &if p.delay_days > 0 {
-                format!("{} {} {}", t("an_delay"), p.delay_days, t("days_short"))
-            } else {
-                t("cl_on_time").to_string()
-            },
-            if p.delay_days > 0 { theme::danger() } else { theme::ok() },
-        );
-        stat_card(
-            ui,
-            t("cl_contract"),
-            money(project.contract_sum),
-            t("cl_contract_hint"),
-            theme::text(),
-        );
-        stat_card(
-            ui,
-            t("cl_paid"),
-            money(project.paid_total),
-            &if project.contract_sum > 0.0 {
-                format!(
-                    "{:.0}% {}",
-                    project.paid_total / project.contract_sum * 100.0,
-                    t("cl_of_contract")
-                )
-            } else {
-                String::new()
-            },
-            theme::ok(),
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("cl_progress"),
+                format!("{:.0}%", p.fact_pct),
+                &format!("{} {:.0}%", t("an_plan"), p.plan_pct),
+                if p.fact_pct + 2.0 >= p.plan_pct {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("cl_deadline"),
+                project.planned_end.format("%d.%m.%Y").to_string(),
+                &if left >= 0 {
+                    format!("{left} {}", t("cl_days_left"))
+                } else {
+                    format!("{} {}", -left, t("cl_days_over"))
+                },
+                if left >= 0 {
+                    theme::text()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("cl_forecast"),
+                match p.forecast_end {
+                    Some(d) => d.format("%d.%m.%Y").to_string(),
+                    None => t("dash").to_string(),
+                },
+                &if p.delay_days > 0 {
+                    format!("{} {} {}", t("an_delay"), p.delay_days, t("days_short"))
+                } else {
+                    t("cl_on_time").to_string()
+                },
+                if p.delay_days > 0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("cl_contract"),
+                money(project.contract_sum),
+                t("cl_contract_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("cl_paid"),
+                money(project.paid_total),
+                &if project.contract_sum > 0.0 {
+                    format!(
+                        "{:.0}% {}",
+                        project.paid_total / project.contract_sum * 100.0,
+                        t("cl_of_contract")
+                    )
+                } else {
+                    String::new()
+                },
+                theme::ok(),
+            ),
+        ],
+    );
 }
 
 fn block(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
@@ -159,7 +161,11 @@ fn sections_block(ui: &mut egui::Ui, app: &App) {
                 .iter()
                 .map(|t| t.duration.max(1) as f64 * t.progress / 100.0)
                 .sum();
-            let pct = if total > 0.0 { done / total * 100.0 } else { 0.0 };
+            let pct = if total > 0.0 {
+                done / total * 100.0
+            } else {
+                0.0
+            };
 
             ui.horizontal(|ui| {
                 ui.add_sized(
@@ -223,7 +229,12 @@ fn finance_block(ui: &mut egui::Ui, app: &App, project: &crate::model::Project) 
                 ui.label(RichText::new(value).size(13.5).color(color));
             });
         };
-        line(ui, t("cl_contract"), money(project.contract_sum), theme::text());
+        line(
+            ui,
+            t("cl_contract"),
+            money(project.contract_sum),
+            theme::text(),
+        );
         line(ui, t("cl_estimate"), money(cost.total), theme::text());
         line(ui, t("cl_earned"), money(earned), theme::accent());
         line(ui, t("cl_paid"), money(project.paid_total), theme::ok());
@@ -233,7 +244,11 @@ fn finance_block(ui: &mut egui::Ui, app: &App, project: &crate::model::Project) 
             ui,
             t("cl_unpaid"),
             money(unpaid),
-            if unpaid > 0.0 { theme::warn() } else { theme::ok() },
+            if unpaid > 0.0 {
+                theme::warn()
+            } else {
+                theme::ok()
+            },
         );
         ui.add_space(4.0);
         ui.label(
@@ -293,11 +308,7 @@ fn sales_block(ui: &mut egui::Ui, app: &App) {
         ui.horizontal(|ui| {
             ui.add_sized(
                 [230.0, 18.0],
-                egui::Label::new(
-                    RichText::new(t("cl_sold"))
-                        .size(12.0)
-                        .color(theme::muted()),
-                ),
+                egui::Label::new(RichText::new(t("cl_sold")).size(12.0).color(theme::muted())),
             );
             bar(ui, sold_pct, 300.0);
             ui.label(
@@ -322,7 +333,11 @@ fn sales_block(ui: &mut egui::Ui, app: &App) {
             ui,
             t("kpi_debt"),
             money(s.debt),
-            if s.debt > 0.0 { theme::warn() } else { theme::ok() },
+            if s.debt > 0.0 {
+                theme::warn()
+            } else {
+                theme::ok()
+            },
         );
     });
 }

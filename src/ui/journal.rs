@@ -127,57 +127,56 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .map(|e| photo_list(&e.photos).len())
         .sum();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("jr_last"),
-            match last {
-                Some(d) => d.format("%d.%m.%Y").to_string(),
-                None => t("dash").to_string(),
-            },
-            &if gap < 0 {
-                t("jr_never").to_string()
-            } else if gap == 0 {
-                t("jr_today").to_string()
-            } else {
-                format!("{gap} {} {}", t("days_short"), t("jr_ago"))
-            },
-            if gap > 2 {
-                theme::danger()
-            } else {
-                theme::ok()
-            },
-        );
-        stat_card(
-            ui,
-            t("jr_covered"),
-            format!("{days_covered} / 30"),
-            t("jr_covered_hint"),
-            if days_covered >= 20 {
-                theme::ok()
-            } else {
-                theme::warn()
-            },
-        );
-        stat_card(
-            ui,
-            t("jr_avg_workers"),
-            avg_workers.to_string(),
-            t("jr_avg_workers_hint"),
-            theme::accent(),
-        );
-        stat_card(
-            ui,
-            t("jr_photos"),
-            photos.to_string(),
-            t("jr_photos_hint"),
-            if photos == 0 {
-                theme::muted()
-            } else {
-                theme::accent()
-            },
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("jr_last"),
+                match last {
+                    Some(d) => d.format("%d.%m.%Y").to_string(),
+                    None => t("dash").to_string(),
+                },
+                &if gap < 0 {
+                    t("jr_never").to_string()
+                } else if gap == 0 {
+                    t("jr_today").to_string()
+                } else {
+                    format!("{gap} {} {}", t("days_short"), t("jr_ago"))
+                },
+                if gap > 2 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("jr_covered"),
+                format!("{days_covered} / 30"),
+                t("jr_covered_hint"),
+                if days_covered >= 20 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("jr_avg_workers"),
+                avg_workers.to_string(),
+                t("jr_avg_workers_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("jr_photos"),
+                photos.to_string(),
+                t("jr_photos_hint"),
+                if photos == 0 {
+                    theme::muted()
+                } else {
+                    theme::accent()
+                },
+            ),
+        ],
+    );
 }
 
 fn entries(ui: &mut egui::Ui, app: &mut App) {

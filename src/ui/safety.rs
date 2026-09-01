@@ -110,43 +110,57 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .filter(|s| s.kind == SafetyKind::Training)
         .count();
 
-    ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("kpi_safety_events"),
-            events.to_string(),
-            t("kpi_safety_events_hint"),
-            if events == 0 { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("kpi_safety_incidents"),
-            incidents.to_string(),
-            t("kpi_safety_incidents_hint"),
-            if incidents == 0 { theme::ok() } else { theme::danger() },
-        );
-        stat_card(
-            ui,
-            t("kpi_safety_open"),
-            open.to_string(),
-            t("kpi_safety_open_hint"),
-            if open == 0 { theme::ok() } else { theme::warn() },
-        );
-        stat_card(
-            ui,
-            t("kpi_safety_overdue"),
-            overdue.to_string(),
-            t("kpi_safety_overdue_hint"),
-            if overdue == 0 { theme::ok() } else { theme::danger() },
-        );
-        stat_card(
-            ui,
-            t("kpi_safety_training"),
-            trainings.to_string(),
-            t("kpi_safety_training_hint"),
-            theme::accent(),
-        );
-    });
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_safety_events"),
+                events.to_string(),
+                t("kpi_safety_events_hint"),
+                if events == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_safety_incidents"),
+                incidents.to_string(),
+                t("kpi_safety_incidents_hint"),
+                if incidents == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_safety_open"),
+                open.to_string(),
+                t("kpi_safety_open_hint"),
+                if open == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("kpi_safety_overdue"),
+                overdue.to_string(),
+                t("kpi_safety_overdue_hint"),
+                if overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("kpi_safety_training"),
+                trainings.to_string(),
+                t("kpi_safety_training_hint"),
+                theme::accent(),
+            ),
+        ],
+    );
 }
 
 fn severity_color(s: Severity) -> Color32 {
@@ -210,8 +224,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             });
                         egui::ComboBox::from_id_salt(("se_sev", s.id))
                             .selected_text(
-                                RichText::new(s.severity.label())
-                                    .color(severity_color(s.severity)),
+                                RichText::new(s.severity.label()).color(severity_color(s.severity)),
                             )
                             .width(120.0)
                             .show_ui(ui, |ui| {
