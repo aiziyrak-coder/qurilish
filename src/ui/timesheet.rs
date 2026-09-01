@@ -1,16 +1,21 @@
 //! «Tabel» ekrani (TZ XIII).
 //!
-//! Haftalik jadval: qatorlar — ishchilar, ustunlar — hafta kunlari, katakda
-//! soat. Kun bo'yicha va ishchi bo'yicha yig'indilar chetda turadi, ish haqi
-//! esa soat va stavkadan hisoblanadi — alohida kiritilmaydi.
+//! Uch ko'rinish: **tabel** (haftalik jadval — qatorlar ishchilar, ustunlar
+//! kunlar), **brigadalar** (guruhlarni solishtirish) va **tannarx** (har bir
+//! ishning ish haqi va material qiymati).
+//!
+//! Katakda nima tahrirlanishi yuqoridagi tugmalar bilan almashadi: soat,
+//! kun turi (bo'sh turish, ta'til, kasallik), smena yoki qaysi ish. Shunday
+//! qilinganining sababi: yetti kunlik ustunga to'rt xil maydonni birdaniga
+//! sig'dirib bo'lmaydi, almashtirish esa jadvalni tor ekranda ham saqlaydi.
+//!
+//! Ish haqi soat, smena va kun turidan hisoblanadi — alohida kiritilmaydi.
 
 use super::warehouse::{cell_l, cell_r};
 use super::*;
-use crate::domain::Worker;
+use crate::checks::{NORM_HOURS, OVERTIME_RATE};
+use crate::domain::{Brigade, DayKind, Shift, Worker};
 use chrono::{Datelike, Duration, NaiveDate};
-
-/// Bir kunlik normal ish vaqti — undan oshgani ortiqcha ish deb belgilanadi.
-const NORM_HOURS: f64 = 8.0;
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let Some(pid) = app.current else {
@@ -27,12 +32,23 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let week = *app.timesheet_week.get_or_insert(monday_of(app.today));
     let mut add = false;
+    let mut add_brigade = false;
     let mut move_week = 0i64;
     let mut to_today = false;
 
-    ui.horizontal(|ui| {
+    let tab_key = egui::Id::new("ts_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+
+    ui.horizontal_wrapped(|ui| {
         if ui.button(t("add_worker")).clicked() {
             add = true;
+        }
+        if ui
+            .button(t("add_brigade"))
+            .on_hover_text(t("add_brigade_hint"))
+            .clicked()
+        {
+            add_brigade = true;
         }
         ui.add_space(10.0);
         if ui.button("<").on_hover_text(t("prev_week")).clicked() {
@@ -53,28 +69,48 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         if ui.button(t("this_week")).clicked() {
             to_today = true;
         }
-        ui.label(
-            RichText::new(t("timesheet_hint"))
-                .size(11.0)
-                .color(theme::muted()),
-        );
     });
+    ui.label(
+        RichText::new(t("timesheet_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
     ui.add_space(8.0);
 
     kpi_row(ui, app, week);
     ui.add_space(10.0);
 
-    if app.workers.is_empty() {
-        ui.add_space(40.0);
-        ui.vertical_centered(|ui| {
-            ui.label(
-                RichText::new(t("workers_empty"))
-                    .color(theme::muted())
-                    .size(15.0),
-            );
-        });
-    } else {
-        grid(ui, app, week);
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in [
+            (0u8, t("ts_tab_sheet")),
+            (1, t("ts_tab_brigades")),
+            (2, t("ts_tab_cost")),
+        ] {
+            if ui.selectable_label(tab == i, label).clicked() {
+                tab = i;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(8.0);
+
+    match tab {
+        1 => brigades_tab(ui, app, week),
+        2 => cost_tab(ui, app),
+        _ => {
+            if app.workers.is_empty() {
+                ui.add_space(40.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        RichText::new(t("workers_empty"))
+                            .color(theme::muted())
+                            .size(15.0),
+                    );
+                });
+            } else {
+                sheet_tab(ui, app, week);
+            }
+        }
     }
 
     if add {
@@ -87,8 +123,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             org: String::new(),
             hourly_rate: 0.0,
             active: true,
+            brigade_id: None,
         });
         app.reload_modules();
+    }
+    if add_brigade {
+        let n = app.brigades.len() + 1;
+        app.db.insert_brigade(&Brigade {
+            id: 0,
+            project_id: pid,
+            name: format!("{n}-{}", t("brigade_new_name")),
+            foreman: String::new(),
+            task_id: None,
+            note: String::new(),
+        });
+        app.reload_modules();
+        ui.data_mut(|d| d.insert_temp(tab_key, 1u8));
     }
     if move_week != 0 {
         app.timesheet_week = Some(week + Duration::days(7 * move_week));
@@ -105,37 +155,14 @@ fn monday_of(d: NaiveDate) -> NaiveDate {
 
 fn kpi_row(ui: &mut egui::Ui, app: &App, week: NaiveDate) {
     let end = week + Duration::days(6);
-    let in_week = |d: NaiveDate| d >= week && d <= end;
+    let lines = crate::checks::wages(&app.workers, &app.timesheet, week, end);
 
-    let hours: f64 = app
-        .timesheet
-        .iter()
-        .filter(|e| in_week(e.date))
-        .map(|e| e.hours)
-        .sum();
-    // Ish haqi soat va stavkadan hisoblanadi — tabel bilan bir manbadan.
-    let payroll: f64 = app
-        .timesheet
-        .iter()
-        .filter(|e| in_week(e.date))
-        .map(|e| {
-            e.hours
-                * app
-                    .workers
-                    .iter()
-                    .find(|w| w.id == e.worker_id)
-                    .map(|w| w.hourly_rate)
-                    .unwrap_or(0.0)
-        })
-        .sum();
+    let hours: f64 = lines.iter().map(|l| l.hours).sum();
+    let payroll: f64 = lines.iter().map(|l| l.wage).sum();
+    let overtime: f64 = lines.iter().map(|l| l.overtime_hours).sum();
+    let downtime: f64 = lines.iter().map(|l| l.downtime_hours).sum();
+    let absences: i64 = lines.iter().map(|l| l.absence_days).sum();
     let active = app.workers.iter().filter(|w| w.active).count();
-    // Haftaning ish kunlari soni — o'rtacha bandlikni hisoblash uchun.
-    let worked_days = (0..7)
-        .map(|i| week + Duration::days(i))
-        .filter(|d| app.timesheet.iter().any(|e| e.date == *d && e.hours > 0.0))
-        .count()
-        .max(1);
-    let avg = hours / worked_days as f64;
 
     stat_row(
         ui,
@@ -153,10 +180,34 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, week: NaiveDate) {
                 theme::text(),
             ),
             stat(
-                t("kpi_avg_day"),
-                super::materials::trim_num(avg),
-                t("kpi_avg_day_hint"),
-                theme::text(),
+                t("kpi_overtime"),
+                super::materials::trim_num(overtime),
+                t("kpi_overtime_hint"),
+                if overtime > 0.0 {
+                    theme::warn()
+                } else {
+                    theme::muted()
+                },
+            ),
+            stat(
+                t("kpi_downtime"),
+                super::materials::trim_num(downtime),
+                t("kpi_downtime_hint"),
+                if downtime > 0.0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("kpi_absences"),
+                absences.to_string(),
+                t("kpi_absences_hint"),
+                if absences > 0 {
+                    theme::warn()
+                } else {
+                    theme::muted()
+                },
             ),
             stat(
                 t("kpi_payroll"),
@@ -168,27 +219,94 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, week: NaiveDate) {
     );
 }
 
-fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
+// ================================================================ Tabel
+
+/// Katakda nima tahrirlanadi.
+#[derive(Clone, Copy, PartialEq)]
+enum CellMode {
+    Hours,
+    Kind,
+    Shift,
+    Task,
+}
+
+fn sheet_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
     let Some(pid) = app.current else { return };
     let today = app.today;
     let days: Vec<NaiveDate> = (0..7).map(|i| week + Duration::days(i)).collect();
 
+    let mode_key = egui::Id::new("ts_cell_mode");
+    let mut mode = match ui.data(|d| d.get_temp::<u8>(mode_key)).unwrap_or(0) {
+        1 => CellMode::Kind,
+        2 => CellMode::Shift,
+        3 => CellMode::Task,
+        _ => CellMode::Hours,
+    };
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(t("cell_shows"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        for (m, label) in [
+            (CellMode::Hours, t("cell_hours")),
+            (CellMode::Kind, t("cell_kind")),
+            (CellMode::Shift, t("cell_shift")),
+            (CellMode::Task, t("cell_task")),
+        ] {
+            if ui.selectable_label(mode == m, label).clicked() {
+                mode = m;
+            }
+        }
+        // Koeffitsiyentlar yashirin qolmasin — hisob qanday chiqqani ko'rinsin.
+        ui.label(
+            RichText::new(format!(
+                "{} ×{OVERTIME_RATE}, {} ×{}, {} ×{}",
+                t("cell_overtime"),
+                t("sh_evening"),
+                Shift::Evening.rate(),
+                t("sh_night"),
+                Shift::Night.rate(),
+            ))
+            .size(11.0)
+            .color(theme::muted()),
+        );
+    });
+    ui.data_mut(|d| {
+        d.insert_temp(
+            mode_key,
+            match mode {
+                CellMode::Hours => 0u8,
+                CellMode::Kind => 1,
+                CellMode::Shift => 2,
+                CellMode::Task => 3,
+            },
+        )
+    });
+    ui.add_space(6.0);
+
+    let wages = crate::checks::wages(&app.workers, &app.timesheet, week, days[6]);
     let mut edited: Option<Worker> = None;
     let mut removed: Option<i64> = None;
-    // (ishchi, kun, soat)
-    let mut set: Option<(i64, NaiveDate, f64)> = None;
+    // Katakka yozish: (ishchi, kun, nima)
+    let mut set_hours: Option<(i64, NaiveDate, f64)> = None;
+    let mut set_kind: Option<(i64, NaiveDate, DayKind)> = None;
+    let mut set_shift: Option<(i64, NaiveDate, Shift)> = None;
+    let mut set_task: Option<(i64, NaiveDate, Option<i64>)> = None;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("timesheet_grid")
-                .num_columns(13)
+                .num_columns(14)
                 .spacing([6.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
                     head_l(ui, 190.0, t("col_worker"));
-                    head_l(ui, 140.0, t("col_position"));
-                    head_r(ui, 110.0, t("col_hourly_rate"));
+                    head_l(ui, 150.0, t("col_brigade"));
+                    head_l(ui, 130.0, t("col_position"));
+                    head_r(ui, 105.0, t("col_hourly_rate"));
                     for d in &days {
                         let weekend = d.weekday().num_days_from_monday() >= 5;
                         let color = if *d == today {
@@ -201,10 +319,10 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                         // Ikki qatorli sarlavha: kun nomi va sanasi. `cell_r`
                         // matnni qisqartirgani uchun o'zimiz chizamiz.
                         ui.allocate_ui_with_layout(
-                            egui::vec2(56.0, 26.0),
+                            egui::vec2(58.0, 26.0),
                             egui::Layout::top_down(egui::Align::Center),
                             |ui| {
-                                ui.set_min_width(56.0);
+                                ui.set_min_width(58.0);
                                 ui.spacing_mut().item_spacing.y = 0.0;
                                 ui.label(RichText::new(t(weekday_key(*d))).size(11.0).color(color));
                                 ui.label(
@@ -224,19 +342,20 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                         let mut w = src.clone();
                         let mut changed = false;
 
-                        // Faol bo'lmagan ishchi kulrang ko'rsatiladi.
+                        // Faol bo'lmagan ishchi belgisi olib tashlanadi.
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut w.active, "").changed();
                             changed |= ui
                                 .add_sized([160.0, 22.0], egui::TextEdit::singleline(&mut w.name))
                                 .changed();
                         });
+                        changed |= brigade_picker(ui, app, w.id, &mut w.brigade_id, 150.0);
                         changed |= ui
-                            .add_sized([140.0, 22.0], egui::TextEdit::singleline(&mut w.position))
+                            .add_sized([130.0, 22.0], egui::TextEdit::singleline(&mut w.position))
                             .changed();
                         changed |= ui
                             .add_sized(
-                                [110.0, 22.0],
+                                [105.0, 22.0],
                                 egui::DragValue::new(&mut w.hourly_rate)
                                     .speed(1000.0)
                                     .range(0.0..=1e9),
@@ -245,24 +364,111 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
 
                         let mut total = 0.0;
                         for d in &days {
-                            let cur = app
+                            let e = app
                                 .timesheet
                                 .iter()
-                                .find(|e| e.worker_id == w.id && e.date == *d)
-                                .map(|e| e.hours)
-                                .unwrap_or(0.0);
-                            total += cur;
-                            let mut v = cur;
-                            let resp = ui.add_sized(
-                                [56.0, 22.0],
-                                egui::DragValue::new(&mut v).speed(0.5).range(0.0..=24.0),
-                            );
-                            if resp.changed() {
-                                set = Some((w.id, *d, v));
-                            }
-                            // Norma ustidagi soat — ortiqcha ish.
-                            if cur > NORM_HOURS {
-                                resp.on_hover_text(t("overtime_hint"));
+                                .find(|e| e.worker_id == w.id && e.date == *d);
+                            let hours = e.map(|e| e.hours).unwrap_or(0.0);
+                            let kind = e.map(|e| e.kind).unwrap_or(DayKind::Work);
+                            let shift = e.map(|e| e.shift).unwrap_or(Shift::Day);
+                            let task = e.and_then(|e| e.task_id);
+                            total += hours;
+
+                            match mode {
+                                CellMode::Hours => {
+                                    let mut v = hours;
+                                    let resp = ui.add_sized(
+                                        [58.0, 22.0],
+                                        egui::DragValue::new(&mut v).speed(0.5).range(0.0..=24.0),
+                                    );
+                                    if resp.changed() {
+                                        set_hours = Some((w.id, *d, v));
+                                    }
+                                    // Kun turi oddiy ish bo'lmasa — buni aytamiz,
+                                    // aks holda soat sababsiz kam ko'rinardi.
+                                    if kind != DayKind::Work {
+                                        resp.on_hover_text(kind.label());
+                                    } else if hours > NORM_HOURS {
+                                        resp.on_hover_text(t("overtime_hint"));
+                                    }
+                                }
+                                CellMode::Kind => {
+                                    let mut v = kind;
+                                    let mut hit = false;
+                                    egui::ComboBox::from_id_salt(("ts_k", w.id, *d))
+                                        .selected_text(
+                                            RichText::new(short_kind(v))
+                                                .size(11.5)
+                                                .color(kind_color(v)),
+                                        )
+                                        .width(58.0)
+                                        .show_ui(ui, |ui| {
+                                            for k in DayKind::ALL {
+                                                hit |= ui
+                                                    .selectable_value(&mut v, *k, k.label())
+                                                    .changed();
+                                            }
+                                        });
+                                    if hit {
+                                        set_kind = Some((w.id, *d, v));
+                                    }
+                                }
+                                CellMode::Shift => {
+                                    let mut v = shift;
+                                    let mut hit = false;
+                                    egui::ComboBox::from_id_salt(("ts_s", w.id, *d))
+                                        .selected_text(
+                                            RichText::new(short_shift(v)).size(11.5).color(
+                                                if v == Shift::Day {
+                                                    theme::muted()
+                                                } else {
+                                                    theme::accent()
+                                                },
+                                            ),
+                                        )
+                                        .width(58.0)
+                                        .show_ui(ui, |ui| {
+                                            for k in Shift::ALL {
+                                                hit |= ui
+                                                    .selectable_value(
+                                                        &mut v,
+                                                        *k,
+                                                        format!("{} ×{}", k.label(), k.rate()),
+                                                    )
+                                                    .changed();
+                                            }
+                                        });
+                                    if hit {
+                                        set_shift = Some((w.id, *d, v));
+                                    }
+                                }
+                                CellMode::Task => {
+                                    let mut v = task;
+                                    let mut hit = false;
+                                    let label = v
+                                        .and_then(|id| app.task(id).map(|x| x.wbs.clone()))
+                                        .unwrap_or_else(|| t("dash").to_string());
+                                    egui::ComboBox::from_id_salt(("ts_t", w.id, *d))
+                                        .selected_text(RichText::new(label).size(11.5))
+                                        .width(58.0)
+                                        .show_ui(ui, |ui| {
+                                            hit |= ui
+                                                .selectable_value(&mut v, None, t("no_task"))
+                                                .changed();
+                                            for task in &app.tasks {
+                                                hit |= ui
+                                                    .selectable_value(
+                                                        &mut v,
+                                                        Some(task.id),
+                                                        format!("{} {}", task.wbs, task.name),
+                                                    )
+                                                    .changed();
+                                            }
+                                        });
+                                    if hit {
+                                        set_task = Some((w.id, *d, v));
+                                    }
+                                }
                             }
                         }
 
@@ -273,11 +479,12 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                                 .size(12.5)
                                 .strong(),
                         );
-                        cell_r(
-                            ui,
-                            130.0,
-                            RichText::new(money(total * w.hourly_rate)).size(12.0),
-                        );
+                        let wage = wages
+                            .iter()
+                            .find(|l| l.worker_id == w.id)
+                            .map(|l| l.wage)
+                            .unwrap_or(0.0);
+                        cell_r(ui, 130.0, RichText::new(money(wage)).size(12.0));
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -299,8 +506,9 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                             .size(11.5)
                             .color(theme::muted()),
                     );
-                    cell_l(ui, 140.0, RichText::new(""));
-                    cell_l(ui, 110.0, RichText::new(""));
+                    cell_l(ui, 150.0, RichText::new(""));
+                    cell_l(ui, 130.0, RichText::new(""));
+                    cell_l(ui, 105.0, RichText::new(""));
                     let mut week_total = 0.0;
                     for d in &days {
                         let sum: f64 = app
@@ -312,7 +520,7 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                         week_total += sum;
                         cell_r(
                             ui,
-                            56.0,
+                            58.0,
                             RichText::new(super::materials::trim_num(sum))
                                 .size(11.5)
                                 .color(theme::muted()),
@@ -325,12 +533,31 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
                             .size(12.5)
                             .strong(),
                     );
+                    cell_r(
+                        ui,
+                        130.0,
+                        RichText::new(money(wages.iter().map(|l| l.wage).sum::<f64>()))
+                            .size(12.0)
+                            .strong(),
+                    );
                     ui.end_row();
                 });
         });
 
-    if let Some((worker, day, hours)) = set {
+    if let Some((worker, day, hours)) = set_hours {
         app.db.set_timesheet(pid, worker, day, hours);
+        app.timesheet = app.db.timesheet(pid);
+    }
+    if let Some((worker, day, kind)) = set_kind {
+        app.db.set_timesheet_kind(pid, worker, day, kind);
+        app.timesheet = app.db.timesheet(pid);
+    }
+    if let Some((worker, day, shift)) = set_shift {
+        app.db.set_timesheet_shift(pid, worker, day, shift);
+        app.timesheet = app.db.timesheet(pid);
+    }
+    if let Some((worker, day, task)) = set_task {
+        app.db.set_timesheet_task(pid, worker, day, task);
         app.timesheet = app.db.timesheet(pid);
     }
     if let Some(w) = edited {
@@ -342,6 +569,308 @@ fn grid(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
     if let Some(id) = removed {
         app.db.del("worker", id);
         app.reload_modules();
+    }
+}
+
+// ================================================================ Brigadalar
+
+fn brigades_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
+    if app.brigades.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("brigades_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    ui.label(
+        RichText::new(t("brigades_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    let lines = crate::checks::brigade_lines(
+        &app.brigades,
+        &app.workers,
+        &app.timesheet,
+        week,
+        week + Duration::days(6),
+    );
+    let mut edited: Option<Brigade> = None;
+    let mut removed: Option<i64> = None;
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("ts_brigades")
+                .num_columns(10)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 220.0, t("col_brigade"));
+                    head_l(ui, 170.0, t("col_foreman"));
+                    head_l(ui, 230.0, t("col_task"));
+                    head_r(ui, 80.0, t("col_people"));
+                    head_r(ui, 90.0, t("col_total_hours"));
+                    head_r(ui, 90.0, t("col_downtime"));
+                    head_r(ui, 80.0, "%");
+                    head_r(ui, 130.0, t("col_wage"));
+                    head_r(ui, 120.0, t("col_cost_per_hour"));
+                    head_l(ui, 24.0, "");
+                    ui.end_row();
+
+                    for src in &app.brigades {
+                        let mut b = src.clone();
+                        let mut changed = false;
+                        let l = lines.iter().find(|l| l.brigade_id == b.id);
+
+                        changed |= ui
+                            .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut b.name))
+                            .changed();
+                        changed |= ui
+                            .add_sized([170.0, 22.0], egui::TextEdit::singleline(&mut b.foreman))
+                            .changed();
+                        changed |= task_picker(ui, app, ("bg_task", b.id), &mut b.task_id, 230.0);
+
+                        let num = |v: f64| super::materials::trim_num(v);
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(l.map(|l| l.workers).unwrap_or(0).to_string()).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(num(l.map(|l| l.hours).unwrap_or(0.0)))
+                                .size(12.0)
+                                .strong(),
+                        );
+                        let down = l.map(|l| l.downtime_hours).unwrap_or(0.0);
+                        let pct = l.map(|l| l.downtime_pct).unwrap_or(0.0);
+                        let color = if pct > 10.0 {
+                            theme::danger()
+                        } else if pct > 0.0 {
+                            theme::warn()
+                        } else {
+                            theme::muted()
+                        };
+                        cell_r(ui, 90.0, RichText::new(num(down)).size(12.0).color(color));
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(format!("{pct:.0}%")).size(11.5).color(color),
+                        );
+                        cell_r(
+                            ui,
+                            130.0,
+                            RichText::new(money(l.map(|l| l.wage).unwrap_or(0.0))).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(money(l.map(|l| l.cost_per_hour).unwrap_or(0.0)))
+                                .size(11.5)
+                                .color(theme::muted()),
+                        );
+                        if ui
+                            .small_button(RichText::new("x").color(theme::danger()))
+                            .clicked()
+                        {
+                            removed = Some(b.id);
+                        }
+                        ui.end_row();
+                        if changed {
+                            edited = Some(b);
+                        }
+                    }
+                });
+        });
+
+    if let Some(b) = edited {
+        app.db.update_brigade(&b);
+        app.reload_modules();
+    }
+    if let Some(id) = removed {
+        // Brigada o'chsa ishchilar qolaveradi — ular brigadasiz bo'lib qoladi.
+        app.db.del("brigade", id);
+        app.reload_modules();
+    }
+}
+
+// ================================================================ Tannarx
+
+fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
+    let lines = crate::checks::task_costs(
+        &app.tasks,
+        &app.workers,
+        &app.timesheet,
+        &app.materials,
+        &app.stock_moves,
+    );
+    if lines.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("cost_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    let labour: f64 = lines.iter().map(|l| l.labour).sum();
+    let material: f64 = lines.iter().map(|l| l.material).sum();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_labour_cost"),
+                money(labour),
+                t("kpi_labour_cost_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_material_cost"),
+                money(material),
+                t("kpi_material_cost_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_total_cost"),
+                money(labour + material),
+                t("kpi_total_cost_hint"),
+                theme::ok(),
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+    ui.label(
+        RichText::new(t("cost_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("ts_costs")
+                .num_columns(7)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 300.0, t("col_task"));
+                    head_r(ui, 90.0, t("col_total_hours"));
+                    head_r(ui, 140.0, t("col_labour"));
+                    head_r(ui, 150.0, t("col_material_cost"));
+                    head_r(ui, 150.0, t("col_total"));
+                    head_r(ui, 130.0, t("col_per_volume"));
+                    head_l(ui, 60.0, t("col_unit"));
+                    ui.end_row();
+
+                    for l in &lines {
+                        let task = app.task(l.task_id);
+                        let name = task
+                            .map(|x| format!("{} {}", x.wbs, x.name))
+                            .unwrap_or_default();
+                        cell_l(
+                            ui,
+                            300.0,
+                            RichText::new(super::issues::truncate(&name, 44)).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(super::materials::trim_num(l.hours))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(ui, 140.0, RichText::new(money(l.labour)).size(12.0));
+                        cell_r(ui, 150.0, RichText::new(money(l.material)).size(12.0));
+                        cell_r(ui, 150.0, RichText::new(money(l.total)).size(12.5).strong());
+                        cell_r(
+                            ui,
+                            130.0,
+                            RichText::new(if l.per_unit > 0.0 {
+                                money(l.per_unit)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(11.5)
+                            .color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            60.0,
+                            RichText::new(task.map(|x| x.unit.clone()).unwrap_or_default())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+}
+
+// ================================================================ Yordamchilar
+
+/// Brigada tanlash ro'yxati.
+fn brigade_picker(
+    ui: &mut egui::Ui,
+    app: &App,
+    salt: i64,
+    cur: &mut Option<i64>,
+    width: f32,
+) -> bool {
+    let mut changed = false;
+    let label = cur
+        .and_then(|id| app.brigades.iter().find(|b| b.id == id))
+        .map(|b| b.name.clone())
+        .unwrap_or_else(|| t("no_brigade").to_string());
+    egui::ComboBox::from_id_salt(("ts_bg", salt))
+        .selected_text(super::issues::truncate(&label, 20))
+        .width(width)
+        .show_ui(ui, |ui| {
+            changed |= ui.selectable_value(cur, None, t("no_brigade")).changed();
+            for b in &app.brigades {
+                changed |= ui.selectable_value(cur, Some(b.id), &b.name).changed();
+            }
+        });
+    changed
+}
+
+/// Kun turining tor ustunga sig'adigan qisqa belgisi.
+fn short_kind(k: DayKind) -> &'static str {
+    match k {
+        DayKind::Work => t("dks_work"),
+        DayKind::Downtime => t("dks_downtime"),
+        DayKind::Vacation => t("dks_vacation"),
+        DayKind::Sick => t("dks_sick"),
+        DayKind::Trip => t("dks_trip"),
+        DayKind::Absent => t("dks_absent"),
+    }
+}
+
+fn kind_color(k: DayKind) -> egui::Color32 {
+    match k {
+        DayKind::Work => theme::muted(),
+        DayKind::Downtime | DayKind::Absent => theme::danger(),
+        DayKind::Sick | DayKind::Vacation => theme::warn(),
+        DayKind::Trip => theme::accent(),
+    }
+}
+
+fn short_shift(s: Shift) -> &'static str {
+    match s {
+        Shift::Day => t("shs_day"),
+        Shift::Evening => t("shs_evening"),
+        Shift::Night => t("shs_night"),
     }
 }
 

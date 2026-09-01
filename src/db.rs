@@ -1701,12 +1701,27 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let sheet = t.db.timesheet(pid);
         assert_eq!(workers.len(), 6);
         assert!(!sheet.is_empty(), "tabel bo'sh");
-        // Tabelda faqat mavjud ishchilar va real soatlar.
+        // Tabelda faqat mavjud ishchilar va real soatlar. Yo'qlik kunida
+        // soat nol bo'lishi mumkin — ishchi kelmagan.
         for e in &sheet {
             assert!(workers.iter().any(|w| w.id == e.worker_id));
-            assert!(e.hours > 0.0 && e.hours <= 24.0, "soat: {}", e.hours);
+            assert!(e.hours >= 0.0 && e.hours <= 24.0, "soat: {}", e.hours);
+            assert!(
+                e.hours > 0.0 || e.kind != crate::domain::DayKind::Work,
+                "ish kunida soat nol"
+            );
             assert!(e.date <= today);
         }
+        // Namunada brigada, yo'qlik va bo'sh turish ko'rinadi (TZ XIII.8, 16–22).
+        assert_eq!(t.db.brigades(pid).len(), 2);
+        assert!(workers.iter().filter(|w| w.brigade_id.is_some()).count() >= 4);
+        assert!(sheet
+            .iter()
+            .any(|e| e.kind == crate::domain::DayKind::Downtime));
+        assert!(sheet.iter().any(|e| e.kind == crate::domain::DayKind::Sick));
+        assert!(sheet
+            .iter()
+            .any(|e| e.shift == crate::domain::Shift::Evening));
 
         // Sifat: mos emas va shartli holatlar namunada bor.
         let quality = t.db.quality_checks(pid);
@@ -1982,6 +1997,170 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let l = calc(&t.db);
         assert!(!l.over);
         assert_eq!(l.over_cost, 0.0);
+    }
+
+    /// TZ XIII.13–14, 22: ish haqi smena va kun turini hisobga oladi.
+    #[test]
+    fn wages_count_shift_overtime_and_unpaid_days() {
+        use crate::domain::{DayKind, Shift, Worker};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let wid = t.db.insert_worker(&Worker {
+            id: 0,
+            project_id: pid,
+            name: "Sinov ishchisi".into(),
+            position: String::new(),
+            org: String::new(),
+            hourly_rate: 10_000.0,
+            active: true,
+            brigade_id: None,
+        });
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 3, 2).expect("sana");
+        let d = |n: i64| day + chrono::Duration::days(n);
+
+        // Oddiy kun: 8 soat → 80 000.
+        t.db.set_timesheet(pid, wid, d(0), 8.0);
+        // Ortiqcha ish: 10 soat → (8 + 2×1.5) × 10 000 = 110 000.
+        t.db.set_timesheet(pid, wid, d(1), 10.0);
+        // Tungi smena: 8 soat × 1.5 → 120 000.
+        t.db.set_timesheet(pid, wid, d(2), 8.0);
+        t.db.set_timesheet_shift(pid, wid, d(2), Shift::Night);
+        // Bo'sh turish to'lanadi: 4 soat → 40 000.
+        t.db.set_timesheet(pid, wid, d(3), 4.0);
+        t.db.set_timesheet_kind(pid, wid, d(3), DayKind::Downtime);
+        // Sababsiz yo'qlik to'lanmaydi.
+        t.db.set_timesheet_kind(pid, wid, d(4), DayKind::Absent);
+
+        let lines = crate::checks::wages(&t.db.workers(pid), &t.db.timesheet(pid), day, d(6));
+        let l = lines.iter().find(|l| l.worker_id == wid).expect("qator");
+
+        assert_eq!(l.hours, 30.0);
+        assert_eq!(l.worked_hours, 26.0, "bo'sh turish ishlangan soat emas");
+        assert_eq!(l.overtime_hours, 2.0);
+        assert_eq!(l.night_hours, 8.0);
+        assert_eq!(l.downtime_hours, 4.0);
+        assert_eq!(l.absence_days, 1);
+        assert_eq!(l.absent_days, 1);
+        assert_eq!(l.wage, 80_000.0 + 110_000.0 + 120_000.0 + 40_000.0);
+    }
+
+    /// TZ XIII.24–25: brigadalar bo'sh turish ulushi bilan solishtiriladi.
+    #[test]
+    fn brigade_lines_compare_groups() {
+        use crate::domain::{Brigade, DayKind, Worker};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 6).expect("sana");
+        let bid = t.db.insert_brigade(&Brigade {
+            id: 0,
+            project_id: pid,
+            name: "Sinov brigadasi".into(),
+            foreman: String::new(),
+            task_id: None,
+            note: String::new(),
+        });
+        let mut ids = Vec::new();
+        for i in 0..2 {
+            ids.push(t.db.insert_worker(&Worker {
+                id: 0,
+                project_id: pid,
+                name: format!("Ishchi {i}"),
+                position: String::new(),
+                org: String::new(),
+                hourly_rate: 10_000.0,
+                active: true,
+                brigade_id: Some(bid),
+            }));
+        }
+        // Ikkovi 8 soatdan; birining yarim kuni bo'sh turish.
+        t.db.set_timesheet(pid, ids[0], day, 8.0);
+        t.db.set_timesheet(pid, ids[1], day, 8.0);
+        t.db.set_timesheet(pid, ids[1], day + chrono::Duration::days(1), 4.0);
+        t.db.set_timesheet_kind(
+            pid,
+            ids[1],
+            day + chrono::Duration::days(1),
+            DayKind::Downtime,
+        );
+
+        let lines = crate::checks::brigade_lines(
+            &t.db.brigades(pid),
+            &t.db.workers(pid),
+            &t.db.timesheet(pid),
+            day,
+            day + chrono::Duration::days(6),
+        );
+        let l = lines.iter().find(|l| l.brigade_id == bid).expect("qator");
+        assert_eq!(l.workers, 2);
+        assert_eq!(l.hours, 20.0);
+        assert_eq!(l.worked_hours, 16.0);
+        assert_eq!(l.downtime_hours, 4.0);
+        assert_eq!(l.downtime_pct, 20.0);
+        assert_eq!(l.wage, 200_000.0);
+        assert_eq!(
+            l.cost_per_hour, 12_500.0,
+            "bo'sh turish soatning tannarxini oshiradi"
+        );
+    }
+
+    /// TZ XIII.30–31: ish tannarxi tabel va ombordan yig'iladi.
+    #[test]
+    fn task_cost_sums_labour_and_material() {
+        use crate::domain::{MoveKind, StockMove, Worker};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut tasks = t.db.tasks(pid).unwrap_or_default();
+        let task = tasks.first_mut().expect("ish");
+        task.volume = 100.0;
+        t.db.update_task(task).unwrap();
+        let tid = task.id;
+
+        let wid = t.db.insert_worker(&Worker {
+            id: 0,
+            project_id: pid,
+            name: "Tannarx ishchisi".into(),
+            position: String::new(),
+            org: String::new(),
+            hourly_rate: 10_000.0,
+            active: true,
+            brigade_id: None,
+        });
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 5, 4).expect("sana");
+        t.db.set_timesheet(pid, wid, day, 8.0);
+        t.db.set_timesheet_task(pid, wid, day, Some(tid));
+
+        let mid = t.db.insert_material(&test_material(pid, "C-1", 0.0));
+        t.db.insert_stock_move(&StockMove {
+            id: 0,
+            project_id: pid,
+            material_id: mid,
+            date: day,
+            kind: MoveKind::Out,
+            qty: 5.0,
+            price: 20_000.0,
+            document: String::new(),
+            counterparty: String::new(),
+            task_id: Some(tid),
+            note: String::new(),
+            warehouse_id: None,
+            batch_id: None,
+        });
+
+        let costs = crate::checks::task_costs(
+            &t.db.tasks(pid).unwrap_or_default(),
+            &t.db.workers(pid),
+            &t.db.timesheet(pid),
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+        );
+        let c = costs.iter().find(|c| c.task_id == tid).expect("qator");
+        assert_eq!(c.labour, 80_000.0);
+        assert_eq!(c.material, 100_000.0);
+        assert_eq!(c.total, 180_000.0);
+        assert_eq!(c.per_unit, 1_800.0);
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

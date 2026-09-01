@@ -4,10 +4,10 @@ use crate::checks::{self, Norm};
 use crate::cpm::{self, Progress, Schedule};
 use crate::db::Db;
 use crate::domain::{
-    Batch, Block, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Inventory,
-    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material,
-    Payment, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent, Severity,
-    StockMove, TimesheetEntry, Unit, Warehouse, Worker,
+    Batch, Block, DayKind, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc,
+    Inventory, InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog,
+    Material, Payment, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent, Severity,
+    Shift, StockMove, TimesheetEntry, Unit, Warehouse, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -411,6 +411,8 @@ pub struct App {
     pub inventory_lines: Vec<InventoryLine>,
     /// Ishga material sarf normalari (TZ XI.15).
     pub material_norms: Vec<crate::domain::MaterialNorm>,
+    /// Brigadalar (TZ XIII.8).
+    pub brigades: Vec<crate::domain::Brigade>,
     /// Omborda tanlangan bo'lim (barcha omborlar — `None`).
     pub warehouse_filter: Option<i64>,
     pub requests: Vec<Request>,
@@ -539,6 +541,7 @@ impl App {
             inventories: Vec::new(),
             inventory_lines: Vec::new(),
             material_norms: Vec::new(),
+            brigades: Vec::new(),
             warehouse_filter: None,
             requests: Vec::new(),
             purchases: Vec::new(),
@@ -688,6 +691,7 @@ impl App {
         self.inventories.clear();
         self.inventory_lines.clear();
         self.material_norms.clear();
+        self.brigades.clear();
         self.warehouse_filter = None;
         self.requests.clear();
         self.purchases.clear();
@@ -730,6 +734,7 @@ impl App {
         self.inventories = self.db.inventories(id);
         self.inventory_lines = self.db.inventory_lines(id);
         self.material_norms = self.db.material_norms(id);
+        self.brigades = self.db.brigades(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);
         self.workers = self.db.workers(id);
@@ -937,9 +942,17 @@ impl App {
                 .collect(),
         };
 
+        // Kun turi va smena ham ko'chadi: maydonchada belgilangan bo'sh turish
+        // yoki yo'qlik ofisdagi bazada ham shunday qolishi kerak.
         let timesheet = Table {
             name: "timesheet".into(),
-            columns: vec!["date".into(), "worker".into(), "hours".into()],
+            columns: vec![
+                "date".into(),
+                "worker".into(),
+                "hours".into(),
+                "kind".into(),
+                "shift".into(),
+            ],
             rows: self
                 .timesheet
                 .iter()
@@ -950,7 +963,13 @@ impl App {
                         .find(|w| w.id == e.worker_id)
                         .map(|w| w.name.clone())
                         .unwrap_or_default();
-                    vec![e.date.to_string(), worker, e.hours.to_string()]
+                    vec![
+                        e.date.to_string(),
+                        worker,
+                        e.hours.to_string(),
+                        e.kind.code().into(),
+                        e.shift.code().into(),
+                    ]
                 })
                 .collect(),
         };
@@ -1121,6 +1140,7 @@ impl App {
                             org: String::new(),
                             hourly_rate: 0.0,
                             active: true,
+                            brigade_id: None,
                         });
                         self.workers = self.db.workers(pid);
                         id
@@ -1134,9 +1154,24 @@ impl App {
                     existing += 1;
                     continue;
                 }
+                // Kun turi avval yoziladi: nol soatli yo'qlik kuni ham
+                // saqlanib qolsin (aks holda yozuv o'chib ketardi).
+                let kind = DayKind::parse(m.get("kind").copied().unwrap_or("work"));
+                if kind != DayKind::Work {
+                    self.db.set_timesheet_kind(pid, wid, d, kind);
+                }
+                let shift = Shift::parse(m.get("shift").copied().unwrap_or("day"));
+                if shift != Shift::Day {
+                    self.db.set_timesheet_shift(pid, wid, d, shift);
+                }
                 self.db
                     .set_timesheet(pid, wid, d, num(m.get("hours").copied().unwrap_or("")));
-                added += 1;
+                // Nol soatli oddiy ish kuni bazada yozuv qoldirmaydi — uni
+                // qo'shilgan deb sanamaymiz, aks holda har importda takrorlanardi.
+                if kind != DayKind::Work || num(m.get("hours").copied().unwrap_or("")) > 0.0 {
+                    added += 1;
+                }
+                self.timesheet = self.db.timesheet(pid);
             }
         }
 

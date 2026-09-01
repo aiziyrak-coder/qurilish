@@ -2448,6 +2448,89 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_payroll" => ("Ish haqi fondi", "Фонд зарплаты"),
         "kpi_payroll_hint" => ("shu hafta uchun", "за эту неделю"),
 
+        // ---------- XIII. Brigadalar, smenalar, yo'qliklar, tannarx ----------
+        "ts_tab_sheet" => ("Tabel", "Табель"),
+        "ts_tab_brigades" => ("Brigadalar", "Бригады"),
+        "ts_tab_cost" => ("Tannarx", "Себестоимость"),
+
+        "add_brigade" => ("+ Brigada", "+ Бригада"),
+        "add_brigade_hint" => (
+            "Brigada — ishchilar guruhi va uning brigadiri. Soat, ish haqi va bo'sh turish brigada bo'yicha yig'iladi.",
+            "Бригада — группа рабочих и её бригадир. Часы, зарплата и простои собираются по бригаде.",
+        ),
+        "brigade_new_name" => ("brigada", "бригада"),
+        "no_brigade" => ("Brigadasiz", "Без бригады"),
+        "brigades_empty" => (
+            "Brigada yaratilmagan — «+ Brigada» bilan boshlang",
+            "Бригады не созданы — начните с «+ Бригада»",
+        ),
+        "brigades_hint" => (
+            "Ko'rsatkichlar tanlangan hafta bo'yicha. Bo'sh turish ulushi 10% dan oshsa qizil bo'ladi.",
+            "Показатели за выбранную неделю. Доля простоев выше 10% выделяется красным.",
+        ),
+        "col_brigade" => ("Brigada", "Бригада"),
+        "col_foreman" => ("Brigadir", "Бригадир"),
+        "col_people" => ("Odam", "Человек"),
+        "col_downtime" => ("Bo'sh turish", "Простой"),
+        "col_cost_per_hour" => ("Soatning tannarxi", "Себестоимость часа"),
+
+        // Katakda nima tahrirlanadi
+        "cell_shows" => ("Katakda:", "В ячейке:"),
+        "cell_hours" => ("Soat", "Часы"),
+        "cell_kind" => ("Kun turi", "Тип дня"),
+        "cell_shift" => ("Smena", "Смена"),
+        "cell_task" => ("Ish", "Работа"),
+        "cell_overtime" => ("ortiqcha ish", "сверхурочные"),
+
+        // Smenalar (TZ XIII.11, 14)
+        "sh_day" => ("Kunduzgi", "Дневная"),
+        "sh_evening" => ("Kechki", "Вечерняя"),
+        "sh_night" => ("Tungi", "Ночная"),
+        "shs_day" => ("K", "Д"),
+        "shs_evening" => ("Kc", "В"),
+        "shs_night" => ("T", "Н"),
+
+        // Kun turlari (TZ XIII.16-22)
+        "dk_work" => ("Ish kuni", "Рабочий день"),
+        "dk_downtime" => ("Bo'sh turish", "Простой"),
+        "dk_vacation" => ("Ta'til", "Отпуск"),
+        "dk_sick" => ("Kasallik varaqasi", "Больничный"),
+        "dk_trip" => ("Xizmat safari", "Командировка"),
+        "dk_absent" => ("Sababsiz yo'qlik", "Прогул"),
+        "dks_work" => ("I", "Р"),
+        "dks_downtime" => ("BT", "П"),
+        "dks_vacation" => ("T", "О"),
+        "dks_sick" => ("K", "Б"),
+        "dks_trip" => ("XS", "К"),
+        "dks_absent" => ("Y", "Н"),
+
+        "kpi_overtime" => ("Ortiqcha ish", "Сверхурочные"),
+        "kpi_overtime_hint" => ("normadan oshgan soat", "часов сверх нормы"),
+        "kpi_downtime" => ("Bo'sh turish", "Простой"),
+        "kpi_downtime_hint" => ("soat, ishchi aybsiz", "часов не по вине рабочего"),
+        "kpi_absences" => ("Yo'qliklar", "Отсутствия"),
+        "kpi_absences_hint" => ("kun: ta'til, kasallik, safar", "дней: отпуск, больничный, командировка"),
+
+        // Tannarx (TZ XIII.30-31)
+        "cost_empty" => (
+            "Tannarx uchun tabelda ish ko'rsatilishi kerak — katakni «Ish» rejimida to'ldiring",
+            "Для себестоимости в табеле нужно указать работу — заполните ячейки в режиме «Работа»",
+        ),
+        "cost_hint" => (
+            "Tannarx tabeldagi soat va omborga berilgan materialdan yig'iladi — alohida kiritilmaydi.",
+            "Себестоимость собирается из часов табеля и выданного со склада материала — отдельно не вводится.",
+        ),
+        "col_total" => ("Jami", "Итого"),
+        "col_labour" => ("Ish haqi", "Зарплата"),
+        "col_material_cost" => ("Material", "Материал"),
+        "col_per_volume" => ("Bir birlikka", "На единицу"),
+        "kpi_labour_cost" => ("Ish haqi", "Зарплата"),
+        "kpi_labour_cost_hint" => ("ishlarga taqsimlangan", "распределено по работам"),
+        "kpi_material_cost" => ("Material", "Материал"),
+        "kpi_material_cost_hint" => ("ishlarga berilgan", "выдано на работы"),
+        "kpi_total_cost" => ("Jami tannarx", "Итого себестоимость"),
+        "kpi_total_cost_hint" => ("ish haqi va material", "зарплата и материал"),
+
         // ---------- XIV. Sifat ----------
         "quality_hint" => (
             "Kirish, operatsion va qabul nazorati. Nuqson bo'lsa muddat qo'ying.",
@@ -2728,5 +2811,115 @@ pub fn month(m: u32) -> &'static str {
         10 => t("mon_10"),
         11 => t("mon_11"),
         _ => t("mon_12"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Kodda ishlatilgan har bir kalit tarjima ro'yxatida bo'lishi kerak.
+    ///
+    /// Bu sinov `?` belgisining interfeysga chiqib ketishini oldini oladi:
+    /// yangi ekran qo'shilganda tarjima unutilsa, yig'ish emas — sinov yiqiladi.
+    #[test]
+    fn every_key_used_in_the_code_has_a_translation() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        collect(&root, &mut files);
+        assert!(files.len() > 10, "manba fayllar topilmadi");
+
+        let mut missing: Vec<String> = Vec::new();
+        for f in &files {
+            // Tarjimalar fayli o'zi tekshirilmaydi: izohlarda namuna sifatida
+            // yozilgan `t("...")` haqiqiy kalit emas.
+            if f.file_name().is_some_and(|x| x == "i18n.rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(f).unwrap_or_default();
+            for key in keys_in(&text) {
+                if lookup(&key).is_none() && !missing.contains(&key) {
+                    missing.push(format!(
+                        "{}: {key}",
+                        f.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
+            }
+        }
+        assert!(missing.is_empty(), "tarjimasi yo'q kalitlar: {missing:?}");
+    }
+
+    /// Bir kalit ikki marta yozilmasin — ikkinchisi hech qachon ishlamaydi.
+    #[test]
+    fn keys_are_not_duplicated() {
+        let text = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/i18n.rs"),
+        )
+        .expect("i18n.rs");
+        let mut seen: Vec<&str> = Vec::new();
+        let mut dupes: Vec<&str> = Vec::new();
+        for line in text.lines() {
+            let line = line.trim_start();
+            let Some(rest) = line.strip_prefix('"') else {
+                continue;
+            };
+            let Some(end) = rest.find('"') else { continue };
+            let key = &rest[..end];
+            if !rest[end + 1..].trim_start().starts_with("=>") {
+                continue;
+            }
+            if seen.contains(&key) {
+                dupes.push(key);
+            } else {
+                seen.push(key);
+            }
+        }
+        assert!(dupes.is_empty(), "takrorlangan kalitlar: {dupes:?}");
+        assert!(seen.len() > 500, "kalitlar juda kam: {}", seen.len());
+    }
+
+    /// `.rs` fayllarni yig'adi.
+    fn collect(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.is_dir() {
+                collect(&p, out);
+            } else if p.extension().is_some_and(|x| x == "rs") {
+                out.push(p);
+            }
+        }
+    }
+
+    /// Matndan `t("...")` ko'rinishidagi kalitlarni ajratadi.
+    ///
+    /// Faqat to'g'ridan-to'g'ri yozilgan satrlar olinadi: o'zgaruvchi orqali
+    /// uzatilgan kalitni statik tekshirib bo'lmaydi.
+    fn keys_in(text: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let b = text.as_bytes();
+        let mut i = 0;
+        while let Some(pos) = text[i..].find("t(\"") {
+            let start = i + pos;
+            // Oldingi belgi harf yoki `_` bo'lsa — bu boshqa funksiya
+            // (masalan `format!`, `insert`), `t(` emas.
+            let prev = if start == 0 { b' ' } else { b[start - 1] };
+            i = start + 3;
+            if prev.is_ascii_alphanumeric() || prev == b'_' {
+                continue;
+            }
+            let Some(end) = text[i..].find('"') else {
+                break;
+            };
+            let key = &text[i..i + end];
+            // Yopuvchi qavs darrov kelmasa — bu `t("x")` emas.
+            if text[i + end..].starts_with("\")") && !key.is_empty() {
+                out.push(key.to_string());
+            }
+            i += end + 1;
+        }
+        out
     }
 }

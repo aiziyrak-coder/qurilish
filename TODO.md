@@ -27,13 +27,13 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | X. Xaridlar | 48 | 9 | 7 | 32 |
 | XI. Ombor | 48 | 25 | 6 | 17 |
 | XII. Materiallar | 41 | 12 | 6 | 23 |
-| XIII. Tabel | 44 | 9 | 6 | 29 |
+| XIII. Tabel | 44 | 15 | 10 | 19 |
 | XIV. Sifat | 41 | 8 | 6 | 27 |
 | XV. Xavfsizlik | 41 | 7 | 6 | 28 |
 | XVI. Mashinalar | 50 | 10 | 7 | 33 |
 | XVII. AI analitika | 51 | 12 | 9 | 30 |
 | XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **170** | **112** | **400** |
+| **Jami** | **682** | **176** | **116** | **390** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -530,32 +530,32 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 5. Obyekt geozonasi
 - [ ] 🔒 6. QR-kirish
 - [~] 7. Prorabning mobil tabeli — *desktop ekranida*
-- [ ] 8. **Brigadalar**
-- [ ] 9. Ishchilarni obyektlar bo'yicha taqsimlash
-- [ ] 10. Ish vaqtini ishlar bo'yicha taqsimlash
-- [ ] 11. **Smenalar**
+- [x] 8. **Brigadalar** — *brigadir, ish, ishchilar tarkibi*
+- [~] 9. Ishchilarni obyektlar bo'yicha taqsimlash — *ishchi obyektga tegishli*
+- [x] 10. Ish vaqtini ishlar bo'yicha taqsimlash — *katakda «Ish» rejimi*
+- [x] 11. **Smenalar** — *kunduzgi / kechki / tungi, koeffitsiyent bilan*
 - [ ] 12. Ish grafigi
-- [~] 13. Ortiqcha ish — *8 soatdan oshgani belgilanadi*
-- [ ] 14. Tungi soatlar
+- [x] 13. Ortiqcha ish — *8 soatdan oshgani ×1.5*
+- [x] 14. Tungi soatlar — *smena bo'yicha, ×1.5*
 - [~] 15. Dam olish / bayram kuni — *sarlavhada ajratiladi*
-- [ ] 16. **Yo'qliklar**
-- [ ] 17. Ta'tillar
-- [ ] 18. Kasallik varaqasi
-- [ ] 19. Xizmat safari
+- [x] 16. **Yo'qliklar** — *kun turi: ta'til, kasallik, safar, sababsiz*
+- [x] 17. Ta'tillar
+- [x] 18. Kasallik varaqasi
+- [x] 19. Xizmat safari — *to'lanadi*
 - [ ] 20. AI anomaliyalarni nazorat qilishi
 - [ ] 21. Prorabning ish vaqtini nazorat qilish
-- [ ] 22. **Bo'sh turishlar hisobi**
-- [ ] 23. Bo'sh turishlar tahlili
-- [ ] 24. **Unumdorlik**
-- [ ] 25. Brigadalarni solishtirish
+- [x] 22. **Bo'sh turishlar hisobi** — *to'lanadi, ishlangan soat emas*
+- [~] 23. Bo'sh turishlar tahlili — *brigada bo'yicha ulush*
+- [~] 24. **Unumdorlik** — *soatning tannarxi*
+- [x] 25. Brigadalarni solishtirish
 - [ ] 26. Xodimlar sonini rejalashtirish
 - [ ] 27. AI xodim ehtiyoji prognozi
 - [ ] 28. Xodimlarni ko'chirish
 - [x] 29. Tabel → ish haqi
-- [ ] 30. Tabel → tannarx
-- [ ] 31. Aniq ishning tannarxi
+- [x] 30. Tabel → tannarx
+- [x] 31. Aniq ishning tannarxi — *ish haqi + material, bir birlikka*
 - [~] 32. Ish haqi fondini nazorat qilish
-- [ ] 33. Buxgalteriya uchun tabel
+- [~] 33. Buxgalteriya uchun tabel — *soat, yo'qlik, ish haqi jadvali*
 - [~] 34. Tabelni tuzatish
 - [ ] 35. Oyni yopish
 - [ ] 36. Tasdiqlash
@@ -821,7 +821,7 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 
 1. ~~Ombor: partiyalar, rezervlash, inventarizatsiya, qaytarish, bir necha ombor~~ (XI.3, 9, 17, 20–21, 24–28) — **bajarildi**
 2. ~~Normativ sarf va ortiqcha sarf nazorati~~ (XI.14–15, XII.21–22, III.28) — **bajarildi**
-3. **Tabel: brigadalar, smenalar, yo'qliklar, bo'sh turish, tannarx** (XIII.8–31)
+3. ~~Tabel: brigadalar, smenalar, yo'qliklar, bo'sh turish, tannarx~~ (XIII.8–31) — **bajarildi**
 4. **Xaridlar: KP, yetkazib beruvchilar, qisman yetkazish, byudjet** (X.7–15, 30, 35)
 5. **Arizalar: kelishuv marshruti, limitlar, tarix, rad sababi** (IX.8–10, 31–32)
 6. **Sifat: chek-listlar, bosqich bloklash, Quality Score, brak tahlili** (XIV.8, 10, 30–35)

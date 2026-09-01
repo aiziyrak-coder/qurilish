@@ -402,6 +402,15 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
 
+            CREATE TABLE IF NOT EXISTS brigade (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                foreman TEXT NOT NULL DEFAULT '',
+                task_id INTEGER,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE TABLE IF NOT EXISTS material_norm (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -442,6 +451,9 @@ impl Db {
             "ALTER TABLE issue ADD COLUMN deadline TEXT",
             "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
+            "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
+            "ALTER TABLE timesheet ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'",
+            "ALTER TABLE timesheet ADD COLUMN shift TEXT NOT NULL DEFAULT 'day'",
             "ALTER TABLE stock_move ADD COLUMN batch_id INTEGER",
         ] {
             let _ = self.conn().execute(sql, []);
@@ -1862,7 +1874,7 @@ impl Db {
 
     pub fn workers(&self, pid: i64) -> Vec<Worker> {
         self.list(
-            "SELECT id,project_id,name,position,org,hourly_rate,active
+            "SELECT id,project_id,name,position,org,hourly_rate,active,brigade_id
              FROM worker WHERE project_id=?1 ORDER BY name",
             pid,
             |r| {
@@ -1874,6 +1886,7 @@ impl Db {
                     org: r.get(4)?,
                     hourly_rate: r.get(5)?,
                     active: r.get::<_, i64>(6)? != 0,
+                    brigade_id: r.get(7)?,
                 })
             },
         )
@@ -1881,28 +1894,39 @@ impl Db {
 
     pub fn insert_worker(&self, w: &Worker) -> i64 {
         self.ins(
-            "INSERT INTO worker (project_id,name,position,org,hourly_rate,active) VALUES (?1,?2,?3,?4,?5,?6)",
-            params![w.project_id, w.name, w.position, w.org, w.hourly_rate, w.active as i64],
+            "INSERT INTO worker (project_id,name,position,org,hourly_rate,active,brigade_id)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                w.project_id,
+                w.name,
+                w.position,
+                w.org,
+                w.hourly_rate,
+                w.active as i64,
+                w.brigade_id
+            ],
         )
     }
 
     pub fn update_worker(&self, w: &Worker) -> bool {
         self.upd(
-            "UPDATE worker SET name=?2,position=?3,org=?4,hourly_rate=?5,active=?6 WHERE id=?1",
+            "UPDATE worker SET name=?2,position=?3,org=?4,hourly_rate=?5,active=?6,brigade_id=?7
+             WHERE id=?1",
             params![
                 w.id,
                 w.name,
                 w.position,
                 w.org,
                 w.hourly_rate,
-                w.active as i64
+                w.active as i64,
+                w.brigade_id
             ],
         )
     }
 
     pub fn timesheet(&self, pid: i64) -> Vec<TimesheetEntry> {
         self.list(
-            "SELECT id,project_id,worker_id,date,hours,task_id,note
+            "SELECT id,project_id,worker_id,date,hours,task_id,kind,shift,note
              FROM timesheet WHERE project_id=?1 ORDER BY date",
             pid,
             |r| {
@@ -1913,27 +1937,128 @@ impl Db {
                     date: date(&r.get::<_, String>(3)?),
                     hours: r.get(4)?,
                     task_id: r.get(5)?,
-                    note: r.get(6)?,
+                    kind: DayKind::parse(&r.get::<_, String>(6)?),
+                    shift: Shift::parse(&r.get::<_, String>(7)?),
+                    note: r.get(8)?,
                 })
             },
         )
     }
 
-    /// Tabel katakchasi: bir ishchining bir kunlik soati. Nol soat — yozuv o'chiriladi.
+    /// Tabel katakchasi: bir ishchining bir kunlik soati. Nol soat va oddiy ish
+    /// kuni — yozuv o'chiriladi (bo'sh katak «ishlamagan» degani).
     pub fn set_timesheet(&self, pid: i64, worker: i64, day: NaiveDate, hours: f64) -> bool {
-        if hours <= 0.0 {
-            return self
-                .conn()
-                .execute(
-                    "DELETE FROM timesheet WHERE worker_id=?1 AND date=?2",
-                    params![worker, day.to_string()],
-                )
-                .is_ok();
+        let kind = self.timesheet_kind(worker, day);
+        if hours <= 0.0 && kind == DayKind::Work {
+            return self.delete_timesheet(worker, day);
         }
         self.upd(
             "INSERT INTO timesheet (project_id,worker_id,date,hours) VALUES (?1,?2,?3,?4)
              ON CONFLICT(worker_id,date) DO UPDATE SET hours=excluded.hours",
             params![pid, worker, day.to_string(), hours],
+        )
+    }
+
+    /// Katakning turi: yo'qlik, bo'sh turish yoki oddiy ish kuni (TZ XIII.16–22).
+    ///
+    /// Oddiy ish kuniga qaytarilganda va soat nol bo'lsa yozuv o'chiriladi —
+    /// bo'sh katak bazada ham bo'sh qoladi.
+    pub fn set_timesheet_kind(&self, pid: i64, worker: i64, day: NaiveDate, kind: DayKind) -> bool {
+        if kind == DayKind::Work && self.timesheet_hours(worker, day) <= 0.0 {
+            return self.delete_timesheet(worker, day);
+        }
+        self.upd(
+            "INSERT INTO timesheet (project_id,worker_id,date,hours,kind) VALUES (?1,?2,?3,0,?4)
+             ON CONFLICT(worker_id,date) DO UPDATE SET kind=excluded.kind",
+            params![pid, worker, day.to_string(), kind.code()],
+        )
+    }
+
+    /// Katakning smenasi (TZ XIII.11).
+    pub fn set_timesheet_shift(&self, pid: i64, worker: i64, day: NaiveDate, shift: Shift) -> bool {
+        self.upd(
+            "INSERT INTO timesheet (project_id,worker_id,date,hours,shift) VALUES (?1,?2,?3,0,?4)
+             ON CONFLICT(worker_id,date) DO UPDATE SET shift=excluded.shift",
+            params![pid, worker, day.to_string(), shift.code()],
+        )
+    }
+
+    /// Katak qaysi ishga tegishli (TZ XIII.10) — tannarx shundan yig'iladi.
+    pub fn set_timesheet_task(
+        &self,
+        pid: i64,
+        worker: i64,
+        day: NaiveDate,
+        task: Option<i64>,
+    ) -> bool {
+        self.upd(
+            "INSERT INTO timesheet (project_id,worker_id,date,hours,task_id) VALUES (?1,?2,?3,0,?4)
+             ON CONFLICT(worker_id,date) DO UPDATE SET task_id=excluded.task_id",
+            params![pid, worker, day.to_string(), task],
+        )
+    }
+
+    fn delete_timesheet(&self, worker: i64, day: NaiveDate) -> bool {
+        self.conn()
+            .execute(
+                "DELETE FROM timesheet WHERE worker_id=?1 AND date=?2",
+                params![worker, day.to_string()],
+            )
+            .is_ok()
+    }
+
+    fn timesheet_hours(&self, worker: i64, day: NaiveDate) -> f64 {
+        self.conn()
+            .query_row(
+                "SELECT hours FROM timesheet WHERE worker_id=?1 AND date=?2",
+                params![worker, day.to_string()],
+                |r| r.get(0),
+            )
+            .unwrap_or(0.0)
+    }
+
+    fn timesheet_kind(&self, worker: i64, day: NaiveDate) -> DayKind {
+        self.conn()
+            .query_row(
+                "SELECT kind FROM timesheet WHERE worker_id=?1 AND date=?2",
+                params![worker, day.to_string()],
+                |r| r.get::<_, String>(0),
+            )
+            .map(|s| DayKind::parse(&s))
+            .unwrap_or(DayKind::Work)
+    }
+
+    // ---------- XIII.8. Brigadalar ----------
+
+    pub fn brigades(&self, pid: i64) -> Vec<Brigade> {
+        self.list(
+            "SELECT id,project_id,name,foreman,task_id,note
+             FROM brigade WHERE project_id=?1 ORDER BY name",
+            pid,
+            |r| {
+                Ok(Brigade {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    foreman: r.get(3)?,
+                    task_id: r.get(4)?,
+                    note: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_brigade(&self, b: &Brigade) -> i64 {
+        self.ins(
+            "INSERT INTO brigade (project_id,name,foreman,task_id,note) VALUES (?1,?2,?3,?4,?5)",
+            params![b.project_id, b.name, b.foreman, b.task_id, b.note],
+        )
+    }
+
+    pub fn update_brigade(&self, b: &Brigade) -> bool {
+        self.upd(
+            "UPDATE brigade SET name=?2,foreman=?3,task_id=?4,note=?5 WHERE id=?1",
+            params![b.id, b.name, b.foreman, b.task_id, b.note],
         )
     }
 
@@ -2571,8 +2696,37 @@ impl Db {
         } else {
             "«Navro'z Qurilish» MChJ"
         };
+        // Ikki brigada: monolitchilar va pardozchilar (TZ XIII.8).
+        let brigade = |name: &str, foreman: &str, task_id: Option<i64>| {
+            self.insert_brigade(&Brigade {
+                id: 0,
+                project_id: pid,
+                name: name.into(),
+                foreman: foreman.into(),
+                task_id,
+                note: String::new(),
+            })
+        };
+        let (b_monolit, b_finish) = if ru {
+            (
+                brigade("Бригада №1 — монолит", "Каримов А.Т.", by_wbs("7")),
+                brigade("Бригада №2 — отделка", "Умаров Д.К.", by_wbs("9")),
+            )
+        } else {
+            (
+                brigade("1-brigada — monolit", "Karimov A.T.", by_wbs("7")),
+                brigade("2-brigada — pardoz", "Umarov D.K.", by_wbs("9")),
+            )
+        };
+
         let mut ids = Vec::new();
-        for (name, position, rate) in crew {
+        for (i, (name, position, rate)) in crew.into_iter().enumerate() {
+            // Prorab brigadaga kirmaydi, qolganlari ikkiga bo'linadi.
+            let brigade_id = match i {
+                0 => None,
+                1..=3 => Some(b_monolit),
+                _ => Some(b_finish),
+            };
             ids.push(self.insert_worker(&Worker {
                 id: 0,
                 project_id: pid,
@@ -2581,6 +2735,7 @@ impl Db {
                 org: org.into(),
                 hourly_rate: rate,
                 active: true,
+                brigade_id,
             }));
         }
 
@@ -2608,9 +2763,40 @@ impl Db {
                 };
                 if hours > 0.0 {
                     self.set_timesheet(pid, *wid, day, hours);
+                    // Brigada ishi tabelda ko'rinsin — tannarx shundan yig'iladi.
+                    let task = match i {
+                        0 => None,
+                        1..=3 => by_wbs("7"),
+                        _ => by_wbs("9"),
+                    };
+                    if task.is_some() {
+                        self.set_timesheet_task(pid, *wid, day, task);
+                    }
+                    // Uchinchi ishchi kechqurun smenada ishlaydi (TZ XIII.11).
+                    if i == 3 && back % 4 == 1 {
+                        self.set_timesheet_shift(pid, *wid, day, Shift::Evening);
+                    }
                 }
             }
         }
+
+        // Yo'qliklar va bo'sh turish (TZ XIII.16–22).
+        let mark = |wid: Option<&i64>, days_ago: i64, kind: DayKind, hours: f64| {
+            if let Some(wid) = wid {
+                let day = today - chrono::Duration::days(days_ago);
+                self.set_timesheet_kind(pid, *wid, day, kind);
+                if hours > 0.0 {
+                    self.set_timesheet(pid, *wid, day, hours);
+                }
+            }
+        };
+        // Beton kelmagani uchun brigada yarim kun bo'sh turdi.
+        mark(ids.get(1), 6, DayKind::Downtime, 4.0);
+        mark(ids.get(2), 6, DayKind::Downtime, 4.0);
+        // Kasallik varaqasi va sababsiz yo'qlik.
+        mark(ids.get(5), 4, DayKind::Sick, 0.0);
+        mark(ids.get(5), 3, DayKind::Sick, 0.0);
+        mark(ids.get(4), 2, DayKind::Absent, 0.0);
 
         // ---------- XIV. Sifat nazorati ----------
         let inspector = if ru {

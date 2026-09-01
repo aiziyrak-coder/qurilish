@@ -707,6 +707,74 @@ pub struct Worker {
     pub org: String,
     pub hourly_rate: f64,
     pub active: bool,
+    /// Qaysi brigadada (TZ XIII.8). Brigadasiz ishchi ham bo'lishi mumkin.
+    pub brigade_id: Option<i64>,
+}
+
+/// Brigada (TZ XIII.8): ishchilar guruhi va uning brigadiri.
+#[derive(Debug, Clone)]
+pub struct Brigade {
+    pub id: i64,
+    pub project_id: i64,
+    pub name: String,
+    pub foreman: String,
+    /// Brigada qaysi ishga biriktirilgan (TZ XIII.10). Majburiy emas.
+    pub task_id: Option<i64>,
+    pub note: String,
+}
+
+enum_kind!(Shift {
+    Day     => "day",     "sh_day";
+    Evening => "evening", "sh_evening";
+    Night   => "night",   "sh_night";
+});
+
+impl Shift {
+    /// Tungi smena soatlariga qo'shimcha haq (TZ XIII.14).
+    ///
+    /// Koeffitsiyent kodda turibdi va ekranda ochiq yozilgan — sozlamada
+    /// o'zgartirilmaydi, chunki uni tashkilot o'z ichki hujjati bilan
+    /// belgilaydi va bu yerda faqat hisob-kitob ko'rsatiladi.
+    pub fn rate(self) -> f64 {
+        match self {
+            Shift::Day => 1.0,
+            Shift::Evening => 1.2,
+            Shift::Night => 1.5,
+        }
+    }
+}
+
+enum_kind!(DayKind {
+    Work     => "work",     "dk_work";
+    Downtime => "downtime", "dk_downtime";
+    Vacation => "vacation", "dk_vacation";
+    Sick     => "sick",     "dk_sick";
+    Trip     => "trip",     "dk_trip";
+    Absent   => "absent",   "dk_absent";
+});
+
+impl DayKind {
+    /// Shu kun uchun ish haqi hisoblanadimi.
+    ///
+    /// Bo'sh turish va xizmat safari to'lanadi (ishchi aybdor emas), sababsiz
+    /// yo'qlik to'lanmaydi. Ta'til va kasallik varaqasi bu yerda emas,
+    /// buxgalteriyada hisoblanadi — shuning uchun tabel summasiga kirmaydi.
+    pub fn paid(self) -> bool {
+        matches!(self, DayKind::Work | DayKind::Downtime | DayKind::Trip)
+    }
+
+    /// Ishchi haqiqatda ishlaganmi — unumdorlik shundan hisoblanadi.
+    pub fn worked(self) -> bool {
+        matches!(self, DayKind::Work | DayKind::Trip)
+    }
+
+    /// Yo'qlik turi (TZ XIII.16–19).
+    pub fn absence(self) -> bool {
+        matches!(
+            self,
+            DayKind::Vacation | DayKind::Sick | DayKind::Trip | DayKind::Absent
+        )
+    }
 }
 
 /// Tabel yozuvi: bir ishchi, bir kun.
@@ -718,6 +786,9 @@ pub struct TimesheetEntry {
     pub date: NaiveDate,
     pub hours: f64,
     pub task_id: Option<i64>,
+    /// Kun turi: ish, bo'sh turish, ta'til, kasallik, safar, yo'qlik.
+    pub kind: DayKind,
+    pub shift: Shift,
     pub note: String,
 }
 

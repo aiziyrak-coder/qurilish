@@ -1475,6 +1475,220 @@ pub fn consumption(
         .collect()
 }
 
+// ================= XIII. Tabel: ish haqi, brigada, tannarx =================
+
+/// Bir kunda shu soatdan oshgani ortiqcha ish deb belgilanadi (TZ XIII.13).
+pub const NORM_HOURS: f64 = 8.0;
+
+/// Ortiqcha ish soatiga qo'shimcha haq. Koeffitsiyent kodda turibdi va ekranda
+/// ochiq yozilgan — buni tashkilot o'z ichki hujjati bilan belgilaydi.
+pub const OVERTIME_RATE: f64 = 1.5;
+
+/// Bitta ishchining davr bo'yicha tabel yakuni (TZ XIII.29).
+#[derive(Debug, Clone, Default)]
+pub struct WageLine {
+    pub worker_id: i64,
+    /// Jami tabelga yozilgan soat.
+    pub hours: f64,
+    /// Haqiqatda ishlangan soat (bo'sh turish va yo'qlik kirmaydi).
+    pub worked_hours: f64,
+    /// Normadan oshgan soat.
+    pub overtime_hours: f64,
+    /// Tungi smenadagi soat.
+    pub night_hours: f64,
+    /// Bo'sh turish soati (TZ XIII.22).
+    pub downtime_hours: f64,
+    /// Yo'qlik kunlari (ta'til, kasallik, safar, sababsiz).
+    pub absence_days: i64,
+    /// Sababsiz yo'qlik kunlari — alohida ko'rsatiladi.
+    pub absent_days: i64,
+    /// Hisoblangan ish haqi.
+    pub wage: f64,
+}
+
+/// TZ XIII.29: tabeldan ish haqi.
+///
+/// Har bir kun o'z smenasi va turi bilan hisoblanadi:
+/// normadagi soat `stavka × smena koeffitsiyenti`, undan oshgani esa
+/// yana `OVERTIME_RATE` ga ko'paytiriladi. To'lanmaydigan kun turlari
+/// (ta'til, kasallik, sababsiz yo'qlik) summaga kirmaydi — ular
+/// buxgalteriyada boshqacha hisoblanadi.
+pub fn wages(
+    workers: &[Worker],
+    entries: &[TimesheetEntry],
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Vec<WageLine> {
+    workers
+        .iter()
+        .map(|w| {
+            let mut l = WageLine {
+                worker_id: w.id,
+                ..Default::default()
+            };
+            for e in entries
+                .iter()
+                .filter(|e| e.worker_id == w.id && e.date >= from && e.date <= to)
+            {
+                l.hours += e.hours;
+                if e.kind.worked() {
+                    l.worked_hours += e.hours;
+                }
+                if e.kind == DayKind::Downtime {
+                    l.downtime_hours += e.hours;
+                }
+                if e.kind.absence() {
+                    l.absence_days += 1;
+                    if e.kind == DayKind::Absent {
+                        l.absent_days += 1;
+                    }
+                }
+                if e.shift == Shift::Night {
+                    l.night_hours += e.hours;
+                }
+                let over = (e.hours - NORM_HOURS).max(0.0);
+                l.overtime_hours += over;
+                if e.kind.paid() {
+                    let base = e.hours - over;
+                    l.wage += (base + over * OVERTIME_RATE) * e.shift.rate() * w.hourly_rate;
+                }
+            }
+            l
+        })
+        .collect()
+}
+
+/// Brigadalarni solishtirish uchun yakun (TZ XIII.24–25).
+#[derive(Debug, Clone, Default)]
+pub struct BrigadeLine {
+    pub brigade_id: i64,
+    pub workers: usize,
+    pub hours: f64,
+    pub worked_hours: f64,
+    pub downtime_hours: f64,
+    pub wage: f64,
+    /// Bo'sh turish ulushi, foizda — brigada qanchalik uzilishsiz ishlaganini
+    /// ko'rsatadi.
+    pub downtime_pct: f64,
+    /// Bir soatning o'rtacha tannarxi.
+    pub cost_per_hour: f64,
+}
+
+pub fn brigade_lines(
+    brigades: &[Brigade],
+    workers: &[Worker],
+    entries: &[TimesheetEntry],
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Vec<BrigadeLine> {
+    let all = wages(workers, entries, from, to);
+    brigades
+        .iter()
+        .map(|b| {
+            let mut l = BrigadeLine {
+                brigade_id: b.id,
+                ..Default::default()
+            };
+            for w in workers.iter().filter(|w| w.brigade_id == Some(b.id)) {
+                l.workers += 1;
+                if let Some(x) = all.iter().find(|x| x.worker_id == w.id) {
+                    l.hours += x.hours;
+                    l.worked_hours += x.worked_hours;
+                    l.downtime_hours += x.downtime_hours;
+                    l.wage += x.wage;
+                }
+            }
+            l.downtime_pct = if l.hours > 0.0 {
+                l.downtime_hours / l.hours * 100.0
+            } else {
+                0.0
+            };
+            l.cost_per_hour = if l.worked_hours > 0.0 {
+                l.wage / l.worked_hours
+            } else {
+                0.0
+            };
+            l
+        })
+        .collect()
+}
+
+/// Aniq ishning tannarxi (TZ XIII.30–31).
+#[derive(Debug, Clone)]
+pub struct TaskCost {
+    pub task_id: i64,
+    pub hours: f64,
+    /// Tabeldan yig'ilgan ish haqi.
+    pub labour: f64,
+    /// Shu ishga berilgan materialning qiymati.
+    pub material: f64,
+    pub total: f64,
+    /// Bir birlik ish hajmining tannarxi. Hajm nol bo'lsa — 0.
+    pub per_unit: f64,
+}
+
+/// Ish tannarxi: tabeldagi soat va omborga berilgan material.
+///
+/// Ikkalasi ham allaqachon kiritilgan ma'lumotdan yig'iladi — tannarx alohida
+/// kiritilmaydi, shuning uchun u hujjatlar bilan hech qachon zid bo'lmaydi.
+pub fn task_costs(
+    tasks: &[Task],
+    workers: &[Worker],
+    entries: &[TimesheetEntry],
+    materials: &[Material],
+    moves: &[StockMove],
+) -> Vec<TaskCost> {
+    tasks
+        .iter()
+        .map(|t| {
+            let mut hours = 0.0;
+            let mut labour = 0.0;
+            for e in entries.iter().filter(|e| e.task_id == Some(t.id)) {
+                hours += e.hours;
+                if !e.kind.paid() {
+                    continue;
+                }
+                let rate = workers
+                    .iter()
+                    .find(|w| w.id == e.worker_id)
+                    .map_or(0.0, |w| w.hourly_rate);
+                let over = (e.hours - NORM_HOURS).max(0.0);
+                labour += (e.hours - over + over * OVERTIME_RATE) * e.shift.rate() * rate;
+            }
+            let material: f64 = moves
+                .iter()
+                .filter(|m| m.task_id == Some(t.id))
+                .filter(|m| matches!(m.kind, MoveKind::Out | MoveKind::WriteOff))
+                .map(|m| {
+                    let price = if m.price > 0.0 {
+                        m.price
+                    } else {
+                        materials
+                            .iter()
+                            .find(|x| x.id == m.material_id)
+                            .map_or(0.0, |x| x.price)
+                    };
+                    m.qty * price
+                })
+                .sum();
+            let total = labour + material;
+            TaskCost {
+                task_id: t.id,
+                hours,
+                labour,
+                material,
+                total,
+                per_unit: if t.volume > 0.0 {
+                    total / t.volume
+                } else {
+                    0.0
+                },
+            }
+        })
+        .filter(|c| c.hours > 0.0 || c.total > 0.0)
+        .collect()
+}
+
 // ================= IV. Ijro hujjatlari =================
 
 /// Ish uchun talab qilinadigan bitta hujjat.
