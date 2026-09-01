@@ -437,6 +437,146 @@ pub struct StockMove {
     pub note: String,
 }
 
+// ---------- XIX–XX. Sotuv ----------
+
+/// Blok (podez, kirish). Shaxmatka har blok uchun alohida quriladi.
+#[derive(Debug, Clone)]
+pub struct Block {
+    pub id: i64,
+    pub project_id: i64,
+    pub name: String,
+    /// Qavatlar soni — shaxmatkaning balandligi.
+    pub floors: i64,
+    /// Yerto'la va nolinchi qavatlar uchun: shaxmatka qaysi qavatdan boshlanadi.
+    pub first_floor: i64,
+    pub note: String,
+}
+
+enum_kind!(UnitKind {
+    Flat       => "flat",    "uk_flat";
+    Commercial => "comm",    "uk_comm";
+    Office     => "office",  "uk_office";
+    Parking    => "parking", "uk_parking";
+    Storage    => "storage", "uk_storage";
+});
+
+enum_kind!(UnitStatus {
+    Free        => "free",     "us_free";
+    Reserved    => "reserved", "us_reserved";
+    Contract    => "contract", "us_contract";
+    Sold        => "sold",     "us_sold";
+    Unavailable => "off",      "us_off";
+});
+
+/// Sotuv birligi: kvartira, tijorat joyi, ofis, avtoturargoh yoki ombor.
+#[derive(Debug, Clone)]
+pub struct Unit {
+    pub id: i64,
+    pub project_id: i64,
+    pub block_id: i64,
+    pub number: String,
+    pub floor: i64,
+    /// Qavatdagi tartib raqami — shaxmatkada ustunni belgilaydi.
+    pub position: i64,
+    pub kind: UnitKind,
+    pub rooms: i64,
+    /// Umumiy maydon, m².
+    pub area: f64,
+    /// Yashash maydoni, m².
+    pub area_living: f64,
+    pub price_per_m2: f64,
+    pub status: UnitStatus,
+    /// Planirovka turi yoki chizma fayli yo'li.
+    pub layout: String,
+    pub note: String,
+}
+
+impl UnitKind {
+    /// Shaxmatka katagi uchun qisqa belgi — joy tor.
+    pub fn short_key(self) -> &'static str {
+        match self {
+            UnitKind::Flat => "uks_flat",
+            UnitKind::Commercial => "uks_comm",
+            UnitKind::Office => "uks_office",
+            UnitKind::Parking => "uks_parking",
+            UnitKind::Storage => "uks_storage",
+        }
+    }
+}
+
+impl Unit {
+    /// Kvartiraning to'liq narxi. Shartnomadagi narx bundan farq qilishi mumkin —
+    /// chegirma yoki kelishuv bo'lsa, u shartnomada saqlanadi.
+    pub fn price(&self) -> f64 {
+        self.area * self.price_per_m2
+    }
+}
+
+enum_kind!(PayKind {
+    Cash        => "cash",        "pk_cash";
+    Installment => "installment", "pk_installment";
+    Credit      => "credit",      "pk_credit";
+    Subsidy     => "subsidy",     "pk_subsidy";
+    Barter      => "barter",      "pk_barter";
+    Mixed       => "mixed",       "pk_mixed";
+});
+
+enum_kind!(DealStatus {
+    Reserved  => "reserved",  "ds_reserved";
+    Signed    => "signed",    "ds_signed";
+    Completed => "completed", "ds_completed";
+    Cancelled => "cancelled", "ds_cancelled";
+});
+
+/// Sotuv shartnomasi (yoki band qilish).
+#[derive(Debug, Clone)]
+pub struct Deal {
+    pub id: i64,
+    pub project_id: i64,
+    pub unit_id: i64,
+    pub number: String,
+    pub date: NaiveDate,
+    pub client: String,
+    pub phone: String,
+    /// Mijoz hujjati raqami — shartnomaga havola uchun.
+    pub client_doc: String,
+    pub pay_kind: PayKind,
+    /// Kelishilgan narx (chegirmagacha).
+    pub price: f64,
+    pub discount: f64,
+    /// Boshlang'ich to'lov.
+    pub prepayment: f64,
+    /// Muddatli to'lov oylari soni; 0 — bo'lib to'lash yo'q.
+    pub months: i64,
+    pub status: DealStatus,
+    pub manager: String,
+    pub note: String,
+}
+
+impl Deal {
+    /// To'lanishi kerak bo'lgan yakuniy summa.
+    pub fn total(&self) -> f64 {
+        (self.price - self.discount).max(0.0)
+    }
+}
+
+/// To'lov grafigining bir qatori: reja va fakt bir yozuvda.
+#[derive(Debug, Clone)]
+pub struct Payment {
+    pub id: i64,
+    pub project_id: i64,
+    pub deal_id: i64,
+    /// Reja bo'yicha to'lov sanasi.
+    pub due: NaiveDate,
+    pub planned: f64,
+    pub paid: f64,
+    /// Haqiqatda to'langan sana.
+    pub paid_date: Option<NaiveDate>,
+    pub kind: PayKind,
+    pub document: String,
+    pub note: String,
+}
+
 // ---------- XIII. Tabel ----------
 
 /// Ishchi (TZ XIII).

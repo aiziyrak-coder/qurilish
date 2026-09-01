@@ -16,7 +16,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.current.is_none() {
         ui.vertical_centered(|ui| {
             ui.add_space(120.0);
-            ui.label(RichText::new(t("no_object_selected")).color(theme::muted()).size(18.0));
+            ui.label(
+                RichText::new(t("no_object_selected"))
+                    .color(theme::muted())
+                    .size(18.0),
+            );
         });
         return;
     }
@@ -26,7 +30,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     summary_strip(ui, app);
     ui.add_space(8.0);
 
-    let bottom = if app.selected_task.is_some() { 278.0 } else { 0.0 };
+    let bottom = if app.selected_task.is_some() {
+        278.0
+    } else {
+        0.0
+    };
     let avail = ui.available_size() - vec2(0.0, bottom);
     let (rect, _) = ui.allocate_exact_size(avail, Sense::hover());
 
@@ -91,7 +99,11 @@ fn keyboard(ui: &egui::Ui, app: &mut App) {
         // Oddiy strelka — tanlovni ko'chirish.
         let visible: Vec<i64> = app.visible_tasks().iter().map(|x| x.id).collect();
         if let Some(i) = visible.iter().position(|x| *x == id) {
-            let j = if up { i.checked_sub(1) } else { (i + 1 < visible.len()).then_some(i + 1) };
+            let j = if up {
+                i.checked_sub(1)
+            } else {
+                (i + 1 < visible.len()).then_some(i + 1)
+            };
             if let Some(j) = j {
                 app.selected_task = Some(visible[j]);
                 app.scroll_to_task(visible[j]);
@@ -134,10 +146,7 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
         if pinned > 0 {
             ui.separator();
             if ui
-                .button(
-                    RichText::new(format!("{} {pinned}", t("unpin_all")))
-                        .color(theme::warn()),
-                )
+                .button(RichText::new(format!("{} {pinned}", t("unpin_all"))).color(theme::warn()))
                 .on_hover_text(t("unpin_hint"))
                 .clicked()
             {
@@ -197,7 +206,11 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
 fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
     let pr = &app.progress;
     let sched_end = app.origin() + Duration::days((app.schedule.project_days - 1).max(0));
-    let crit_count = app.tasks.iter().filter(|t| app.schedule.is_critical(t.id)).count();
+    let crit_count = app
+        .tasks
+        .iter()
+        .filter(|t| app.schedule.is_critical(t.id))
+        .count();
 
     ui.horizontal_wrapped(|ui| {
         stat_card(
@@ -207,12 +220,21 @@ fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
             t("kpi_by_durations"),
             theme::accent(),
         );
-        let fact_color = if pr.fact_pct + 0.5 < pr.plan_pct { theme::danger() } else { theme::ok() };
+        let fact_color = if pr.fact_pct + 0.5 < pr.plan_pct {
+            theme::danger()
+        } else {
+            theme::ok()
+        };
         stat_card(
             ui,
             t("kpi_fact"),
             format!("{:.1} %", pr.fact_pct),
-            &format!("{} {:+.1} {}", t("kpi_deviation"), pr.fact_pct - pr.plan_pct, t("kpi_pp")),
+            &format!(
+                "{} {:+.1} {}",
+                t("kpi_deviation"),
+                pr.fact_pct - pr.plan_pct,
+                t("kpi_pp")
+            ),
             fact_color,
         );
         stat_card(
@@ -220,13 +242,22 @@ fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
             t("kpi_overdue_tasks"),
             pr.overdue.len().to_string(),
             t("kpi_overdue_hint"),
-            if pr.overdue.is_empty() { theme::ok() } else { theme::danger() },
+            if pr.overdue.is_empty() {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_critical"),
             format!("{crit_count} {}", t("kpi_tasks_count")),
-            &format!("{} {} {}", t("kpi_cpm_length"), app.schedule.project_days, t("days_short")),
+            &format!(
+                "{} {} {}",
+                t("kpi_cpm_length"),
+                app.schedule.project_days,
+                t("days_short")
+            ),
             theme::warn(),
         );
         let delay = pr.delay_days;
@@ -242,7 +273,11 @@ fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
             } else {
                 t("kpi_on_track").to_string()
             },
-            if delay > 0 { theme::danger() } else { theme::ok() },
+            if delay > 0 {
+                theme::danger()
+            } else {
+                theme::ok()
+            },
         );
     });
 
@@ -296,7 +331,11 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
         app.timeline_offset = (app.timeline_offset + days).clamp(0.0, max_time_off);
     };
 
-    let time_resp = ui.interact(time_rect, egui::Id::new("timeline"), Sense::click_and_drag());
+    let time_resp = ui.interact(
+        time_rect,
+        egui::Id::new("timeline"),
+        Sense::click_and_drag(),
+    );
     if ui.rect_contains_pointer(full) {
         let (d, modifiers) = ui.input(|i| (i.raw_scroll_delta, i.modifiers));
         if modifiers.ctrl && d.y != 0.0 {
@@ -374,7 +413,10 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
     // Два painter-а: `rp` для строк таблицы, `tp` — только для области таймлайна.
     // Иначе полосы и стрелки связей, уходящие влево за границу, рисуются поверх таблицы.
     let rp = ui.painter_at(Rect::from_min_max(pos2(full.min.x, rows_top), full.max));
-    let tp = ui.painter_at(Rect::from_min_max(pos2(time_rect.min.x, rows_top), full.max));
+    let tp = ui.painter_at(Rect::from_min_max(
+        pos2(time_rect.min.x, rows_top),
+        full.max,
+    ));
 
     for (i, &tid) in visible.iter().enumerate().skip(first_row) {
         let y = rows_top + (i - first_row) as f32 * ROW_H;
@@ -382,7 +424,9 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
             break;
         }
         row_y.insert(tid, y);
-        let Some(task) = app.task(tid).cloned() else { continue };
+        let Some(task) = app.task(tid).cloned() else {
+            continue;
+        };
         let calc = app.schedule.get(tid);
         let selected = app.selected_task == Some(tid);
         let critical = app.schedule.is_critical(tid);
@@ -411,11 +455,19 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
             );
         };
         text(8.0, task.wbs.clone(), theme::muted(), 12.0);
-        let name_col = if overdue { theme::danger() } else { theme::text() };
+        let name_col = if overdue {
+            theme::danger()
+        } else {
+            theme::text()
+        };
         text(40.0, truncate(&task.name, 29), name_col, 13.0);
         if task.section != Section::None {
             let chip = Rect::from_min_size(pos2(full.min.x + 262.0, cy - 8.0), vec2(36.0, 16.0));
-            rp.rect_filled(chip, 4.0, theme::section_color(task.section.color()).gamma_multiply(0.35));
+            rp.rect_filled(
+                chip,
+                4.0,
+                theme::section_color(task.section.color()).gamma_multiply(0.35),
+            );
             rp.text(
                 chip.center(),
                 Align2::CENTER_CENTER,
@@ -432,7 +484,11 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
             text(
                 358.0,
                 ed.format("%d.%m").to_string(),
-                if overdue { theme::danger() } else { theme::muted() },
+                if overdue {
+                    theme::danger()
+                } else {
+                    theme::muted()
+                },
                 11.5,
             );
         }
@@ -441,23 +497,42 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
         text(
             440.0,
             format!("{:.0}", task.progress),
-            if task.progress >= 99.99 { theme::ok() } else { theme::text() },
+            if task.progress >= 99.99 {
+                theme::ok()
+            } else {
+                theme::text()
+            },
             12.0,
         );
         {
             let pbar = Rect::from_min_size(pos2(full.min.x + 464.0, cy + 4.0), vec2(34.0, 4.0));
             rp.rect_filled(pbar, 1.5, theme::track());
             rp.rect_filled(
-                Rect::from_min_size(pbar.min, vec2(pbar.width() * (task.progress / 100.0) as f32, pbar.height())),
+                Rect::from_min_size(
+                    pbar.min,
+                    vec2(pbar.width() * (task.progress / 100.0) as f32, pbar.height()),
+                ),
                 1.5,
-                if task.progress >= 99.99 { theme::ok() } else { theme::accent() },
+                if task.progress >= 99.99 {
+                    theme::ok()
+                } else {
+                    theme::accent()
+                },
             );
         }
         if let Some(c) = calc {
             text(
                 508.0,
-                if critical { t("crit_short").to_string() } else { format!("{}", c.slack) },
-                if critical { theme::danger() } else { theme::muted() },
+                if critical {
+                    t("crit_short").to_string()
+                } else {
+                    format!("{}", c.slack)
+                },
+                if critical {
+                    theme::danger()
+                } else {
+                    theme::muted()
+                },
                 11.0,
             );
         }
@@ -501,7 +576,10 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
         tp.rect_stroke(
             bar,
             3.0,
-            Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, if selected { theme::accent() } else { base }),
+            Stroke::new(
+                if selected { 2.0_f32 } else { 1.0_f32 },
+                if selected { theme::accent() } else { base },
+            ),
             egui::StrokeKind::Inside,
         );
         if task.pinned {
@@ -576,7 +654,9 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
     let sel = app.selected_task;
     let any_selected = sel.is_some();
     for l in app.links.clone() {
-        let (Some(&yp), Some(&ys)) = (row_y.get(&l.pred), row_y.get(&l.succ)) else { continue };
+        let (Some(&yp), Some(&ys)) = (row_y.get(&l.pred), row_y.get(&l.succ)) else {
+            continue;
+        };
         let (Some(cp), Some(cs)) = (app.schedule.get(l.pred), app.schedule.get(l.succ)) else {
             continue;
         };
@@ -629,7 +709,10 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
 
     // Разделитель таблицы и таймлайна
     painter.line_segment(
-        [pos2(time_rect.min.x, full.min.y), pos2(time_rect.min.x, full.max.y)],
+        [
+            pos2(time_rect.min.x, full.min.y),
+            pos2(time_rect.min.x, full.max.y),
+        ],
         Stroke::new(1.0_f32, theme::line()),
     );
 
@@ -681,8 +764,7 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
         let frac = (visible_days / total_days).clamp(0.02, 1.0);
         let thumb_w = (track.width() * frac).max(24.0);
         let max_off = (total_days - visible_days).max(1.0);
-        let tx0 = track.min.x
-            + (track.width() - thumb_w) * (t_off / max_off).clamp(0.0, 1.0);
+        let tx0 = track.min.x + (track.width() - thumb_w) * (t_off / max_off).clamp(0.0, 1.0);
         let thumb = Rect::from_min_size(pos2(tx0, track.min.y), vec2(thumb_w, track.height()));
         painter.rect_filled(thumb, 2.0, theme::muted());
         // Belgini sudrab aylantirish mumkin.
@@ -727,7 +809,6 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
             }
         }
     }
-
 }
 
 // ================================================================ Tahlil
@@ -745,7 +826,9 @@ fn analysis_window(ctx: &egui::Context, app: &mut App) {
     let mut overdue_rows: Vec<(String, String, i64)> = Vec::new();
     for id in &app.progress.overdue {
         let Some(task) = app.task(*id) else { continue };
-        let Some(c) = app.schedule.get(*id) else { continue };
+        let Some(c) = app.schedule.get(*id) else {
+            continue;
+        };
         let late = (today_off - c.ef).max(0);
         let resp = if task.responsible.trim().is_empty() {
             t("dash").to_string()
@@ -769,7 +852,11 @@ fn analysis_window(ctx: &egui::Context, app: &mut App) {
     let remaining_days = ((app.schedule.project_days - 1) - today_off).max(1) as f64;
     let current_rate = pr.fact_pct / elapsed;
     let needed_rate = (100.0 - pr.fact_pct) / remaining_days;
-    let boost = if current_rate > 0.01 { needed_rate / current_rate } else { 0.0 };
+    let boost = if current_rate > 0.01 {
+        needed_rate / current_rate
+    } else {
+        0.0
+    };
 
     // Kritik yo'ldagi navbatdagi ishlar.
     let mut crit_next: Vec<(chrono::NaiveDate, String, String)> = app
@@ -809,7 +896,11 @@ fn analysis_window(ctx: &egui::Context, app: &mut App) {
             // ---- 1. Muddati o'tganlar ----
             section(ui, t("an_overdue"), theme::danger());
             if overdue_rows.is_empty() {
-                ui.label(RichText::new(t("an_none_overdue")).color(theme::ok()).size(12.5));
+                ui.label(
+                    RichText::new(t("an_none_overdue"))
+                        .color(theme::ok())
+                        .size(12.5),
+                );
             } else {
                 for (name, resp, late) in overdue_rows.iter().take(6) {
                     ui.horizontal(|ui| {
@@ -929,7 +1020,9 @@ enum DragKind {
 /// Перетаскивание полосы: сдвиг даты (с закреплением) или изменение длительности.
 fn apply_drag(app: &mut App, tid: i64, kind: DragKind, dx: f32) {
     let ppd = app.px_per_day;
-    let Some(mut task) = app.task(tid).cloned() else { return };
+    let Some(mut task) = app.task(tid).cloned() else {
+        return;
+    };
 
     // Дробный остаток копится между кадрами: при мелком масштабе один кадр
     // даёт меньше пикселя на день, и без накопления полоса бы не двигалась.
@@ -969,7 +1062,11 @@ fn hover_text(task: &Task, c: &crate::cpm::Calc, app: &App) -> String {
         i18n::t("task_section"),
         task.section.label(),
         i18n::t("task_responsible"),
-        if task.responsible.is_empty() { i18n::t("dash") } else { &task.responsible },
+        if task.responsible.is_empty() {
+            i18n::t("dash")
+        } else {
+            &task.responsible
+        },
         i18n::t("hover_plan"),
         s.format("%d.%m.%Y"),
         e.format("%d.%m.%Y"),
@@ -1043,8 +1140,8 @@ fn draw_time_header(
     let span = (time_rect.width() / ppd).ceil() as i64 + 2;
 
     let mut month_start = origin + Duration::days(first_day);
-    month_start = NaiveDate::from_ymd_opt(month_start.year(), month_start.month(), 1)
-        .unwrap_or(month_start);
+    month_start =
+        NaiveDate::from_ymd_opt(month_start.year(), month_start.month(), 1).unwrap_or(month_start);
     let end = origin + Duration::days(first_day + span);
     let (step, fmt) = pick_tick(ppd);
 
@@ -1198,11 +1295,13 @@ fn tick(painter: &egui::Painter, x: f32, rows_top: f32) {
 }
 
 fn next_month(d: NaiveDate) -> NaiveDate {
-    let (y, m) = if d.month() == 12 { (d.year() + 1, 1) } else { (d.year(), d.month() + 1) };
+    let (y, m) = if d.month() == 12 {
+        (d.year() + 1, 1)
+    } else {
+        (d.year(), d.month() + 1)
+    };
     NaiveDate::from_ymd_opt(y, m, 1).unwrap_or(d)
 }
-
-
 
 /// Ортогональная стрелка связи с наконечником.
 fn arrow(p: &egui::Painter, from: Pos2, to: Pos2, col: Color32) {
@@ -1266,7 +1365,12 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                 // Колонка 1 — основные поля
                 ui.vertical(|ui| {
                     ui.set_width(430.0);
-                    ui.label(RichText::new(t("insp_task")).size(13.0).strong().color(theme::accent()));
+                    ui.label(
+                        RichText::new(t("insp_task"))
+                            .size(13.0)
+                            .strong()
+                            .color(theme::accent()),
+                    );
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(t("insp_wbs")).color(theme::muted()));
@@ -1288,13 +1392,17 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                             .width(90.0)
                             .show_ui(ui, |ui| {
                                 for s in Section::ALL {
-                                    dirty |=
-                                        ui.selectable_value(&mut task.section, s, s.label()).changed();
+                                    dirty |= ui
+                                        .selectable_value(&mut task.section, s, s.label())
+                                        .changed();
                                 }
                             });
                         ui.label(RichText::new(t("task_responsible")).color(theme::muted()));
                         dirty |= ui
-                            .add(egui::TextEdit::singleline(&mut task.responsible).desired_width(180.0))
+                            .add(
+                                egui::TextEdit::singleline(&mut task.responsible)
+                                    .desired_width(180.0),
+                            )
                             .changed();
                     });
                     ui.horizontal(|ui| {
@@ -1335,10 +1443,18 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                         ui.label(RichText::new(t("task_plan_start")).color(theme::muted()));
                         dirty |= super::passport::date_edit(ui, "t_start", &mut task.plan_start);
                         // Tartib: ro'yxatda yuqoriga/pastga.
-                        if ui.small_button("↑").on_hover_text(t("insp_move_up")).clicked() {
+                        if ui
+                            .small_button("↑")
+                            .on_hover_text(t("insp_move_up"))
+                            .clicked()
+                        {
                             reorder = Some(true);
                         }
-                        if ui.small_button("↓").on_hover_text(t("insp_move_down")).clicked() {
+                        if ui
+                            .small_button("↓")
+                            .on_hover_text(t("insp_move_down"))
+                            .clicked()
+                        {
                             reorder = Some(false);
                         }
                     });
@@ -1376,7 +1492,12 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                 // Колонка 2 — расчет CPM
                 ui.vertical(|ui| {
                     ui.set_width(280.0);
-                    ui.label(RichText::new(t("insp_calc")).size(13.0).strong().color(theme::accent()));
+                    ui.label(
+                        RichText::new(t("insp_calc"))
+                            .size(13.0)
+                            .strong()
+                            .color(theme::accent()),
+                    );
                     ui.add_space(4.0);
                     if let Some(c) = calc {
                         let o = app.origin();
@@ -1384,7 +1505,9 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                             ui.horizontal(|ui| {
                                 ui.add_sized(
                                     [150.0, 18.0],
-                                    egui::Label::new(RichText::new(k).color(theme::muted()).size(12.0)),
+                                    egui::Label::new(
+                                        RichText::new(k).color(theme::muted()).size(12.0),
+                                    ),
                                 );
                                 ui.label(RichText::new(v).color(col).size(12.0));
                             });
@@ -1398,13 +1521,25 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                             ui,
                             t("insp_slack"),
                             format!("{} {}", c.slack, t("days_short")),
-                            if c.slack <= 0 { theme::danger() } else { theme::ok() },
+                            if c.slack <= 0 {
+                                theme::danger()
+                            } else {
+                                theme::ok()
+                            },
                         );
                         row(
                             ui,
                             t("kpi_critical"),
-                            if c.critical { t("yes").to_string() } else { t("no").to_string() },
-                            if c.critical { theme::danger() } else { theme::muted() },
+                            if c.critical {
+                                t("yes").to_string()
+                            } else {
+                                t("no").to_string()
+                            },
+                            if c.critical {
+                                theme::danger()
+                            } else {
+                                theme::muted()
+                            },
                         );
                         if app.progress.overdue.contains(&id) {
                             ui.add_space(4.0);
@@ -1422,7 +1557,12 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
 
                 // Колонка 3 — связи
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(t("insp_links")).size(13.0).strong().color(theme::accent()));
+                    ui.label(
+                        RichText::new(t("insp_links"))
+                            .size(13.0)
+                            .strong()
+                            .color(theme::accent()),
+                    );
                     ui.add_space(4.0);
                     egui::ScrollArea::vertical()
                         .max_height(180.0)
@@ -1433,7 +1573,11 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                                 app.links.iter().filter(|l| l.pred == id).cloned().collect();
 
                             if !preds.is_empty() {
-                                ui.label(RichText::new(t("insp_preds")).color(theme::muted()).size(11.0));
+                                ui.label(
+                                    RichText::new(t("insp_preds"))
+                                        .color(theme::muted())
+                                        .size(11.0),
+                                );
                                 for l in preds {
                                     ui.horizontal(|ui| {
                                         ui.label(
@@ -1469,7 +1613,11 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                                         if ui
                                             .selectable_label(
                                                 false,
-                                                format!("{} {}", cand.wbs, truncate(&cand.name, 24)),
+                                                format!(
+                                                    "{} {}",
+                                                    cand.wbs,
+                                                    truncate(&cand.name, 24)
+                                                ),
                                             )
                                             .clicked()
                                         {
@@ -1479,7 +1627,11 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                                 });
                             if !succs.is_empty() {
                                 ui.add_space(4.0);
-                                ui.label(RichText::new(t("insp_succs")).color(theme::muted()).size(11.0));
+                                ui.label(
+                                    RichText::new(t("insp_succs"))
+                                        .color(theme::muted())
+                                        .size(11.0),
+                                );
                                 for l in succs {
                                     ui.horizontal(|ui| {
                                         ui.label(

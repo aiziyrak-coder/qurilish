@@ -71,7 +71,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     if add {
         let n = app.purchases.len() + 1;
-        app.db.insert_purchase(&new_purchase(app, pid, format!("X-{n:03}"), None));
+        app.db
+            .insert_purchase(&new_purchase(app, pid, format!("X-{n:03}"), None));
         app.reload_modules();
     }
     if from_requests {
@@ -110,11 +111,12 @@ fn create_from_requests(app: &App, pid: i64) -> usize {
     let mut n = 0;
     let mut number = app.purchases.len();
     let supply = app.supply();
-    for q in app
-        .requests
-        .iter()
-        .filter(|q| matches!(q.status, RequestStatus::Approved | RequestStatus::InPurchase))
-    {
+    for q in app.requests.iter().filter(|q| {
+        matches!(
+            q.status,
+            RequestStatus::Approved | RequestStatus::InPurchase
+        )
+    }) {
         let has = supply
             .iter()
             .find(|l| l.request_id == q.id)
@@ -137,7 +139,10 @@ fn create_from_requests(app: &App, pid: i64) -> usize {
         // Yetkazish sanasi ehtiyoj sanasidan kechikmasin.
         p.delivery_date = q.need_date;
         // Narx ma'lum bo'lsa — katalogdan olamiz, yo'q bo'lsa nol qoladi.
-        if let Some(m) = q.material_id.and_then(|id| app.materials.iter().find(|m| m.id == id)) {
+        if let Some(m) = q
+            .material_id
+            .and_then(|id| app.materials.iter().find(|m| m.id == id))
+        {
             p.price = m.price;
         }
         app.db.insert_purchase(&p);
@@ -239,14 +244,22 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             t("kpi_purchase_late"),
             late.to_string(),
             t("kpi_purchase_late_hint"),
-            if late == 0 { theme::ok() } else { theme::danger() },
+            if late == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_purchase_unposted"),
             waiting.to_string(),
             t("kpi_purchase_unposted_hint"),
-            if waiting == 0 { theme::ok() } else { theme::warn() },
+            if waiting == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
     });
 }
@@ -342,7 +355,9 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                         changed |= ui
                             .add_sized(
                                 [110.0, 22.0],
-                                egui::DragValue::new(&mut p.price).speed(100.0).range(0.0..=1e12),
+                                egui::DragValue::new(&mut p.price)
+                                    .speed(100.0)
+                                    .range(0.0..=1e12),
                             )
                             .changed();
                         cell_r(ui, 130.0, RichText::new(money(p.amount())).size(12.5));
@@ -379,13 +394,17 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             cell_l(
                                 ui,
                                 110.0,
-                                RichText::new(t("stock_pending")).size(11.0).color(theme::warn()),
+                                RichText::new(t("stock_pending"))
+                                    .size(11.0)
+                                    .color(theme::warn()),
                             );
                         } else if app.stock_moves.iter().any(|m| m.document == p.number) {
                             cell_l(
                                 ui,
                                 110.0,
-                                RichText::new(t("stock_posted")).size(11.0).color(theme::ok()),
+                                RichText::new(t("stock_posted"))
+                                    .size(11.0)
+                                    .color(theme::ok()),
                             );
                         } else {
                             cell_l(ui, 110.0, RichText::new(t("dash")).color(theme::muted()));
@@ -419,9 +438,13 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
             if !over.is_empty() {
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new(format!("{} {}", t("purchase_over_request"), over.join(", ")))
-                        .size(11.5)
-                        .color(theme::warn()),
+                    RichText::new(format!(
+                        "{} {}",
+                        t("purchase_over_request"),
+                        over.join(", ")
+                    ))
+                    .size(11.5)
+                    .color(theme::warn()),
                 );
             }
         });

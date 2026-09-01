@@ -25,6 +25,8 @@ enum Action {
     Issue(i64, IssueModule),
     EstimateItem(i64),
     Ppr(i64),
+    Unit(i64),
+    Deal(i64),
     Screen(Screen),
 }
 
@@ -181,7 +183,9 @@ fn collect(app: &App, query: &str) -> Vec<Hit> {
     for task in app
         .tasks
         .iter()
-        .filter(|x| norm(&x.name).contains(&q) || norm(&x.wbs) == q || norm(&x.responsible).contains(&q))
+        .filter(|x| {
+            norm(&x.name).contains(&q) || norm(&x.wbs) == q || norm(&x.responsible).contains(&q)
+        })
         .take(PER_KIND)
     {
         out.push(Hit {
@@ -213,7 +217,12 @@ fn collect(app: &App, query: &str) -> Vec<Hit> {
         out.push(Hit {
             kind: t("search_kind_issue"),
             title: issue.title.clone(),
-            subtitle: format!("{} · {} · {}", issue.code, issue.element, issue.status.label()),
+            subtitle: format!(
+                "{} · {} · {}",
+                issue.code,
+                issue.element,
+                issue.status.label()
+            ),
             color: issue.severity.color(),
             action: Action::Issue(issue.id, issue.module),
         });
@@ -235,7 +244,12 @@ fn collect(app: &App, query: &str) -> Vec<Hit> {
             } else {
                 el.mark.clone()
             },
-            subtitle: format!("{} · {} · {}", el.kind.label(), el.section.label(), el.sheet),
+            subtitle: format!(
+                "{} · {} · {}",
+                el.kind.label(),
+                el.section.label(),
+                el.sheet
+            ),
             color: theme::section_color(el.section.color()),
             action: Action::Element(el.id),
         });
@@ -277,6 +291,67 @@ fn collect(app: &App, query: &str) -> Vec<Hit> {
             subtitle: card.kind.label().to_string(),
             color: theme::ok(),
             action: Action::Ppr(card.id),
+        });
+    }
+
+    // ---- Kvartiralar: raqami, planirovkasi yoki blok nomi bo'yicha ----
+    for u in app
+        .units
+        .iter()
+        .filter(|u| {
+            let block = app
+                .blocks
+                .iter()
+                .find(|b| b.id == u.block_id)
+                .map(|b| b.name.clone())
+                .unwrap_or_default();
+            norm(&u.number) == q
+                || norm(&u.layout).contains(&q)
+                || norm(&block).contains(&q)
+                || norm(u.status.label()).contains(&q)
+        })
+        .take(PER_KIND)
+    {
+        let block = app
+            .blocks
+            .iter()
+            .find(|b| b.id == u.block_id)
+            .map(|b| b.name.clone())
+            .unwrap_or_default();
+        out.push(Hit {
+            kind: t("screen_sales"),
+            title: format!("{block} · {}", u.number),
+            subtitle: format!(
+                "{} {} · {} m² · {} · {}",
+                u.floor,
+                t("floor_short"),
+                super::materials::trim_num(u.area),
+                u.status.label(),
+                super::money(u.price())
+            ),
+            color: theme::accent(),
+            action: Action::Unit(u.id),
+        });
+    }
+
+    // ---- Shartnomalar: raqami yoki mijoz bo'yicha ----
+    for d in app
+        .deals
+        .iter()
+        .filter(|d| norm(&d.number).contains(&q) || norm(&d.client).contains(&q))
+        .take(PER_KIND)
+    {
+        out.push(Hit {
+            kind: t("screen_deals"),
+            title: format!("{} · {}", d.number, d.client),
+            subtitle: format!(
+                "{} · {} · {}",
+                d.status.label(),
+                d.pay_kind.label(),
+                super::money(d.total())
+            ),
+            color: theme::ok(),
+            action: Action::Deal(d.id),
         });
     }
 
@@ -349,6 +424,16 @@ fn apply(app: &mut App, action: Action) {
         Action::Ppr(id) => {
             app.screen = Screen::Ppr;
             app.selected_ppr = Some(id);
+        }
+        Action::Unit(id) => {
+            app.screen = Screen::Sales;
+            app.selected_unit = Some(id);
+            // Shaxmatka tanlangan kvartira turgan blokka o'tsin.
+            app.sales_block = app.units.iter().find(|u| u.id == id).map(|u| u.block_id);
+        }
+        Action::Deal(id) => {
+            app.screen = Screen::Deals;
+            app.selected_deal = Some(id);
         }
         Action::Screen(s) => app.screen = s,
     }

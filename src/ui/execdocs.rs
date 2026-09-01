@@ -91,34 +91,56 @@ fn kpis(ui: &mut egui::Ui, app: &App) {
     let overdue = need.iter().filter(|r| !r.exists && r.task_done).count();
 
     ui.horizontal_wrapped(|ui| {
-        stat_card(ui, t("kpi_docs_total"), total.to_string(), t("kpi_docs_hint"), theme::accent());
+        stat_card(
+            ui,
+            t("kpi_docs_total"),
+            total.to_string(),
+            t("kpi_docs_hint"),
+            theme::accent(),
+        );
         stat_card(
             ui,
             t("kpi_docs_signed"),
             signed.to_string(),
             t("kpi_docs_signed_hint"),
-            if signed == total && total > 0 { theme::ok() } else { theme::text() },
+            if signed == total && total > 0 {
+                theme::ok()
+            } else {
+                theme::text()
+            },
         );
         stat_card(
             ui,
             t("kpi_docs_review"),
             review.to_string(),
             t("kpi_docs_review_hint"),
-            if review == 0 { theme::muted() } else { theme::warn() },
+            if review == 0 {
+                theme::muted()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
             t("kpi_docs_missing"),
             missing.to_string(),
             t("kpi_docs_missing_hint"),
-            if missing == 0 { theme::ok() } else { theme::warn() },
+            if missing == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
             t("kpi_docs_overdue"),
             overdue.to_string(),
             t("kpi_docs_overdue_hint"),
-            if overdue == 0 { theme::ok() } else { theme::danger() },
+            if overdue == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
     });
 }
@@ -138,11 +160,7 @@ fn open_requirements(app: &App) -> Vec<crate::checks::RequiredDoc> {
 
 /// Talablar reyestri: qaysi ishga qaysi hujjat kerak va u qaysi holatda.
 /// Bosilganda o'sha tur bilan hujjat yaratiladi.
-fn required_panel(
-    ui: &mut egui::Ui,
-    app: &App,
-    w: f32,
-) -> Option<(i64, ExecDocKind)> {
+fn required_panel(ui: &mut egui::Ui, app: &App, w: f32) -> Option<(i64, ExecDocKind)> {
     let mut create_for = None;
     let items = open_requirements(app);
 
@@ -187,8 +205,7 @@ fn required_panel(
                         );
                         ui.vertical(|ui| {
                             ui.label(
-                                RichText::new(super::issues::truncate(&r.task_name, 24))
-                                    .size(12.0),
+                                RichText::new(super::issues::truncate(&r.task_name, 24)).size(12.0),
                             );
                             ui.label(
                                 RichText::new(r.kind.label())
@@ -270,11 +287,8 @@ fn list(ui: &mut egui::Ui, app: &mut App) {
                         changed |= ui
                             .add_sized([210.0, 22.0], egui::TextEdit::singleline(&mut d.name))
                             .changed();
-                        changed |= super::passport::date_edit(
-                            ui,
-                            &format!("ed{}", d.id),
-                            &mut d.date,
-                        );
+                        changed |=
+                            super::passport::date_edit(ui, &format!("ed{}", d.id), &mut d.date);
                         changed |= task_picker(ui, app, ("ed_task", d.id), &mut d.task_id, 220.0);
                         egui::ComboBox::from_id_salt(("ed_st", d.id))
                             .selected_text(d.status.label())
@@ -286,7 +300,10 @@ fn list(ui: &mut egui::Ui, app: &mut App) {
                                 }
                             });
                         changed |= ui
-                            .add_sized([150.0, 22.0], egui::TextEdit::singleline(&mut d.responsible))
+                            .add_sized(
+                                [150.0, 22.0],
+                                egui::TextEdit::singleline(&mut d.responsible),
+                            )
                             .changed();
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))

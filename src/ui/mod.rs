@@ -2,6 +2,7 @@
 
 mod aicheck;
 mod dashboard;
+mod deals;
 mod documents;
 mod estimate;
 mod execdocs;
@@ -14,6 +15,7 @@ mod passport;
 mod ppr;
 mod purchases;
 mod requests;
+mod sales;
 mod search;
 mod settings;
 mod warehouse;
@@ -35,9 +37,10 @@ pub fn install_fonts(ctx: &Context) {
     ];
     for path in candidates {
         if let Ok(bytes) = std::fs::read(path) {
-            fonts
-                .font_data
-                .insert("ui".to_owned(), std::sync::Arc::new(egui::FontData::from_owned(bytes)));
+            fonts.font_data.insert(
+                "ui".to_owned(),
+                std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+            );
             fonts
                 .families
                 .entry(FontFamily::Proportional)
@@ -88,18 +91,22 @@ pub fn install_theme(ctx: &Context) {
     style.spacing.item_spacing = egui::vec2(8.0, 7.0);
     style.spacing.button_padding = egui::vec2(10.0, 5.0);
 
-    style
-        .text_styles
-        .insert(egui::TextStyle::Heading, FontId::new(20.0, FontFamily::Proportional));
-    style
-        .text_styles
-        .insert(egui::TextStyle::Body, FontId::new(14.0, FontFamily::Proportional));
-    style
-        .text_styles
-        .insert(egui::TextStyle::Button, FontId::new(14.0, FontFamily::Proportional));
-    style
-        .text_styles
-        .insert(egui::TextStyle::Small, FontId::new(12.0, FontFamily::Proportional));
+    style.text_styles.insert(
+        egui::TextStyle::Heading,
+        FontId::new(20.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Body,
+        FontId::new(14.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Button,
+        FontId::new(14.0, FontFamily::Proportional),
+    );
+    style.text_styles.insert(
+        egui::TextStyle::Small,
+        FontId::new(12.0, FontFamily::Proportional),
+    );
     ctx.set_style(style);
 }
 
@@ -127,6 +134,8 @@ pub fn draw(ctx: &Context, app: &mut App) {
         Screen::Materials => materials::show(ui, app),
         Screen::Requests => requests::show(ui, app),
         Screen::Purchases => purchases::show(ui, app),
+        Screen::Sales => sales::show(ui, app),
+        Screen::Deals => deals::show(ui, app),
         Screen::Settings => settings::show(ui, app),
         other => stub(ui, other),
     });
@@ -147,8 +156,17 @@ fn top_bar(ctx: &Context, app: &mut App) {
         )
         .show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
-                ui.label(RichText::new("QURAi").size(20.0).strong().color(theme::accent()));
-                ui.label(RichText::new(t("app_subtitle")).size(12.0).color(theme::muted()));
+                ui.label(
+                    RichText::new("QURAi")
+                        .size(20.0)
+                        .strong()
+                        .color(theme::accent()),
+                );
+                ui.label(
+                    RichText::new(t("app_subtitle"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
                 ui.add_space(20.0);
 
                 ui.label(RichText::new(t("object")).color(theme::muted()));
@@ -249,7 +267,11 @@ fn nav_item(ui: &mut egui::Ui, screen: Screen, active: bool) -> egui::Response {
                 Align2::RIGHT_CENTER,
                 numeral,
                 egui::FontId::monospace(10.5),
-                if active { theme::accent() } else { theme::muted() },
+                if active {
+                    theme::accent()
+                } else {
+                    theme::muted()
+                },
             );
         }
 
@@ -353,13 +375,16 @@ fn side_bar(ctx: &Context, app: &mut App) {
                     ui.add_space(6.0);
                     let legend = |ui: &mut egui::Ui, filled: bool, c: Color32, text: &str| {
                         ui.horizontal(|ui| {
-                            let (r, _) =
-                                ui.allocate_exact_size(egui::vec2(14.0, 12.0), egui::Sense::hover());
+                            let (r, _) = ui
+                                .allocate_exact_size(egui::vec2(14.0, 12.0), egui::Sense::hover());
                             if filled {
                                 ui.painter().circle_filled(r.center(), 3.2, c);
                             } else {
-                                ui.painter()
-                                    .circle_stroke(r.center(), 3.2, Stroke::new(1.2_f32, c));
+                                ui.painter().circle_stroke(
+                                    r.center(),
+                                    3.2,
+                                    Stroke::new(1.2_f32, c),
+                                );
                             }
                             ui.label(RichText::new(text).size(10.5).color(theme::muted()));
                         });
@@ -373,7 +398,10 @@ fn side_bar(ctx: &Context, app: &mut App) {
             ui.separator();
             ui.add_space(6.0);
             if ui
-                .add_sized([ui.available_width(), 30.0], egui::Button::new(t("new_object")))
+                .add_sized(
+                    [ui.available_width(), 30.0],
+                    egui::Button::new(t("new_object")),
+                )
                 .clicked()
             {
                 new_project(app);
@@ -559,7 +587,9 @@ fn dialogs(ctx: &Context, app: &mut App) {
 }
 
 fn toast(ctx: &Context, app: &mut App) {
-    let Some((msg, ttl)) = app.toast.clone() else { return };
+    let Some((msg, ttl)) = app.toast.clone() else {
+        return;
+    };
     let dt = ctx.input(|i| i.stable_dt).min(0.1);
     let left = ttl - dt;
     if left <= 0.0 {
@@ -628,7 +658,12 @@ pub fn card_frame(ui: &mut egui::Ui, title: &str, width: f32, add: impl FnOnce(&
         .show(ui, |ui| {
             ui.vertical(|ui| {
                 ui.set_width(width);
-                ui.label(RichText::new(title).size(15.0).strong().color(theme::accent()));
+                ui.label(
+                    RichText::new(title)
+                        .size(15.0)
+                        .strong()
+                        .color(theme::accent()),
+                );
                 ui.add_space(8.0);
                 add(ui);
             });
@@ -675,11 +710,17 @@ pub fn open_path(path: &str) {
 /// bo'lmasligi mumkin — kvadratcha chiqib qolardi.
 pub fn draw_check(p: &egui::Painter, c: egui::Pos2, r: f32, color: Color32, width: f32) {
     p.line_segment(
-        [pos2(c.x - r, c.y + r * 0.1), pos2(c.x - r * 0.25, c.y + r * 0.75)],
+        [
+            pos2(c.x - r, c.y + r * 0.1),
+            pos2(c.x - r * 0.25, c.y + r * 0.75),
+        ],
         Stroke::new(width, color),
     );
     p.line_segment(
-        [pos2(c.x - r * 0.25, c.y + r * 0.75), pos2(c.x + r, c.y - r * 0.65)],
+        [
+            pos2(c.x - r * 0.25, c.y + r * 0.75),
+            pos2(c.x + r, c.y - r * 0.65),
+        ],
         Stroke::new(width, color),
     );
 }

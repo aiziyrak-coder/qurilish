@@ -52,7 +52,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.requests.is_empty() {
         ui.add_space(50.0);
         ui.vertical_centered(|ui| {
-            ui.label(RichText::new(t("requests_empty")).color(theme::muted()).size(15.0));
+            ui.label(
+                RichText::new(t("requests_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
         });
     } else {
         table(ui, app, &supply);
@@ -60,7 +64,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     if add {
         let n = app.requests.len() + 1;
-        app.db.insert_request(&new_request(pid, app.today, format!("Z-{n:03}")));
+        app.db
+            .insert_request(&new_request(pid, app.today, format!("Z-{n:03}")));
         app.reload_modules();
     }
     if from_stock {
@@ -117,7 +122,11 @@ fn create_from_stock(app: &App, pid: i64) -> usize {
         // Minimal zaxiraga yetkazish uchun yetishmaydigan miqdor.
         q.qty = (m.min_stock - line.balance).max(0.0);
         q.unit = m.unit.clone();
-        q.priority = if line.negative { Priority::Urgent } else { Priority::High };
+        q.priority = if line.negative {
+            Priority::Urgent
+        } else {
+            Priority::High
+        };
         app.db.insert_request(&q);
         n += 1;
     }
@@ -136,11 +145,13 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, supply: &[SupplyLine]) {
         .requests
         .iter()
         .filter(|q| {
-            matches!(q.status, RequestStatus::Approved | RequestStatus::InPurchase)
-                && supply
-                    .iter()
-                    .find(|l| l.request_id == q.id)
-                    .is_some_and(|l| !l.covered)
+            matches!(
+                q.status,
+                RequestStatus::Approved | RequestStatus::InPurchase
+            ) && supply
+                .iter()
+                .find(|l| l.request_id == q.id)
+                .is_some_and(|l| !l.covered)
         })
         .count();
 
@@ -164,14 +175,22 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, supply: &[SupplyLine]) {
             t("kpi_req_late"),
             late.to_string(),
             t("kpi_req_late_hint"),
-            if late == 0 { theme::ok() } else { theme::danger() },
+            if late == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_req_uncovered"),
             uncovered.to_string(),
             t("kpi_req_uncovered_hint"),
-            if uncovered == 0 { theme::ok() } else { theme::warn() },
+            if uncovered == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
     });
 }
@@ -232,7 +251,8 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                         changed |= ui
                             .add_sized([76.0, 22.0], egui::TextEdit::singleline(&mut q.number))
                             .changed();
-                        changed |= super::passport::date_edit(ui, &format!("rq{}", q.id), &mut q.date);
+                        changed |=
+                            super::passport::date_edit(ui, &format!("rq{}", q.id), &mut q.date);
 
                         egui::ComboBox::from_id_salt(("rq_st", q.id))
                             .selected_text(
@@ -252,8 +272,9 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                             .width(96.0)
                             .show_ui(ui, |ui| {
                                 for p in Priority::ALL {
-                                    changed |=
-                                        ui.selectable_value(&mut q.priority, *p, p.label()).changed();
+                                    changed |= ui
+                                        .selectable_value(&mut q.priority, *p, p.label())
+                                        .changed();
                                 }
                             });
                         coverage_cell(ui, supply.iter().find(|l| l.request_id == q.id), q.qty);
@@ -368,10 +389,18 @@ fn coverage_cell(ui: &mut egui::Ui, line: Option<&SupplyLine>, need: f64) {
         |ui| {
             ui.set_min_width(150.0);
             if l.purchases == 0 {
-                ui.label(RichText::new(t("no_purchase")).size(11.0).color(theme::muted()));
+                ui.label(
+                    RichText::new(t("no_purchase"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
                 return;
             }
-            let color = if l.covered { theme::ok() } else { theme::warn() };
+            let color = if l.covered {
+                theme::ok()
+            } else {
+                theme::warn()
+            };
             ui.label(
                 RichText::new(format!("{} / {}", trim_num(l.ordered), trim_num(need)))
                     .size(11.5)
@@ -380,9 +409,13 @@ fn coverage_cell(ui: &mut egui::Ui, line: Option<&SupplyLine>, need: f64) {
             .on_hover_text(format!("{} {}", t("kpi_purchase_total"), money(l.amount)));
             if l.delivered > 0.0 {
                 ui.label(
-                    RichText::new(format!("({} {})", trim_num(l.delivered), t("delivered_short")))
-                        .size(10.5)
-                        .color(theme::muted()),
+                    RichText::new(format!(
+                        "({} {})",
+                        trim_num(l.delivered),
+                        t("delivered_short")
+                    ))
+                    .size(10.5)
+                    .color(theme::muted()),
                 );
             }
             if l.planned_after_need {

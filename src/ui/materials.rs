@@ -125,21 +125,33 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             t("kpi_below_min"),
             below.to_string(),
             t("kpi_below_min_hint"),
-            if below == 0 { theme::ok() } else { theme::danger() },
+            if below == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_cert_expired"),
             expired.to_string(),
             &format!("{soon} {}", t("kpi_cert_soon")),
-            if expired == 0 && soon == 0 { theme::ok() } else { theme::danger() },
+            if expired == 0 && soon == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_no_cert"),
             no_cert.to_string(),
             t("kpi_no_cert_hint"),
-            if no_cert == 0 { theme::ok() } else { theme::warn() },
+            if no_cert == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
     });
 }
@@ -218,11 +230,8 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                                 changed = true;
                             }
                             if let Some(mut d) = m.cert_until {
-                                if super::passport::date_edit(
-                                    ui,
-                                    &format!("cert{}", m.id),
-                                    &mut d,
-                                ) {
+                                if super::passport::date_edit(ui, &format!("cert{}", m.id), &mut d)
+                                {
                                     m.cert_until = Some(d);
                                     changed = true;
                                 }
@@ -246,48 +255,50 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                         changed |= ui
                             .add_sized(
                                 [80.0, 22.0],
-                                egui::DragValue::new(&mut m.min_stock).speed(1.0).range(0.0..=1e9),
+                                egui::DragValue::new(&mut m.min_stock)
+                                    .speed(1.0)
+                                    .range(0.0..=1e9),
                             )
                             .changed();
                         changed |= ui
                             .add_sized(
                                 [100.0, 22.0],
-                                egui::DragValue::new(&mut m.price).speed(100.0).range(0.0..=1e12),
+                                egui::DragValue::new(&mut m.price)
+                                    .speed(100.0)
+                                    .range(0.0..=1e12),
                             )
                             .changed();
 
                         // Ombordagi qoldiq — faqat ko'rsatiladi, bu yerda tahrirlanmaydi.
                         let line = lines.iter().find(|l| l.material_id == m.id);
-                        ui.horizontal(|ui| {
-                            match line {
-                                Some(l) => {
-                                    let color = if l.negative {
-                                        theme::danger()
-                                    } else if l.below_min {
-                                        theme::warn()
-                                    } else {
-                                        theme::text()
-                                    };
-                                    ui.add_sized(
-                                        [76.0, 18.0],
-                                        egui::Label::new(
-                                            RichText::new(trim_num(l.balance))
-                                                .size(12.0)
-                                                .color(color)
-                                                .strong(),
-                                        ),
+                        ui.horizontal(|ui| match line {
+                            Some(l) => {
+                                let color = if l.negative {
+                                    theme::danger()
+                                } else if l.below_min {
+                                    theme::warn()
+                                } else {
+                                    theme::text()
+                                };
+                                ui.add_sized(
+                                    [76.0, 18.0],
+                                    egui::Label::new(
+                                        RichText::new(trim_num(l.balance))
+                                            .size(12.0)
+                                            .color(color)
+                                            .strong(),
+                                    ),
+                                );
+                                if l.below_min {
+                                    ui.label(
+                                        RichText::new(t("below_min_short"))
+                                            .size(10.0)
+                                            .color(theme::warn()),
                                     );
-                                    if l.below_min {
-                                        ui.label(
-                                            RichText::new(t("below_min_short"))
-                                                .size(10.0)
-                                                .color(theme::warn()),
-                                        );
-                                    }
                                 }
-                                None => {
-                                    ui.label(RichText::new(t("dash")).color(theme::muted()));
-                                }
+                            }
+                            None => {
+                                ui.label(RichText::new(t("dash")).color(theme::muted()));
                             }
                         });
 
@@ -370,7 +381,11 @@ pub fn stock_bar(ui: &mut egui::Ui, balance: f64, min_stock: f64, width: f32) {
     let p = ui.painter();
     p.rect_filled(rect, 3.0, theme::track());
     // Shkala: minimal zaxiraning ikki barobari to'liq kenglik deb olinadi.
-    let scale = if min_stock > 0.0 { min_stock * 2.0 } else { balance.max(1.0) };
+    let scale = if min_stock > 0.0 {
+        min_stock * 2.0
+    } else {
+        balance.max(1.0)
+    };
     let frac = (balance.max(0.0) / scale).clamp(0.0, 1.0) as f32;
     let color = if balance < 0.0 {
         theme::danger()

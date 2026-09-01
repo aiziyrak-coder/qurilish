@@ -82,28 +82,44 @@ fn action_tab(ui: &mut egui::Ui, app: &mut App) {
             t("act_open"),
             open.len().to_string(),
             t("act_open_hint"),
-            if open.is_empty() { theme::ok() } else { theme::accent() },
+            if open.is_empty() {
+                theme::ok()
+            } else {
+                theme::accent()
+            },
         );
         stat_card(
             ui,
             t("act_critical"),
             crit.to_string(),
             t("act_critical_hint"),
-            if crit == 0 { theme::ok() } else { theme::danger() },
+            if crit == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("act_with_deadline"),
             format!("{with_deadline} / {}", open.len()),
             t("act_with_deadline_hint"),
-            if with_deadline == open.len() { theme::ok() } else { theme::warn() },
+            if with_deadline == open.len() {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
             t("act_overdue"),
             overdue.to_string(),
             t("act_overdue_hint"),
-            if overdue == 0 { theme::ok() } else { theme::danger() },
+            if overdue == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
     });
     ui.add_space(10.0);
@@ -131,7 +147,9 @@ fn action_tab(ui: &mut egui::Ui, app: &mut App) {
     }
     // Kritik xatosi ko'p bo'lgan mas'ul yuqorida.
     groups.sort_by_key(|(_, v)| {
-        -(v.iter().filter(|i| i.severity == Severity::Critical).count() as i64)
+        -(v.iter()
+            .filter(|i| i.severity == Severity::Critical)
+            .count() as i64)
     });
 
     egui::ScrollArea::vertical()
@@ -139,7 +157,10 @@ fn action_tab(ui: &mut egui::Ui, app: &mut App) {
         .show(ui, |ui| {
             let w = (ui.available_width() - 26.0).min(1020.0);
             for (who, items) in &groups {
-                let crit_n = items.iter().filter(|i| i.severity == Severity::Critical).count();
+                let crit_n = items
+                    .iter()
+                    .filter(|i| i.severity == Severity::Critical)
+                    .count();
                 let title = format!("{who} — {} {}", items.len(), t("act_items"));
                 card_frame(ui, &title, w, |ui| {
                     if crit_n > 0 {
@@ -249,7 +270,11 @@ fn graph_tab(ui: &mut egui::Ui, app: &mut App) {
     }
 
     ui.horizontal(|ui| {
-        ui.label(RichText::new(t("graph_hint")).size(11.5).color(theme::muted()));
+        ui.label(
+            RichText::new(t("graph_hint"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
     });
     ui.add_space(6.0);
 
@@ -335,11 +360,7 @@ fn graph_tab(ui: &mut egui::Ui, app: &mut App) {
                     let dir = (to - from).normalized();
                     let n = egui::vec2(-dir.y, dir.x);
                     p.add(egui::Shape::convex_polygon(
-                        vec![
-                            to,
-                            to - dir * 8.0 + n * 3.5,
-                            to - dir * 8.0 - n * 3.5,
-                        ],
+                        vec![to, to - dir * 8.0 + n * 3.5, to - dir * 8.0 - n * 3.5],
                         color,
                         Stroke::NONE,
                     ));
@@ -355,7 +376,11 @@ fn graph_tab(ui: &mut egui::Ui, app: &mut App) {
                 p.rect_filled(
                     node,
                     5.0,
-                    if active { base.gamma_multiply(0.35) } else { base.gamma_multiply(0.16) },
+                    if active {
+                        base.gamma_multiply(0.35)
+                    } else {
+                        base.gamma_multiply(0.16)
+                    },
                 );
                 p.rect_stroke(
                     node,
@@ -398,7 +423,11 @@ fn graph_tab(ui: &mut egui::Ui, app: &mut App) {
 
     if let Some(id) = clicked {
         // Ikkinchi marta bosilsa — tanlov bekor qilinadi.
-        app.selected_element = if app.selected_element == Some(id) { None } else { Some(id) };
+        app.selected_element = if app.selected_element == Some(id) {
+            None
+        } else {
+            Some(id)
+        };
     }
 }
 
@@ -508,21 +537,23 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
                                     } else {
                                         el.mark.clone()
                                     };
-                                    let lbl = egui::Label::new(
-                                        RichText::new(mark)
-                                            .size(12.0)
-                                            .color(if sel { theme::accent() } else { theme::text() }),
-                                    )
-                                    .sense(egui::Sense::click());
+                                    let lbl =
+                                        egui::Label::new(RichText::new(mark).size(12.0).color(
+                                            if sel { theme::accent() } else { theme::text() },
+                                        ))
+                                        .sense(egui::Sense::click());
                                     if ui.add_sized([100.0, 17.0], lbl).clicked() {
                                         app.selected_element = Some(el.id);
                                     }
-                                    let cell = |ui: &mut egui::Ui, w: f32, s: String, c: Color32| {
-                                        ui.add_sized(
-                                            [w, 17.0],
-                                            egui::Label::new(RichText::new(s).size(12.0).color(c)),
-                                        );
-                                    };
+                                    let cell =
+                                        |ui: &mut egui::Ui, w: f32, s: String, c: Color32| {
+                                            ui.add_sized(
+                                                [w, 17.0],
+                                                egui::Label::new(
+                                                    RichText::new(s).size(12.0).color(c),
+                                                ),
+                                            );
+                                        };
                                     cell(ui, 110.0, el.kind.label().to_string(), theme::muted());
                                     cell(
                                         ui,
@@ -621,17 +652,18 @@ fn element_editor(ui: &mut egui::Ui, app: &mut App, height: f32) -> Option<i64> 
                     );
                     ui.add_space(6.0);
 
-                    let row = |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [110.0, 20.0],
-                                egui::Label::new(
-                                    RichText::new(label).color(theme::muted()).size(12.0),
-                                ),
-                            );
-                            add(ui);
-                        });
-                    };
+                    let row =
+                        |ui: &mut egui::Ui, label: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+                            ui.horizontal(|ui| {
+                                ui.add_sized(
+                                    [110.0, 20.0],
+                                    egui::Label::new(
+                                        RichText::new(label).color(theme::muted()).size(12.0),
+                                    ),
+                                );
+                                add(ui);
+                            });
+                        };
 
                     row(ui, t("col_section_short"), &mut |ui| {
                         egui::ComboBox::from_id_salt("el_sec")
@@ -670,14 +702,22 @@ fn element_editor(ui: &mut egui::Ui, app: &mut App, height: f32) -> Option<i64> 
                         dirty |= ui
                             .add(egui::TextEdit::singleline(&mut el.axis).desired_width(90.0))
                             .changed();
-                        ui.label(RichText::new(t("col_level")).color(theme::muted()).size(12.0));
+                        ui.label(
+                            RichText::new(t("col_level"))
+                                .color(theme::muted())
+                                .size(12.0),
+                        );
                         dirty |= ui
                             .add(egui::TextEdit::singleline(&mut el.level).desired_width(70.0))
                             .changed();
                     });
                     row(ui, t("col_size"), &mut |ui| {
                         dirty |= ui
-                            .add(egui::DragValue::new(&mut el.size).speed(1.0).range(0.0..=1e9))
+                            .add(
+                                egui::DragValue::new(&mut el.size)
+                                    .speed(1.0)
+                                    .range(0.0..=1e9),
+                            )
                             .changed();
                         dirty |= ui
                             .add(
@@ -727,7 +767,11 @@ fn element_editor(ui: &mut egui::Ui, app: &mut App, height: f32) -> Option<i64> 
                     ui.add_space(4.0);
                     let impact = checks::impact(&app.elements, &app.element_links, id);
                     if impact.is_empty() {
-                        ui.label(RichText::new(t("impact_empty")).color(theme::muted()).size(12.0));
+                        ui.label(
+                            RichText::new(t("impact_empty"))
+                                .color(theme::muted())
+                                .size(12.0),
+                        );
                     } else {
                         ui.horizontal_wrapped(|ui| {
                             for (sec, n) in impact {
@@ -903,7 +947,11 @@ fn relations_tab(ui: &mut egui::Ui, app: &mut App) {
 fn norms_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut save: Option<(String, Norm)> = None;
 
-    ui.label(RichText::new(t("norm_registry_hint")).color(theme::muted()).size(12.0));
+    ui.label(
+        RichText::new(t("norm_registry_hint"))
+            .color(theme::muted())
+            .size(12.0),
+    );
     ui.add_space(8.0);
 
     egui::ScrollArea::vertical()
@@ -915,30 +963,35 @@ fn norms_tab(ui: &mut egui::Ui, app: &mut App) {
                 let header = format!(
                     "{}  ·  {}",
                     t(name_key),
-                    if filled { t("norm_filled") } else { t("norm_empty") }
+                    if filled {
+                        t("norm_filled")
+                    } else {
+                        t("norm_empty")
+                    }
                 );
-                egui::CollapsingHeader::new(
-                    RichText::new(header)
-                        .size(13.0)
-                        .color(if filled { theme::ok() } else { theme::warn() }),
-                )
+                egui::CollapsingHeader::new(RichText::new(header).size(13.0).color(if filled {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                }))
                 .id_salt(*key)
                 .show(ui, |ui| {
                     let mut changed = false;
-                    let row = |ui: &mut egui::Ui,
-                               label: &str,
-                               add: &mut dyn FnMut(&mut egui::Ui) -> bool| {
-                        ui.horizontal(|ui| {
-                            ui.add_sized(
-                                [130.0, 20.0],
-                                egui::Label::new(
-                                    RichText::new(label).color(theme::muted()).size(12.0),
-                                ),
-                            );
-                            add(ui)
-                        })
-                        .inner
-                    };
+                    let row =
+                        |ui: &mut egui::Ui,
+                         label: &str,
+                         add: &mut dyn FnMut(&mut egui::Ui) -> bool| {
+                            ui.horizontal(|ui| {
+                                ui.add_sized(
+                                    [130.0, 20.0],
+                                    egui::Label::new(
+                                        RichText::new(label).color(theme::muted()).size(12.0),
+                                    ),
+                                );
+                                add(ui)
+                            })
+                            .inner
+                        };
                     changed |= row(ui, t("norm_doc"), &mut |ui| {
                         ui.add(
                             egui::TextEdit::singleline(&mut n.doc)

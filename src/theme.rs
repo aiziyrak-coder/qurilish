@@ -62,79 +62,127 @@ fn pick(light: Color32, dark: Color32) -> Color32 {
 
 /// Sahifa foni.
 pub fn bg() -> Color32 {
-    pick(Color32::from_rgb(242, 244, 247), Color32::from_rgb(24, 26, 31))
+    pick(
+        Color32::from_rgb(242, 244, 247),
+        Color32::from_rgb(24, 26, 31),
+    )
 }
 
 /// Yuqori va yon panel.
 pub fn panel() -> Color32 {
-    pick(Color32::from_rgb(255, 255, 255), Color32::from_rgb(31, 34, 41))
+    pick(
+        Color32::from_rgb(255, 255, 255),
+        Color32::from_rgb(31, 34, 41),
+    )
 }
 
 /// Kartochka foni.
 pub fn card() -> Color32 {
-    pick(Color32::from_rgb(255, 255, 255), Color32::from_rgb(38, 42, 51))
+    pick(
+        Color32::from_rgb(255, 255, 255),
+        Color32::from_rgb(38, 42, 51),
+    )
 }
 
 /// Chegara chiziqlari.
 pub fn line() -> Color32 {
-    pick(Color32::from_rgb(219, 224, 231), Color32::from_rgb(55, 60, 71))
+    pick(
+        Color32::from_rgb(219, 224, 231),
+        Color32::from_rgb(55, 60, 71),
+    )
 }
 
 /// Asosiy matn.
 pub fn text() -> Color32 {
-    pick(Color32::from_rgb(27, 32, 39), Color32::from_rgb(226, 229, 235))
+    pick(
+        Color32::from_rgb(27, 32, 39),
+        Color32::from_rgb(226, 229, 235),
+    )
 }
 
 /// Ikkilamchi matn.
 pub fn muted() -> Color32 {
-    pick(Color32::from_rgb(102, 112, 133), Color32::from_rgb(146, 154, 168))
+    pick(
+        Color32::from_rgb(102, 112, 133),
+        Color32::from_rgb(146, 154, 168),
+    )
 }
 
 /// Urg'u rangi.
 pub fn accent() -> Color32 {
-    pick(Color32::from_rgb(37, 99, 235), Color32::from_rgb(96, 165, 250))
+    pick(
+        Color32::from_rgb(37, 99, 235),
+        Color32::from_rgb(96, 165, 250),
+    )
 }
 
 pub fn ok() -> Color32 {
-    pick(Color32::from_rgb(21, 128, 71), Color32::from_rgb(74, 190, 130))
+    pick(
+        Color32::from_rgb(21, 128, 71),
+        Color32::from_rgb(74, 190, 130),
+    )
 }
 
 pub fn warn() -> Color32 {
-    pick(Color32::from_rgb(176, 104, 0), Color32::from_rgb(226, 168, 62))
+    pick(
+        Color32::from_rgb(176, 104, 0),
+        Color32::from_rgb(226, 168, 62),
+    )
 }
 
 pub fn danger() -> Color32 {
-    pick(Color32::from_rgb(198, 40, 40), Color32::from_rgb(230, 96, 88))
+    pick(
+        Color32::from_rgb(198, 40, 40),
+        Color32::from_rgb(230, 96, 88),
+    )
 }
 
 /// Diagramma maydonining foni.
 pub fn canvas() -> Color32 {
-    pick(Color32::from_rgb(255, 255, 255), Color32::from_rgb(20, 22, 26))
+    pick(
+        Color32::from_rgb(255, 255, 255),
+        Color32::from_rgb(20, 22, 26),
+    )
 }
 
 /// Jadvaldagi toq qatorlar.
 pub fn row_alt() -> Color32 {
-    pick(Color32::from_rgb(247, 249, 251), Color32::from_rgb(26, 28, 34))
+    pick(
+        Color32::from_rgb(247, 249, 251),
+        Color32::from_rgb(26, 28, 34),
+    )
 }
 
 /// Qatorlar orasidagi chiziq.
 pub fn row_line() -> Color32 {
-    pick(Color32::from_rgb(233, 237, 242), Color32::from_rgb(40, 44, 52))
+    pick(
+        Color32::from_rgb(233, 237, 242),
+        Color32::from_rgb(40, 44, 52),
+    )
 }
 
 /// Dam olish kunlari foni.
 pub fn weekend() -> Color32 {
-    pick(Color32::from_rgb(243, 245, 249), Color32::from_rgb(28, 30, 36))
+    pick(
+        Color32::from_rgb(243, 245, 249),
+        Color32::from_rgb(28, 30, 36),
+    )
 }
 
 /// Bog'lanish strelkalari.
 pub fn arrow() -> Color32 {
-    pick(Color32::from_rgb(140, 149, 163), Color32::from_rgb(105, 115, 132))
+    pick(
+        Color32::from_rgb(140, 149, 163),
+        Color32::from_rgb(105, 115, 132),
+    )
 }
 
 /// Progress-polosaning bo'sh qismi.
 pub fn track() -> Color32 {
-    pick(Color32::from_rgb(230, 234, 240), Color32::from_rgb(45, 49, 58))
+    pick(
+        Color32::from_rgb(230, 234, 240),
+        Color32::from_rgb(45, 49, 58),
+    )
 }
 
 /// Gant polosasidagi yozuv rangi.

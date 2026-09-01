@@ -44,7 +44,11 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
         ui.add_space(8.0);
 
         // --- Foto galereyasi ---
-        let photos: Vec<&Document> = app.documents.iter().filter(|d| is_photo(&d.format)).collect();
+        let photos: Vec<&Document> = app
+            .documents
+            .iter()
+            .filter(|d| is_photo(&d.format))
+            .collect();
         if !photos.is_empty() {
             ui.label(
                 RichText::new(t("photos"))
@@ -72,8 +76,10 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                                 open_path(&d.path);
                             }
                         } else {
-                            let (rect, _) =
-                                ui.allocate_exact_size(egui::vec2(148.0, 100.0), egui::Sense::hover());
+                            let (rect, _) = ui.allocate_exact_size(
+                                egui::vec2(148.0, 100.0),
+                                egui::Sense::hover(),
+                            );
                             ui.painter().rect_filled(rect, 4.0, theme::track());
                             ui.painter().text(
                                 rect.center(),
@@ -135,9 +141,7 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                     });
                 ui.add_sized(
                     [100.0, 22.0],
-                    egui::Label::new(
-                        RichText::new(&d.added_at).size(11.0).color(theme::muted()),
-                    ),
+                    egui::Label::new(RichText::new(&d.added_at).size(11.0).color(theme::muted())),
                 );
                 if ui
                     .add_enabled(exists, egui::Button::new(t("open")))

@@ -32,6 +32,8 @@ Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo cli
 - [x] **XI Ombor** — kirim/chiqim/hisobdan chiqarish, qoldiq va uning qiymati
 - [x] **IX Arizalar** — ehtiyoj → ariza → tasdiqlash, qoplanish nazorati
 - [x] **X Xaridlar** — ariza → xarid → yetkazish → omborga kirim
+- [x] **XIX Sotuv — shaxmatka** — bloklar, qavatlar, kvartiralar, holatlar
+- [x] **XX Shartnomalar va to'lovlar** — to'lov turlari, grafik, qarz nazorati
 - [ ] **XIV Sifat** — kirish/operatsion/qabul nazorati  <- HOZIR SHU YERDA
 - [ ] **XV Xavfsizlik** — buzilishlar, instruktajlar, naryad-dopusk
 - [ ] **XIII Tabel** — ishchilar, soatlar, ishlarga taqsimot
@@ -62,6 +64,13 @@ Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo cli
   kirim harakatining hujjat raqami xarid raqami bo'ladi. Shu sabab «kirim
   qilinganmi?» degan savolga javob alohida bayroqsiz, ma'lumotning o'zidan chiqadi
   va tugma ikki marta bosilsa ham takror kirim bo'lmaydi.
+- **Sotuv bo'limi TZ dan tashqarida, ammo bir xil qoidalar bilan** — XIX-XX
+  raqamlari TZ ning I–XVIII sidan keyin davom etadi. Kvartira holati alohida
+  bayroq emas: u shartnoma holatidan kelib chiqadi (`sales::status_for`), shuning
+  uchun shaxmatkadagi rang va shartnoma hech qachon bir-biriga zid bo'lmaydi.
+- **To'lov grafigi shartnomadan quriladi** — `sales::build_schedule` boshlang'ich
+  to'lov va teng oylik ulushlarni hisoblaydi; yaxlitlash qoldig'i oxirgi oyga
+  qo'shiladi, shunda grafik summasi shartnoma summasiga tiyin-tiyin to'g'ri keladi.
 - **Baza migratsiyasi qo'shimcha ustunlar orqali** — eski baza ochilaveradi,
   ma'lumot yo'qolmaydi (test bilan qoplangan).
 

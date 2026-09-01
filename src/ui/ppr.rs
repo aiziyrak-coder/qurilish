@@ -84,7 +84,11 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
         ui.separator();
 
         // Mavjud resurs: yetarlilik shu qiymatga nisbatan hisoblanadi.
-        ui.label(RichText::new(t("avail_workers")).color(theme::muted()).size(12.0));
+        ui.label(
+            RichText::new(t("avail_workers"))
+                .color(theme::muted())
+                .size(12.0),
+        );
         settings_changed |= ui
             .add(
                 egui::DragValue::new(&mut app.settings.avail_workers)
@@ -92,7 +96,11 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
                     .speed(1.0),
             )
             .changed();
-        ui.label(RichText::new(t("avail_machines")).color(theme::muted()).size(12.0));
+        ui.label(
+            RichText::new(t("avail_machines"))
+                .color(theme::muted())
+                .size(12.0),
+        );
         settings_changed |= ui
             .add(
                 egui::DragValue::new(&mut app.settings.avail_machines)
@@ -164,7 +172,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         .collect();
     let tasks_n = app.tasks.len();
     let cov_n = app.tasks.iter().filter(|x| covered.contains(&x.id)).count();
-    let cov_pct = if tasks_n == 0 { 0.0 } else { cov_n as f32 / tasks_n as f32 * 100.0 };
+    let cov_pct = if tasks_n == 0 {
+        0.0
+    } else {
+        cov_n as f32 / tasks_n as f32 * 100.0
+    };
 
     // Kritik yo'l qoplanishi — eng muhim ko'rsatkich.
     let crit: Vec<i64> = app
@@ -194,21 +206,33 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             t("kpi_ppr_cards"),
             total.to_string(),
             &format!("{approved} {}", t("kpi_ppr_approved")),
-            if total > 0 && approved == total { theme::ok() } else { theme::accent() },
+            if total > 0 && approved == total {
+                theme::ok()
+            } else {
+                theme::accent()
+            },
         );
         stat_card(
             ui,
             t("kpi_ppr_coverage"),
             format!("{cov_pct:.0} %"),
             &format!("{cov_n} / {tasks_n} {}", t("tasks_short")),
-            if cov_pct >= 99.0 { theme::ok() } else { theme::warn() },
+            if cov_pct >= 99.0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
             t("kpi_ppr_crit_cov"),
             format!("{crit_pct:.0} %"),
             &format!("{crit_cov} / {} {}", crit.len(), t("kpi_ppr_crit_tasks")),
-            if crit_pct >= 99.0 { theme::ok() } else { theme::danger() },
+            if crit_pct >= 99.0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
@@ -219,7 +243,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             } else {
                 t("avail_not_set").to_string()
             },
-            if aw > 0 && wpeak > aw { theme::danger() } else { theme::text() },
+            if aw > 0 && wpeak > aw {
+                theme::danger()
+            } else {
+                theme::text()
+            },
         );
         stat_card(
             ui,
@@ -230,7 +258,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             } else {
                 t("avail_not_set").to_string()
             },
-            if am > 0 && mpeak > am { theme::danger() } else { theme::text() },
+            if am > 0 && mpeak > am {
+                theme::danger()
+            } else {
+                theme::text()
+            },
         );
     });
 }
@@ -241,9 +273,17 @@ fn cards_tab(ui: &mut egui::Ui, app: &mut App) {
     if app.ppr_docs.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(60.0);
-            ui.label(RichText::new(t("ppr_empty")).color(theme::muted()).size(16.0));
+            ui.label(
+                RichText::new(t("ppr_empty"))
+                    .color(theme::muted())
+                    .size(16.0),
+            );
             ui.add_space(6.0);
-            ui.label(RichText::new(t("ppr_hint")).color(theme::muted()).size(12.0));
+            ui.label(
+                RichText::new(t("ppr_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
         });
         return;
     }
@@ -412,16 +452,21 @@ fn resources_tab(ui: &mut egui::Ui, app: &mut App) {
         ui.label(RichText::new(t("no_tasks")).color(theme::muted()));
         return;
     }
-    let has_data = app
-        .ppr_docs
-        .iter()
-        .any(|d| d.workers > 0 || d.machines > 0);
+    let has_data = app.ppr_docs.iter().any(|d| d.workers > 0 || d.machines > 0);
     if !has_data {
         ui.add_space(50.0);
         ui.vertical_centered(|ui| {
-            ui.label(RichText::new(t("res_no_data")).color(theme::muted()).size(15.0));
+            ui.label(
+                RichText::new(t("res_no_data"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
             ui.add_space(6.0);
-            ui.label(RichText::new(t("res_no_data_hint")).color(theme::muted()).size(12.0));
+            ui.label(
+                RichText::new(t("res_no_data_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
         });
         return;
     }
@@ -573,16 +618,16 @@ fn histogram(ui: &mut egui::Ui, app: &App, machines: bool, avail: i64, height: f
             .color(theme::danger()),
         );
     } else {
-        ui.label(
-            RichText::new(t("res_enough"))
-                .size(11.5)
-                .color(theme::ok()),
-        );
+        ui.label(RichText::new(t("res_enough")).size(11.5).color(theme::ok()));
     }
 }
 
 fn next_month(d: NaiveDate) -> NaiveDate {
-    let (y, m) = if d.month() == 12 { (d.year() + 1, 1) } else { (d.year(), d.month() + 1) };
+    let (y, m) = if d.month() == 12 {
+        (d.year() + 1, 1)
+    } else {
+        (d.year(), d.month() + 1)
+    };
     NaiveDate::from_ymd_opt(y, m, 1).unwrap_or(d)
 }
 
@@ -661,12 +706,19 @@ fn coverage_tab(ui: &mut egui::Ui, app: &mut App) {
                         let start = app
                             .schedule
                             .get(task.id)
-                            .map(|c| (origin + Duration::days(c.es)).format("%d.%m.%y").to_string())
+                            .map(|c| {
+                                (origin + Duration::days(c.es))
+                                    .format("%d.%m.%y")
+                                    .to_string()
+                            })
                             .unwrap_or_default();
                         ui.add_sized(
                             [74.0, 18.0],
                             egui::Label::new(
-                                RichText::new(start).size(11.5).color(theme::muted()).monospace(),
+                                RichText::new(start)
+                                    .size(11.5)
+                                    .color(theme::muted())
+                                    .monospace(),
                             ),
                         );
                         ui.add_sized(
@@ -684,13 +736,13 @@ fn coverage_tab(ui: &mut egui::Ui, app: &mut App) {
                                 ui.add_sized(
                                     [260.0, 18.0],
                                     egui::Label::new(
-                                        RichText::new(t("cov_no_card"))
-                                            .size(12.0)
-                                            .color(if critical {
+                                        RichText::new(t("cov_no_card")).size(12.0).color(
+                                            if critical {
                                                 theme::danger()
                                             } else {
                                                 theme::muted()
-                                            }),
+                                            },
+                                        ),
                                     ),
                                 );
                                 if ui
@@ -728,11 +780,13 @@ fn coverage_tab(ui: &mut egui::Ui, app: &mut App) {
                                             issues::truncate(&card.name, 22)
                                         ))
                                         .size(12.0)
-                                        .color(if card.approved {
-                                            theme::text()
-                                        } else {
-                                            theme::warn()
-                                        }),
+                                        .color(
+                                            if card.approved {
+                                                theme::text()
+                                            } else {
+                                                theme::warn()
+                                            },
+                                        ),
                                     );
                                     // Qo'shimcha kartalar soni.
                                     if cards.len() > 1 {

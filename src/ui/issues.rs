@@ -24,9 +24,18 @@ pub fn severity_chip(ui: &mut egui::Ui, sev: Severity, width: f32) {
 /// Tekshiruv natijasi bo'yicha ko'rsatkichlar qatori.
 pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, String, &str)>) {
     let total = list.len();
-    let crit = list.iter().filter(|i| i.severity == Severity::Critical).count();
-    let major = list.iter().filter(|i| i.severity == Severity::Major).count();
-    let open = list.iter().filter(|i| i.status == IssueStatus::Open).count();
+    let crit = list
+        .iter()
+        .filter(|i| i.severity == Severity::Critical)
+        .count();
+    let major = list
+        .iter()
+        .filter(|i| i.severity == Severity::Major)
+        .count();
+    let open = list
+        .iter()
+        .filter(|i| i.status == IssueStatus::Open)
+        .count();
 
     ui.horizontal_wrapped(|ui| {
         stat_card(
@@ -41,21 +50,33 @@ pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, Strin
             t("kpi_issues_critical"),
             crit.to_string(),
             t("kpi_issues_critical_hint"),
-            if crit == 0 { theme::ok() } else { theme::danger() },
+            if crit == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_issues_major"),
             major.to_string(),
             t("kpi_issues_major_hint"),
-            if major == 0 { theme::ok() } else { theme::warn() },
+            if major == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
             t("kpi_issues_open"),
             open.to_string(),
             t("kpi_issues_open_hint"),
-            if open == 0 { theme::ok() } else { theme::accent() },
+            if open == 0 {
+                theme::ok()
+            } else {
+                theme::accent()
+            },
         );
         if let Some((title, value, hint)) = extra {
             stat_card(ui, title, value, hint, theme::text());
@@ -73,7 +94,11 @@ pub fn section_report(ui: &mut egui::Ui, list: &[&Issue]) {
     .id_salt("section_report")
     .show(ui, |ui| {
         if list.is_empty() {
-            ui.label(RichText::new(t("report_empty")).color(theme::muted()).size(12.0));
+            ui.label(
+                RichText::new(t("report_empty"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
             return;
         }
         let ranks = [
@@ -104,15 +129,16 @@ pub fn section_report(ui: &mut egui::Ui, list: &[&Issue]) {
                 ui.add_sized(
                     [60.0, 16.0],
                     egui::Label::new(
-                        RichText::new(t("report_total")).color(theme::muted()).size(11.0),
+                        RichText::new(t("report_total"))
+                            .color(theme::muted())
+                            .size(11.0),
                     ),
                 );
                 ui.end_row();
 
                 let mut totals = [0usize; 4];
                 for sec in Section::ALL {
-                    let in_sec: Vec<&&Issue> =
-                        list.iter().filter(|i| i.section == sec).collect();
+                    let in_sec: Vec<&&Issue> = list.iter().filter(|i| i.section == sec).collect();
                     if in_sec.is_empty() {
                         continue;
                     }
@@ -137,7 +163,11 @@ pub fn section_report(ui: &mut egui::Ui, list: &[&Issue]) {
                                     n.to_string()
                                 })
                                 .size(12.0)
-                                .color(if n == 0 { theme::muted() } else { sev.color() }),
+                                .color(if n == 0 {
+                                    theme::muted()
+                                } else {
+                                    sev.color()
+                                }),
                             ),
                         );
                     }
@@ -153,7 +183,9 @@ pub fn section_report(ui: &mut egui::Ui, list: &[&Issue]) {
                 ui.add_sized(
                     [70.0, 16.0],
                     egui::Label::new(
-                        RichText::new(t("report_total")).color(theme::muted()).size(12.0),
+                        RichText::new(t("report_total"))
+                            .color(theme::muted())
+                            .size(12.0),
                     ),
                 );
                 for n in totals {
@@ -436,9 +468,7 @@ pub fn issue_detail(ui: &mut egui::Ui, app: &mut App, height: f32) {
                         ui.horizontal(|ui| {
                             ui.add_sized(
                                 [120.0, 18.0],
-                                egui::Label::new(
-                                    RichText::new(k).color(theme::muted()).size(12.0),
-                                ),
+                                egui::Label::new(RichText::new(k).color(theme::muted()).size(12.0)),
                             );
                             ui.label(RichText::new(v).size(12.0));
                         });

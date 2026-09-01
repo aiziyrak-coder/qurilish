@@ -297,6 +297,67 @@ impl Db {
                 task_id INTEGER,
                 note TEXT NOT NULL DEFAULT ''
             );
+
+            CREATE TABLE IF NOT EXISTS block (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                name TEXT NOT NULL DEFAULT '',
+                floors INTEGER NOT NULL DEFAULT 9,
+                first_floor INTEGER NOT NULL DEFAULT 1,
+                note TEXT NOT NULL DEFAULT ''
+            );
+
+            CREATE TABLE IF NOT EXISTS unit (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                block_id INTEGER NOT NULL REFERENCES block(id) ON DELETE CASCADE,
+                number TEXT NOT NULL DEFAULT '',
+                floor INTEGER NOT NULL DEFAULT 1,
+                position INTEGER NOT NULL DEFAULT 1,
+                kind TEXT NOT NULL DEFAULT 'flat',
+                rooms INTEGER NOT NULL DEFAULT 0,
+                area REAL NOT NULL DEFAULT 0,
+                area_living REAL NOT NULL DEFAULT 0,
+                price_per_m2 REAL NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'free',
+                layout TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_unit_block ON unit(block_id);
+
+            CREATE TABLE IF NOT EXISTS deal (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                unit_id INTEGER NOT NULL REFERENCES unit(id) ON DELETE CASCADE,
+                number TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                client TEXT NOT NULL DEFAULT '',
+                phone TEXT NOT NULL DEFAULT '',
+                client_doc TEXT NOT NULL DEFAULT '',
+                pay_kind TEXT NOT NULL DEFAULT 'cash',
+                price REAL NOT NULL DEFAULT 0,
+                discount REAL NOT NULL DEFAULT 0,
+                prepayment REAL NOT NULL DEFAULT 0,
+                months INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'reserved',
+                manager TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_deal_unit ON deal(unit_id);
+
+            CREATE TABLE IF NOT EXISTS payment (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                deal_id INTEGER NOT NULL REFERENCES deal(id) ON DELETE CASCADE,
+                due TEXT NOT NULL,
+                planned REAL NOT NULL DEFAULT 0,
+                paid REAL NOT NULL DEFAULT 0,
+                paid_date TEXT,
+                kind TEXT NOT NULL DEFAULT 'cash',
+                document TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_pay_deal ON payment(deal_id);
             "#,
         )?;
 
@@ -312,11 +373,265 @@ impl Db {
         Ok(())
     }
 
+    // ---------- XIX–XX. Sotuv ----------
+
+    pub fn blocks(&self, pid: i64) -> Vec<Block> {
+        self.list(
+            "SELECT id,project_id,name,floors,first_floor,note
+             FROM block WHERE project_id=?1 ORDER BY name,id",
+            pid,
+            |r| {
+                Ok(Block {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    name: r.get(2)?,
+                    floors: r.get(3)?,
+                    first_floor: r.get(4)?,
+                    note: r.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_block(&self, b: &Block) -> i64 {
+        self.ins(
+            "INSERT INTO block (project_id,name,floors,first_floor,note)
+             VALUES (?1,?2,?3,?4,?5)",
+            params![b.project_id, b.name, b.floors, b.first_floor, b.note],
+        )
+    }
+
+    pub fn update_block(&self, b: &Block) -> bool {
+        self.upd(
+            "UPDATE block SET name=?2,floors=?3,first_floor=?4,note=?5 WHERE id=?1",
+            params![b.id, b.name, b.floors, b.first_floor, b.note],
+        )
+    }
+
+    pub fn units(&self, pid: i64) -> Vec<Unit> {
+        self.list(
+            "SELECT id,project_id,block_id,number,floor,position,kind,rooms,area,area_living,
+                    price_per_m2,status,layout,note
+             FROM unit WHERE project_id=?1 ORDER BY block_id,floor,position,id",
+            pid,
+            |r| {
+                Ok(Unit {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    block_id: r.get(2)?,
+                    number: r.get(3)?,
+                    floor: r.get(4)?,
+                    position: r.get(5)?,
+                    kind: UnitKind::parse(&r.get::<_, String>(6)?),
+                    rooms: r.get(7)?,
+                    area: r.get(8)?,
+                    area_living: r.get(9)?,
+                    price_per_m2: r.get(10)?,
+                    status: UnitStatus::parse(&r.get::<_, String>(11)?),
+                    layout: r.get(12)?,
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_unit(&self, u: &Unit) -> i64 {
+        self.ins(
+            "INSERT INTO unit (project_id,block_id,number,floor,position,kind,rooms,area,
+                               area_living,price_per_m2,status,layout,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                u.project_id,
+                u.block_id,
+                u.number,
+                u.floor,
+                u.position,
+                u.kind.code(),
+                u.rooms,
+                u.area,
+                u.area_living,
+                u.price_per_m2,
+                u.status.code(),
+                u.layout,
+                u.note
+            ],
+        )
+    }
+
+    pub fn update_unit(&self, u: &Unit) -> bool {
+        self.upd(
+            "UPDATE unit SET block_id=?2,number=?3,floor=?4,position=?5,kind=?6,rooms=?7,area=?8,
+                             area_living=?9,price_per_m2=?10,status=?11,layout=?12,note=?13
+             WHERE id=?1",
+            params![
+                u.id,
+                u.block_id,
+                u.number,
+                u.floor,
+                u.position,
+                u.kind.code(),
+                u.rooms,
+                u.area,
+                u.area_living,
+                u.price_per_m2,
+                u.status.code(),
+                u.layout,
+                u.note
+            ],
+        )
+    }
+
+    pub fn deals(&self, pid: i64) -> Vec<Deal> {
+        self.list(
+            "SELECT id,project_id,unit_id,number,date,client,phone,client_doc,pay_kind,price,
+                    discount,prepayment,months,status,manager,note
+             FROM deal WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(Deal {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    unit_id: r.get(2)?,
+                    number: r.get(3)?,
+                    date: date(&r.get::<_, String>(4)?),
+                    client: r.get(5)?,
+                    phone: r.get(6)?,
+                    client_doc: r.get(7)?,
+                    pay_kind: PayKind::parse(&r.get::<_, String>(8)?),
+                    price: r.get(9)?,
+                    discount: r.get(10)?,
+                    prepayment: r.get(11)?,
+                    months: r.get(12)?,
+                    status: DealStatus::parse(&r.get::<_, String>(13)?),
+                    manager: r.get(14)?,
+                    note: r.get(15)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_deal(&self, d: &Deal) -> i64 {
+        self.ins(
+            "INSERT INTO deal (project_id,unit_id,number,date,client,phone,client_doc,pay_kind,
+                               price,discount,prepayment,months,status,manager,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+            params![
+                d.project_id,
+                d.unit_id,
+                d.number,
+                d.date.to_string(),
+                d.client,
+                d.phone,
+                d.client_doc,
+                d.pay_kind.code(),
+                d.price,
+                d.discount,
+                d.prepayment,
+                d.months,
+                d.status.code(),
+                d.manager,
+                d.note
+            ],
+        )
+    }
+
+    pub fn update_deal(&self, d: &Deal) -> bool {
+        self.upd(
+            "UPDATE deal SET unit_id=?2,number=?3,date=?4,client=?5,phone=?6,client_doc=?7,
+                             pay_kind=?8,price=?9,discount=?10,prepayment=?11,months=?12,
+                             status=?13,manager=?14,note=?15
+             WHERE id=?1",
+            params![
+                d.id,
+                d.unit_id,
+                d.number,
+                d.date.to_string(),
+                d.client,
+                d.phone,
+                d.client_doc,
+                d.pay_kind.code(),
+                d.price,
+                d.discount,
+                d.prepayment,
+                d.months,
+                d.status.code(),
+                d.manager,
+                d.note
+            ],
+        )
+    }
+
+    pub fn payments(&self, pid: i64) -> Vec<Payment> {
+        self.list(
+            "SELECT id,project_id,deal_id,due,planned,paid,paid_date,kind,document,note
+             FROM payment WHERE project_id=?1 ORDER BY due,id",
+            pid,
+            |r| {
+                Ok(Payment {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    deal_id: r.get(2)?,
+                    due: date(&r.get::<_, String>(3)?),
+                    planned: r.get(4)?,
+                    paid: r.get(5)?,
+                    paid_date: odate(r.get(6)?),
+                    kind: PayKind::parse(&r.get::<_, String>(7)?),
+                    document: r.get(8)?,
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_payment(&self, p: &Payment) -> i64 {
+        self.ins(
+            "INSERT INTO payment (project_id,deal_id,due,planned,paid,paid_date,kind,document,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                p.project_id,
+                p.deal_id,
+                p.due.to_string(),
+                p.planned,
+                p.paid,
+                p.paid_date.map(|d| d.to_string()),
+                p.kind.code(),
+                p.document,
+                p.note
+            ],
+        )
+    }
+
+    pub fn update_payment(&self, p: &Payment) -> bool {
+        self.upd(
+            "UPDATE payment SET due=?2,planned=?3,paid=?4,paid_date=?5,kind=?6,document=?7,note=?8
+             WHERE id=?1",
+            params![
+                p.id,
+                p.due.to_string(),
+                p.planned,
+                p.paid,
+                p.paid_date.map(|d| d.to_string()),
+                p.kind.code(),
+                p.document,
+                p.note
+            ],
+        )
+    }
+
+    /// Bitta shartnomaning to'lov grafigini o'chiradi — qayta yaratishdan oldin.
+    pub fn clear_payments(&self, deal_id: i64) -> bool {
+        self.upd("DELETE FROM payment WHERE deal_id=?1", params![deal_id])
+    }
+
     // ---------- Umumiy yordamchilar ----------
 
     fn list<T>(&self, sql: &str, pid: i64, f: impl Fn(&Row) -> rusqlite::Result<T>) -> Vec<T> {
-        let Ok(mut st) = self.conn().prepare(sql) else { return Vec::new() };
-        let Ok(rows) = st.query_map([pid], |r| f(r)) else { return Vec::new() };
+        let Ok(mut st) = self.conn().prepare(sql) else {
+            return Vec::new();
+        };
+        let Ok(rows) = st.query_map([pid], |r| f(r)) else {
+            return Vec::new();
+        };
         rows.filter_map(|x| x.ok()).collect()
     }
 
@@ -381,9 +696,23 @@ impl Db {
                                 responsible,status,auto,deadline)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)",
             params![
-                i.project_id, i.module.code(), i.section.code(), i.code, i.sheet, i.location,
-                i.element, i.title, i.description, i.severity.code(), i.norm_doc, i.norm_clause,
-                i.norm_text, i.recommendation, i.responsible, i.status.code(), i.auto as i64,
+                i.project_id,
+                i.module.code(),
+                i.section.code(),
+                i.code,
+                i.sheet,
+                i.location,
+                i.element,
+                i.title,
+                i.description,
+                i.severity.code(),
+                i.norm_doc,
+                i.norm_clause,
+                i.norm_text,
+                i.recommendation,
+                i.responsible,
+                i.status.code(),
+                i.auto as i64,
                 ods(i.deadline)
             ],
         )
@@ -395,9 +724,23 @@ impl Db {
                     title=?8,description=?9,severity=?10,norm_doc=?11,norm_clause=?12,norm_text=?13,
                     recommendation=?14,responsible=?15,status=?16,deadline=?17 WHERE id=?1",
             params![
-                i.id, i.module.code(), i.section.code(), i.code, i.sheet, i.location, i.element,
-                i.title, i.description, i.severity.code(), i.norm_doc, i.norm_clause, i.norm_text,
-                i.recommendation, i.responsible, i.status.code(), ods(i.deadline)
+                i.id,
+                i.module.code(),
+                i.section.code(),
+                i.code,
+                i.sheet,
+                i.location,
+                i.element,
+                i.title,
+                i.description,
+                i.severity.code(),
+                i.norm_doc,
+                i.norm_clause,
+                i.norm_text,
+                i.recommendation,
+                i.responsible,
+                i.status.code(),
+                ods(i.deadline)
             ],
         )
     }
@@ -468,8 +811,18 @@ impl Db {
                               approved,note,author,approved_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                d.project_id, d.kind.code(), d.number, d.name, d.section.code(), d.task_id,
-                d.workers, d.machines, d.path, d.approved as i64, d.note, d.author,
+                d.project_id,
+                d.kind.code(),
+                d.number,
+                d.name,
+                d.section.code(),
+                d.task_id,
+                d.workers,
+                d.machines,
+                d.path,
+                d.approved as i64,
+                d.note,
+                d.author,
                 ods(d.approved_at)
             ],
         )
@@ -481,8 +834,19 @@ impl Db {
                     machines=?8,path=?9,approved=?10,note=?11,author=?12,approved_at=?13
              WHERE id=?1",
             params![
-                d.id, d.kind.code(), d.number, d.name, d.section.code(), d.task_id, d.workers,
-                d.machines, d.path, d.approved as i64, d.note, d.author, ods(d.approved_at)
+                d.id,
+                d.kind.code(),
+                d.number,
+                d.name,
+                d.section.code(),
+                d.task_id,
+                d.workers,
+                d.machines,
+                d.path,
+                d.approved as i64,
+                d.note,
+                d.author,
+                ods(d.approved_at)
             ],
         )
     }
@@ -531,8 +895,19 @@ impl Db {
             "UPDATE element SET section=?2,kind=?3,mark=?4,room=?5,axis=?6,level=?7,size=?8,
                     unit=?9,value=?10,value_name=?11,sheet=?12,note=?13 WHERE id=?1",
             params![
-                e.id, e.section.code(), e.kind.code(), e.mark, e.room, e.axis, e.level, e.size,
-                e.unit, e.value, e.value_name, e.sheet, e.note
+                e.id,
+                e.section.code(),
+                e.kind.code(),
+                e.mark,
+                e.room,
+                e.axis,
+                e.level,
+                e.size,
+                e.unit,
+                e.value,
+                e.value_name,
+                e.sheet,
+                e.note
             ],
         )
     }
@@ -658,8 +1033,16 @@ impl Db {
             "INSERT INTO estimate_item (estimate_id,pos,section,code,name,unit,qty,price,cost,note)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
             params![
-                i.estimate_id, i.pos, i.section.code(), i.code, i.name, i.unit, i.qty, i.price,
-                i.cost, i.note
+                i.estimate_id,
+                i.pos,
+                i.section.code(),
+                i.code,
+                i.name,
+                i.unit,
+                i.qty,
+                i.price,
+                i.cost,
+                i.note
             ],
         )
     }
@@ -685,7 +1068,16 @@ impl Db {
             "UPDATE estimate_item SET pos=?2,section=?3,code=?4,name=?5,unit=?6,qty=?7,price=?8,
                     cost=?9,note=?10 WHERE id=?1",
             params![
-                i.id, i.pos, i.section.code(), i.code, i.name, i.unit, i.qty, i.price, i.cost, i.note
+                i.id,
+                i.pos,
+                i.section.code(),
+                i.code,
+                i.name,
+                i.unit,
+                i.qty,
+                i.price,
+                i.cost,
+                i.note
             ],
         )
     }
@@ -730,8 +1122,15 @@ impl Db {
             "UPDATE exec_doc SET kind=?2,number=?3,name=?4,date=?5,task_id=?6,status=?7,
                     responsible=?8,note=?9 WHERE id=?1",
             params![
-                d.id, d.kind.code(), d.number, d.name, d.date.to_string(), d.task_id,
-                d.status.code(), d.responsible, d.note
+                d.id,
+                d.kind.code(),
+                d.number,
+                d.name,
+                d.date.to_string(),
+                d.task_id,
+                d.status.code(),
+                d.responsible,
+                d.note
             ],
         )
     }
@@ -771,8 +1170,19 @@ impl Db {
                                  task_id,volume,unit,text,remarks,photos)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                j.project_id, j.date.to_string(), j.author, j.weather, j.temperature, j.workers,
-                j.machines, j.task_id, j.volume, j.unit, j.text, j.remarks, j.photos
+                j.project_id,
+                j.date.to_string(),
+                j.author,
+                j.weather,
+                j.temperature,
+                j.workers,
+                j.machines,
+                j.task_id,
+                j.volume,
+                j.unit,
+                j.text,
+                j.remarks,
+                j.photos
             ],
         )
     }
@@ -782,8 +1192,19 @@ impl Db {
             "UPDATE journal SET date=?2,author=?3,weather=?4,temperature=?5,workers=?6,machines=?7,
                     task_id=?8,volume=?9,unit=?10,text=?11,remarks=?12,photos=?13 WHERE id=?1",
             params![
-                j.id, j.date.to_string(), j.author, j.weather, j.temperature, j.workers,
-                j.machines, j.task_id, j.volume, j.unit, j.text, j.remarks, j.photos
+                j.id,
+                j.date.to_string(),
+                j.author,
+                j.weather,
+                j.temperature,
+                j.workers,
+                j.machines,
+                j.task_id,
+                j.volume,
+                j.unit,
+                j.text,
+                j.remarks,
+                j.photos
             ],
         )
     }
@@ -824,9 +1245,20 @@ impl Db {
                                   need_date,priority,status,task_id,note)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
-                q.project_id, q.number, q.date.to_string(), q.kind.code(), q.title, q.material_id,
-                q.qty, q.unit, q.requester, q.need_date.to_string(), q.priority.code(),
-                q.status.code(), q.task_id, q.note
+                q.project_id,
+                q.number,
+                q.date.to_string(),
+                q.kind.code(),
+                q.title,
+                q.material_id,
+                q.qty,
+                q.unit,
+                q.requester,
+                q.need_date.to_string(),
+                q.priority.code(),
+                q.status.code(),
+                q.task_id,
+                q.note
             ],
         )
     }
@@ -878,8 +1310,18 @@ impl Db {
                                    currency,delivery_date,status,note)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
-                p.project_id, p.request_id, p.number, p.date.to_string(), p.supplier, p.title,
-                p.qty, p.unit, p.price, p.currency, p.delivery_date.to_string(), p.status.code(),
+                p.project_id,
+                p.request_id,
+                p.number,
+                p.date.to_string(),
+                p.supplier,
+                p.title,
+                p.qty,
+                p.unit,
+                p.price,
+                p.currency,
+                p.delivery_date.to_string(),
+                p.status.code(),
                 p.note
             ],
         )
@@ -938,8 +1380,17 @@ impl Db {
             "UPDATE material SET code=?2,name=?3,unit=?4,section=?5,spec=?6,cert_no=?7,
                     cert_until=?8,min_stock=?9,price=?10,note=?11 WHERE id=?1",
             params![
-                m.id, m.code, m.name, m.unit, m.section.code(), m.spec, m.cert_no,
-                ods(m.cert_until), m.min_stock, m.price, m.note
+                m.id,
+                m.code,
+                m.name,
+                m.unit,
+                m.section.code(),
+                m.spec,
+                m.cert_no,
+                ods(m.cert_until),
+                m.min_stock,
+                m.price,
+                m.note
             ],
         )
     }
@@ -983,8 +1434,16 @@ impl Db {
             "UPDATE stock_move SET material_id=?2,date=?3,kind=?4,qty=?5,price=?6,document=?7,
                     counterparty=?8,task_id=?9,note=?10 WHERE id=?1",
             params![
-                m.id, m.material_id, m.date.to_string(), m.kind.code(), m.qty, m.price, m.document,
-                m.counterparty, m.task_id, m.note
+                m.id,
+                m.material_id,
+                m.date.to_string(),
+                m.kind.code(),
+                m.qty,
+                m.price,
+                m.document,
+                m.counterparty,
+                m.task_id,
+                m.note
             ],
         )
     }
@@ -1020,7 +1479,14 @@ impl Db {
     pub fn update_worker(&self, w: &Worker) -> bool {
         self.upd(
             "UPDATE worker SET name=?2,position=?3,org=?4,hourly_rate=?5,active=?6 WHERE id=?1",
-            params![w.id, w.name, w.position, w.org, w.hourly_rate, w.active as i64],
+            params![
+                w.id,
+                w.name,
+                w.position,
+                w.org,
+                w.hourly_rate,
+                w.active as i64
+            ],
         )
     }
 
@@ -1103,8 +1569,17 @@ impl Db {
             "UPDATE quality_check SET kind=?2,date=?3,task_id=?4,material_id=?5,subject=?6,
                     inspector=?7,result=?8,defect=?9,deadline=?10,note=?11 WHERE id=?1",
             params![
-                q.id, q.kind.code(), q.date.to_string(), q.task_id, q.material_id, q.subject,
-                q.inspector, q.result.code(), q.defect, ods(q.deadline), q.note
+                q.id,
+                q.kind.code(),
+                q.date.to_string(),
+                q.task_id,
+                q.material_id,
+                q.subject,
+                q.inspector,
+                q.result.code(),
+                q.defect,
+                ods(q.deadline),
+                q.note
             ],
         )
     }
@@ -1150,8 +1625,16 @@ impl Db {
             "UPDATE safety_event SET date=?2,kind=?3,severity=?4,place=?5,description=?6,
                     responsible=?7,measure=?8,deadline=?9,status=?10 WHERE id=?1",
             params![
-                s.id, s.date.to_string(), s.kind.code(), s.severity.code(), s.place,
-                s.description, s.responsible, s.measure, ods(s.deadline), s.status.code()
+                s.id,
+                s.date.to_string(),
+                s.kind.code(),
+                s.severity.code(),
+                s.place,
+                s.description,
+                s.responsible,
+                s.measure,
+                ods(s.deadline),
+                s.status.code()
             ],
         )
     }
@@ -1196,8 +1679,15 @@ impl Db {
             "UPDATE machine SET name=?2,kind=?3,reg_no=?4,owner=?5,status=?6,hour_rate=?7,
                     operator=?8,inspection_until=?9 WHERE id=?1",
             params![
-                m.id, m.name, m.kind.code(), m.reg_no, m.owner, m.status.code(), m.hour_rate,
-                m.operator, ods(m.inspection_until)
+                m.id,
+                m.name,
+                m.kind.code(),
+                m.reg_no,
+                m.owner,
+                m.status.code(),
+                m.hour_rate,
+                m.operator,
+                ods(m.inspection_until)
             ],
         )
     }
@@ -1226,7 +1716,15 @@ impl Db {
         self.ins(
             "INSERT INTO machine_log (project_id,machine_id,date,hours,fuel,task_id,note)
              VALUES (?1,?2,?3,?4,?5,?6,?7)",
-            params![l.project_id, l.machine_id, l.date.to_string(), l.hours, l.fuel, l.task_id, l.note],
+            params![
+                l.project_id,
+                l.machine_id,
+                l.date.to_string(),
+                l.hours,
+                l.fuel,
+                l.task_id,
+                l.note
+            ],
         )
     }
 
@@ -1248,21 +1746,25 @@ impl Db {
     pub fn seed_demo_modules(&self, pid: i64) {
         let ru = crate::i18n::lang() == crate::i18n::Lang::Ru;
         let s = |uz: &'static str, r: &'static str| -> String {
-            if ru { r.to_string() } else { uz.to_string() }
+            if ru {
+                r.to_string()
+            } else {
+                uz.to_string()
+            }
         };
 
         // (bo'lim, tur, marka, xona, o'q, qavat, o'lcham, birlik, qiymat, qiymat nomi, varaq)
         let el = |section: Section,
-                      kind: ElementKind,
-                      mark: &str,
-                      room: String,
-                      axis: &str,
-                      level: &str,
-                      size: f64,
-                      unit: &str,
-                      value: f64,
-                      value_name: &str,
-                      sheet: &str|
+                  kind: ElementKind,
+                  mark: &str,
+                  room: String,
+                  axis: &str,
+                  level: &str,
+                  size: f64,
+                  unit: &str,
+                  value: f64,
+                  value_name: &str,
+                  sheet: &str|
          -> i64 {
             self.insert_element(&Element {
                 id: 0,
@@ -1282,44 +1784,313 @@ impl Db {
             })
         };
 
-        let r101 = el(Section::Ar, ElementKind::Room, "101", s("101-xona, kvartira 1", "Помещение 101, кв. 1"), "A-B/1-2", "1", 0.0, "", 42.5, s("maydon", "площадь").as_str(), "AR-04");
-        let r102 = el(Section::Ar, ElementKind::Room, "102", s("102-xona, kvartira 2", "Помещение 102, кв. 2"), "B-V/1-2", "1", 0.0, "", 38.0, s("maydon", "площадь").as_str(), "AR-04");
-        let r103 = el(Section::Ar, ElementKind::Room, "103", s("103-xona, omborxona", "Помещение 103, кладовая"), "V-G/1-2", "1", 0.0, "", 12.0, s("maydon", "площадь").as_str(), "AR-04");
+        let r101 = el(
+            Section::Ar,
+            ElementKind::Room,
+            "101",
+            s("101-xona, kvartira 1", "Помещение 101, кв. 1"),
+            "A-B/1-2",
+            "1",
+            0.0,
+            "",
+            42.5,
+            s("maydon", "площадь").as_str(),
+            "AR-04",
+        );
+        let r102 = el(
+            Section::Ar,
+            ElementKind::Room,
+            "102",
+            s("102-xona, kvartira 2", "Помещение 102, кв. 2"),
+            "B-V/1-2",
+            "1",
+            0.0,
+            "",
+            38.0,
+            s("maydon", "площадь").as_str(),
+            "AR-04",
+        );
+        let r103 = el(
+            Section::Ar,
+            ElementKind::Room,
+            "103",
+            s("103-xona, omborxona", "Помещение 103, кладовая"),
+            "V-G/1-2",
+            "1",
+            0.0,
+            "",
+            12.0,
+            s("maydon", "площадь").as_str(),
+            "AR-04",
+        );
 
         // OK-1 uchun teshik bor, OK-2 uchun yo'q -> AR/KJ nomuvofiqligi.
-        let ok1 = el(Section::Ar, ElementKind::Window, "OK-1", s("101-xona", "Помещение 101"), "A/1", "1", 1500.0, "mm", 0.0, "", "AR-06");
-        let ok2 = el(Section::Ar, ElementKind::Window, "OK-2", s("102-xona", "Помещение 102"), "B/1", "1", 1500.0, "mm", 0.0, "", "AR-06");
+        let ok1 = el(
+            Section::Ar,
+            ElementKind::Window,
+            "OK-1",
+            s("101-xona", "Помещение 101"),
+            "A/1",
+            "1",
+            1500.0,
+            "mm",
+            0.0,
+            "",
+            "AR-06",
+        );
+        let ok2 = el(
+            Section::Ar,
+            ElementKind::Window,
+            "OK-2",
+            s("102-xona", "Помещение 102"),
+            "B/1",
+            "1",
+            1500.0,
+            "mm",
+            0.0,
+            "",
+            "AR-06",
+        );
         // Marka takrorlangan: bir bo'limda ikkita OK-1.
-        let _ok1b = el(Section::Ar, ElementKind::Window, "OK-1", s("103-xona", "Помещение 103"), "V/1", "1", 900.0, "mm", 0.0, "", "AR-06");
-        let d1 = el(Section::Ar, ElementKind::Door, "D-1", s("101-xona", "Помещение 101"), "A/2", "1", 900.0, "mm", 0.0, "", "AR-06");
+        let _ok1b = el(
+            Section::Ar,
+            ElementKind::Window,
+            "OK-1",
+            s("103-xona", "Помещение 103"),
+            "V/1",
+            "1",
+            900.0,
+            "mm",
+            0.0,
+            "",
+            "AR-06",
+        );
+        let d1 = el(
+            Section::Ar,
+            ElementKind::Door,
+            "D-1",
+            s("101-xona", "Помещение 101"),
+            "A/2",
+            "1",
+            900.0,
+            "mm",
+            0.0,
+            "",
+            "AR-06",
+        );
 
-        let pr1 = el(Section::Kj, ElementKind::Opening, "PR-1", s("101-xona", "Помещение 101"), "A/1", "1", 1500.0, "mm", 0.0, "", "KJ-12");
-        let pr2 = el(Section::Kj, ElementKind::Opening, "PR-2", s("101-xona", "Помещение 101"), "A/2", "1", 900.0, "mm", 0.0, "", "KJ-12");
-        let b1 = el(Section::Kj, ElementKind::Beam, "B-1", s("Koridor", "Коридор"), "B/1-2", "1", 400.0, "mm", 0.0, "", "KJ-08");
-        let k1 = el(Section::Kj, ElementKind::Column, "K-1", s("101-xona", "Помещение 101"), "A/1", "1", 400.0, "mm", 0.0, "", "KJ-05");
+        let pr1 = el(
+            Section::Kj,
+            ElementKind::Opening,
+            "PR-1",
+            s("101-xona", "Помещение 101"),
+            "A/1",
+            "1",
+            1500.0,
+            "mm",
+            0.0,
+            "",
+            "KJ-12",
+        );
+        let pr2 = el(
+            Section::Kj,
+            ElementKind::Opening,
+            "PR-2",
+            s("101-xona", "Помещение 101"),
+            "A/2",
+            "1",
+            900.0,
+            "mm",
+            0.0,
+            "",
+            "KJ-12",
+        );
+        let b1 = el(
+            Section::Kj,
+            ElementKind::Beam,
+            "B-1",
+            s("Koridor", "Коридор"),
+            "B/1-2",
+            "1",
+            400.0,
+            "mm",
+            0.0,
+            "",
+            "KJ-08",
+        );
+        let k1 = el(
+            Section::Kj,
+            ElementKind::Column,
+            "K-1",
+            s("101-xona", "Помещение 101"),
+            "A/1",
+            "1",
+            400.0,
+            "mm",
+            0.0,
+            "",
+            "KJ-05",
+        );
 
         // Uklon 0.008 — minimal 0.02 dan past.
-        let p1 = el(Section::Vk, ElementKind::Pipe, "K1-1", s("101-xona", "Помещение 101"), "A/1", "1", 110.0, "mm", 0.008, s("uklon", "уклон").as_str(), "VK-03");
+        let p1 = el(
+            Section::Vk,
+            ElementKind::Pipe,
+            "K1-1",
+            s("101-xona", "Помещение 101"),
+            "A/1",
+            "1",
+            110.0,
+            "mm",
+            0.008,
+            s("uklon", "уклон").as_str(),
+            "VK-03",
+        );
         // Rigelni kesib o'tadi, teshik ko'zda tutilmagan.
-        let p2 = el(Section::Vk, ElementKind::Pipe, "K1-2", s("Koridor", "Коридор"), "B/1-2", "1", 100.0, "mm", 0.025, s("uklon", "уклон").as_str(), "VK-03");
-        let v1 = el(Section::Ov, ElementKind::Duct, "V-1", s("Koridor", "Коридор"), "B/1-2", "1", 200.0, "mm", 0.0, "", "OV-02");
+        let p2 = el(
+            Section::Vk,
+            ElementKind::Pipe,
+            "K1-2",
+            s("Koridor", "Коридор"),
+            "B/1-2",
+            "1",
+            100.0,
+            "mm",
+            0.025,
+            s("uklon", "уклон").as_str(),
+            "VK-03",
+        );
+        let v1 = el(
+            Section::Ov,
+            ElementKind::Duct,
+            "V-1",
+            s("Koridor", "Коридор"),
+            "B/1-2",
+            "1",
+            200.0,
+            "mm",
+            0.0,
+            "",
+            "OV-02",
+        );
         // O'lcham nol va varaq ko'rsatilmagan — ikkita alohida qoida.
-        let w1 = el(Section::Eom, ElementKind::Cable, "W-1", s("101-xona", "Помещение 101"), "A/1", "1", 0.0, "mm2", 0.0, "", "");
-        let w2 = el(Section::Eom, ElementKind::Cable, "W-2", s("103-xona", "Помещение 103"), "V/1", "1", 4.0, "mm2", 0.0, "", "EOM-01");
+        let w1 = el(
+            Section::Eom,
+            ElementKind::Cable,
+            "W-1",
+            s("101-xona", "Помещение 101"),
+            "A/1",
+            "1",
+            0.0,
+            "mm2",
+            0.0,
+            "",
+            "",
+        );
+        let w2 = el(
+            Section::Eom,
+            ElementKind::Cable,
+            "W-2",
+            s("103-xona", "Помещение 103"),
+            "V/1",
+            "1",
+            4.0,
+            "mm2",
+            0.0,
+            "",
+            "EOM-01",
+        );
         // Grafda yolg'iz turgan qurilma.
-        let _sh1 = el(Section::Eom, ElementKind::Device, "SH-1", s("Elektr xonasi", "Электрощитовая"), "G/1", "1", 0.0, "", 25.0, s("quvvat", "мощность").as_str(), "EOM-01");
+        let _sh1 = el(
+            Section::Eom,
+            ElementKind::Device,
+            "SH-1",
+            s("Elektr xonasi", "Электрощитовая"),
+            "G/1",
+            "1",
+            0.0,
+            "",
+            25.0,
+            s("quvvat", "мощность").as_str(),
+            "EOM-01",
+        );
         // Elektr ta'minoti ko'zda tutilmagan ventilyator va yong'in izvestchateli.
-        let vn1 = el(Section::Ov, ElementKind::Device, "VN-1", s("Koridor", "Коридор"), "B/2", "1", 0.0, "", 1.5, s("quvvat", "мощность").as_str(), "OV-02");
-        let ip1 = el(Section::Pb, ElementKind::Device, "IP-1", s("103-xona", "Помещение 103"), "V/1", "1", 0.0, "", 0.02, s("quvvat", "мощность").as_str(), "PB-03");
+        let vn1 = el(
+            Section::Ov,
+            ElementKind::Device,
+            "VN-1",
+            s("Koridor", "Коридор"),
+            "B/2",
+            "1",
+            0.0,
+            "",
+            1.5,
+            s("quvvat", "мощность").as_str(),
+            "OV-02",
+        );
+        let ip1 = el(
+            Section::Pb,
+            ElementKind::Device,
+            "IP-1",
+            s("103-xona", "Помещение 103"),
+            "V/1",
+            "1",
+            0.0,
+            "",
+            0.02,
+            s("quvvat", "мощность").as_str(),
+            "PB-03",
+        );
         // Nasos esa to'g'ri ulangan — ijobiy misol.
-        let n1 = el(Section::Vk, ElementKind::Device, "N-1", s("Nasos xonasi", "Насосная"), "G/2", "0", 0.0, "", 4.0, s("quvvat", "мощность").as_str(), "VK-01");
+        let n1 = el(
+            Section::Vk,
+            ElementKind::Device,
+            "N-1",
+            s("Nasos xonasi", "Насосная"),
+            "G/2",
+            "0",
+            0.0,
+            "",
+            4.0,
+            s("quvvat", "мощность").as_str(),
+            "VK-01",
+        );
         // Metall rigel: KJ bilan tayanch tuguni kelishilmagan.
-        let mb1 = el(Section::Km, ElementKind::Beam, "MB-1", s("Koridor", "Коридор"), "B/1-2", "9", 300.0, "mm", 0.0, "", "KM-02");
+        let mb1 = el(
+            Section::Km,
+            ElementKind::Beam,
+            "MB-1",
+            s("Koridor", "Коридор"),
+            "B/1-2",
+            "9",
+            300.0,
+            "mm",
+            0.0,
+            "",
+            "KM-02",
+        );
         // Metall ustun: tayanchi KJ ustuniga bog'langan.
-        let mk1 = el(Section::Km, ElementKind::Column, "MK-1", s("101-xona", "Помещение 101"), "A/1", "9", 200.0, "mm", 0.0, "", "KM-02");
+        let mk1 = el(
+            Section::Km,
+            ElementKind::Column,
+            "MK-1",
+            s("101-xona", "Помещение 101"),
+            "A/1",
+            "9",
+            200.0,
+            "mm",
+            0.0,
+            "",
+            "KM-02",
+        );
 
         let link = |from_el: i64, to_el: i64, relation: Relation| {
-            self.insert_element_link(&ElementLink { id: 0, from_el, to_el, relation });
+            self.insert_element_link(&ElementLink {
+                id: 0,
+                from_el,
+                to_el,
+                relation,
+            });
         };
         link(ok1, pr1, Relation::Contains);
         link(d1, pr2, Relation::Contains);
@@ -1346,6 +2117,239 @@ impl Db {
         self.seed_demo_execution(pid, ru);
         self.seed_demo_stock(pid, ru);
         self.seed_demo_supply(pid, ru);
+        self.seed_demo_sales(pid, ru);
+    }
+
+    /// Sotuv namunasi: ikkita blok, kvartiralar va turli holatdagi shartnomalar
+    /// (TZ XIX-XX). Bir shartnomada to'lov ataylab kechiktirilgan — muddati
+    /// o'tgan qarz qanday ko'rinishini ko'rsatish uchun.
+    pub fn seed_demo_sales(&self, pid: i64, ru: bool) {
+        if !self.blocks(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+
+        // Qavatdagi to'rt kvartira: maydon, yashash maydoni, xonalar.
+        const PLAN: [(f64, f64, i64); 4] = [
+            (42.5, 24.0, 1),
+            (58.0, 33.0, 2),
+            (74.5, 44.0, 3),
+            (48.0, 28.0, 2),
+        ];
+        const FLOORS: i64 = 9;
+        let base_price = 9_400_000.0;
+
+        let mut units: Vec<(i64, i64)> = Vec::new(); // (unit_id, maydon indeksi)
+        for (bi, name) in [
+            (0, if ru { "1-й блок" } else { "1-blok" }),
+            (1, if ru { "2-й блок" } else { "2-blok" }),
+        ] {
+            let bid = self.insert_block(&Block {
+                id: 0,
+                project_id: pid,
+                name: name.into(),
+                floors: FLOORS,
+                first_floor: 1,
+                note: String::new(),
+            });
+            if bid == 0 {
+                continue;
+            }
+            for floor in 1..=FLOORS {
+                for (i, (area, living, rooms)) in PLAN.iter().enumerate() {
+                    // Birinchi qavat tijorat uchun, qolgani turar-joy.
+                    let kind = if floor == 1 {
+                        UnitKind::Commercial
+                    } else {
+                        UnitKind::Flat
+                    };
+                    // Yuqori qavat qimmatroq, birinchi qavat esa tijorat narxida.
+                    let price = if floor == 1 {
+                        base_price * 1.35
+                    } else {
+                        base_price + (floor - 2) as f64 * 60_000.0
+                    };
+                    let number = bi * 100 + (floor - 1) * PLAN.len() as i64 + i as i64 + 1;
+                    let id = self.insert_unit(&Unit {
+                        id: 0,
+                        project_id: pid,
+                        block_id: bid,
+                        number: number.to_string(),
+                        floor,
+                        position: i as i64 + 1,
+                        kind,
+                        rooms: if kind == UnitKind::Commercial {
+                            0
+                        } else {
+                            *rooms
+                        },
+                        area: *area,
+                        area_living: if kind == UnitKind::Commercial {
+                            0.0
+                        } else {
+                            *living
+                        },
+                        price_per_m2: price,
+                        status: UnitStatus::Free,
+                        layout: format!("{}{}", rooms, if ru { "К" } else { "X" }),
+                        note: String::new(),
+                    });
+                    if id > 0 && bi == 0 {
+                        units.push((id, floor));
+                    }
+                }
+            }
+        }
+
+        // Shartnomalar: birinchi blokning bir qismi sotilgan.
+        let clients: [(&str, &str); 8] = if ru {
+            [
+                ("Ахмедов Ж.Т.", "+998 90 123-45-67"),
+                ("Каримова Н.С.", "+998 91 234-56-78"),
+                ("Усмонов Ш.Б.", "+998 93 345-67-89"),
+                ("Юлдашева Д.А.", "+998 94 456-78-90"),
+                ("Рахматов О.К.", "+998 95 567-89-01"),
+                ("Сафарова М.И.", "+998 97 678-90-12"),
+                ("Тошматов А.Р.", "+998 98 789-01-23"),
+                ("Эргашева З.Н.", "+998 99 890-12-34"),
+            ]
+        } else {
+            [
+                ("Ahmedov J.T.", "+998 90 123-45-67"),
+                ("Karimova N.S.", "+998 91 234-56-78"),
+                ("Usmonov Sh.B.", "+998 93 345-67-89"),
+                ("Yuldasheva D.A.", "+998 94 456-78-90"),
+                ("Rahmatov O.K.", "+998 95 567-89-01"),
+                ("Safarova M.I.", "+998 97 678-90-12"),
+                ("Toshmatov A.R.", "+998 98 789-01-23"),
+                ("Ergasheva Z.N.", "+998 99 890-12-34"),
+            ]
+        };
+        let manager = if ru {
+            "Отдел продаж: Собиров Т."
+        } else {
+            "Sotuv bo'limi: Sobirov T."
+        };
+
+        // (kvartira indeksi, kunlar oldin, to'lov turi, holat, chegirma %, boshlang'ich %, oy, to'langan oy)
+        type DemoDeal = (usize, i64, PayKind, DealStatus, f64, f64, i64, i64);
+        let plan: [DemoDeal; 8] = [
+            (
+                4,
+                150,
+                PayKind::Cash,
+                DealStatus::Completed,
+                3.0,
+                100.0,
+                0,
+                1,
+            ),
+            (
+                5,
+                130,
+                PayKind::Credit,
+                DealStatus::Completed,
+                0.0,
+                30.0,
+                0,
+                1,
+            ),
+            (
+                8,
+                110,
+                PayKind::Installment,
+                DealStatus::Signed,
+                0.0,
+                30.0,
+                12,
+                3,
+            ),
+            (9, 95, PayKind::Subsidy, DealStatus::Signed, 5.0, 40.0, 6, 2),
+            (
+                12,
+                70,
+                PayKind::Installment,
+                DealStatus::Signed,
+                0.0,
+                20.0,
+                18,
+                1,
+            ),
+            (
+                13,
+                45,
+                PayKind::Barter,
+                DealStatus::Signed,
+                0.0,
+                100.0,
+                0,
+                1,
+            ),
+            (
+                16,
+                20,
+                PayKind::Installment,
+                DealStatus::Reserved,
+                0.0,
+                15.0,
+                24,
+                0,
+            ),
+            (17, 6, PayKind::Mixed, DealStatus::Reserved, 0.0, 25.0, 9, 0),
+        ];
+
+        let all = self.units(pid);
+        for (n, (idx, days, pay_kind, status, disc, pre, months, paid_months)) in
+            plan.iter().enumerate()
+        {
+            let Some((uid, _)) = units.get(*idx) else {
+                continue;
+            };
+            let Some(u) = all.iter().find(|x| x.id == *uid) else {
+                continue;
+            };
+            let price = u.price();
+            let deal = Deal {
+                id: 0,
+                project_id: pid,
+                unit_id: *uid,
+                number: format!("S-{:03}", n + 1),
+                date: today - chrono::Duration::days(*days),
+                client: clients[n].0.into(),
+                phone: clients[n].1.into(),
+                client_doc: String::new(),
+                pay_kind: *pay_kind,
+                price,
+                discount: price * disc / 100.0,
+                prepayment: (price - price * disc / 100.0) * pre / 100.0,
+                months: *months,
+                status: *status,
+                manager: manager.into(),
+                note: String::new(),
+            };
+            let did = self.insert_deal(&deal);
+            if did == 0 {
+                continue;
+            }
+            let mut deal = deal;
+            deal.id = did;
+
+            // Grafik va unga tushgan to'lovlar.
+            for (i, mut row) in crate::sales::build_schedule(&deal).into_iter().enumerate() {
+                if (i as i64) < *paid_months {
+                    row.paid = row.planned;
+                    row.paid_date = Some(row.due);
+                }
+                self.insert_payment(&row);
+            }
+
+            // Kvartira holati shartnomaga ergashadi.
+            if let Some(want) = crate::sales::status_for(Some(&deal)) {
+                let mut copy = u.clone();
+                copy.status = want;
+                self.update_unit(&copy);
+            }
+        }
     }
 
     /// Ariza va xaridlar namunasi (TZ IX-X).
@@ -1385,7 +2389,11 @@ impl Db {
                 material_id,
                 qty,
                 unit: unit.into(),
-                requester: if ru { "Юсупов Б.Р.".into() } else { "Yusupov B.R.".to_string() },
+                requester: if ru {
+                    "Юсупов Б.Р.".into()
+                } else {
+                    "Yusupov B.R.".to_string()
+                },
                 need_date: today + chrono::Duration::days(need_in),
                 priority,
                 status,
@@ -1399,7 +2407,11 @@ impl Db {
             "Z-001",
             32,
             RequestKind::Material,
-            if ru { "Кирпич керамический М150" } else { "Keramik g'isht M150" },
+            if ru {
+                "Кирпич керамический М150"
+            } else {
+                "Keramik g'isht M150"
+            },
             by_code("M-201"),
             96_000.0,
             if ru { "шт" } else { "dona" },
@@ -1413,7 +2425,11 @@ impl Db {
             "Z-002",
             10,
             RequestKind::Material,
-            if ru { "Арматура А500С d16" } else { "A500S armatura d16" },
+            if ru {
+                "Арматура А500С d16"
+            } else {
+                "A500S armatura d16"
+            },
             by_code("M-102"),
             24.0,
             if ru { "т" } else { "t" },
@@ -1427,7 +2443,11 @@ impl Db {
             "Z-003",
             18,
             RequestKind::Material,
-            if ru { "Труба ПП 110" } else { "PP 110 truba" },
+            if ru {
+                "Труба ПП 110"
+            } else {
+                "PP 110 truba"
+            },
             by_code("M-401"),
             300.0,
             if ru { "м" } else { "m" },
@@ -1441,7 +2461,11 @@ impl Db {
             "Z-004",
             2,
             RequestKind::Machine,
-            if ru { "Автобетононасос, 3 смены" } else { "Avtobetonnasos, 3 smena" },
+            if ru {
+                "Автобетононасос, 3 смены"
+            } else {
+                "Avtobetonnasos, 3 smena"
+            },
             None,
             3.0,
             if ru { "смена" } else { "smena" },
@@ -1479,8 +2503,16 @@ impl Db {
             });
         };
 
-        let s1 = if ru { "ООО «СтройБаза»" } else { "«StroyBaza» MChJ" };
-        let s2 = if ru { "ООО «МеталлСнаб»" } else { "«MetallSnab» MChJ" };
+        let s1 = if ru {
+            "ООО «СтройБаза»"
+        } else {
+            "«StroyBaza» MChJ"
+        };
+        let s2 = if ru {
+            "ООО «МеталлСнаб»"
+        } else {
+            "«MetallSnab» MChJ"
+        };
 
         // Z-001 uchun xarid: hujjat raqami TTN-1150 — ombor kirimi bilan bir xil,
         // shuning uchun «kirim qilingan» deb ko'rsatiladi.
@@ -1489,7 +2521,11 @@ impl Db {
             Some(z1),
             28,
             s1,
-            if ru { "Кирпич керамический М150" } else { "Keramik g'isht M150" },
+            if ru {
+                "Кирпич керамический М150"
+            } else {
+                "Keramik g'isht M150"
+            },
             96_000.0,
             if ru { "шт" } else { "dona" },
             1_400.0,
@@ -1502,7 +2538,11 @@ impl Db {
             Some(z2),
             8,
             s2,
-            if ru { "Арматура А500С d16" } else { "A500S armatura d16" },
+            if ru {
+                "Арматура А500С d16"
+            } else {
+                "A500S armatura d16"
+            },
             24.0,
             if ru { "т" } else { "t" },
             10_200_000.0,
@@ -1515,7 +2555,11 @@ impl Db {
             Some(z3),
             12,
             s1,
-            if ru { "Труба ПП 110" } else { "PP 110 truba" },
+            if ru {
+                "Труба ПП 110"
+            } else {
+                "PP 110 truba"
+            },
             180.0,
             if ru { "м" } else { "m" },
             41_000.0,
@@ -1572,7 +2616,11 @@ impl Db {
 
         let concrete = mat(
             "M-101",
-            if ru { "Бетон товарный" } else { "Tayyor beton" },
+            if ru {
+                "Бетон товарный"
+            } else {
+                "Tayyor beton"
+            },
             if ru { "м3" } else { "m3" },
             Section::Kj,
             "B25 W6 F150",
@@ -1584,7 +2632,11 @@ impl Db {
         // Sertifikat muddati o'tgan — armatura ishlatilishi to'xtatilishi kerak.
         let rebar = mat(
             "M-102",
-            if ru { "Арматура А500С" } else { "A500S armatura" },
+            if ru {
+                "Арматура А500С"
+            } else {
+                "A500S armatura"
+            },
             if ru { "т" } else { "t" },
             Section::Kj,
             "d12-d32, GOST 34028-2016",
@@ -1596,10 +2648,18 @@ impl Db {
         // Qoldiq minimal zaxiradan past — buyurtma kerak.
         let brick = mat(
             "M-201",
-            if ru { "Кирпич керамический" } else { "Keramik g'isht" },
+            if ru {
+                "Кирпич керамический"
+            } else {
+                "Keramik g'isht"
+            },
             if ru { "шт" } else { "dona" },
             Section::Ar,
-            if ru { "М150, 250х120х65" } else { "M150, 250x120x65" },
+            if ru {
+                "М150, 250х120х65"
+            } else {
+                "M150, 250x120x65"
+            },
             "SS-3302/25",
             Some(400),
             40_000.0,
@@ -1608,7 +2668,11 @@ impl Db {
         // Sertifikat kiritilmagan.
         let cable = mat(
             "M-301",
-            if ru { "Кабель ВВГнг 3x4" } else { "VVGng 3x4 kabel" },
+            if ru {
+                "Кабель ВВГнг 3x4"
+            } else {
+                "VVGng 3x4 kabel"
+            },
             if ru { "м" } else { "m" },
             Section::Eom,
             "0.66 kV",
@@ -1619,10 +2683,18 @@ impl Db {
         );
         let pipe = mat(
             "M-401",
-            if ru { "Труба канализационная ПП 110" } else { "PP 110 kanalizatsiya trubasi" },
+            if ru {
+                "Труба канализационная ПП 110"
+            } else {
+                "PP 110 kanalizatsiya trubasi"
+            },
             if ru { "м" } else { "m" },
             Section::Vk,
-            if ru { "SN4, раструбная" } else { "SN4, rastrubli" },
+            if ru {
+                "SN4, раструбная"
+            } else {
+                "SN4, rastrubli"
+            },
             "SS-2210/24",
             Some(95),
             120.0,
@@ -1655,28 +2727,135 @@ impl Db {
         let karkas = by_wbs("7");
         let plita = by_wbs("3");
         let devor = by_wbs("9");
-        let supplier = if ru { "ООО «СтройБаза»" } else { "«StroyBaza» MChJ" };
-        let supplier2 = if ru { "ООО «МеталлСнаб»" } else { "«MetallSnab» MChJ" };
+        let supplier = if ru {
+            "ООО «СтройБаза»"
+        } else {
+            "«StroyBaza» MChJ"
+        };
+        let supplier2 = if ru {
+            "ООО «МеталлСнаб»"
+        } else {
+            "«MetallSnab» MChJ"
+        };
 
-        mv(concrete, 40, MoveKind::In, 900.0, 700_000.0, "TTN-1120", supplier, None);
-        mv(concrete, 22, MoveKind::In, 600.0, 745_000.0, "TTN-1188", supplier, None);
-        mv(concrete, 30, MoveKind::Out, 640.0, 0.0, "M-29/03", "", plita);
-        mv(concrete, 5, MoveKind::Out, 720.0, 0.0, "M-29/08", "", karkas);
-        mv(concrete, 4, MoveKind::WriteOff, 12.0, 0.0, "AKT-07", "", karkas);
+        mv(
+            concrete,
+            40,
+            MoveKind::In,
+            900.0,
+            700_000.0,
+            "TTN-1120",
+            supplier,
+            None,
+        );
+        mv(
+            concrete,
+            22,
+            MoveKind::In,
+            600.0,
+            745_000.0,
+            "TTN-1188",
+            supplier,
+            None,
+        );
+        mv(
+            concrete,
+            30,
+            MoveKind::Out,
+            640.0,
+            0.0,
+            "M-29/03",
+            "",
+            plita,
+        );
+        mv(
+            concrete,
+            5,
+            MoveKind::Out,
+            720.0,
+            0.0,
+            "M-29/08",
+            "",
+            karkas,
+        );
+        mv(
+            concrete,
+            4,
+            MoveKind::WriteOff,
+            12.0,
+            0.0,
+            "AKT-07",
+            "",
+            karkas,
+        );
 
-        mv(rebar, 45, MoveKind::In, 62.0, 9_600_000.0, "TTN-0914", supplier2, None);
-        mv(rebar, 12, MoveKind::In, 18.0, 10_100_000.0, "TTN-1201", supplier2, None);
+        mv(
+            rebar,
+            45,
+            MoveKind::In,
+            62.0,
+            9_600_000.0,
+            "TTN-0914",
+            supplier2,
+            None,
+        );
+        mv(
+            rebar,
+            12,
+            MoveKind::In,
+            18.0,
+            10_100_000.0,
+            "TTN-1201",
+            supplier2,
+            None,
+        );
         mv(rebar, 28, MoveKind::Out, 41.0, 0.0, "M-29/04", "", plita);
         mv(rebar, 3, MoveKind::Out, 24.0, 0.0, "M-29/09", "", karkas);
 
-        mv(brick, 26, MoveKind::In, 96_000.0, 1_400.0, "TTN-1150", supplier, None);
+        mv(
+            brick,
+            26,
+            MoveKind::In,
+            96_000.0,
+            1_400.0,
+            "TTN-1150",
+            supplier,
+            None,
+        );
         mv(brick, 8, MoveKind::Out, 68_000.0, 0.0, "M-29/06", "", devor);
-        mv(brick, 2, MoveKind::WriteOff, 2_400.0, 0.0, "AKT-09", "", devor);
+        mv(
+            brick,
+            2,
+            MoveKind::WriteOff,
+            2_400.0,
+            0.0,
+            "AKT-09",
+            "",
+            devor,
+        );
 
-        mv(cable, 18, MoveKind::In, 1_800.0, 27_500.0, "TTN-1174", supplier, None);
+        mv(
+            cable,
+            18,
+            MoveKind::In,
+            1_800.0,
+            27_500.0,
+            "TTN-1174",
+            supplier,
+            None,
+        );
         mv(cable, 6, MoveKind::Out, 640.0, 0.0, "M-29/07", "", None);
 
-        mv(pipe, 20, MoveKind::In, 740.0, 40_000.0, "TTN-1179", supplier, None);
+        mv(
+            pipe,
+            20,
+            MoveKind::In,
+            740.0,
+            40_000.0,
+            "TTN-1179",
+            supplier,
+            None,
+        );
         mv(pipe, 7, MoveKind::Out, 310.0, 0.0, "M-29/05", "", None);
     }
 
@@ -1687,15 +2866,19 @@ impl Db {
         let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).cloned();
         let today = chrono::Local::now().date_naive();
 
-        let author = if ru { "ПТО: Саидова М.И." } else { "PTO: Saidova M.I." };
+        let author = if ru {
+            "ПТО: Саидова М.И."
+        } else {
+            "PTO: Saidova M.I."
+        };
         let card = |kind: PprKind,
-                        number: &str,
-                        name: &str,
-                        section: Section,
-                        task_id: Option<i64>,
-                        workers: i64,
-                        machines: i64,
-                        approved: bool| {
+                    number: &str,
+                    name: &str,
+                    section: Section,
+                    task_id: Option<i64>,
+                    workers: i64,
+                    machines: i64,
+                    approved: bool| {
             self.insert_ppr(&PprDoc {
                 id: 0,
                 project_id: pid,
@@ -1718,7 +2901,11 @@ impl Db {
         card(
             PprKind::TechCard,
             "TK-03",
-            if ru { "Устройство фундаментной плиты" } else { "Poydevor plitasini qurish" },
+            if ru {
+                "Устройство фундаментной плиты"
+            } else {
+                "Poydevor plitasini qurish"
+            },
             Section::Kj,
             by_wbs("3").map(|t| t.id),
             24,
@@ -1729,7 +2916,11 @@ impl Db {
         card(
             PprKind::TechCard,
             "TK-07",
-            if ru { "Монолитный каркас, этажи 7-9" } else { "Monolit karkas, 7-9 qavat" },
+            if ru {
+                "Монолитный каркас, этажи 7-9"
+            } else {
+                "Monolit karkas, 7-9 qavat"
+            },
             Section::Kj,
             by_wbs("7").map(|t| t.id),
             32,
@@ -1739,7 +2930,11 @@ impl Db {
         card(
             PprKind::QualityCard,
             "KK-02",
-            if ru { "Контроль бетонных работ" } else { "Beton ishlarini nazorat qilish" },
+            if ru {
+                "Контроль бетонных работ"
+            } else {
+                "Beton ishlarini nazorat qilish"
+            },
             Section::Kj,
             by_wbs("3").map(|t| t.id),
             0,
@@ -1749,7 +2944,11 @@ impl Db {
         card(
             PprKind::TechCard,
             "TK-09",
-            if ru { "Кладка наружных стен" } else { "Tashqi devorlar g'ishtligi" },
+            if ru {
+                "Кладка наружных стен"
+            } else {
+                "Tashqi devorlar g'ishtligi"
+            },
             Section::Ar,
             by_wbs("9").map(|t| t.id),
             18,
@@ -1759,7 +2958,11 @@ impl Db {
         card(
             PprKind::TechCard,
             "TK-14",
-            if ru { "Электромонтажные работы" } else { "Elektromontaj ishlari" },
+            if ru {
+                "Электромонтажные работы"
+            } else {
+                "Elektromontaj ishlari"
+            },
             Section::Eom,
             by_wbs("14").map(|t| t.id),
             14,
@@ -1770,7 +2973,11 @@ impl Db {
         card(
             PprKind::SafetyCard,
             "XK-01",
-            if ru { "Работы на высоте" } else { "Balandlikdagi ishlar" },
+            if ru {
+                "Работы на высоте"
+            } else {
+                "Balandlikdagi ishlar"
+            },
             Section::None,
             None,
             0,
@@ -1779,13 +2986,27 @@ impl Db {
         );
 
         // Jurnal: oxirgi uch kun.
-        let entry = |days_ago: i64, task_id: Option<i64>, volume: f64, unit: &str, text: &str, workers: i64, machines: i64| {
+        let entry = |days_ago: i64,
+                     task_id: Option<i64>,
+                     volume: f64,
+                     unit: &str,
+                     text: &str,
+                     workers: i64,
+                     machines: i64| {
             self.insert_journal(&JournalEntry {
                 id: 0,
                 project_id: pid,
                 date: today - chrono::Duration::days(days_ago),
-                author: if ru { "Юсупов Б.Р.".into() } else { "Yusupov B.R.".to_string() },
-                weather: if ru { "Ясно".into() } else { "Ochiq".to_string() },
+                author: if ru {
+                    "Юсупов Б.Р.".into()
+                } else {
+                    "Yusupov B.R.".to_string()
+                },
+                weather: if ru {
+                    "Ясно".into()
+                } else {
+                    "Ochiq".to_string()
+                },
                 temperature: 24.0,
                 workers,
                 machines,
@@ -1804,7 +3025,11 @@ impl Db {
             karkas,
             420.0,
             "m3",
-            if ru { "Бетонирование колонн 8 этажа" } else { "8-qavat ustunlarini betonlash" },
+            if ru {
+                "Бетонирование колонн 8 этажа"
+            } else {
+                "8-qavat ustunlarini betonlash"
+            },
             28,
             3,
         );
@@ -1813,7 +3038,11 @@ impl Db {
             karkas,
             380.0,
             "m3",
-            if ru { "Бетонирование перекрытия 8 этажа" } else { "8-qavat oralig'ini betonlash" },
+            if ru {
+                "Бетонирование перекрытия 8 этажа"
+            } else {
+                "8-qavat oralig'ini betonlash"
+            },
             31,
             4,
         );
@@ -1822,13 +3051,21 @@ impl Db {
             karkas,
             365.0,
             "m3",
-            if ru { "Армирование колонн 9 этажа" } else { "9-qavat ustunlarini armaturalash" },
+            if ru {
+                "Армирование колонн 9 этажа"
+            } else {
+                "9-qavat ustunlarini armaturalash"
+            },
             26,
             2,
         );
 
         // Ijro hujjatlari: 2 va 3-ishlar hujjatlangan, 1-ish esa yo'q.
-        let doc = |kind: ExecDocKind, number: &str, name: &str, task_id: Option<i64>, status: ExecDocStatus| {
+        let doc = |kind: ExecDocKind,
+                   number: &str,
+                   name: &str,
+                   task_id: Option<i64>,
+                   status: ExecDocStatus| {
             self.insert_exec_doc(&ExecDoc {
                 id: 0,
                 project_id: pid,
@@ -1838,21 +3075,33 @@ impl Db {
                 date: today - chrono::Duration::days(30),
                 task_id,
                 status,
-                responsible: if ru { "Рахимов Ш.А.".into() } else { "Rahimov Sh.A.".to_string() },
+                responsible: if ru {
+                    "Рахимов Ш.А.".into()
+                } else {
+                    "Rahimov Sh.A.".to_string()
+                },
                 note: String::new(),
             });
         };
         doc(
             ExecDocKind::Hidden,
             "AOSR-014",
-            if ru { "Акт на устройство котлована" } else { "Kotlovan qurilishi dalolatnomasi" },
+            if ru {
+                "Акт на устройство котлована"
+            } else {
+                "Kotlovan qurilishi dalolatnomasi"
+            },
             by_wbs("2").map(|t| t.id),
             ExecDocStatus::Signed,
         );
         doc(
             ExecDocKind::Hidden,
             "AOSR-021",
-            if ru { "Акт на армирование плиты" } else { "Plita armaturasi dalolatnomasi" },
+            if ru {
+                "Акт на армирование плиты"
+            } else {
+                "Plita armaturasi dalolatnomasi"
+            },
             by_wbs("3").map(|t| t.id),
             ExecDocStatus::OnReview,
         );
@@ -1882,7 +3131,13 @@ impl Db {
 
         let mut pos = 0;
         let mut total = 0.0;
-        let mut add = |section: Section, code: &str, name: String, unit: &str, qty: f64, price: f64, cost: f64| {
+        let mut add = |section: Section,
+                       code: &str,
+                       name: String,
+                       unit: &str,
+                       qty: f64,
+                       price: f64,
+                       cost: f64| {
             pos += 1;
             total += cost;
             self.insert_estimate_item(&EstimateItem {
@@ -1902,20 +3157,52 @@ impl Db {
 
         // 1. To'g'ri pozitsiya: hajm ham, arifmetika ham loyihaga mos.
         if let Some(t) = by_wbs("3") {
-            add(Section::Kj, "E6-1-1", t.name.clone(), "m3", t.volume, 1_250_000.0, t.volume * 1_250_000.0);
+            add(
+                Section::Kj,
+                "E6-1-1",
+                t.name.clone(),
+                "m3",
+                t.volume,
+                1_250_000.0,
+                t.volume * 1_250_000.0,
+            );
         }
         // 2. Hajm loyihadagidan 18 % ga oshirilgan.
         if let Some(t) = by_wbs("5") {
             let qty = t.volume * 1.18;
-            add(Section::Kj, "E6-1-22", t.name.clone(), "m3", qty, 1_480_000.0, qty * 1_480_000.0);
+            add(
+                Section::Kj,
+                "E6-1-22",
+                t.name.clone(),
+                "m3",
+                qty,
+                1_480_000.0,
+                qty * 1_480_000.0,
+            );
         }
         // 3. Birlik loyihadagiga mos emas: m2 o'rniga m3.
         if let Some(t) = by_wbs("9") {
-            add(Section::Ar, "E8-2-1", t.name.clone(), "m3", 950.0, 2_100_000.0, 950.0 * 2_100_000.0);
+            add(
+                Section::Ar,
+                "E8-2-1",
+                t.name.clone(),
+                "m3",
+                950.0,
+                2_100_000.0,
+                950.0 * 2_100_000.0,
+            );
         }
         // 4. Arifmetik xato: miqdor x narx summaga teng emas.
         if let Some(t) = by_wbs("17") {
-            add(Section::Ar, "E10-1-4", t.name.clone(), "m2", 1450.0, 1_850_000.0, 2_900_000_000.0);
+            add(
+                Section::Ar,
+                "E10-1-4",
+                t.name.clone(),
+                "m2",
+                1450.0,
+                1_850_000.0,
+                2_900_000_000.0,
+            );
         }
         // 5-6. Dublikat: bir xil nom, bir xil miqdor.
         let dup = if ru {
@@ -1923,13 +3210,33 @@ impl Db {
         } else {
             "Pol styashkasini qurish, 50 mm".to_string()
         };
-        add(Section::Ar, "E11-1-9", dup.clone(), "m2", 4200.0, 185_000.0, 4200.0 * 185_000.0);
-        add(Section::Ar, "E11-1-9", dup, "m2", 4200.0, 185_000.0, 4200.0 * 185_000.0);
+        add(
+            Section::Ar,
+            "E11-1-9",
+            dup.clone(),
+            "m2",
+            4200.0,
+            185_000.0,
+            4200.0 * 185_000.0,
+        );
+        add(
+            Section::Ar,
+            "E11-1-9",
+            dup,
+            "m2",
+            4200.0,
+            185_000.0,
+            4200.0 * 185_000.0,
+        );
         // 7. Noma'lum o'lchov birligi.
         add(
             Section::Ar,
             "E12-3-2",
-            if ru { "Гидроизоляция рулонная".into() } else { "Rulonli gidroizolyatsiya".to_string() },
+            if ru {
+                "Гидроизоляция рулонная".into()
+            } else {
+                "Rulonli gidroizolyatsiya".to_string()
+            },
             if ru { "рулон" } else { "rulon" },
             860.0,
             420_000.0,
@@ -1939,7 +3246,11 @@ impl Db {
         add(
             Section::Km,
             "E9-1-3",
-            if ru { "Монтаж закладных деталей".into() } else { "Zakladnoy detallarni montaj qilish".to_string() },
+            if ru {
+                "Монтаж закладных деталей".into()
+            } else {
+                "Zakladnoy detallarni montaj qilish".to_string()
+            },
             "t",
             0.0,
             9_800_000.0,
@@ -1949,7 +3260,11 @@ impl Db {
         add(
             Section::Eom,
             "E21-1-5",
-            if ru { "Прокладка кабеля ВВГнг 3х2,5".into() } else { "VVGng 3x2,5 kabelini yotqizish".to_string() },
+            if ru {
+                "Прокладка кабеля ВВГнг 3х2,5".into()
+            } else {
+                "VVGng 3x2,5 kabelini yotqizish".to_string()
+            },
             "m",
             9200.0,
             38_000.0,
@@ -1958,7 +3273,11 @@ impl Db {
         add(
             Section::Eom,
             "E21-1-5",
-            if ru { "Прокладка кабеля ВВГнг 3х2,5 (2 этап)".into() } else { "VVGng 3x2,5 kabelini yotqizish (2-bosqich)".to_string() },
+            if ru {
+                "Прокладка кабеля ВВГнг 3х2,5 (2 этап)".into()
+            } else {
+                "VVGng 3x2,5 kabelini yotqizish (2-bosqich)".to_string()
+            },
             "m",
             9300.0,
             54_000.0,

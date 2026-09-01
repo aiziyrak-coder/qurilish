@@ -119,7 +119,14 @@ impl Db {
                      clause=excluded.clause,text=excluded.text,param=excluded.param,
                      param_set=excluded.param_set,source=excluded.source",
                 params![
-                    key, n.doc, n.edition, n.clause, n.text, n.param, n.param_set as i64, n.source
+                    key,
+                    n.doc,
+                    n.edition,
+                    n.clause,
+                    n.text,
+                    n.param,
+                    n.param_set as i64,
+                    n.source
                 ],
             )
             .is_ok()
@@ -164,12 +171,13 @@ struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    fn new(
-        norms: &'a HashMap<String, Norm>,
-        project_id: i64,
-        module: IssueModule,
-    ) -> Builder<'a> {
-        Builder { norms, project_id, module, counter: HashMap::new() }
+    fn new(norms: &'a HashMap<String, Norm>, project_id: i64, module: IssueModule) -> Builder<'a> {
+        Builder {
+            norms,
+            project_id,
+            module,
+            counter: HashMap::new(),
+        }
     }
 
     fn norm(&self, key: &str) -> Norm {
@@ -204,7 +212,11 @@ impl<'a> Builder<'a> {
                 norm.text.clone(),
             )
         } else {
-            (String::new(), String::new(), crate::i18n::t("norm_missing").to_string())
+            (
+                String::new(),
+                String::new(),
+                crate::i18n::t("norm_missing").to_string(),
+            )
         };
 
         Issue {
@@ -347,12 +359,18 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
         }
         let positions: Vec<String> = group.iter().map(|i| i.pos.to_string()).collect();
         // Miqdorlar ham teng bo'lsa — dublikat ehtimoli yuqori.
-        let same_qty = group.windows(2).all(|w| (w[0].qty - w[1].qty).abs() < 0.001);
+        let same_qty = group
+            .windows(2)
+            .all(|w| (w[0].qty - w[1].qty).abs() < 0.001);
         out.push(b.make(
             "EST_DUP",
             "SM",
             group[0].section,
-            if same_qty { Severity::Critical } else { Severity::Warning },
+            if same_qty {
+                Severity::Critical
+            } else {
+                Severity::Warning
+            },
             crate::i18n::t("chk_dup_title").to_string(),
             format!(
                 "«{}» {}: {}. {}",
@@ -424,7 +442,9 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
     // --- III.6 Hajmlar: loyiha bo'yicha hajm bilan solishtirish ---
     let (dev_pct, _) = ctx.threshold("EST_VOLUME", 5.0);
     for it in ctx.items {
-        let Some(task) = task_by_name.get(&norm_name(&it.name)) else { continue };
+        let Some(task) = task_by_name.get(&norm_name(&it.name)) else {
+            continue;
+        };
         if task.volume <= 0.0 || it.qty <= 0.0 {
             continue;
         }
@@ -437,7 +457,11 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
                 "EST_VOLUME",
                 "SM",
                 it.section,
-                if delta.abs() > dev_pct * 3.0 { Severity::Critical } else { Severity::Major },
+                if delta.abs() > dev_pct * 3.0 {
+                    Severity::Critical
+                } else {
+                    Severity::Major
+                },
                 if delta > 0.0 {
                     crate::i18n::t("chk_vol_over").to_string()
                 } else {
@@ -485,30 +509,32 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
         let min = group.iter().map(|i| i.price).fold(f64::MAX, f64::min);
         let max = group.iter().map(|i| i.price).fold(0.0, f64::max);
         if min > 0.0 && (max - min) / min * 100.0 > price_pct {
-            out.push(b.make(
-                "EST_PRICE",
-                "SM",
-                group[0].section,
-                Severity::Major,
-                crate::i18n::t("chk_price_title").to_string(),
-                format!(
-                    "«{}»: {} {} … {} ({:+.1} %)",
-                    group[0].name,
-                    crate::i18n::t("chk_price_range"),
-                    fmt(min),
-                    fmt(max),
-                    (max - min) / min * 100.0
+            out.push(
+                b.make(
+                    "EST_PRICE",
+                    "SM",
+                    group[0].section,
+                    Severity::Major,
+                    crate::i18n::t("chk_price_title").to_string(),
+                    format!(
+                        "«{}»: {} {} … {} ({:+.1} %)",
+                        group[0].name,
+                        crate::i18n::t("chk_price_range"),
+                        fmt(min),
+                        fmt(max),
+                        (max - min) / min * 100.0
+                    ),
+                    group
+                        .iter()
+                        .map(|i| i.pos.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    group[0].name.clone(),
+                    String::new(),
+                    crate::i18n::t("chk_price_fix").to_string(),
+                    String::new(),
                 ),
-                group
-                    .iter()
-                    .map(|i| i.pos.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                group[0].name.clone(),
-                String::new(),
-                crate::i18n::t("chk_price_fix").to_string(),
-                String::new(),
-            ));
+            );
         }
     }
 
@@ -610,7 +636,9 @@ pub fn cost_summary(ctx: &Ctx) -> CostSummary {
     let task_by_name: HashMap<String, &Task> =
         ctx.tasks.iter().map(|t| (norm_name(&t.name), t)).collect();
     for it in ctx.items {
-        let Some(task) = task_by_name.get(&norm_name(&it.name)) else { continue };
+        let Some(task) = task_by_name.get(&norm_name(&it.name)) else {
+            continue;
+        };
         if task.volume <= 0.0 || it.qty <= 0.0 {
             continue;
         }
@@ -701,24 +729,31 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
         // Guruh kaliti kichik harfga keltirilgan — ekranga chizmadagi asl marka chiqadi.
         let mark = &group[0].mark;
         if group.len() > 1 {
-            out.push(b.make(
-                "PRJ_DUP_MARK",
-                "PR",
-                *sec,
-                Severity::Warning,
-                crate::i18n::t("chk_dupmark_title").to_string(),
-                format!("«{}» — {} {}", mark, group.len(), crate::i18n::t("chk_times")),
-                group
-                    .iter()
-                    .map(|e| e.sheet.clone())
-                    .filter(|s| !s.is_empty())
-                    .collect::<Vec<_>>()
-                    .join(", "),
-                mark.clone(),
-                String::new(),
-                crate::i18n::t("chk_dupmark_fix").to_string(),
-                String::new(),
-            ));
+            out.push(
+                b.make(
+                    "PRJ_DUP_MARK",
+                    "PR",
+                    *sec,
+                    Severity::Warning,
+                    crate::i18n::t("chk_dupmark_title").to_string(),
+                    format!(
+                        "«{}» — {} {}",
+                        mark,
+                        group.len(),
+                        crate::i18n::t("chk_times")
+                    ),
+                    group
+                        .iter()
+                        .map(|e| e.sheet.clone())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    mark.clone(),
+                    String::new(),
+                    crate::i18n::t("chk_dupmark_fix").to_string(),
+                    String::new(),
+                ),
+            );
         }
     }
 
@@ -763,9 +798,7 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
 
     // --- II.11 AR ↔ KJ: deraza/eshik bor, teshik yo'q ---
     for e in ctx.elements {
-        if e.section != Section::Ar
-            || !matches!(e.kind, ElementKind::Window | ElementKind::Door)
-        {
+        if e.section != Section::Ar || !matches!(e.kind, ElementKind::Window | ElementKind::Door) {
             continue;
         }
         let has_opening = rel_out
@@ -779,7 +812,12 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
                 Section::Ar,
                 Severity::Critical,
                 crate::i18n::t("chk_arkj_title").to_string(),
-                format!("{} «{}» {}", e.kind.label(), e.mark, crate::i18n::t("chk_arkj_desc")),
+                format!(
+                    "{} «{}» {}",
+                    e.kind.label(),
+                    e.mark,
+                    crate::i18n::t("chk_arkj_desc")
+                ),
                 format!("{} {}", e.room, e.axis).trim().to_string(),
                 e.mark.clone(),
                 e.sheet.clone(),
@@ -825,7 +863,11 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
                 format!(
                     "{} «{}»: {}",
                     crate::i18n::t("ek_room"),
-                    if room.mark.is_empty() { room.room.clone() } else { room.mark.clone() },
+                    if room.mark.is_empty() {
+                        room.room.clone()
+                    } else {
+                        room.mark.clone()
+                    },
                     crate::i18n::t(desc_key)
                 ),
                 room.room.clone(),
@@ -842,12 +884,17 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
         if l.relation != Relation::Crosses {
             continue;
         }
-        let (Some(a), Some(c)) = (by_id.get(&l.from_el), by_id.get(&l.to_el)) else { continue };
+        let (Some(a), Some(c)) = (by_id.get(&l.from_el), by_id.get(&l.to_el)) else {
+            continue;
+        };
         let is_net = matches!(
             a.kind,
             ElementKind::Pipe | ElementKind::Duct | ElementKind::Cable
         );
-        let is_struct = matches!(c.kind, ElementKind::Beam | ElementKind::Column | ElementKind::Slab);
+        let is_struct = matches!(
+            c.kind,
+            ElementKind::Beam | ElementKind::Column | ElementKind::Slab
+        );
         if !(is_net && is_struct) {
             continue;
         }
@@ -888,7 +935,8 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
         if e.section != Section::Vk || e.kind != ElementKind::Pipe {
             continue;
         }
-        if norm_name(&e.value_name) != norm_name("uklon") && !e.value_name.to_lowercase().contains("uklon")
+        if norm_name(&e.value_name) != norm_name("uklon")
+            && !e.value_name.to_lowercase().contains("uklon")
             && !e.value_name.to_lowercase().contains("уклон")
         {
             continue;
@@ -936,8 +984,9 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
         let powered_by = |m: &HashMap<i64, Vec<(&ElementLink, &Element)>>| {
             m.get(&e.id)
                 .map(|v| {
-                    v.iter()
-                        .any(|(l, o)| l.relation == Relation::PoweredBy && o.section == Section::Eom)
+                    v.iter().any(|(l, o)| {
+                        l.relation == Relation::PoweredBy && o.section == Section::Eom
+                    })
                 })
                 .unwrap_or(false)
         };
@@ -949,7 +998,11 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
             "PR",
             e.section,
             // Yong'in xavfsizligi tizimi uchun bu kritik, qolganlari uchun jiddiy.
-            if e.section == Section::Pb { Severity::Critical } else { Severity::Major },
+            if e.section == Section::Pb {
+                Severity::Critical
+            } else {
+                Severity::Major
+            },
             crate::i18n::t("chk_power_title").to_string(),
             format!(
                 "{} «{}» {}",
@@ -967,9 +1020,7 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
 
     // --- II.11 KM <-> KJ: metall konstruksiya tayanchi aniqlanmagan ---
     for e in ctx.elements {
-        if e.section != Section::Km
-            || !matches!(e.kind, ElementKind::Column | ElementKind::Beam)
-        {
+        if e.section != Section::Km || !matches!(e.kind, ElementKind::Column | ElementKind::Beam) {
             continue;
         }
         let supported = rel_out
@@ -1087,7 +1138,11 @@ pub struct SupplyLine {
 ///
 /// Dastur hukm chiqarmaydi (TZ III.32) — bu yerda faqat fakt qayd etiladi:
 /// qancha so'raldi, qancha buyurtma qilindi, qancha keldi va sana qanday.
-pub fn supply_status(requests: &[Request], purchases: &[Purchase], today: NaiveDate) -> Vec<SupplyLine> {
+pub fn supply_status(
+    requests: &[Request],
+    purchases: &[Purchase],
+    today: NaiveDate,
+) -> Vec<SupplyLine> {
     let mut out = Vec::with_capacity(requests.len());
     for q in requests {
         let mine: Vec<&Purchase> = purchases
@@ -1153,9 +1208,7 @@ pub fn stock_balances(materials: &[Material], moves: &[StockMove]) -> Vec<StockL
     let mut out = Vec::with_capacity(materials.len());
     for m in materials {
         let mine: Vec<&StockMove> = moves.iter().filter(|x| x.material_id == m.id).collect();
-        let sum = |k: MoveKind| -> f64 {
-            mine.iter().filter(|x| x.kind == k).map(|x| x.qty).sum()
-        };
+        let sum = |k: MoveKind| -> f64 { mine.iter().filter(|x| x.kind == k).map(|x| x.qty).sum() };
         let incoming = sum(MoveKind::In);
         let outgoing = sum(MoveKind::Out);
         let written_off = sum(MoveKind::WriteOff);
@@ -1171,7 +1224,11 @@ pub fn stock_balances(materials: &[Material], moves: &[StockMove]) -> Vec<StockL
         } else {
             let qty: f64 = priced.iter().map(|x| x.qty).sum();
             let cost: f64 = priced.iter().map(|x| x.qty * x.price).sum();
-            if qty > 0.0 { cost / qty } else { m.price }
+            if qty > 0.0 {
+                cost / qty
+            } else {
+                m.price
+            }
         };
 
         out.push(StockLine {
@@ -1212,11 +1269,7 @@ pub struct RequiredDoc {
 /// konstruksiya va muhandislik tarmoqlari uchun, sinov bayonnomasi bosim va
 /// izolyatsiya sinaladigan tarmoqlar uchun, ijro sxemasi esa geometriyasi
 /// nazorat qilinadigan ishlar uchun.
-pub fn required_docs(
-    tasks: &[Task],
-    docs: &[ExecDoc],
-    only_started: bool,
-) -> Vec<RequiredDoc> {
+pub fn required_docs(tasks: &[Task], docs: &[ExecDoc], only_started: bool) -> Vec<RequiredDoc> {
     let mut out = Vec::new();
     for task in tasks {
         let done = task.progress >= 99.999 || task.fact_end.is_some();
@@ -1228,9 +1281,7 @@ pub fn required_docs(
         // Bo'lim bo'yicha talab qilinadigan hujjat turlari.
         let kinds: &[ExecDocKind] = match task.section {
             // Konstruksiyalar: yashirin ishlar + ijro sxemasi.
-            Section::Kj | Section::Km => {
-                &[ExecDocKind::Hidden, ExecDocKind::Scheme]
-            }
+            Section::Kj | Section::Km => &[ExecDocKind::Hidden, ExecDocKind::Scheme],
             // Muhandislik tarmoqlari: yashirin ishlar + sinov bayonnomasi.
             Section::Vk | Section::Ov => &[ExecDocKind::Hidden, ExecDocKind::Test],
             // Elektr va kuchsiz tok: yashirin ishlar + sinov.
@@ -1307,8 +1358,12 @@ pub fn resource_demand(
     let mut out = vec![0i64; days];
     let by_task = cards_by_task(docs);
     for task in tasks {
-        let Some(c) = schedule.get(task.id) else { continue };
-        let Some(cards) = by_task.get(&task.id) else { continue };
+        let Some(c) = schedule.get(task.id) else {
+            continue;
+        };
+        let Some(cards) = by_task.get(&task.id) else {
+            continue;
+        };
         let need: i64 = cards
             .iter()
             .map(|d| if machines { d.machines } else { d.workers })
@@ -1339,7 +1394,10 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
     for task in ctx.tasks {
         let has_card = by_task
             .get(&task.id)
-            .map(|v| v.iter().any(|d| d.kind == PprKind::TechCard || d.kind == PprKind::Ppr))
+            .map(|v| {
+                v.iter()
+                    .any(|d| d.kind == PprKind::TechCard || d.kind == PprKind::Ppr)
+            })
             .unwrap_or(false);
         if has_card {
             continue;
@@ -1355,7 +1413,11 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
             "PPR_MISSING",
             "PP",
             task.section,
-            if critical { Severity::Critical } else { Severity::Major },
+            if critical {
+                Severity::Critical
+            } else {
+                Severity::Major
+            },
             crate::i18n::t("chk_ppr_missing_title").to_string(),
             format!(
                 "«{}» — {}",
@@ -1379,7 +1441,9 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
         if task.progress <= 0.0 && task.fact_start.is_none() {
             continue;
         }
-        let Some(cards) = by_task.get(&task.id) else { continue };
+        let Some(cards) = by_task.get(&task.id) else {
+            continue;
+        };
         let unapproved: Vec<&&PprDoc> = cards.iter().filter(|d| !d.approved).collect();
         if unapproved.is_empty() {
             continue;
@@ -1426,7 +1490,11 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
             format!(
                 "{} «{}» — {}",
                 d.kind.label(),
-                if d.number.is_empty() { &d.name } else { &d.number },
+                if d.number.is_empty() {
+                    &d.name
+                } else {
+                    &d.number
+                },
                 crate::i18n::t("chk_ppr_orphan_desc")
             ),
             String::new(),
@@ -1451,7 +1519,9 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
             if link.succ != task.id || link.kind != crate::model::LinkType::Fs {
                 continue;
             }
-            let Some(pred) = by_id.get(&link.pred) else { continue };
+            let Some(pred) = by_id.get(&link.pred) else {
+                continue;
+            };
             let pred_done = pred.progress >= 99.999 || pred.fact_end.is_some();
             if pred_done {
                 continue;
@@ -1461,7 +1531,11 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
                 "PP",
                 task.section,
                 // Oldingi ish yarmigacha ham yetmagan bo'lsa — kritik.
-                if pred.progress < 50.0 { Severity::Critical } else { Severity::Major },
+                if pred.progress < 50.0 {
+                    Severity::Critical
+                } else {
+                    Severity::Major
+                },
                 crate::i18n::t("chk_ppr_seq_title").to_string(),
                 format!(
                     "«{}» ({:.0} %) {} «{}» ({:.0} %)",
@@ -1489,7 +1563,9 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
         if !ctx.schedule.is_critical(task.id) {
             continue;
         }
-        let Some(c) = ctx.schedule.get(task.id) else { continue };
+        let Some(c) = ctx.schedule.get(task.id) else {
+            continue;
+        };
         let days_left = c.es - today_off;
         if !(0..=RISK_HORIZON).contains(&days_left) {
             continue;
@@ -1569,8 +1645,13 @@ pub fn check_ppr(ctx: &PprCtx) -> Vec<Issue> {
                     && by_task
                         .get(&task.id)
                         .map(|v| {
-                            v.iter()
-                                .any(|d| if pick == 1 { d.machines > 0 } else { d.workers > 0 })
+                            v.iter().any(|d| {
+                                if pick == 1 {
+                                    d.machines > 0
+                                } else {
+                                    d.workers > 0
+                                }
+                            })
                         })
                         .unwrap_or(false)
             })
@@ -1620,7 +1701,6 @@ fn fmt(v: f64) -> String {
         format!("{v:.3}")
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -1846,7 +1926,9 @@ mod tests {
             .filter(|i| i.title == crate::i18n::t("chk_power_title"))
             .collect();
         assert_eq!(power.len(), 2, "ventilyator va izveshchatel ta'minotsiz");
-        assert!(power.iter().any(|i| i.element == "VN-1" && i.severity == Severity::Major));
+        assert!(power
+            .iter()
+            .any(|i| i.element == "VN-1" && i.severity == Severity::Major));
         // Yong'in xavfsizligi uchun bu kritik.
         assert!(power
             .iter()
@@ -2142,7 +2224,11 @@ mod tests {
     fn dangling_card_is_reported() {
         let tasks = vec![gtask(1, "Karkas", 20)];
         // Ish boshlanmagan — PPR_MISSING chiqmaydi, faqat bog'lanish xatolari.
-        let docs = vec![card(1, Some(1), 0, true), card(2, Some(99), 0, true), card(3, None, 0, true)];
+        let docs = vec![
+            card(1, Some(1), 0, true),
+            card(2, Some(99), 0, true),
+            card(3, None, 0, true),
+        ];
         let out = ppr_out(&tasks, &[], &docs, 0);
         assert_eq!(
             out.iter()
@@ -2236,8 +2322,18 @@ mod tests {
             el(3, Section::Eom, ElementKind::Cable, "W-1", "EOM-01"),
         ];
         let links = vec![
-            ElementLink { id: 1, from_el: 2, to_el: 1, relation: Relation::Serves },
-            ElementLink { id: 2, from_el: 3, to_el: 1, relation: Relation::Serves },
+            ElementLink {
+                id: 1,
+                from_el: 2,
+                to_el: 1,
+                relation: Relation::Serves,
+            },
+            ElementLink {
+                id: 2,
+                from_el: 3,
+                to_el: 1,
+                relation: Relation::Serves,
+            },
         ];
         let out = impact(&elements, &links, 1);
         assert_eq!(out.len(), 2, "VK va EOM bo'limlari ta'sirlanadi");

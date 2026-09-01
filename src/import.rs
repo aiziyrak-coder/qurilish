@@ -100,16 +100,30 @@ fn detect_columns(row: &[Cell]) -> Columns {
         let hit = |variants: &[&str]| variants.iter().any(|v| k == *v || k.starts_with(v));
 
         // Qisqa "n" varianti bo'lmasligi kerak: u "narx" va "nomi" ga ham tushardi.
-        if c.pos.is_none()
-            && hit(&["№", "nomer", "номер", "поз", "pozitsiya", "пп"])
-        {
+        if c.pos.is_none() && hit(&["№", "nomer", "номер", "поз", "pozitsiya", "пп"]) {
             c.pos = Some(i);
         } else if c.code.is_none()
-            && hit(&["шифр", "код", "kod", "shifr", "расценка", "rasenka", "обоснование"])
+            && hit(&[
+                "шифр",
+                "код",
+                "kod",
+                "shifr",
+                "расценка",
+                "rasenka",
+                "обоснование",
+            ])
         {
             c.code = Some(i);
         } else if c.name.is_none()
-            && hit(&["наименование", "название", "работа", "nomi", "nomlanishi", "ish", "описание"])
+            && hit(&[
+                "наименование",
+                "название",
+                "работа",
+                "nomi",
+                "nomlanishi",
+                "ish",
+                "описание",
+            ])
         {
             c.name = Some(i);
         } else if c.unit.is_none()
@@ -117,10 +131,19 @@ fn detect_columns(row: &[Cell]) -> Columns {
         {
             c.unit = Some(i);
         } else if c.qty.is_none()
-            && hit(&["количество", "колво", "кол", "miqdor", "hajm", "объем", "obyem"])
+            && hit(&[
+                "количество",
+                "колво",
+                "кол",
+                "miqdor",
+                "hajm",
+                "объем",
+                "obyem",
+            ])
         {
             c.qty = Some(i);
-        } else if c.price.is_none() && hit(&["цена", "narx", "расценкаед", "стоимостьед"]) {
+        } else if c.price.is_none() && hit(&["цена", "narx", "расценкаед", "стоимостьед"])
+        {
             c.price = Some(i);
         } else if c.cost.is_none()
             && hit(&["стоимость", "сумма", "summa", "всего", "итого", "qiymat"])
@@ -145,9 +168,16 @@ fn is_total_row(row: &[Cell], name_col: Option<usize>) -> bool {
             .unwrap_or_default(),
     };
     let k = key(&text);
-    ["итого", "всего", "jami", "yakun", "итогопосмете", "всегопосмете"]
-        .iter()
-        .any(|v| k.starts_with(v))
+    [
+        "итого",
+        "всего",
+        "jami",
+        "yakun",
+        "итогопосмете",
+        "всегопосмете",
+    ]
+    .iter()
+    .any(|v| k.starts_with(v))
 }
 
 /// Jadvalni pozitsiyalarga aylantiradi. `estimate_id` keyin to'ldiriladi.
@@ -241,7 +271,12 @@ fn rows_to_items(rows: &[Vec<Cell>], name: String) -> Result<Imported, String> {
     if items.is_empty() {
         return Err(crate::i18n::t("import_no_items").to_string());
     }
-    Ok(Imported { items, declared_total, name, skipped })
+    Ok(Imported {
+        items,
+        declared_total,
+        name,
+        skipped,
+    })
 }
 
 /// Fayl kengaytmasiga qarab kerakli parserni chaqiradi.
@@ -276,18 +311,35 @@ fn read_spreadsheet(path: &Path) -> Result<Vec<Vec<Cell>>, String> {
     // Bir nechta varaq bo'lsa, ustunlari topiladigan birinchisini olamiz.
     let mut fallback: Option<Vec<Vec<Cell>>> = None;
     for sheet in sheets {
-        let Ok(range) = wb.worksheet_range(&sheet) else { continue };
+        let Ok(range) = wb.worksheet_range(&sheet) else {
+            continue;
+        };
         let rows: Vec<Vec<Cell>> = range
             .rows()
             .map(|r| {
                 r.iter()
                     .map(|d| match d {
                         Data::Empty => Cell::default(),
-                        Data::Int(i) => Cell { text: i.to_string(), num: Some(*i as f64) },
-                        Data::Float(f) => Cell { text: f.to_string(), num: Some(*f) },
-                        Data::String(s) => Cell { text: s.clone(), num: None },
-                        Data::Bool(b) => Cell { text: b.to_string(), num: None },
-                        other => Cell { text: other.to_string(), num: None },
+                        Data::Int(i) => Cell {
+                            text: i.to_string(),
+                            num: Some(*i as f64),
+                        },
+                        Data::Float(f) => Cell {
+                            text: f.to_string(),
+                            num: Some(*f),
+                        },
+                        Data::String(s) => Cell {
+                            text: s.clone(),
+                            num: None,
+                        },
+                        Data::Bool(b) => Cell {
+                            text: b.to_string(),
+                            num: None,
+                        },
+                        other => Cell {
+                            text: other.to_string(),
+                            num: None,
+                        },
                     })
                     .collect()
             })
@@ -354,7 +406,10 @@ mod tests {
 
     fn cells(row: &[&str]) -> Vec<Cell> {
         row.iter()
-            .map(|s| Cell { text: s.to_string(), num: None })
+            .map(|s| Cell {
+                text: s.to_string(),
+                num: None,
+            })
             .collect()
     }
 
@@ -400,9 +455,33 @@ mod tests {
             cells(&["Локальная смета № 2-1", "", "", "", "", "", ""]),
             cells(&["Объект: ЖК Навруз", "", "", "", "", "", ""]),
             cells(&[""]),
-            cells(&["№", "Шифр", "Наименование", "Ед. изм.", "Кол-во", "Цена", "Стоимость"]),
-            cells(&["1", "Е6-1-1", "Бетонирование", "м3", "450", "1 250 000", "562 500 000"]),
-            cells(&["2", "Е8-2-1", "Кладка стен", "м2", "1 200", "310 000", "372 000 000"]),
+            cells(&[
+                "№",
+                "Шифр",
+                "Наименование",
+                "Ед. изм.",
+                "Кол-во",
+                "Цена",
+                "Стоимость",
+            ]),
+            cells(&[
+                "1",
+                "Е6-1-1",
+                "Бетонирование",
+                "м3",
+                "450",
+                "1 250 000",
+                "562 500 000",
+            ]),
+            cells(&[
+                "2",
+                "Е8-2-1",
+                "Кладка стен",
+                "м2",
+                "1 200",
+                "310 000",
+                "372 000 000",
+            ]),
             cells(&["", "", "Итого по смете", "", "", "", "934 500 000"]),
         ];
         let out = rows_to_items(&rows, "smeta".into()).unwrap();
@@ -419,9 +498,23 @@ mod tests {
     #[test]
     fn section_heading_is_not_an_item() {
         let rows = vec![
-            cells(&["№", "Наименование", "Ед. изм.", "Кол-во", "Цена", "Стоимость"]),
+            cells(&[
+                "№",
+                "Наименование",
+                "Ед. изм.",
+                "Кол-во",
+                "Цена",
+                "Стоимость",
+            ]),
             cells(&["", "Раздел 1. Земляные работы", "", "", "", ""]),
-            cells(&["1", "Разработка грунта", "м3", "800", "45 000", "36 000 000"]),
+            cells(&[
+                "1",
+                "Разработка грунта",
+                "м3",
+                "800",
+                "45 000",
+                "36 000 000",
+            ]),
         ];
         let out = rows_to_items(&rows, "smeta".into()).unwrap();
         assert_eq!(out.items.len(), 1);
@@ -480,7 +573,10 @@ mod tests {
             // Butunlay bo'sh fayl.
             ("empty", ""),
             // Faqat sarlavha, pozitsiyasiz.
-            ("headeronly", "\u{FEFF}№;Наименование;Ед. изм.;Кол-во;Цена\n"),
+            (
+                "headeronly",
+                "\u{FEFF}№;Наименование;Ед. изм.;Кол-во;Цена\n",
+            ),
             // Ustunlar tanilmaydi.
             ("garbage", "aaa;bbb;ccc\n1;2;3\n"),
             // Bitta ustun.

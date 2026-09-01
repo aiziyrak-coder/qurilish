@@ -247,6 +247,41 @@ olinadi; kirimda narx ko'rsatilmagan bo'lsa katalogdagi narx ishlatiladi.
 Chiqim kirimdan ko'p yozilsa qoldiq manfiy bo'ladi va bu hujjatdagi xato deb
 alohida ajratib ko'rsatiladi.
 
+### Sotuv — shaxmatka (XIX)
+Bino sotuv kesimida: **blok (podez) → qavat → kvartira**. Shaxmatkada vertikal o'q
+qavatlar (yuqoridan pastga), gorizontal o'q qavatdagi kvartiralar; har katakda
+raqam, xonalar soni (tijorat joyida — turning qisqartmasi) va maydon, katak rangi
+esa holatni bildiradi: **bo'sh, band qilingan, shartnoma, sotilgan, sotuvda emas**.
+Muddati o'tgan to'lovi bor kvartira o'ng pastda qizil nuqta bilan belgilanadi.
+
+Katak bosilganda o'ng panelda kvartira kartochkasi ochiladi: raqam, qavat, o'rni,
+turi, xonalar, umumiy va yashash maydoni, 1 m² narxi, umumiy narx, holat,
+planirovka. Shu yerdan bir bosishda band qilish ochiladi yoki mavjud shartnomaga
+o'tiladi. «Kvartiralarni yaratish» blokning har bir qavati uchun bir xil
+kvartiralarni hosil qiladi — band raqamlar o'tkazib yuboriladi, shuning uchun
+tugma ikki marta bosilsa dubl bo'lmaydi.
+
+«Ro'yxat» ko'rinishi barcha bloklardagi kvartiralarni jadval sifatida beradi:
+narx va holatni to'g'ridan-to'g'ri tahrirlash, mijoz ustuni bilan.
+
+### Shartnomalar va to'lovlar (XX)
+Shartnoma kvartiraga bog'lanadi. Shartlar: mijoz, telefon, hujjat, **to'lov turi**
+(naqd, muddatli to'lov, kredit/ipoteka, subsidiya, barter, aralash), narx,
+chegirma, boshlang'ich to'lov, muddat va menejer. Holat: band qilingan →
+imzolangan → to'liq to'langan (yoki bekor qilingan).
+
+Kvartira holati alohida saqlanmaydi — u shartnoma holatidan kelib chiqadi, shuning
+uchun shaxmatkadagi rang shartnoma bilan hech qachon zid bo'lmaydi. Shartnoma
+o'chirilsa kvartira yana bo'sh bo'ladi.
+
+**To'lov grafigi** shartnoma shartlaridan quriladi: birinchi qator — boshlang'ich
+to'lov, qolgani teng oylik ulushlar; yaxlitlash qoldig'i oxirgi oyga qo'shiladi,
+shuning uchun grafik summasi shartnoma summasiga aniq to'g'ri keladi (mos kelmasa
+ekran buni ochiq aytadi). Har qatorda reja va fakt yonma-yon; muddati o'tgan
+to'lanmagan qator qizil undov bilan ajraladi. Qarz shartnoma summasidan
+hisoblanadi, grafikdan emas — grafik to'ldirilmagan bo'lsa ham qarz to'g'ri
+ko'rinadi.
+
 ### Umumiy ko'rinish
 Obyekt bo'yicha xulosa, muddati o'tgan ishlar mas'ullari va kechikish miqdori bilan
 (bosilsa GPR da ochiladi), bo'limlar kesimidagi bajarilish, bugungi ishlar.
@@ -263,7 +298,7 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/i18n.rs` | Ikki tilli satrlar ro'yxati, joriy til |
 | `src/theme.rs` | Yorug' va qorong'i palitra |
 | `src/model.rs` | I modul turlari: obyekt, ishtirokchilar, ishlar, bog'lanishlar, bo'limlar |
-| `src/domain.rs` | II–XVI modullar turlari: nomuvofiqlik, element, smeta, jurnal, ombor… |
+| `src/domain.rs` | II–XX modullar turlari: nomuvofiqlik, element, smeta, jurnal, ombor, kvartira, shartnoma… |
 | `src/cpm.rs` | Tarmoq grafigi hisobi: CPM, zaxiralar, plan/fakt, prognoz |
 | `src/checks.rs` | Tekshiruv dvigateli: loyiha (II), smeta (III) va PPR (I.3) qoidalari, normativ reyestri |
 | `src/import.rs` | Smeta importi: XLSX/XLS/ODS/CSV, ustunlarni nom bo'yicha aniqlash |
@@ -279,6 +314,9 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/execdocs.rs` | Ijro hujjatlari va rasmiylashtirilmagan ishlar |
 | `src/ui/journal.rs` | Kundalik ishlar jurnali |
 | `src/ui/documents.rs` | Obyekt hujjatlari va foto galereyasi |
+| `src/sales.rs` | Sotuv hisobi: qarz, to'lov grafigi, kvartira holati |
+| `src/ui/sales.rs` | Sotuv shaxmatkasi va kvartira kartochkasi |
+| `src/ui/deals.rs` | Shartnomalar, to'lov turlari va to'lov grafigi |
 | `src/ui/requests.rs` | Arizalar, ehtiyoj va qoplanish nazorati |
 | `src/ui/purchases.rs` | Xaridlar, yetkazish va omborga kirim |
 | `src/ui/materials.rs` | Material katalogi, sertifikat nazorati |

@@ -9,6 +9,7 @@ mod domain;
 mod i18n;
 mod import;
 mod model;
+mod sales;
 mod store;
 mod theme;
 mod ui;

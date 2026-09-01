@@ -59,11 +59,7 @@ fn topo_order(tasks: &[Task], links: &[Link]) -> (Vec<i64>, Vec<i64>) {
         *indeg.entry(l.succ).or_default() += 1;
     }
 
-    let mut queue: Vec<i64> = ids
-        .iter()
-        .copied()
-        .filter(|i| indeg[i] == 0)
-        .collect();
+    let mut queue: Vec<i64> = ids.iter().copied().filter(|i| indeg[i] == 0).collect();
     let mut order = Vec::with_capacity(ids.len());
 
     while let Some(id) = queue.pop() {
@@ -303,7 +299,13 @@ mod tests {
     }
 
     fn fs(id: i64, pred: i64, succ: i64) -> Link {
-        Link { id, pred, succ, kind: LinkType::Fs, lag: 0 }
+        Link {
+            id,
+            pred,
+            succ,
+            kind: LinkType::Fs,
+            lag: 0,
+        }
     }
 
     /// Классическая цепочка A(3) → B(5) → D(2), параллельно A → C(2) → D.
@@ -341,7 +343,13 @@ mod tests {
     fn start_to_start_runs_parallel() {
         let origin = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap();
         let tasks = vec![task(1, 10), task(2, 4)];
-        let l = Link { id: 1, pred: 1, succ: 2, kind: LinkType::Ss, lag: 2 };
+        let l = Link {
+            id: 1,
+            pred: 1,
+            succ: 2,
+            kind: LinkType::Ss,
+            lag: 2,
+        };
         let s = compute(&tasks, &[l], origin);
         assert_eq!(s.get(2).unwrap().es, 2);
     }

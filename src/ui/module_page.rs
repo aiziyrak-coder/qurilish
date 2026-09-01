@@ -21,11 +21,7 @@ pub fn show(ui: &mut egui::Ui, screen: Screen) {
 
             let summary = screen.tz_summary();
             if !summary.is_empty() {
-                ui.label(
-                    RichText::new(summary)
-                        .size(15.0)
-                        .color(theme::text()),
-                );
+                ui.label(RichText::new(summary).size(15.0).color(theme::text()));
                 ui.add_space(16.0);
             }
 
@@ -39,16 +35,9 @@ pub fn show(ui: &mut egui::Ui, screen: Screen) {
                         }
                         ui.horizontal_top(|ui| {
                             ui.add_space(2.0);
-                            ui.label(
-                                RichText::new("—")
-                                    .size(13.0)
-                                    .color(theme::accent()),
-                            );
+                            ui.label(RichText::new("—").size(13.0).color(theme::accent()));
                             ui.add_space(6.0);
-                            ui.add(
-                                egui::Label::new(RichText::new(line).size(13.5))
-                                    .wrap(),
-                            );
+                            ui.add(egui::Label::new(RichText::new(line).size(13.5)).wrap());
                         });
                         ui.add_space(3.0);
                     }
@@ -97,11 +86,9 @@ fn readiness_chip(ui: &mut egui::Ui, ready: Readiness) {
         Readiness::Storage => (t("readiness_storage"), theme::warn()),
         Readiness::Planned => (t("readiness_planned"), theme::muted()),
     };
-    let galley = ui.painter().layout_no_wrap(
-        text.to_string(),
-        egui::FontId::proportional(12.0),
-        color,
-    );
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text.to_string(), egui::FontId::proportional(12.0), color);
     let (rect, _) = ui.allocate_exact_size(
         egui::vec2(galley.size().x + 20.0, 22.0),
         egui::Sense::hover(),
@@ -141,9 +128,7 @@ fn status_card(ui: &mut egui::Ui, screen: Screen, ready: Readiness, w: f32) {
                 );
             });
             ui.add_space(2.0);
-            ui.add(
-                egui::Label::new(RichText::new(blocker).size(13.0).color(theme::warn())).wrap(),
-            );
+            ui.add(egui::Label::new(RichText::new(blocker).size(13.0).color(theme::warn())).wrap());
         }
     });
 }

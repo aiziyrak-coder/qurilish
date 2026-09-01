@@ -4,8 +4,9 @@ use crate::checks::{self, Norm};
 use crate::cpm::{self, Progress, Schedule};
 use crate::db::Db;
 use crate::domain::{
-    Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Issue, IssueModule,
-    IssueStatus, JournalEntry, Material, PprDoc, Purchase, Request, Severity, StockMove,
+    Block, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc, Issue,
+    IssueModule, IssueStatus, JournalEntry, Material, Payment, PprDoc, Purchase, Request, Severity,
+    StockMove, Unit,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -46,6 +47,9 @@ pub enum Screen {
     // XVII-XVIII. Analitika
     Analytics,
     Copilot,
+    // XIX-XX. Sotuv
+    Sales,
+    Deals,
     Settings,
 }
 
@@ -84,6 +88,8 @@ impl Screen {
             Screen::Machines => t("screen_machines"),
             Screen::Analytics => t("screen_analytics"),
             Screen::Copilot => t("screen_copilot"),
+            Screen::Sales => t("screen_sales"),
+            Screen::Deals => t("screen_deals"),
             Screen::Settings => t("screen_settings"),
         }
     }
@@ -112,6 +118,8 @@ impl Screen {
             Screen::Machines => "XVI",
             Screen::Analytics => "XVII",
             Screen::Copilot => "XVIII",
+            Screen::Sales => "XIX",
+            Screen::Deals => "XX",
         }
     }
 
@@ -129,13 +137,14 @@ impl Screen {
             | Screen::Materials
             | Screen::Requests
             | Screen::Purchases
+            | Screen::Sales
+            | Screen::Deals
             | Screen::Settings => Readiness::Ready,
 
             // Bularning domen turlari `domain.rs` da, jadvallari `store.rs` da bor.
-            Screen::Quality
-            | Screen::Safety
-            | Screen::Timesheet
-            | Screen::Machines => Readiness::Storage,
+            Screen::Quality | Screen::Safety | Screen::Timesheet | Screen::Machines => {
+                Readiness::Storage
+            }
 
             // Bular server, mobil klient yoki LLM ni talab qiladi.
             Screen::Foreman
@@ -202,7 +211,12 @@ impl Screen {
 pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
     (
         "nav_object",
-        &[Screen::Dashboard, Screen::Passport, Screen::Gantt, Screen::Ppr],
+        &[
+            Screen::Dashboard,
+            Screen::Passport,
+            Screen::Gantt,
+            Screen::Ppr,
+        ],
     ),
     ("nav_ai", &[Screen::AiCheck, Screen::Estimate]),
     (
@@ -227,6 +241,7 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
             Screen::Materials,
         ],
     ),
+    ("nav_sales", &[Screen::Sales, Screen::Deals]),
     ("nav_resources", &[Screen::Timesheet, Screen::Machines]),
     ("nav_analytics", &[Screen::Analytics, Screen::Copilot]),
     ("nav_system", &[Screen::Settings]),
@@ -444,6 +459,14 @@ pub struct App {
     pub stock_moves: Vec<StockMove>,
     pub requests: Vec<Request>,
     pub purchases: Vec<Purchase>,
+    pub blocks: Vec<Block>,
+    pub units: Vec<Unit>,
+    pub deals: Vec<Deal>,
+    pub payments: Vec<Payment>,
+    /// Shaxmatkada tanlangan blok va birlik.
+    pub sales_block: Option<i64>,
+    pub selected_unit: Option<i64>,
+    pub selected_deal: Option<i64>,
     pub selected_ppr: Option<i64>,
     pub elements: Vec<Element>,
     pub element_links: Vec<ElementLink>,
@@ -505,6 +528,8 @@ impl App {
                 Ok("warehouse") => Screen::Warehouse,
                 Ok("requests") => Screen::Requests,
                 Ok("purchases") => Screen::Purchases,
+                Ok("sales") => Screen::Sales,
+                Ok("deals") => Screen::Deals,
                 _ => Screen::Dashboard,
             },
             today: chrono::Local::now().date_naive(),
@@ -531,6 +556,13 @@ impl App {
             stock_moves: Vec::new(),
             requests: Vec::new(),
             purchases: Vec::new(),
+            blocks: Vec::new(),
+            units: Vec::new(),
+            deals: Vec::new(),
+            payments: Vec::new(),
+            sales_block: None,
+            selected_unit: None,
+            selected_deal: None,
             selected_ppr: None,
             elements: Vec::new(),
             element_links: Vec::new(),
@@ -640,6 +672,13 @@ impl App {
         self.stock_moves.clear();
         self.requests.clear();
         self.purchases.clear();
+        self.blocks.clear();
+        self.units.clear();
+        self.deals.clear();
+        self.payments.clear();
+        self.sales_block = None;
+        self.selected_unit = None;
+        self.selected_deal = None;
         self.elements.clear();
         self.element_links.clear();
         self.estimates.clear();
@@ -662,6 +701,13 @@ impl App {
         self.stock_moves = self.db.stock_moves(id);
         self.requests = self.db.requests(id);
         self.purchases = self.db.purchases(id);
+        self.blocks = self.db.blocks(id);
+        self.units = self.db.units(id);
+        self.deals = self.db.deals(id);
+        self.payments = self.db.payments(id);
+        if self.sales_block.is_none() {
+            self.sales_block = self.blocks.first().map(|b| b.id);
+        }
         self.elements = self.db.elements(id);
         self.element_links = self.db.element_links(id);
         self.estimates = self.db.estimates(id);
@@ -720,7 +766,8 @@ impl App {
         }
         let found = checks::check_project(&self.check_ctx());
         let n = found.len();
-        self.db.replace_auto_issues(pid, IssueModule::Project, &found);
+        self.db
+            .replace_auto_issues(pid, IssueModule::Project, &found);
         self.reload_modules();
         self.notify(if n == 0 {
             t("no_issues").to_string()
@@ -738,13 +785,40 @@ impl App {
         }
         let found = checks::check_estimate(&self.check_ctx());
         let n = found.len();
-        self.db.replace_auto_issues(pid, IssueModule::Estimate, &found);
+        self.db
+            .replace_auto_issues(pid, IssueModule::Estimate, &found);
         self.reload_modules();
         self.notify(if n == 0 {
             t("no_issues").to_string()
         } else {
             format!("{n} {}", t("issues_found"))
         });
+    }
+
+    /// TZ XIX-XX: obyekt bo'yicha sotuv xulosasi.
+    pub fn sales(&self) -> crate::sales::SalesSummary {
+        crate::sales::sales_summary(&self.units, &self.deals, &self.payments, self.today)
+    }
+
+    /// Birlik holatini amaldagi shartnomaga moslaydi va bazaga yozadi.
+    ///
+    /// Shartnoma holati o'zgarganda shaxmatkadagi rang ham o'zgarishi kerak,
+    /// aks holda «sotilgan» kvartira bo'sh bo'lib ko'rinib qoladi.
+    pub fn sync_unit_status(&mut self, unit_id: i64) {
+        let deal = crate::sales::active_deal(&self.deals, unit_id).cloned();
+        let Some(want) = crate::sales::status_for(deal.as_ref()) else {
+            return;
+        };
+        let Some(u) = self.units.iter_mut().find(|u| u.id == unit_id) else {
+            return;
+        };
+        // «Sotuvda emas» qo'lda qo'yiladi — uni shartnoma bekor qilmaydi.
+        if u.status == want || u.status == crate::domain::UnitStatus::Unavailable {
+            return;
+        }
+        u.status = want;
+        let copy = u.clone();
+        self.db.update_unit(&copy);
     }
 
     /// TZ IX-X: ariza va xaridlarni solishtirgan ta'minot holati.
@@ -884,7 +958,9 @@ impl App {
         let mut updated = 0;
         let mut no_volume = 0;
         for task in self.tasks.iter_mut() {
-            let Some(volume_done) = done.get(&task.id) else { continue };
+            let Some(volume_done) = done.get(&task.id) else {
+                continue;
+            };
             if task.volume <= 0.0 {
                 no_volume += 1;
                 continue;
@@ -923,9 +999,10 @@ impl App {
     pub fn auto_check(&mut self, module: IssueModule) {
         let (ran, has_input) = match module {
             IssueModule::Project => (&mut self.auto_check_project, !self.elements.is_empty()),
-            IssueModule::Estimate => {
-                (&mut self.auto_check_estimate, !self.estimate_items.is_empty())
-            }
+            IssueModule::Estimate => (
+                &mut self.auto_check_estimate,
+                !self.estimate_items.is_empty(),
+            ),
             IssueModule::Ppr => (&mut self.auto_check_ppr, !self.tasks.is_empty()),
             _ => return,
         };
@@ -968,7 +1045,12 @@ impl App {
     /// qayta tiklaydi. Polosani tasodifan sudrab yuborish ishni mahkamlab
     /// qo'yadi — bunday ishlarni birma-bir qidirmaslik uchun kerak.
     pub fn unpin_all(&mut self) {
-        let ids: Vec<i64> = self.tasks.iter().filter(|t| t.pinned).map(|t| t.id).collect();
+        let ids: Vec<i64> = self
+            .tasks
+            .iter()
+            .filter(|t| t.pinned)
+            .map(|t| t.id)
+            .collect();
         if ids.is_empty() {
             return;
         }
@@ -985,7 +1067,9 @@ impl App {
     /// Ishni ±N kunga suradi (klaviatura bilan boshqarish uchun).
     /// Surilgan ish mahkamlanadi — aks holda CPM uni qaytarib qo'yardi.
     pub fn nudge_task(&mut self, id: i64, days: i64) {
-        let Some(mut task) = self.task(id).cloned() else { return };
+        let Some(mut task) = self.task(id).cloned() else {
+            return;
+        };
         task.plan_start += chrono::Duration::days(days);
         task.pinned = true;
         self.save_task(task);
@@ -994,8 +1078,14 @@ impl App {
     /// Ishni ro'yxatda yuqoriga yoki pastga suradi.
     pub fn reorder_task(&mut self, id: i64, up: bool) {
         let ids: Vec<i64> = self.tasks.iter().map(|t| t.id).collect();
-        let Some(i) = ids.iter().position(|x| *x == id) else { return };
-        let j = if up { i.checked_sub(1) } else { (i + 1 < ids.len()).then_some(i + 1) };
+        let Some(i) = ids.iter().position(|x| *x == id) else {
+            return;
+        };
+        let j = if up {
+            i.checked_sub(1)
+        } else {
+            (i + 1 < ids.len()).then_some(i + 1)
+        };
         let Some(j) = j else { return };
         let mut order = ids.clone();
         order.swap(i, j);
@@ -1109,7 +1199,13 @@ impl App {
             return;
         }
         let had_cycles = !self.schedule.cycles.is_empty();
-        let l = Link { id: 0, pred, succ, kind, lag };
+        let l = Link {
+            id: 0,
+            pred,
+            succ,
+            kind,
+            lag,
+        };
         let id = match self.db.insert_link(&l) {
             Ok(id) => id,
             Err(e) => {

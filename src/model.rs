@@ -148,14 +148,62 @@ impl Section {
         let ru = crate::i18n::lang() == crate::i18n::Lang::Ru;
         match self {
             Section::None => "—",
-            Section::Ar => if ru { "АР" } else { "AR" },
-            Section::Kj => if ru { "КЖ" } else { "KJ" },
-            Section::Km => if ru { "КМ" } else { "KM" },
-            Section::Vk => if ru { "ВК" } else { "VK" },
-            Section::Ov => if ru { "ОВ" } else { "OV" },
-            Section::Eom => if ru { "ЭОМ" } else { "EOM" },
-            Section::Ss => if ru { "СС" } else { "SS" },
-            Section::Pb => if ru { "ПБ" } else { "PB" },
+            Section::Ar => {
+                if ru {
+                    "АР"
+                } else {
+                    "AR"
+                }
+            }
+            Section::Kj => {
+                if ru {
+                    "КЖ"
+                } else {
+                    "KJ"
+                }
+            }
+            Section::Km => {
+                if ru {
+                    "КМ"
+                } else {
+                    "KM"
+                }
+            }
+            Section::Vk => {
+                if ru {
+                    "ВК"
+                } else {
+                    "VK"
+                }
+            }
+            Section::Ov => {
+                if ru {
+                    "ОВ"
+                } else {
+                    "OV"
+                }
+            }
+            Section::Eom => {
+                if ru {
+                    "ЭОМ"
+                } else {
+                    "EOM"
+                }
+            }
+            Section::Ss => {
+                if ru {
+                    "СС"
+                } else {
+                    "SS"
+                }
+            }
+            Section::Pb => {
+                if ru {
+                    "ПБ"
+                } else {
+                    "PB"
+                }
+            }
         }
     }
 

@@ -76,43 +76,57 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
     let cur = est.currency.clone();
     // Tekshirishga arziydigan umumiy summa: dublikat, hajm oshig'i va arifmetika.
     let attention = s.duplicate_cost + s.volume_excess + s.arithmetic_diff.max(0.0);
-    let pct = if s.total > 0.0 { attention / s.total * 100.0 } else { 0.0 };
+    let pct = if s.total > 0.0 {
+        attention / s.total * 100.0
+    } else {
+        0.0
+    };
 
     ui.horizontal_wrapped(|ui| {
-        stat_card(
-            ui,
-            t("cc_total"),
-            money(s.total),
-            &cur,
-            theme::text(),
-        );
+        stat_card(ui, t("cc_total"), money(s.total), &cur, theme::text());
         stat_card(
             ui,
             t("cc_attention"),
             money(attention),
             &format!("{pct:.1} % {}", t("cc_of_total")),
-            if attention > 0.0 { theme::danger() } else { theme::ok() },
+            if attention > 0.0 {
+                theme::danger()
+            } else {
+                theme::ok()
+            },
         );
         stat_card(
             ui,
             t("cc_duplicates"),
             s.duplicate_count.to_string(),
             &format!("{} {cur}", money(s.duplicate_cost)),
-            if s.duplicate_count == 0 { theme::ok() } else { theme::danger() },
+            if s.duplicate_count == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("cc_mismatch"),
             s.mismatch_count.to_string(),
             t("cc_mismatch_hint"),
-            if s.mismatch_count == 0 { theme::ok() } else { theme::warn() },
+            if s.mismatch_count == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
             t("cc_saving"),
             money(s.price_saving),
             t("cc_saving_hint"),
-            if s.price_saving > 0.0 { theme::accent() } else { theme::muted() },
+            if s.price_saving > 0.0 {
+                theme::accent()
+            } else {
+                theme::muted()
+            },
         );
     });
     ui.add_space(12.0);
@@ -145,7 +159,13 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
             ui.add_space(2.0);
         };
 
-        row(ui, t("cc_items_sum"), s.total, t("cc_items_sum_hint"), false);
+        row(
+            ui,
+            t("cc_items_sum"),
+            s.total,
+            t("cc_items_sum_hint"),
+            false,
+        );
         row(
             ui,
             t("cc_declared_diff"),
@@ -317,12 +337,23 @@ fn header(ui: &mut egui::Ui, app: &mut App) {
 
         ui.add_space(6.0);
         ui.horizontal(|ui| {
-            ui.add_sized([120.0, 20.0], egui::Label::new(RichText::new(t("estimate_name")).color(theme::muted()).size(12.0)));
+            ui.add_sized(
+                [120.0, 20.0],
+                egui::Label::new(
+                    RichText::new(t("estimate_name"))
+                        .color(theme::muted())
+                        .size(12.0),
+                ),
+            );
             dirty |= ui
                 .add(egui::TextEdit::singleline(&mut e.name).desired_width(300.0))
                 .changed();
             ui.add_space(12.0);
-            ui.label(RichText::new(t("estimate_declared")).color(theme::muted()).size(12.0));
+            ui.label(
+                RichText::new(t("estimate_declared"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
             dirty |= ui
                 .add(
                     egui::DragValue::new(&mut e.declared_total)
@@ -482,8 +513,9 @@ fn items(ui: &mut egui::Ui, app: &mut App) {
                             .width(46.0)
                             .show_ui(ui, |ui| {
                                 for s in Section::ALL {
-                                    changed |=
-                                        ui.selectable_value(&mut it.section, s, s.label()).changed();
+                                    changed |= ui
+                                        .selectable_value(&mut it.section, s, s.label())
+                                        .changed();
                                 }
                             });
                         changed |= ui

@@ -59,9 +59,17 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.journal.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(60.0);
-            ui.label(RichText::new(t("journal_empty")).color(theme::muted()).size(16.0));
+            ui.label(
+                RichText::new(t("journal_empty"))
+                    .color(theme::muted())
+                    .size(16.0),
+            );
             ui.add_space(6.0);
-            ui.label(RichText::new(t("journal_hint")).color(theme::muted()).size(12.0));
+            ui.label(
+                RichText::new(t("journal_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
         });
     } else {
         entries(ui, app);
@@ -113,7 +121,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     } else {
         recent.iter().map(|e| e.workers).sum::<i64>() / recent.len() as i64
     };
-    let photos: usize = app.journal.iter().map(|e| photo_list(&e.photos).len()).sum();
+    let photos: usize = app
+        .journal
+        .iter()
+        .map(|e| photo_list(&e.photos).len())
+        .sum();
 
     ui.horizontal_wrapped(|ui| {
         stat_card(
@@ -130,14 +142,22 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             } else {
                 format!("{gap} {} {}", t("days_short"), t("jr_ago"))
             },
-            if gap > 2 { theme::danger() } else { theme::ok() },
+            if gap > 2 {
+                theme::danger()
+            } else {
+                theme::ok()
+            },
         );
         stat_card(
             ui,
             t("jr_covered"),
             format!("{days_covered} / 30"),
             t("jr_covered_hint"),
-            if days_covered >= 20 { theme::ok() } else { theme::warn() },
+            if days_covered >= 20 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
         );
         stat_card(
             ui,
@@ -151,7 +171,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             t("jr_photos"),
             photos.to_string(),
             t("jr_photos_hint"),
-            if photos == 0 { theme::muted() } else { theme::accent() },
+            if photos == 0 {
+                theme::muted()
+            } else {
+                theme::accent()
+            },
         );
     });
 }
@@ -178,21 +202,33 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
 
                         // 1-qator: sana, muallif, ob-havo, resurs
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(t("col_date")).color(theme::muted()).size(12.0));
-                            changed |= super::passport::date_edit(
-                                ui,
-                                &format!("j{}", e.id),
-                                &mut e.date,
+                            ui.label(
+                                RichText::new(t("col_date"))
+                                    .color(theme::muted())
+                                    .size(12.0),
                             );
+                            changed |=
+                                super::passport::date_edit(ui, &format!("j{}", e.id), &mut e.date);
                             ui.add_space(8.0);
-                            ui.label(RichText::new(t("col_author")).color(theme::muted()).size(12.0));
+                            ui.label(
+                                RichText::new(t("col_author"))
+                                    .color(theme::muted())
+                                    .size(12.0),
+                            );
                             changed |= ui
                                 .add_sized([170.0, 22.0], egui::TextEdit::singleline(&mut e.author))
                                 .changed();
                             ui.add_space(8.0);
-                            ui.label(RichText::new(t("col_weather")).color(theme::muted()).size(12.0));
+                            ui.label(
+                                RichText::new(t("col_weather"))
+                                    .color(theme::muted())
+                                    .size(12.0),
+                            );
                             changed |= ui
-                                .add_sized([120.0, 22.0], egui::TextEdit::singleline(&mut e.weather))
+                                .add_sized(
+                                    [120.0, 22.0],
+                                    egui::TextEdit::singleline(&mut e.weather),
+                                )
                                 .changed();
                             changed |= ui
                                 .add(
@@ -201,22 +237,33 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                         .suffix(" °C"),
                                 )
                                 .changed();
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                if ui
-                                    .small_button(RichText::new("x").color(theme::danger()))
-                                    .clicked()
-                                {
-                                    removed = Some(e.id);
-                                }
-                            });
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if ui
+                                        .small_button(RichText::new("x").color(theme::danger()))
+                                        .clicked()
+                                    {
+                                        removed = Some(e.id);
+                                    }
+                                },
+                            );
                         });
 
                         // 2-qator: ish, hajm, resurs
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(t("col_task")).color(theme::muted()).size(12.0));
+                            ui.label(
+                                RichText::new(t("col_task"))
+                                    .color(theme::muted())
+                                    .size(12.0),
+                            );
                             changed |=
                                 task_picker(ui, app, ("j_task", e.id), &mut e.task_id, 280.0);
-                            ui.label(RichText::new(t("col_volume")).color(theme::muted()).size(12.0));
+                            ui.label(
+                                RichText::new(t("col_volume"))
+                                    .color(theme::muted())
+                                    .size(12.0),
+                            );
                             changed |= ui
                                 .add(egui::DragValue::new(&mut e.volume).speed(0.5))
                                 .changed();
@@ -224,11 +271,19 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                 .add_sized([60.0, 22.0], egui::TextEdit::singleline(&mut e.unit))
                                 .changed();
                             ui.add_space(8.0);
-                            ui.label(RichText::new(t("col_workers")).color(theme::muted()).size(12.0));
+                            ui.label(
+                                RichText::new(t("col_workers"))
+                                    .color(theme::muted())
+                                    .size(12.0),
+                            );
                             changed |= ui
                                 .add(egui::DragValue::new(&mut e.workers).range(0..=5000))
                                 .changed();
-                            ui.label(RichText::new(t("col_machines")).color(theme::muted()).size(12.0));
+                            ui.label(
+                                RichText::new(t("col_machines"))
+                                    .color(theme::muted())
+                                    .size(12.0),
+                            );
                             changed |= ui
                                 .add(egui::DragValue::new(&mut e.machines).range(0..=500))
                                 .changed();
@@ -256,10 +311,7 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                         ui.horizontal(|ui| {
                             if ui.small_button(t("jr_add_photo")).clicked() {
                                 if let Some(files) = rfd::FileDialog::new()
-                                    .add_filter(
-                                        t("photos"),
-                                        &["jpg", "jpeg", "png", "bmp", "webp"],
-                                    )
+                                    .add_filter(t("photos"), &["jpg", "jpeg", "png", "bmp", "webp"])
                                     .pick_files()
                                 {
                                     let mut all = photo_list(&e.photos);
@@ -295,11 +347,10 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                     ui.vertical(|ui| {
                                         ui.set_width(104.0);
                                         if std::path::Path::new(path).exists() {
-                                            let img =
-                                                egui::Image::new(format!("file://{path}"))
-                                                    .fit_to_exact_size(vec2(104.0, 72.0))
-                                                    .maintain_aspect_ratio(true)
-                                                    .corner_radius(4);
+                                            let img = egui::Image::new(format!("file://{path}"))
+                                                .fit_to_exact_size(vec2(104.0, 72.0))
+                                                .maintain_aspect_ratio(true)
+                                                .corner_radius(4);
                                             if ui
                                                 .add(egui::ImageButton::new(img).frame(false))
                                                 .on_hover_text(t("open_file"))
@@ -322,9 +373,7 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                             );
                                         }
                                         if ui
-                                            .small_button(
-                                                RichText::new("x").color(theme::danger()),
-                                            )
+                                            .small_button(RichText::new("x").color(theme::danger()))
                                             .on_hover_text(t("remove_from_list"))
                                             .clicked()
                                         {

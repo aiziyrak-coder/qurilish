@@ -143,7 +143,9 @@ impl Db {
 
     pub fn get_setting(&self, key: &str) -> Option<String> {
         self.conn
-            .query_row("SELECT value FROM settings WHERE key=?1", [key], |r| r.get(0))
+            .query_row("SELECT value FROM settings WHERE key=?1", [key], |r| {
+                r.get(0)
+            })
             .ok()
     }
 
@@ -271,7 +273,14 @@ impl Db {
         self.conn.execute(
             "INSERT INTO party (project_id, role, name, person, phone, email)
              VALUES (?1,?2,?3,?4,?5,?6)",
-            params![p.project_id, p.role.as_str(), p.name, p.person, p.phone, p.email],
+            params![
+                p.project_id,
+                p.role.as_str(),
+                p.name,
+                p.person,
+                p.phone,
+                p.email
+            ],
         )?;
         Ok(self.conn.last_insert_rowid())
     }
@@ -439,7 +448,12 @@ impl Db {
 
         let pid = self.insert_project(&Project {
             id: 0,
-            name: if ru { "ЖК «Навруз», блок №15" } else { "«Navro'z» TJM, 15-blok" }.into(),
+            name: if ru {
+                "ЖК «Навруз», блок №15"
+            } else {
+                "«Navro'z» TJM, 15-blok"
+            }
+            .into(),
             code: "NVZ-15".into(),
             address: if ru {
                 "г. Ташкент, Яшнабадский район"
@@ -447,7 +461,12 @@ impl Db {
                 "Toshkent sh., Yashnobod tumani"
             }
             .into(),
-            object_type: if ru { "Жилой дом" } else { "Turar-joy binosi" }.into(),
+            object_type: if ru {
+                "Жилой дом"
+            } else {
+                "Turar-joy binosi"
+            }
+            .into(),
             floors: 9,
             area_total: 18_650.0,
             status: ObjectStatus::InProgress,
@@ -471,12 +490,42 @@ impl Db {
         })?;
 
         let parties: [(PartyRole, &str, &str, &str); 6] = [
-            (PartyRole::Client, "MChJ «Navro'z Development»", "Karimov A.T.", "+998 90 000-00-01"),
-            (PartyRole::Contractor, "MChJ «Mega Qurilish»", "Yusupov B.R.", "+998 90 000-00-02"),
-            (PartyRole::Subcontractor, "XK «Elektromontaj-S»", "Niyozov D.X.", "+998 90 000-00-03"),
-            (PartyRole::Designer, "LI «Toshkentboshplanloyiha»", "Saidova M.I.", "+998 90 000-00-04"),
-            (PartyRole::TechSupervision, "MChJ «StroyKontrol»", "Rahimov Sh.A.", "+998 90 000-00-05"),
-            (PartyRole::AuthorSupervision, "LI «Toshkentboshplanloyiha»", "Saidova M.I.", "+998 90 000-00-04"),
+            (
+                PartyRole::Client,
+                "MChJ «Navro'z Development»",
+                "Karimov A.T.",
+                "+998 90 000-00-01",
+            ),
+            (
+                PartyRole::Contractor,
+                "MChJ «Mega Qurilish»",
+                "Yusupov B.R.",
+                "+998 90 000-00-02",
+            ),
+            (
+                PartyRole::Subcontractor,
+                "XK «Elektromontaj-S»",
+                "Niyozov D.X.",
+                "+998 90 000-00-03",
+            ),
+            (
+                PartyRole::Designer,
+                "LI «Toshkentboshplanloyiha»",
+                "Saidova M.I.",
+                "+998 90 000-00-04",
+            ),
+            (
+                PartyRole::TechSupervision,
+                "MChJ «StroyKontrol»",
+                "Rahimov Sh.A.",
+                "+998 90 000-00-05",
+            ),
+            (
+                PartyRole::AuthorSupervision,
+                "LI «Toshkentboshplanloyiha»",
+                "Saidova M.I.",
+                "+998 90 000-00-04",
+            ),
         ];
         for (role, name, person, phone) in parties {
             self.insert_party(&Party {
@@ -496,26 +545,226 @@ impl Db {
         // Hajm va birlik smeta tekshiruviga (TZ III.5-III.6) kerak: qoidalar
         // smetadagi miqdorni loyihadagi hajm bilan solishtiradi.
         let defs: Vec<TaskDef> = vec![
-            ("1", "Maydonni tayyorlash", "Подготовка площадки", Section::None, 10, contractor, 100.0, 0.0, ""),
-            ("2", "Yer ishlari, kotlovan", "Земляные работы, котлован", Section::Kj, 14, contractor, 100.0, 12500.0, "m3"),
-            ("3", "Poydevor plitasini qurish", "Устройство фундаментной плиты", Section::Kj, 21, contractor, 100.0, 1850.0, "m3"),
-            ("4", "Poydevor gidroizolyatsiyasi", "Гидроизоляция фундамента", Section::Ar, 7, contractor, 100.0, 2400.0, "m2"),
-            ("5", "Monolit karkas, 1-3 qavat", "Монолитный каркас, этажи 1-3", Section::Kj, 30, contractor, 100.0, 2100.0, "m3"),
-            ("6", "Monolit karkas, 4-6 qavat", "Монолитный каркас, этажи 4-6", Section::Kj, 30, contractor, 100.0, 2100.0, "m3"),
-            ("7", "Monolit karkas, 7-9 qavat", "Монолитный каркас, этажи 7-9", Section::Kj, 30, contractor, 45.0, 2100.0, "m3"),
-            ("8", "Tom metall konstruksiyalari", "Металлоконструкции кровли", Section::Km, 18, contractor, 15.0, 46.0, "t"),
-            ("9", "Tashqi devorlar g'ishtligi", "Кладка наружных стен", Section::Ar, 35, contractor, 100.0, 3800.0, "m2"),
-            ("10", "Ichki devorlar", "Внутренние перегородки", Section::Ar, 25, contractor, 100.0, 5200.0, "m2"),
-            ("11", "Suv va kanalizatsiya tarmog'i", "Разводка ВК, стояки", Section::Vk, 22, electro, 95.0, 4200.0, "m"),
-            ("12", "Isitish tizimini montaj qilish", "Монтаж системы отопления", Section::Ov, 20, electro, 90.0, 3600.0, "m"),
-            ("13", "Ventilyatsiya montaji", "Монтаж вентиляции", Section::Ov, 18, electro, 85.0, 1800.0, "m"),
-            ("14", "Elektromontaj ishlari", "Электромонтажные работы", Section::Eom, 28, electro, 100.0, 18500.0, "m"),
-            ("15", "Kuchsiz tok tizimlari, SKS", "Слаботочные системы, СКС", Section::Ss, 15, electro, 80.0, 6400.0, "m"),
-            ("16", "Yong'in signalizatsiyasi va SOUE", "Пожарная сигнализация и СОУЭ", Section::Pb, 14, electro, 65.0, 5200.0, "m"),
-            ("17", "Deraza va vitrajlar", "Окна и витражи", Section::Ar, 20, contractor, 60.0, 1450.0, "m2"),
-            ("18", "Pardozlash ishlari", "Отделочные работы", Section::Ar, 45, contractor, 0.0, 24500.0, "m2"),
-            ("19", "Hududni obodonlashtirish", "Благоустройство территории", Section::None, 20, contractor, 0.0, 6800.0, "m2"),
-            ("20", "Ishga tushirish va topshirish", "Пусконаладка и сдача объекта", Section::None, 12, contractor, 0.0, 0.0, ""),
+            (
+                "1",
+                "Maydonni tayyorlash",
+                "Подготовка площадки",
+                Section::None,
+                10,
+                contractor,
+                100.0,
+                0.0,
+                "",
+            ),
+            (
+                "2",
+                "Yer ishlari, kotlovan",
+                "Земляные работы, котлован",
+                Section::Kj,
+                14,
+                contractor,
+                100.0,
+                12500.0,
+                "m3",
+            ),
+            (
+                "3",
+                "Poydevor plitasini qurish",
+                "Устройство фундаментной плиты",
+                Section::Kj,
+                21,
+                contractor,
+                100.0,
+                1850.0,
+                "m3",
+            ),
+            (
+                "4",
+                "Poydevor gidroizolyatsiyasi",
+                "Гидроизоляция фундамента",
+                Section::Ar,
+                7,
+                contractor,
+                100.0,
+                2400.0,
+                "m2",
+            ),
+            (
+                "5",
+                "Monolit karkas, 1-3 qavat",
+                "Монолитный каркас, этажи 1-3",
+                Section::Kj,
+                30,
+                contractor,
+                100.0,
+                2100.0,
+                "m3",
+            ),
+            (
+                "6",
+                "Monolit karkas, 4-6 qavat",
+                "Монолитный каркас, этажи 4-6",
+                Section::Kj,
+                30,
+                contractor,
+                100.0,
+                2100.0,
+                "m3",
+            ),
+            (
+                "7",
+                "Monolit karkas, 7-9 qavat",
+                "Монолитный каркас, этажи 7-9",
+                Section::Kj,
+                30,
+                contractor,
+                45.0,
+                2100.0,
+                "m3",
+            ),
+            (
+                "8",
+                "Tom metall konstruksiyalari",
+                "Металлоконструкции кровли",
+                Section::Km,
+                18,
+                contractor,
+                15.0,
+                46.0,
+                "t",
+            ),
+            (
+                "9",
+                "Tashqi devorlar g'ishtligi",
+                "Кладка наружных стен",
+                Section::Ar,
+                35,
+                contractor,
+                100.0,
+                3800.0,
+                "m2",
+            ),
+            (
+                "10",
+                "Ichki devorlar",
+                "Внутренние перегородки",
+                Section::Ar,
+                25,
+                contractor,
+                100.0,
+                5200.0,
+                "m2",
+            ),
+            (
+                "11",
+                "Suv va kanalizatsiya tarmog'i",
+                "Разводка ВК, стояки",
+                Section::Vk,
+                22,
+                electro,
+                95.0,
+                4200.0,
+                "m",
+            ),
+            (
+                "12",
+                "Isitish tizimini montaj qilish",
+                "Монтаж системы отопления",
+                Section::Ov,
+                20,
+                electro,
+                90.0,
+                3600.0,
+                "m",
+            ),
+            (
+                "13",
+                "Ventilyatsiya montaji",
+                "Монтаж вентиляции",
+                Section::Ov,
+                18,
+                electro,
+                85.0,
+                1800.0,
+                "m",
+            ),
+            (
+                "14",
+                "Elektromontaj ishlari",
+                "Электромонтажные работы",
+                Section::Eom,
+                28,
+                electro,
+                100.0,
+                18500.0,
+                "m",
+            ),
+            (
+                "15",
+                "Kuchsiz tok tizimlari, SKS",
+                "Слаботочные системы, СКС",
+                Section::Ss,
+                15,
+                electro,
+                80.0,
+                6400.0,
+                "m",
+            ),
+            (
+                "16",
+                "Yong'in signalizatsiyasi va SOUE",
+                "Пожарная сигнализация и СОУЭ",
+                Section::Pb,
+                14,
+                electro,
+                65.0,
+                5200.0,
+                "m",
+            ),
+            (
+                "17",
+                "Deraza va vitrajlar",
+                "Окна и витражи",
+                Section::Ar,
+                20,
+                contractor,
+                60.0,
+                1450.0,
+                "m2",
+            ),
+            (
+                "18",
+                "Pardozlash ishlari",
+                "Отделочные работы",
+                Section::Ar,
+                45,
+                contractor,
+                0.0,
+                24500.0,
+                "m2",
+            ),
+            (
+                "19",
+                "Hududni obodonlashtirish",
+                "Благоустройство территории",
+                Section::None,
+                20,
+                contractor,
+                0.0,
+                6800.0,
+                "m2",
+            ),
+            (
+                "20",
+                "Ishga tushirish va topshirish",
+                "Пусконаладка и сдача объекта",
+                Section::None,
+                12,
+                contractor,
+                0.0,
+                0.0,
+                "",
+            ),
         ];
 
         let mut ids = Vec::new();
@@ -571,7 +820,13 @@ impl Db {
             (19, 20, LinkType::Ff, 0),
         ];
         for (p, s, kind, lag) in chain {
-            self.insert_link(&Link { id: 0, pred: n(p), succ: n(s), kind, lag })?;
+            self.insert_link(&Link {
+                id: 0,
+                pred: n(p),
+                succ: n(s),
+                kind,
+                lag,
+            })?;
         }
 
         // II-III modullar uchun namoyish ma'lumoti: elementlar grafi va smeta.
@@ -596,10 +851,8 @@ type TaskDef = (
 );
 
 fn parse_date(s: &str) -> NaiveDate {
-    NaiveDate::parse_from_str(s, "%Y-%m-%d")
-        .unwrap_or_else(|_| chrono::Local::now().date_naive())
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_else(|_| chrono::Local::now().date_naive())
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -618,11 +871,8 @@ mod tests {
     impl TempDb {
         fn new() -> TempDb {
             let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "qurai_test_{}_{}.db",
-                std::process::id(),
-                n
-            ));
+            let path =
+                std::env::temp_dir().join(format!("qurai_test_{}_{}.db", std::process::id(), n));
             let _ = std::fs::remove_file(&path);
             let db = Db::open(&path).expect("bazani ochib bo'lmadi");
             TempDb { path, db }
@@ -687,11 +937,15 @@ mod tests {
         let project_issues = checks::check_project(&ctx);
         let estimate_issues = checks::check_estimate(&ctx);
         assert!(
-            project_issues.iter().any(|i| i.severity == Severity::Critical),
+            project_issues
+                .iter()
+                .any(|i| i.severity == Severity::Critical),
             "namoyish loyihasida kritik nomuvofiqlik ko'zda tutilgan"
         );
         assert!(
-            estimate_issues.iter().any(|i| i.severity == Severity::Critical),
+            estimate_issues
+                .iter()
+                .any(|i| i.severity == Severity::Critical),
             "namoyish smetasida kritik nomuvofiqlik ko'zda tutilgan"
         );
 
@@ -756,7 +1010,10 @@ mod tests {
             "{} != {expected}",
             after.progress
         );
-        assert!(after.fact_start.is_some(), "boshlanish sanasi jurnaldan olinadi");
+        assert!(
+            after.fact_start.is_some(),
+            "boshlanish sanasi jurnaldan olinadi"
+        );
 
         // Qayta o'qilganda ham saqlanib qolishi kerak.
         let reread = t.db.tasks(pid).unwrap();
@@ -796,18 +1053,32 @@ mod tests {
 
         let mut first = crate::app::App::new(Db::open(&t.path).unwrap());
         first.select_project(pid);
-        let crit1 = first.tasks.iter().filter(|x| first.schedule.is_critical(x.id)).count();
+        let crit1 = first
+            .tasks
+            .iter()
+            .filter(|x| first.schedule.is_critical(x.id))
+            .count();
         let days1 = first.schedule.project_days;
         drop(first);
 
         let mut second = crate::app::App::new(Db::open(&t.path).unwrap());
         second.select_project(pid);
-        let crit2 = second.tasks.iter().filter(|x| second.schedule.is_critical(x.id)).count();
+        let crit2 = second
+            .tasks
+            .iter()
+            .filter(|x| second.schedule.is_critical(x.id))
+            .count();
         let days2 = second.schedule.project_days;
 
         assert_eq!(days1, days2, "loyiha davomiyligi o'zgarmasligi kerak");
-        assert_eq!(crit1, crit2, "kritik yo'ldagi ishlar soni o'zgarmasligi kerak");
-        assert!(crit1 > 1, "namoyish grafigida kritik yo'l bir nechta ishdan iborat");
+        assert_eq!(
+            crit1, crit2,
+            "kritik yo'ldagi ishlar soni o'zgarmasligi kerak"
+        );
+        assert!(
+            crit1 > 1,
+            "namoyish grafigida kritik yo'l bir nechta ishdan iborat"
+        );
     }
 
     /// Bo'sh obyekt — foydalanuvchi «+ Yangi obyekt» bosgandagi holat.
@@ -816,9 +1087,8 @@ mod tests {
     fn empty_project_survives_every_calculation() {
         let t = TempDb::new();
         let today = chrono::Local::now().date_naive();
-        let pid = t
-            .db
-            .insert_project(&Project {
+        let pid =
+            t.db.insert_project(&Project {
                 id: 0,
                 name: "Bo'sh".into(),
                 code: String::new(),
@@ -851,7 +1121,10 @@ mod tests {
         app.run_project_check();
         app.run_estimate_check();
         app.run_ppr_check();
-        assert!(app.issues.is_empty(), "ma'lumotsiz nomuvofiqlik yaratilmasin");
+        assert!(
+            app.issues.is_empty(),
+            "ma'lumotsiz nomuvofiqlik yaratilmasin"
+        );
 
         // Pul xulosasi ham nolga bo'linmasin.
         let cost = app.cost_summary();
@@ -874,9 +1147,8 @@ mod tests {
     fn single_task_project_computes() {
         let t = TempDb::new();
         let today = chrono::Local::now().date_naive();
-        let pid = t
-            .db
-            .insert_project(&Project {
+        let pid =
+            t.db.insert_project(&Project {
                 id: 0,
                 name: "Bitta ish".into(),
                 code: String::new(),
@@ -930,11 +1202,7 @@ mod tests {
     #[test]
     fn old_database_migrates_without_data_loss() {
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
-            "qurai_old_{}_{}.db",
-            std::process::id(),
-            n
-        ));
+        let path = std::env::temp_dir().join(format!("qurai_old_{}_{}.db", std::process::id(), n));
         let _ = std::fs::remove_file(&path);
 
         // Eski sxema: yangi ustunlarsiz.
@@ -1033,10 +1301,7 @@ mod tests {
 
         // Boshqa modul o'z navbatida ishlaydi.
         app.auto_check(IssueModule::Estimate);
-        assert!(app
-            .issues
-            .iter()
-            .any(|i| i.module == IssueModule::Estimate));
+        assert!(app.issues.iter().any(|i| i.module == IssueModule::Estimate));
     }
 
     /// Tekshiradigan ma'lumot bo'lmasa, avtomatik ishga tushirish tegmaydi.
@@ -1046,9 +1311,8 @@ mod tests {
 
         let t = TempDb::new();
         let today = chrono::Local::now().date_naive();
-        let pid = t
-            .db
-            .insert_project(&Project {
+        let pid =
+            t.db.insert_project(&Project {
                 id: 0,
                 name: "Bo'sh".into(),
                 code: String::new(),
@@ -1085,9 +1349,8 @@ mod tests {
         for task_count in [20usize, 200, 500] {
             let t = TempDb::new();
             let today = chrono::Local::now().date_naive();
-            let pid = t
-                .db
-                .insert_project(&Project {
+            let pid =
+                t.db.insert_project(&Project {
                     id: 0,
                     name: "Tezlik".into(),
                     code: String::new(),
@@ -1109,9 +1372,8 @@ mod tests {
             // Zanjir ko'rinishidagi ishlar — CPM uchun eng og'ir holat.
             let mut prev = 0i64;
             for i in 0..task_count {
-                let id = t
-                    .db
-                    .insert_task(&Task {
+                let id =
+                    t.db.insert_task(&Task {
                         id: 0,
                         project_id: pid,
                         wbs: (i + 1).to_string(),
@@ -1204,8 +1466,11 @@ mod tests {
             ("LOYIHA", checks::check_project(&ctx)),
             ("SMETA", checks::check_estimate(&ctx)),
         ] {
-            println!("
-=== {title}: {} ta ===", list.len());
+            println!(
+                "
+=== {title}: {} ta ===",
+                list.len()
+            );
             for i in &list {
                 println!(
                     "{:<10} {:<10} {:<4} {:<40} {}",
@@ -1231,6 +1496,87 @@ mod tests {
         assert!(t.db.elements(pid).is_empty());
         assert!(t.db.estimates(pid).is_empty());
         assert!(t.db.issues(pid).is_empty());
+    }
+
+    /// TZ XIX: namuna sotuv ma'lumoti to'liq quriladi va kvartira holati
+    /// shartnomaga mos keladi.
+    #[test]
+    fn demo_sales_is_consistent() {
+        use crate::domain::{DealStatus, UnitStatus};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let blocks = t.db.blocks(pid);
+        let units = t.db.units(pid);
+        let deals = t.db.deals(pid);
+        let payments = t.db.payments(pid);
+
+        assert_eq!(blocks.len(), 2);
+        // Ikki blok x 9 qavat x 4 kvartira.
+        assert_eq!(units.len(), 72, "kvartiralar soni");
+        assert_eq!(deals.len(), 8);
+        assert!(!payments.is_empty());
+
+        for d in &deals {
+            let u = units.iter().find(|u| u.id == d.unit_id).expect("kvartira");
+            let want = crate::sales::status_for(Some(d)).unwrap();
+            assert_eq!(u.status, want, "{} holati mos emas", d.number);
+
+            // Har bir shartnomaning grafigi shartnoma summasiga teng.
+            let st = crate::sales::deal_state(d, &payments, chrono::Local::now().date_naive());
+            assert!(
+                !st.schedule_mismatch,
+                "{}: grafik {} != {}",
+                d.number,
+                st.planned,
+                d.total()
+            );
+        }
+
+        // Sotilgan va band qilingan kvartiralar bor, bo'shlari ham qolgan.
+        let free = units
+            .iter()
+            .filter(|u| u.status == UnitStatus::Free)
+            .count();
+        assert!(free > 0 && free < units.len());
+        assert!(deals.iter().any(|d| d.status == DealStatus::Completed));
+        assert!(deals.iter().any(|d| d.status == DealStatus::Reserved));
+    }
+
+    /// Xulosa qarz va tushumni shartnomalardan yig'adi.
+    #[test]
+    fn sales_summary_adds_up() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let units = t.db.units(pid);
+        let deals = t.db.deals(pid);
+        let payments = t.db.payments(pid);
+
+        let s = crate::sales::sales_summary(&units, &deals, &payments, today);
+        assert_eq!(s.units, units.len());
+        assert!(s.contracted > 0.0);
+        assert!(s.received > 0.0, "namunada to'langan shartnomalar bor");
+        // Tushum shartnomalar summasidan oshib ketmaydi.
+        assert!(s.received <= s.contracted + 1.0);
+        // Qarz = shartnoma summasi - tushum.
+        assert!(
+            (s.debt - (s.contracted - s.received)).abs() < 1.0,
+            "qarz: {}",
+            s.debt
+        );
+        assert!(s.avg_price_m2 > 0.0);
+    }
+
+    /// Namuna ikki marta chaqirilsa nusxalanmaydi.
+    #[test]
+    fn demo_sales_is_seeded_once() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let n = t.db.units(pid).len();
+        t.db.seed_demo_sales(pid, false);
+        assert_eq!(t.db.units(pid).len(), n);
+        assert_eq!(t.db.blocks(pid).len(), 2);
     }
 
     /// TZ IX-X: qoplanish buyurtma miqdoriga, kechikish esa ehtiyoj sanasiga

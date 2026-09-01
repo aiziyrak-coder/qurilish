@@ -24,9 +24,17 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.materials.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(70.0);
-            ui.label(RichText::new(t("wh_no_materials")).color(theme::muted()).size(16.0));
+            ui.label(
+                RichText::new(t("wh_no_materials"))
+                    .color(theme::muted())
+                    .size(16.0),
+            );
             ui.add_space(6.0);
-            ui.label(RichText::new(t("wh_no_materials_hint")).color(theme::muted()).size(12.0));
+            ui.label(
+                RichText::new(t("wh_no_materials_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
         });
         return;
     }
@@ -49,11 +57,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         {
             add_move = Some(MoveKind::WriteOff);
         }
-        ui.label(
-            RichText::new(t("wh_hint"))
-                .size(11.0)
-                .color(theme::muted()),
-        );
+        ui.label(RichText::new(t("wh_hint")).size(11.0).color(theme::muted()));
     });
     ui.add_space(8.0);
 
@@ -121,14 +125,22 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
             t("kpi_below_min"),
             below.to_string(),
             t("kpi_below_min_hint"),
-            if below == 0 { theme::ok() } else { theme::danger() },
+            if below == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
             t("kpi_negative"),
             negative.to_string(),
             t("kpi_negative_hint"),
-            if negative == 0 { theme::ok() } else { theme::danger() },
+            if negative == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
@@ -176,7 +188,11 @@ fn balance_tab(ui: &mut egui::Ui, app: &mut App) {
                             RichText::new(super::issues::truncate(&material_label(app, m.id), 36))
                                 .size(12.5),
                         );
-                        cell_l(ui, 56.0, RichText::new(&m.unit).size(12.0).color(theme::muted()));
+                        cell_l(
+                            ui,
+                            56.0,
+                            RichText::new(&m.unit).size(12.0).color(theme::muted()),
+                        );
                         let color = if l.negative {
                             theme::danger()
                         } else if l.below_min {
@@ -187,7 +203,10 @@ fn balance_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             96.0,
-                            RichText::new(trim_num(l.balance)).size(13.0).strong().color(color),
+                            RichText::new(trim_num(l.balance))
+                                .size(13.0)
+                                .strong()
+                                .color(color),
                         );
                         stock_bar(ui, l.balance, m.min_stock, 126.0);
                         cell_r(
@@ -206,7 +225,9 @@ fn balance_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             110.0,
-                            RichText::new(money(l.unit_price)).size(12.0).color(theme::muted()),
+                            RichText::new(money(l.unit_price))
+                                .size(12.0)
+                                .color(theme::muted()),
                         );
                         cell_r(ui, 140.0, RichText::new(money(l.value)).size(12.5));
                         cell_r(
@@ -285,11 +306,8 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                         let mut m = mv.clone();
                         let mut changed = false;
 
-                        changed |= super::passport::date_edit(
-                            ui,
-                            &format!("wh{}", m.id),
-                            &mut m.date,
-                        );
+                        changed |=
+                            super::passport::date_edit(ui, &format!("wh{}", m.id), &mut m.date);
 
                         // Harakat turi rangli: kirim yashil, chiqim ko'k, hisobdan
                         // chiqarish sariq — jurnal bir qarashda o'qiladi.
@@ -308,7 +326,8 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                                 }
                             });
 
-                        changed |= material_picker(ui, app, ("wh_mat", m.id), &mut m.material_id, 230.0);
+                        changed |=
+                            material_picker(ui, app, ("wh_mat", m.id), &mut m.material_id, 230.0);
                         changed |= ui
                             .add_sized(
                                 [86.0, 22.0],
@@ -318,13 +337,17 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                         changed |= ui
                             .add_sized(
                                 [110.0, 22.0],
-                                egui::DragValue::new(&mut m.price).speed(100.0).range(0.0..=1e12),
+                                egui::DragValue::new(&mut m.price)
+                                    .speed(100.0)
+                                    .range(0.0..=1e12),
                             )
                             .changed();
                         cell_r(
                             ui,
                             120.0,
-                            RichText::new(money(m.qty * m.price)).size(12.0).color(theme::muted()),
+                            RichText::new(money(m.qty * m.price))
+                                .size(12.0)
+                                .color(theme::muted()),
                         );
                         changed |= ui
                             .add_sized([120.0, 22.0], egui::TextEdit::singleline(&mut m.document))

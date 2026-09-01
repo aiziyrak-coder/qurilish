@@ -14,7 +14,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let Some(mut p) = app.project().cloned() else {
         ui.vertical_centered(|ui| {
             ui.add_space(120.0);
-            ui.label(RichText::new(t("no_object_selected")).color(theme::muted()).size(18.0));
+            ui.label(
+                RichText::new(t("no_object_selected"))
+                    .color(theme::muted())
+                    .size(18.0),
+            );
         });
         return;
     };
@@ -25,7 +29,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         // ---- Sarlavha ----
         ui.horizontal(|ui| {
-            ui.label(RichText::new(&p.name).size(22.0).strong().color(theme::text()));
+            ui.label(
+                RichText::new(&p.name)
+                    .size(22.0)
+                    .strong()
+                    .color(theme::text()),
+            );
             code_chip(ui, &p.code);
         });
         if !p.address.is_empty() {
@@ -130,8 +139,7 @@ fn code_chip(ui: &mut egui::Ui, code: &str) {
         egui::FontId::monospace(12.0),
         theme::accent(),
     );
-    let (rect, _) =
-        ui.allocate_exact_size(vec2(galley.size().x + 16.0, 22.0), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(vec2(galley.size().x + 16.0, 22.0), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, 5.0, theme::accent().gamma_multiply(0.14));
     p.text(
@@ -158,10 +166,7 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
     ];
     let suspended = p.status == ObjectStatus::Suspended;
     // To'xtatilganda oxirgi haqiqiy bosqich sifatida «qurilish» ko'rsatiladi.
-    let cur = steps
-        .iter()
-        .position(|s| *s == p.status)
-        .unwrap_or(2);
+    let cur = steps.iter().position(|s| *s == p.status).unwrap_or(2);
 
     let w = ui.available_width() - 190.0;
     ui.horizontal(|ui| {
@@ -232,9 +237,13 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
 
         // «To'xtatilgan» — alohida holat tugmasi.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let label = RichText::new(ObjectStatus::Suspended.label()).size(12.5).color(
-                if suspended { theme::panel() } else { theme::danger() },
-            );
+            let label = RichText::new(ObjectStatus::Suspended.label())
+                .size(12.5)
+                .color(if suspended {
+                    theme::panel()
+                } else {
+                    theme::danger()
+                });
             let btn = egui::Button::new(label)
                 .fill(if suspended {
                     theme::danger()
@@ -396,8 +405,7 @@ fn finance_fields(ui: &mut egui::Ui, p: &mut crate::model::Project, dirty: &mut 
             )
             .changed();
         ui.label(
-            RichText::new(format!("{} {}", money(p.paid_total), p.currency))
-                .color(theme::muted()),
+            RichText::new(format!("{} {}", money(p.paid_total), p.currency)).color(theme::muted()),
         );
     });
 
@@ -467,22 +475,49 @@ fn summary_card(ui: &mut egui::Ui, app: &App) {
         format!("{:.1} % / {:.1} %", pr.fact_pct, pr.plan_pct),
         if behind { theme::danger() } else { theme::ok() },
     );
-    row(ui, t("sum_tasks"), app.tasks.len().to_string(), theme::text());
+    row(
+        ui,
+        t("sum_tasks"),
+        app.tasks.len().to_string(),
+        theme::text(),
+    );
     row(
         ui,
         t("kpi_overdue"),
         pr.overdue.len().to_string(),
-        if pr.overdue.is_empty() { theme::ok() } else { theme::danger() },
+        if pr.overdue.is_empty() {
+            theme::ok()
+        } else {
+            theme::danger()
+        },
     );
-    let open_issues = app.issues.iter().filter(|i| i.status == IssueStatus::Open).count();
+    let open_issues = app
+        .issues
+        .iter()
+        .filter(|i| i.status == IssueStatus::Open)
+        .count();
     row(
         ui,
         t("sum_issues"),
         open_issues.to_string(),
-        if open_issues == 0 { theme::ok() } else { theme::warn() },
+        if open_issues == 0 {
+            theme::ok()
+        } else {
+            theme::warn()
+        },
     );
-    row(ui, t("sum_parties"), app.parties.len().to_string(), theme::text());
-    row(ui, t("sum_docs"), app.documents.len().to_string(), theme::text());
+    row(
+        ui,
+        t("sum_parties"),
+        app.parties.len().to_string(),
+        theme::text(),
+    );
+    row(
+        ui,
+        t("sum_docs"),
+        app.documents.len().to_string(),
+        theme::text(),
+    );
 }
 
 /// Pasport to'ldirilishi: TZ I.1 dagi majburiy bo'laklar bo'yicha nazorat.
@@ -511,13 +546,21 @@ fn completeness_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
         painter.rect_filled(
             Rect::from_min_size(rect.min, vec2(rect.width() * pct, rect.height())),
             4.0,
-            if pct >= 1.0 { theme::ok() } else { theme::accent() },
+            if pct >= 1.0 {
+                theme::ok()
+            } else {
+                theme::accent()
+            },
         );
         ui.label(
             RichText::new(format!("{:.0} %", pct * 100.0))
                 .size(12.0)
                 .strong()
-                .color(if pct >= 1.0 { theme::ok() } else { theme::text() }),
+                .color(if pct >= 1.0 {
+                    theme::ok()
+                } else {
+                    theme::text()
+                }),
         );
     });
     ui.add_space(6.0);
@@ -532,11 +575,11 @@ fn completeness_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
             } else {
                 painter.circle_stroke(icon.center(), 6.0, Stroke::new(1.3_f32, theme::muted()));
             }
-            ui.label(
-                RichText::new(label)
-                    .size(12.0)
-                    .color(if ok { theme::text() } else { theme::muted() }),
-            );
+            ui.label(RichText::new(label).size(12.0).color(if ok {
+                theme::text()
+            } else {
+                theme::muted()
+            }));
         });
     }
     ui.add_space(4.0);

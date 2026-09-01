@@ -15,7 +15,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let Some(p) = app.project().cloned() else {
         ui.vertical_centered(|ui| {
             ui.add_space(140.0);
-            ui.label(RichText::new(t("no_objects_yet")).size(20.0).color(theme::muted()));
+            ui.label(
+                RichText::new(t("no_objects_yet"))
+                    .size(20.0)
+                    .color(theme::muted()),
+            );
             ui.add_space(8.0);
             ui.label(RichText::new(t("create_first_object")).color(theme::muted()));
         });
@@ -103,7 +107,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 fn header(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
-            ui.label(RichText::new(&p.name).size(22.0).strong().color(theme::text()));
+            ui.label(
+                RichText::new(&p.name)
+                    .size(22.0)
+                    .strong()
+                    .color(theme::text()),
+            );
             if !p.address.is_empty() {
                 ui.label(RichText::new(&p.address).size(12.5).color(theme::muted()));
             }
@@ -177,7 +186,11 @@ fn contract_timeline(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
 fn kpi_row(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
     let pr = &app.progress;
     let sched_end = p.start_date + Duration::days((app.schedule.project_days - 1).max(0));
-    let crit_count = app.tasks.iter().filter(|x| app.schedule.is_critical(x.id)).count();
+    let crit_count = app
+        .tasks
+        .iter()
+        .filter(|x| app.schedule.is_critical(x.id))
+        .count();
     let behind = pr.fact_pct + 0.5 < pr.plan_pct;
 
     // Eng katta kechikish — «kim aybdor» jadvalining yuqori qatori.
@@ -206,7 +219,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
             } else {
                 format!("{}: {max_delay} {}", t("kpi_max_delay"), t("days_short"))
             },
-            if pr.overdue.is_empty() { theme::ok() } else { theme::danger() },
+            if pr.overdue.is_empty() {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
         );
         stat_card(
             ui,
@@ -219,7 +236,12 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
             ui,
             t("kpi_critical"),
             format!("{crit_count} {}", t("kpi_tasks_count")),
-            &format!("{} {} {}", t("kpi_cpm_length"), app.schedule.project_days, t("days_short")),
+            &format!(
+                "{} {} {}",
+                t("kpi_cpm_length"),
+                app.schedule.project_days,
+                t("days_short")
+            ),
             theme::warn(),
         );
         stat_card(
@@ -227,19 +249,30 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
             t("kpi_gpr_end"),
             sched_end.format("%d.%m.%Y").to_string(),
             &format!("{} {}", t("kpi_contract"), p.planned_end.format("%d.%m.%Y")),
-            if sched_end > p.planned_end { theme::danger() } else { theme::ok() },
+            if sched_end > p.planned_end {
+                theme::danger()
+            } else {
+                theme::ok()
+            },
         );
         let delay = pr.delay_days;
         stat_card(
             ui,
             t("kpi_forecast"),
-            pr.forecast_end.unwrap_or(sched_end).format("%d.%m.%Y").to_string(),
+            pr.forecast_end
+                .unwrap_or(sched_end)
+                .format("%d.%m.%Y")
+                .to_string(),
             &if delay > 0 {
                 format!("{} {delay} {}", t("kpi_delay"), t("days_short"))
             } else {
                 t("kpi_on_track").to_string()
             },
-            if delay > 0 { theme::danger() } else { theme::ok() },
+            if delay > 0 {
+                theme::danger()
+            } else {
+                theme::ok()
+            },
         );
     });
 }
@@ -329,7 +362,9 @@ fn s_curve(ui: &mut egui::Ui, app: &App, height: f32) {
         }
         let mut done = 0.0;
         for task in &app.tasks {
-            let Some(c) = app.schedule.get(task.id) else { continue };
+            let Some(c) = app.schedule.get(task.id) else {
+                continue;
+            };
             let dur = task.duration.max(1);
             let elapsed = (day - c.es + 1).clamp(0, dur) as f64;
             done += dur as f64 * (elapsed / dur as f64);
@@ -352,18 +387,32 @@ fn s_curve(ui: &mut egui::Ui, app: &App, height: f32) {
     let fill = theme::accent().gamma_multiply(0.07);
     for w in pts.windows(2) {
         p.add(egui::Shape::convex_polygon(
-            vec![w[0], w[1], pos2(w[1].x, plot.max.y), pos2(w[0].x, plot.max.y)],
+            vec![
+                w[0],
+                w[1],
+                pos2(w[1].x, plot.max.y),
+                pos2(w[0].x, plot.max.y),
+            ],
             fill,
             Stroke::NONE,
         ));
     }
-    p.add(egui::Shape::line(pts, Stroke::new(2.0_f32, theme::accent())));
+    p.add(egui::Shape::line(
+        pts,
+        Stroke::new(2.0_f32, theme::accent()),
+    ));
 
     // ---- Prognoz chizig'i ----
     let late = app.progress.delay_days > 0;
     if late {
         let fx = x(forecast_off.clamp(0, axis_end) as f32);
-        dashed_v(&p, fx, plot.min.y, plot.max.y, Stroke::new(1.2_f32, theme::danger()));
+        dashed_v(
+            &p,
+            fx,
+            plot.min.y,
+            plot.max.y,
+            Stroke::new(1.2_f32, theme::danger()),
+        );
         p.text(
             pos2(fx - 4.0, plot.min.y + 8.0),
             Align2::RIGHT_CENTER,
@@ -381,7 +430,11 @@ fn s_curve(ui: &mut egui::Ui, app: &App, height: f32) {
     );
     let plan_now = app.progress.plan_pct as f32;
     let fact_now = app.progress.fact_pct as f32;
-    let fact_color = if fact_now + 0.5 < plan_now { theme::danger() } else { theme::ok() };
+    let fact_color = if fact_now + 0.5 < plan_now {
+        theme::danger()
+    } else {
+        theme::ok()
+    };
 
     // Reja va fakt orasidagi farq — ingichka bog'lovchi chiziq.
     p.line_segment(
@@ -389,13 +442,25 @@ fn s_curve(ui: &mut egui::Ui, app: &App, height: f32) {
         Stroke::new(1.0_f32, theme::muted().gamma_multiply(0.6)),
     );
     p.circle_filled(pos2(tx, y(plan_now)), 4.0, theme::accent());
-    p.circle_stroke(pos2(tx, y(plan_now)), 4.0, Stroke::new(1.5_f32, theme::card()));
+    p.circle_stroke(
+        pos2(tx, y(plan_now)),
+        4.0,
+        Stroke::new(1.5_f32, theme::card()),
+    );
     p.circle_filled(pos2(tx, y(fact_now)), 4.0, fact_color);
-    p.circle_stroke(pos2(tx, y(fact_now)), 4.0, Stroke::new(1.5_f32, theme::card()));
+    p.circle_stroke(
+        pos2(tx, y(fact_now)),
+        4.0,
+        Stroke::new(1.5_f32, theme::card()),
+    );
 
     // Yozuvlar chap yoki o'ngga — chetga tiralib qolmasin.
     let dx = if tx > plot.max.x - 78.0 { -8.0 } else { 8.0 };
-    let align = if dx < 0.0 { Align2::RIGHT_CENTER } else { Align2::LEFT_CENTER };
+    let align = if dx < 0.0 {
+        Align2::RIGHT_CENTER
+    } else {
+        Align2::LEFT_CENTER
+    };
     p.text(
         pos2(tx + dx, y(plan_now) - 9.0),
         align,
@@ -442,7 +507,11 @@ fn dashed_v(p: &egui::Painter, x: f32, y0: f32, y1: f32, stroke: Stroke) {
 }
 
 fn next_month(d: NaiveDate) -> NaiveDate {
-    let (y, m) = if d.month() == 12 { (d.year() + 1, 1) } else { (d.year(), d.month() + 1) };
+    let (y, m) = if d.month() == 12 {
+        (d.year() + 1, 1)
+    } else {
+        (d.year(), d.month() + 1)
+    };
     NaiveDate::from_ymd_opt(y, m, 1).unwrap_or(d)
 }
 
@@ -516,15 +585,30 @@ fn attention_card(
     };
     let prj = open_bad(IssueModule::Project);
     if prj > 0 {
-        items.push((theme::danger(), prj, t("att_project_issues").to_string(), Screen::AiCheck));
+        items.push((
+            theme::danger(),
+            prj,
+            t("att_project_issues").to_string(),
+            Screen::AiCheck,
+        ));
     }
     let est = open_bad(IssueModule::Estimate);
     if est > 0 {
-        items.push((theme::danger(), est, t("att_estimate_issues").to_string(), Screen::Estimate));
+        items.push((
+            theme::danger(),
+            est,
+            t("att_estimate_issues").to_string(),
+            Screen::Estimate,
+        ));
     }
     let ppr_issues = open_bad(IssueModule::Ppr);
     if ppr_issues > 0 {
-        items.push((theme::warn(), ppr_issues, t("att_ppr_issues").to_string(), Screen::Ppr));
+        items.push((
+            theme::warn(),
+            ppr_issues,
+            t("att_ppr_issues").to_string(),
+            Screen::Ppr,
+        ));
     }
 
     // Tugallangan, lekin ijro hujjati rasmiylashtirilmagan ishlar.
@@ -562,13 +646,20 @@ fn attention_card(
                 let painter = ui.painter();
                 painter.circle_filled(icon.center(), 9.0, theme::ok().gamma_multiply(0.18));
                 super::draw_check(painter, icon.center(), 5.0, theme::ok(), 2.0);
-                ui.label(RichText::new(t("attention_empty")).size(13.0).color(theme::ok()));
+                ui.label(
+                    RichText::new(t("attention_empty"))
+                        .size(13.0)
+                        .color(theme::ok()),
+                );
             });
             ui.add_space(8.0);
             return;
         }
         for (color, count, text, screen) in &items {
-            if att_row(ui, *color, *count, text).on_hover_text(text).clicked() {
+            if att_row(ui, *color, *count, text)
+                .on_hover_text(text)
+                .clicked()
+            {
                 goto = Some(*screen);
             }
             ui.add_space(2.0);
@@ -664,7 +755,9 @@ fn overdue_table(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) -> Opt
 
             for (id, late) in rows.iter().take(shown) {
                 let Some(task) = app.task(*id) else { continue };
-                let Some(c) = app.schedule.get(*id) else { continue };
+                let Some(c) = app.schedule.get(*id) else {
+                    continue;
+                };
                 let end = p.start_date + Duration::days(c.ef);
                 if ui
                     .add(
@@ -691,7 +784,11 @@ fn overdue_table(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) -> Opt
                 ui.label(end.format("%d.%m.%Y").to_string());
                 ui.label(
                     RichText::new(format!("{late} {}", t("days_short")))
-                        .color(if *late > 14 { theme::danger() } else { theme::warn() })
+                        .color(if *late > 14 {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        })
                         .strong(),
                 );
                 ui.end_row();
@@ -780,7 +877,10 @@ fn sections_card(ui: &mut egui::Ui, app: &App) {
             let p = ui.painter();
             p.rect_filled(rect, 3.0, theme::track());
             p.rect_filled(
-                Rect::from_min_size(rect.min, vec2(rect.width() * fact_pct / 100.0, rect.height())),
+                Rect::from_min_size(
+                    rect.min,
+                    vec2(rect.width() * fact_pct / 100.0, rect.height()),
+                ),
                 3.0,
                 col,
             );
@@ -790,11 +890,13 @@ fn sections_card(ui: &mut egui::Ui, app: &App) {
                 [pos2(px, rect.min.y - 2.0), pos2(px, rect.max.y + 2.0)],
                 Stroke::new(2.0_f32, theme::text().gamma_multiply(0.55)),
             );
-            ui.label(
-                RichText::new(format!("{fact_pct:.0}%"))
-                    .size(11.5)
-                    .color(if fact_pct + 1.0 < plan_pct { theme::danger() } else { theme::text() }),
-            );
+            ui.label(RichText::new(format!("{fact_pct:.0}%")).size(11.5).color(
+                if fact_pct + 1.0 < plan_pct {
+                    theme::danger()
+                } else {
+                    theme::text()
+                },
+            ));
         });
         ui.add_space(2.0);
     }
@@ -823,14 +925,15 @@ fn today_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) -> Option
 
     for id in &pr.in_progress {
         let Some(task) = app.task(*id) else { continue };
-        let Some(c) = app.schedule.get(*id) else { continue };
+        let Some(c) = app.schedule.get(*id) else {
+            continue;
+        };
         ui.horizontal(|ui| {
             if ui
                 .add_sized(
                     [280.0, 18.0],
                     egui::Label::new(
-                        RichText::new(super::issues::truncate(&task.name, 34))
-                            .color(theme::text()),
+                        RichText::new(super::issues::truncate(&task.name, 34)).color(theme::text()),
                     )
                     .sense(Sense::click()),
                 )
@@ -854,7 +957,9 @@ fn today_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) -> Option
             );
             ui.label(
                 RichText::new(crate::i18n::until(
-                    &(p.start_date + Duration::days(c.ef)).format("%d.%m.%Y").to_string(),
+                    &(p.start_date + Duration::days(c.ef))
+                        .format("%d.%m.%Y")
+                        .to_string(),
                 ))
                 .color(theme::muted())
                 .size(11.5),
@@ -881,7 +986,11 @@ fn today_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) -> Option
                         vec2(rect.width() * (task.progress / 100.0) as f32, rect.height()),
                     ),
                     3.0,
-                    if c.critical { theme::danger() } else { theme::accent() },
+                    if c.critical {
+                        theme::danger()
+                    } else {
+                        theme::accent()
+                    },
                 );
             });
         });
@@ -905,7 +1014,9 @@ fn upcoming_card(ui: &mut egui::Ui, app: &App) {
         if done {
             continue;
         }
-        let Some(c) = app.schedule.get(task.id) else { continue };
+        let Some(c) = app.schedule.get(task.id) else {
+            continue;
+        };
         if task.progress <= 0.0 && c.es > today_off && c.es <= horizon {
             events.push((
                 origin + Duration::days(c.es),
