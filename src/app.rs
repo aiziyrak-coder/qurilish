@@ -363,6 +363,12 @@ impl Settings {
 /// bir necha oylik faol ishga yetadi.
 const AUDIT_KEEP: i64 = 50_000;
 
+/// Material yetarliligi shuncha kun oldin tekshiriladi (TZ XII.28).
+///
+/// Ikki hafta — buyurtma berib, materialni olib kelishga yetadigan eng qisqa
+/// muddat; undan kechroq bilish foydasiz bo'lib qoladi.
+const READINESS_DAYS: i64 = 14;
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -417,6 +423,8 @@ pub struct App {
     pub inventory_lines: Vec<InventoryLine>,
     /// Ishga material sarf normalari (TZ XI.15).
     pub material_norms: Vec<crate::domain::MaterialNorm>,
+    /// Material analoglari (TZ XII.9).
+    pub material_alts: Vec<crate::domain::MaterialAlt>,
     /// Brigadalar (TZ XIII.8).
     pub brigades: Vec<crate::domain::Brigade>,
     /// Yetkazib beruvchilar va tijorat takliflari (TZ X.7–12).
@@ -565,6 +573,7 @@ impl App {
             inventories: Vec::new(),
             inventory_lines: Vec::new(),
             material_norms: Vec::new(),
+            material_alts: Vec::new(),
             brigades: Vec::new(),
             suppliers: Vec::new(),
             quotes: Vec::new(),
@@ -730,6 +739,7 @@ impl App {
         self.inventories.clear();
         self.inventory_lines.clear();
         self.material_norms.clear();
+        self.material_alts.clear();
         self.brigades.clear();
         self.suppliers.clear();
         self.quotes.clear();
@@ -785,6 +795,7 @@ impl App {
         self.inventories = self.db.inventories(id);
         self.inventory_lines = self.db.inventory_lines(id);
         self.material_norms = self.db.material_norms(id);
+        self.material_alts = self.db.material_alts(id);
         self.brigades = self.db.brigades(id);
         self.suppliers = self.db.suppliers(id);
         self.quotes = self.db.quotes(id);
@@ -1568,6 +1579,17 @@ impl App {
     }
 
     /// Partiyalar bo'yicha qoldiq va FEFO navbati (TZ XI.9, XI.28).
+    /// Yaqinda boshlanadigan ishlar uchun material yetarlimi (TZ XII.28).
+    pub fn readiness(&self) -> Vec<crate::checks::Readiness> {
+        crate::checks::readiness(
+            &self.material_norms,
+            &self.tasks,
+            &self.stock(),
+            self.today,
+            READINESS_DAYS,
+        )
+    }
+
     /// Ishchilarning ruxsat va SIZ holati (TZ XV.4–9).
     pub fn worker_safety(&self) -> Vec<crate::checks::WorkerSafety> {
         crate::checks::worker_safety(

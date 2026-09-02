@@ -542,6 +542,7 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                             MoveKind::In | MoveKind::Return => theme::ok(),
                             MoveKind::Out => theme::accent(),
                             MoveKind::WriteOff => theme::warn(),
+                            MoveKind::ToSupplier => theme::danger(),
                         };
                         egui::ComboBox::from_id_salt(("wh_kind", m.id))
                             .selected_text(RichText::new(m.kind.label()).color(kind_color))

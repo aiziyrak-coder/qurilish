@@ -518,7 +518,41 @@ pub struct Material {
     /// Minimal zaxira: undan pastda ogohlantirish beriladi.
     pub min_stock: f64,
     pub price: f64,
+    /// Smetadagi rasenka kodi (TZ XII.7) — smeta bilan bog'lanish.
+    pub estimate_code: String,
+    /// Loyiha spetsifikatsiyasidagi pozitsiya yoki chizma varag'i (TZ XII.5–6).
+    pub spec_ref: String,
+    /// Maxsus talab: sovuqqa chidamlilik, yong'inga qarshilik va h.k. (TZ XII.31).
+    pub special: String,
+    /// Obyektda ishlatish taqiqlangan (TZ XII.38).
+    pub banned: bool,
+    /// Taqiq sababi. Taqiq bo'lsa bo'sh qolmasligi kerak.
+    pub ban_reason: String,
     pub note: String,
+}
+
+/// Almashtiruvchi material — analog (TZ XII.9–11).
+///
+/// Analog **tasdiqlangan** bo'lishi kerak: kim va qachon ruxsat berganini
+/// bilmasak, almashtirish loyihadan chetga chiqish bo'lib qoladi.
+#[derive(Debug, Clone)]
+pub struct MaterialAlt {
+    pub id: i64,
+    pub project_id: i64,
+    /// Asosiy material.
+    pub material_id: i64,
+    /// O'rniga ishlatilishi mumkin bo'lgan material.
+    pub alt_id: i64,
+    /// Kim tasdiqlagan. Bo'sh — hali tasdiqlanmagan.
+    pub approved_by: String,
+    pub approved_at: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl MaterialAlt {
+    pub fn approved(&self) -> bool {
+        !self.approved_by.trim().is_empty() && self.approved_at.is_some()
+    }
 }
 
 enum_kind!(MoveKind {
@@ -526,6 +560,9 @@ enum_kind!(MoveKind {
     Return   => "return",   "mk_return";
     Out      => "out",      "mk_out";
     WriteOff => "writeoff", "mk_writeoff";
+    // ToSupplier — yetkazib beruvchiga qaytarish (TZ XII.37): brak yoki
+    // ortiqcha kelgan material omborni tark etadi, lekin ishga ketmaydi.
+    ToSupplier => "to_supplier", "mk_to_supplier";
 });
 
 /// Ombor harakati (TZ XI).

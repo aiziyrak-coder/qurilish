@@ -420,6 +420,17 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
 
+            CREATE TABLE IF NOT EXISTS material_alt (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                material_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                alt_id INTEGER NOT NULL REFERENCES material(id) ON DELETE CASCADE,
+                approved_by TEXT NOT NULL DEFAULT '',
+                approved_at TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_alt_mat ON material_alt(material_id);
+
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY,
                 at TEXT NOT NULL,
@@ -604,6 +615,11 @@ impl Db {
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
             "ALTER TABLE request ADD COLUMN reject_reason TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE quality_check ADD COLUMN checklist_id INTEGER",
+            "ALTER TABLE material ADD COLUMN estimate_code TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE material ADD COLUMN spec_ref TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE material ADD COLUMN special TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE material ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE material ADD COLUMN ban_reason TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine ADD COLUMN fuel_norm REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN service_hours REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN service_done REAL NOT NULL DEFAULT 0",
@@ -2616,7 +2632,8 @@ impl Db {
 
     pub fn materials(&self, pid: i64) -> Vec<Material> {
         self.list(
-            "SELECT id,project_id,code,name,unit,section,spec,cert_no,cert_until,min_stock,price,note
+            "SELECT id,project_id,code,name,unit,section,spec,cert_no,cert_until,min_stock,price,
+                    estimate_code,spec_ref,special,banned,ban_reason,note
              FROM material WHERE project_id=?1 ORDER BY name",
             pid,
             |r| {
@@ -2632,7 +2649,12 @@ impl Db {
                     cert_until: odate(r.get(8)?),
                     min_stock: r.get(9)?,
                     price: r.get(10)?,
-                    note: r.get(11)?,
+                    estimate_code: r.get(11)?,
+                    spec_ref: r.get(12)?,
+                    special: r.get(13)?,
+                    banned: r.get::<_, i64>(14)? != 0,
+                    ban_reason: r.get(15)?,
+                    note: r.get(16)?,
                 })
             },
         )
@@ -2640,11 +2662,27 @@ impl Db {
 
     pub fn insert_material(&self, m: &Material) -> i64 {
         self.ins(
-            "INSERT INTO material (project_id,code,name,unit,section,spec,cert_no,cert_until,min_stock,price,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO material (project_id,code,name,unit,section,spec,cert_no,cert_until,
+                                   min_stock,price,estimate_code,spec_ref,special,banned,
+                                   ban_reason,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
             params![
-                m.project_id, m.code, m.name, m.unit, m.section.code(), m.spec, m.cert_no,
-                ods(m.cert_until), m.min_stock, m.price, m.note
+                m.project_id,
+                m.code,
+                m.name,
+                m.unit,
+                m.section.code(),
+                m.spec,
+                m.cert_no,
+                ods(m.cert_until),
+                m.min_stock,
+                m.price,
+                m.estimate_code,
+                m.spec_ref,
+                m.special,
+                i64::from(m.banned),
+                m.ban_reason,
+                m.note
             ],
         )
     }
@@ -2652,7 +2690,8 @@ impl Db {
     pub fn update_material(&self, m: &Material) -> bool {
         self.upd(
             "UPDATE material SET code=?2,name=?3,unit=?4,section=?5,spec=?6,cert_no=?7,
-                    cert_until=?8,min_stock=?9,price=?10,note=?11 WHERE id=?1",
+                    cert_until=?8,min_stock=?9,price=?10,estimate_code=?11,spec_ref=?12,
+                    special=?13,banned=?14,ban_reason=?15,note=?16 WHERE id=?1",
             params![
                 m.id,
                 m.code,
@@ -2664,7 +2703,63 @@ impl Db {
                 ods(m.cert_until),
                 m.min_stock,
                 m.price,
+                m.estimate_code,
+                m.spec_ref,
+                m.special,
+                i64::from(m.banned),
+                m.ban_reason,
                 m.note
+            ],
+        )
+    }
+
+    // ---------- XII.9-11. Analoglar ----------
+
+    pub fn material_alts(&self, pid: i64) -> Vec<MaterialAlt> {
+        self.list(
+            "SELECT id,project_id,material_id,alt_id,approved_by,approved_at,note
+             FROM material_alt WHERE project_id=?1 ORDER BY material_id,id",
+            pid,
+            |r| {
+                Ok(MaterialAlt {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    material_id: r.get(2)?,
+                    alt_id: r.get(3)?,
+                    approved_by: r.get(4)?,
+                    approved_at: odate(r.get(5)?),
+                    note: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_material_alt(&self, a: &MaterialAlt) -> i64 {
+        self.ins(
+            "INSERT INTO material_alt (project_id,material_id,alt_id,approved_by,approved_at,note)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![
+                a.project_id,
+                a.material_id,
+                a.alt_id,
+                a.approved_by,
+                ods(a.approved_at),
+                a.note
+            ],
+        )
+    }
+
+    pub fn update_material_alt(&self, a: &MaterialAlt) -> bool {
+        self.upd(
+            "UPDATE material_alt SET material_id=?2,alt_id=?3,approved_by=?4,approved_at=?5,
+                    note=?6 WHERE id=?1",
+            params![
+                a.id,
+                a.material_id,
+                a.alt_id,
+                a.approved_by,
+                ods(a.approved_at),
+                a.note
             ],
         )
     }
@@ -5163,6 +5258,11 @@ impl Db {
                 cert_until: cert_days.map(|d| today + chrono::Duration::days(d)),
                 min_stock,
                 price,
+                estimate_code: String::new(),
+                spec_ref: String::new(),
+                special: String::new(),
+                banned: false,
+                ban_reason: String::new(),
                 note: String::new(),
             })
         };
@@ -5287,7 +5387,8 @@ impl Db {
                    document: &str,
                    counterparty: &str,
                    warehouse_id: Option<i64>,
-                   batch_id: Option<i64>| {
+                   batch_id: Option<i64>,
+                   task_id: Option<i64>| {
             self.insert_stock_move(&StockMove {
                 id: 0,
                 project_id: pid,
@@ -5298,7 +5399,7 @@ impl Db {
                 price,
                 document: document.into(),
                 counterparty: counterparty.into(),
-                task_id: None,
+                task_id,
                 note: String::new(),
                 warehouse_id,
                 batch_id,
@@ -5439,28 +5540,7 @@ impl Db {
             karkas,
         );
 
-        mv(
-            rebar,
-            45,
-            MoveKind::In,
-            62.0,
-            9_600_000.0,
-            "TTN-0914",
-            supplier2,
-            None,
-        );
-        mv(
-            rebar,
-            12,
-            MoveKind::In,
-            18.0,
-            10_100_000.0,
-            "TTN-1201",
-            supplier2,
-            None,
-        );
         mv(rebar, 28, MoveKind::Out, 41.0, 0.0, "M-29/04", "", plita);
-        mv(rebar, 3, MoveKind::Out, 24.0, 0.0, "M-29/09", "", karkas);
 
         mv(
             brick,
@@ -5520,6 +5600,7 @@ impl Db {
             supplier2,
             Some(main_wh),
             Some(rebar_a),
+            None,
         );
         mvw(
             rebar,
@@ -5531,6 +5612,7 @@ impl Db {
             supplier2,
             Some(main_wh),
             Some(rebar_b),
+            None,
         );
         mvw(
             rebar,
@@ -5542,6 +5624,8 @@ impl Db {
             "",
             Some(main_wh),
             Some(rebar_a),
+            // Chiqim ishga bog'lanadi — sarf hisobi shundan chiqadi.
+            karkas,
         );
         mvw(
             concrete,
@@ -5553,6 +5637,7 @@ impl Db {
             supplier,
             Some(open_wh),
             Some(concrete_a),
+            None,
         );
         // Ishdan ortgan material omborga qaytdi (TZ XI.21).
         mvw(
@@ -5564,6 +5649,7 @@ impl Db {
             "V-01",
             "",
             Some(main_wh),
+            None,
             None,
         );
 
@@ -5583,6 +5669,112 @@ impl Db {
             }
             .into(),
         });
+
+        // Materialning loyiha va smeta bilan bog'lanishi (TZ XII.5–7) hamda
+        // analoglar. Bittasi ataylab tasdiqlanmagan holda qoldirilgan.
+        let mut catalog = self.materials(pid);
+        for m in catalog.iter_mut() {
+            let (code, spec_ref, special) = match m.code.as_str() {
+                "M-101" => (
+                    "E-06-01-001",
+                    "KJ-12, 4-varaq",
+                    if ru {
+                        "Морозостойкость F150"
+                    } else {
+                        "Sovuqqa chidamlilik F150"
+                    },
+                ),
+                "M-102" => ("E-06-01-034", "KJ-08, 2-varaq", ""),
+                "M-201" => ("E-08-02-001", "AR-04, 7-varaq", ""),
+                "M-401" => ("E-18-03-012", "VK-02, 3-varaq", ""),
+                _ => ("", "", ""),
+            };
+            m.estimate_code = code.into();
+            m.spec_ref = spec_ref.into();
+            m.special = special.into();
+            self.update_material(m);
+        }
+
+        // Analog haqiqiy almashtiruvchi bo'lishi kerak: shuning uchun katalogga
+        // shu maqsadda ikkita pozitsiya qo'shiladi.
+        let alt_mat = |code: &str, name: &str, unit: &str, section: Section, price: f64| -> i64 {
+            if let Some(m) = catalog.iter().find(|m| m.code == code) {
+                return m.id;
+            }
+            self.insert_material(&Material {
+                id: 0,
+                project_id: pid,
+                code: code.into(),
+                name: name.into(),
+                unit: unit.into(),
+                section,
+                spec: String::new(),
+                cert_no: String::new(),
+                cert_until: None,
+                min_stock: 0.0,
+                price,
+                estimate_code: String::new(),
+                spec_ref: String::new(),
+                special: String::new(),
+                banned: false,
+                ban_reason: String::new(),
+                note: String::new(),
+            })
+        };
+        let by_code = |c: &str| catalog.iter().find(|m| m.code == c).map(|m| m.id);
+
+        // Beton — boshqa zavoddan, narxi biroz qimmat: tasdiqlangan analog.
+        let beton_alt = alt_mat(
+            "M-103",
+            if ru {
+                "Бетон B25 W6 (другой завод)"
+            } else {
+                "B25 W6 beton (boshqa zavod)"
+            },
+            if ru { "м3" } else { "m3" },
+            Section::Kj,
+            745_000.0,
+        );
+        if let Some(concrete) = by_code("M-101") {
+            self.insert_material_alt(&MaterialAlt {
+                id: 0,
+                project_id: pid,
+                material_id: concrete,
+                alt_id: beton_alt,
+                approved_by: if ru {
+                    "ГИП: Ахмедов Р.С."
+                } else {
+                    "BLM: Ahmedov R.S."
+                }
+                .into(),
+                approved_at: Some(today - chrono::Duration::days(20)),
+                note: String::new(),
+            });
+        }
+
+        // PP truba o'rniga PE — arzonroq, lekin hali tasdiqlanmagan.
+        let pipe_alt = alt_mat(
+            "M-402",
+            if ru {
+                "Труба ПЭ 110 канализационная"
+            } else {
+                "PE 110 kanalizatsiya trubasi"
+            },
+            if ru { "м" } else { "m" },
+            Section::Vk,
+            36_000.0,
+        );
+        if let Some(pipe) = by_code("M-401") {
+            self.insert_material_alt(&MaterialAlt {
+                id: 0,
+                project_id: pid,
+                material_id: pipe,
+                alt_id: pipe_alt,
+                approved_by: String::new(),
+                approved_at: None,
+                note: String::new(),
+            });
+        }
 
         // Sarf normalari (TZ XI.15): armaturada ortiqcha sarf ataylab
         // qoldirilgan — «Normativ / fakt» ko'rinishi shuni ko'rsatadi.

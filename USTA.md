@@ -76,6 +76,10 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
       chiqadi, sarlavha qatori qotadi va filtr qo'yiladi
 - [x] **Amallar tarixi** — har bir yozish `store.rs` ning uchta chorrahasidan
       o'tadi, shuning uchun bironta o'zgarish jurnaldan chetda qolmaydi
+- [x] **XII Materiallar** — smeta va spetsifikatsiya havolasi, tasdiqlangan
+      analoglar, narx tarixi, brak va yetkazib beruvchiga qaytarish, taqiq,
+      to'liq kuzatuvchanlik (yetkazuvchi → partiya → ish → hujjat) va ish
+      boshlanishidan oldin material yetarliligini tekshirish
 
 Qolgan ishlar `TODO.md` da modul bo'yicha ro'yxatlangan. Xulosa jadvali
 belgilardan hisoblanadi va qulflangan (server, mobil, LLM, OCR talab

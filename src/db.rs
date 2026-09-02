@@ -1930,6 +1930,11 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             cert_until: None,
             min_stock,
             price: 1_000.0,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
             note: String::new(),
         }
     }
@@ -3379,6 +3384,231 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(t.db.audit_count(), 20);
     }
 
+    /// TZ XII.19: narx tarixi kirimlardan chiqadi va o'zgarishni ko'rsatadi.
+    #[test]
+    fn price_history_shows_the_change_between_deliveries() {
+        use crate::checks::price_history;
+        use crate::domain::{MoveKind, StockMove};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mid = t.db.insert_material(&test_material(pid, "PH-1", 0.0));
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 4, 1).expect("sana");
+        let mv = |days: i64, kind: MoveKind, qty: f64, price: f64| {
+            t.db.insert_stock_move(&StockMove {
+                id: 0,
+                project_id: pid,
+                material_id: mid,
+                date: day + chrono::Duration::days(days),
+                kind,
+                qty,
+                price,
+                document: format!("TTN-{days}"),
+                counterparty: "Yetkazuvchi".into(),
+                task_id: None,
+                note: String::new(),
+                warehouse_id: None,
+                batch_id: None,
+            });
+        };
+        // Tartib ataylab aralash kiritiladi — hisob sanaga qarab saralaydi.
+        mv(10, MoveKind::In, 5.0, 1_200.0);
+        mv(0, MoveKind::In, 10.0, 1_000.0);
+        // Narxsiz kirim va chiqim tarixga kirmaydi.
+        mv(5, MoveKind::In, 3.0, 0.0);
+        mv(7, MoveKind::Out, 2.0, 900.0);
+
+        let hist = price_history(mid, &t.db.stock_moves(pid));
+        assert_eq!(hist.len(), 2, "faqat narxi bor kirimlar");
+        assert_eq!(hist[0].price, 1_000.0);
+        assert_eq!(
+            hist[0].change_pct, None,
+            "birinchi kirimda solishtiruvchi yo'q"
+        );
+        assert_eq!(hist[1].price, 1_200.0);
+        assert_eq!(hist[1].change_pct, Some(20.0));
+        assert_eq!(hist[1].document, "TTN-10");
+    }
+
+    /// TZ XII.29–30: material zanjiri hujjatgacha boradi.
+    #[test]
+    fn material_trace_reaches_the_exec_doc() {
+        use crate::checks::material_trace;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let moves = t.db.stock_moves(pid);
+        let docs = t.db.exec_docs(pid);
+        let quality = t.db.quality_checks(pid);
+
+        // Namunada ishga berilgan material bor.
+        let mid = moves
+            .iter()
+            .find(|m| m.kind == crate::domain::MoveKind::Out && m.task_id.is_some())
+            .map(|m| m.material_id)
+            .expect("ishga berilgan material");
+
+        let tr = material_trace(mid, &moves, &docs, &quality);
+        assert!(tr.received > 0.0, "kirim yo'q");
+        assert!(tr.issued > 0.0, "chiqim yo'q");
+        assert!(!tr.tasks.is_empty(), "ish bog'lanmagan");
+        assert!(!tr.suppliers.is_empty(), "yetkazib beruvchi yo'q");
+
+        // Zanjir bo'lmagan materialda hammasi bo'sh, lekin xato emas.
+        let free = t.db.insert_material(&test_material(pid, "TR-0", 0.0));
+        let empty = material_trace(free, &moves, &docs, &quality);
+        assert_eq!(empty.received, 0.0);
+        assert!(empty.tasks.is_empty());
+        assert!(empty.docs.is_empty());
+    }
+
+    /// TZ XII.36: brak ombordan chiqmagan bo'lsa ochiq masala bo'lib qoladi.
+    #[test]
+    fn defect_stays_open_until_it_leaves_the_warehouse() {
+        use crate::checks::defect_lines;
+        use crate::domain::{MoveKind, QualityKind, QualityResult, StockMove};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mid = t.db.insert_material(&test_material(pid, "BR-1", 0.0));
+        let today = chrono::Local::now().date_naive();
+
+        t.db.insert_quality(&test_check(
+            pid,
+            QualityKind::Input,
+            None,
+            QualityResult::Fail,
+            "Sertifikat mos emas",
+            None,
+            None,
+        ));
+        // Tekshiruvni materialga bog'laymiz.
+        let mut q =
+            t.db.quality_checks(pid)
+                .into_iter()
+                .next()
+                .expect("tekshiruv");
+        q.material_id = Some(mid);
+        q.result = QualityResult::Fail;
+        t.db.update_quality(&q);
+
+        let lines = defect_lines(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.quality_checks(pid),
+        );
+        let d = lines.iter().find(|d| d.material_id == mid).expect("brak");
+        assert_eq!(d.rejected, 1);
+        assert!(d.unresolved, "ombordan chiqmagan brak ochiq bo'lishi kerak");
+
+        // Yetkazib beruvchiga qaytargach — masala yopiladi.
+        t.db.insert_stock_move(&StockMove {
+            id: 0,
+            project_id: pid,
+            material_id: mid,
+            date: today,
+            kind: MoveKind::ToSupplier,
+            qty: 5.0,
+            price: 0.0,
+            document: "V-01".into(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+            warehouse_id: None,
+            batch_id: None,
+        });
+        let lines = defect_lines(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.quality_checks(pid),
+        );
+        let d = lines.iter().find(|d| d.material_id == mid).expect("brak");
+        assert_eq!(d.returned, 5.0);
+        assert!(!d.unresolved);
+    }
+
+    /// TZ XII.28: yaqinda boshlanadigan ishga material yetmasa ogohlantiriladi.
+    #[test]
+    fn readiness_warns_before_the_work_starts() {
+        use crate::checks::{readiness, stock_balances};
+        use crate::domain::MaterialNorm;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let mid = t.db.insert_material(&test_material(pid, "RD-1", 0.0));
+
+        // Ish besh kundan keyin boshlanadi, hajmi 100.
+        let mut tasks = t.db.tasks(pid).unwrap_or_default();
+        let task = tasks.first_mut().expect("ish");
+        task.plan_start = today + chrono::Duration::days(5);
+        task.fact_start = None;
+        task.progress = 0.0;
+        task.volume = 100.0;
+        t.db.update_task(task).unwrap();
+        let tid = task.id;
+
+        // Norma: bir birlikka 2 → 200 kerak, omborda esa hech narsa yo'q.
+        t.db.insert_material_norm(&MaterialNorm {
+            id: 0,
+            project_id: pid,
+            task_id: tid,
+            material_id: mid,
+            per_unit: 2.0,
+            tolerance: 0.0,
+            note: String::new(),
+        });
+
+        let stock = stock_balances(
+            &t.db.materials(pid),
+            &t.db.stock_moves(pid),
+            &t.db.reservations(pid),
+            today,
+        );
+        let lines = readiness(
+            &t.db.material_norms(pid),
+            &t.db.tasks(pid).unwrap_or_default(),
+            &stock,
+            today,
+            14,
+        );
+        let l = lines
+            .iter()
+            .find(|l| l.task_id == tid && l.material_id == mid)
+            .expect("ogohlantirish");
+        assert_eq!(l.needed, 200.0, "butun hajmga qaraladi");
+        assert_eq!(l.available, 0.0);
+        assert_eq!(l.short, 200.0);
+        assert_eq!(l.days_left, 5);
+
+        // Uzoqdagi ish hozircha tekshirilmaydi.
+        let far = readiness(
+            &t.db.material_norms(pid),
+            &t.db.tasks(pid).unwrap_or_default(),
+            &stock,
+            today,
+            2,
+        );
+        assert!(!far.iter().any(|l| l.task_id == tid && l.material_id == mid));
+    }
+
+    /// Namunada analoglar bor: bittasi tasdiqlangan, bittasi yo'q.
+    #[test]
+    fn demo_has_approved_and_pending_alternatives() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let alts = t.db.material_alts(pid);
+        assert_eq!(alts.len(), 2);
+        assert!(alts.iter().any(|a| a.approved()));
+        assert!(alts.iter().any(|a| !a.approved()));
+
+        // Smeta va spetsifikatsiya havolalari to'ldirilgan.
+        let materials = t.db.materials(pid);
+        assert!(materials.iter().any(|m| !m.estimate_code.is_empty()));
+        assert!(materials.iter().any(|m| !m.spec_ref.is_empty()));
+        assert!(materials.iter().any(|m| !m.special.is_empty()));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
@@ -3670,6 +3900,11 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             cert_until: None,
             min_stock: 50.0,
             price: 1_000.0,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
             note: String::new(),
         });
         let today = chrono::Local::now().date_naive();

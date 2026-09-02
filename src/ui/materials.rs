@@ -51,6 +51,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (0u8, t("mat_tab_catalog")),
                 (1, t("mat_tab_norms")),
                 (2, t("mat_tab_usage")),
+                (3, t("mat_tab_alts")),
+                (4, t("mat_tab_trace")),
+                (5, t("mat_tab_ready")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -62,6 +65,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         match tab {
             1 => norms_tab(ui, app),
             2 => usage_tab(ui, app),
+            3 => {
+                if let Some(pid) = app.current {
+                    alts_tab(ui, app, pid);
+                }
+            }
+            4 => trace_tab(ui, app),
+            5 => ready_tab(ui, app),
             _ => table(ui, app),
         }
     }
@@ -80,6 +90,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 cert_until: None,
                 min_stock: 0.0,
                 price: 0.0,
+                estimate_code: String::new(),
+                spec_ref: String::new(),
+                special: String::new(),
+                banned: false,
+                ban_reason: String::new(),
                 note: String::new(),
             });
             app.reload_modules();
@@ -179,12 +194,15 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     let mut removed: Option<i64> = None;
     let lines = app.stock();
     let today = app.today;
+    // Tor ekranda loyiha havolalari yashiriladi: ular bir marta to'ldiriladi,
+    // kunlik ish esa qoldiq va narx ustunlarida.
+    let wide = ui.available_width() > 1500.0;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("materials_grid")
-                .num_columns(11)
+                .num_columns(if wide { 15 } else { 12 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -204,6 +222,12 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                     head(ui, 80.0, t("col_min_stock"));
                     head(ui, 100.0, t("col_price"));
                     head(ui, 120.0, t("col_balance"));
+                    if wide {
+                        head(ui, 100.0, t("col_estimate_code"));
+                        head(ui, 120.0, t("col_spec_ref"));
+                        head(ui, 150.0, t("col_special"));
+                    }
+                    head(ui, 150.0, t("col_banned"));
                     head(ui, 24.0, "");
                     ui.end_row();
 
@@ -317,6 +341,46 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             }
                             None => {
                                 ui.label(RichText::new(t("dash")).color(theme::muted()));
+                            }
+                        });
+
+                        if wide {
+                            // Smeta va loyiha bilan bog'lanish (TZ XII.5–7).
+                            changed |= ui
+                                .add_sized(
+                                    [100.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.estimate_code),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [120.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.spec_ref),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [150.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.special),
+                                )
+                                .changed();
+                        }
+
+                        // Taqiq (TZ XII.38): sababsiz taqiq bajarilmaydi,
+                        // shuning uchun sabab maydoni yonida turadi.
+                        ui.horizontal(|ui| {
+                            changed |= ui.checkbox(&mut m.banned, "").changed();
+                            if m.banned {
+                                let r = ui.add_sized(
+                                    [120.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.ban_reason)
+                                        .hint_text(t("col_reason")),
+                                );
+                                changed |= r.changed();
+                                if m.ban_reason.trim().is_empty() {
+                                    r.on_hover_text(t("ban_reason_hint"));
+                                    ui.label(RichText::new("!").color(theme::danger()).strong());
+                                }
                             }
                         });
 
@@ -711,6 +775,560 @@ fn write_m29(app: &mut App, lines: &[crate::checks::ConsumptionLine]) {
         Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
         Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
     }
+}
+
+// ================================================================ Analoglar
+
+/// Almashtiruvchi materiallar (TZ XII.9–11).
+fn alts_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    use super::warehouse::{cell_l, cell_r};
+    use crate::domain::MaterialAlt;
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_alt")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("alts_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if app.material_alts.is_empty() {
+        empty_screen(ui, t("alts_empty"));
+    } else {
+        let stock = app.stock();
+        let mut edited: Option<MaterialAlt> = None;
+        let mut removed: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("mat_alts")
+                    .num_columns(9)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 220.0, t("col_material"));
+                        head_l(ui, 220.0, t("col_alt"));
+                        head_r(ui, 130.0, t("col_price"));
+                        head_r(ui, 110.0, t("col_alt_diff"));
+                        head_r(ui, 110.0, t("col_balance"));
+                        head_l(ui, 160.0, t("col_approved_by"));
+                        head_l(ui, 130.0, t("col_approved_at"));
+                        head_l(ui, 130.0, t("col_status"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.material_alts {
+                            let mut a = src.clone();
+                            let mut changed = false;
+
+                            changed |=
+                                material_picker(ui, app, ("al_m", a.id), &mut a.material_id, 220.0);
+                            changed |=
+                                material_picker(ui, app, ("al_a", a.id), &mut a.alt_id, 220.0);
+
+                            let base = app.materials.iter().find(|m| m.id == a.material_id);
+                            let alt = app.materials.iter().find(|m| m.id == a.alt_id);
+                            let alt_price = alt.map_or(0.0, |m| m.price);
+                            cell_r(ui, 130.0, RichText::new(money(alt_price)).size(12.0));
+
+                            // Narx farqi: analog qimmatroqmi yoki arzonroq.
+                            let base_price = base.map_or(0.0, |m| m.price);
+                            let diff = if base_price > 0.0 {
+                                (alt_price - base_price) / base_price * 100.0
+                            } else {
+                                0.0
+                            };
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(if base_price > 0.0 && alt_price > 0.0 {
+                                    format!("{diff:+.0}%")
+                                } else {
+                                    t("dash").to_string()
+                                })
+                                .size(11.5)
+                                .color(if diff > 0.0 {
+                                    theme::warn()
+                                } else if diff < 0.0 {
+                                    theme::ok()
+                                } else {
+                                    theme::muted()
+                                }),
+                            );
+                            // Analog omborda bormi — almashtirish shu yerda hal bo'ladi.
+                            let bal = stock
+                                .iter()
+                                .find(|l| l.material_id == a.alt_id)
+                                .map_or(0.0, |l| l.available);
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(trim_num(bal)).size(12.0).color(if bal > 0.0 {
+                                    theme::ok()
+                                } else {
+                                    theme::muted()
+                                }),
+                            );
+
+                            changed |= ui
+                                .add_sized(
+                                    [160.0, 22.0],
+                                    egui::TextEdit::singleline(&mut a.approved_by)
+                                        .hint_text(t("col_approved_by")),
+                                )
+                                .changed();
+                            ui.horizontal(|ui| {
+                                let mut has = a.approved_at.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    a.approved_at = has.then_some(app.today);
+                                    changed = true;
+                                }
+                                if let Some(mut d) = a.approved_at {
+                                    if super::passport::date_edit(
+                                        ui,
+                                        &format!("ala{}", a.id),
+                                        &mut d,
+                                    ) {
+                                        a.approved_at = Some(d);
+                                        changed = true;
+                                    }
+                                }
+                            });
+
+                            // Tasdiqlanmagan analog ishlatishga asos emas.
+                            let banned = alt.is_some_and(|m| m.banned);
+                            let (text, color) = if banned {
+                                (t("alt_banned"), theme::danger())
+                            } else if a.approved() {
+                                (t("alt_approved"), theme::ok())
+                            } else {
+                                (t("alt_not_approved"), theme::warn())
+                            };
+                            cell_l(ui, 130.0, RichText::new(text).size(11.0).color(color));
+
+                            if ui
+                                .small_button(RichText::new("x").color(theme::danger()))
+                                .clicked()
+                            {
+                                removed = Some(a.id);
+                            }
+                            ui.end_row();
+                            if changed {
+                                edited = Some(a);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(a) = edited {
+            app.db.update_material_alt(&a);
+            app.reload_modules();
+        }
+        if let Some(id) = removed {
+            app.db.del("material_alt", id);
+            app.reload_modules();
+        }
+    }
+
+    if add {
+        if app.materials.len() < 2 {
+            app.notify(t("alt_needs_two").to_string());
+        } else {
+            let first = app.materials[0].id;
+            let second = app.materials[1].id;
+            app.db.insert_material_alt(&MaterialAlt {
+                id: 0,
+                project_id: pid,
+                material_id: first,
+                alt_id: second,
+                approved_by: String::new(),
+                approved_at: None,
+                note: String::new(),
+            });
+            app.reload_modules();
+        }
+    }
+}
+
+// ================================================================ Kuzatuvchanlik
+
+/// Bitta material bo'yicha to'liq zanjir va narx tarixi (TZ XII.19, 29–30, 35–36).
+fn trace_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::cell_l;
+
+    let key = egui::Id::new("mat_trace_pick");
+    let mut picked = ui
+        .data(|d| d.get_temp::<i64>(key))
+        .filter(|id| app.materials.iter().any(|m| m.id == *id))
+        .or_else(|| app.materials.first().map(|m| m.id));
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(t("col_material"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        if let Some(cur) = &mut picked {
+            material_picker(ui, app, "tr_pick", cur, 260.0);
+        }
+        ui.label(
+            RichText::new(t("trace_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    let Some(mid) = picked else {
+        empty_screen(ui, t("materials_empty"));
+        return;
+    };
+    ui.data_mut(|d| d.insert_temp(key, mid));
+    ui.add_space(8.0);
+
+    let trace = crate::checks::material_trace(mid, &app.stock_moves, &app.exec_docs, &app.quality);
+    let hist = crate::checks::price_history(mid, &app.stock_moves);
+    let rating = crate::checks::material_ratings(&app.materials, &app.stock_moves, &app.quality)
+        .into_iter()
+        .find(|r| r.material_id == mid);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("kpi_trace_in"),
+                trim_num(trace.received),
+                t("kpi_trace_in_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_issued"),
+                trim_num(trace.issued),
+                &format!("{} {}", trace.tasks.len(), t("kpi_issued_hint")),
+                theme::accent(),
+            ),
+            stat(
+                t("kpi_deliveries"),
+                rating.as_ref().map_or(0, |r| r.deliveries).to_string(),
+                t("kpi_deliveries_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("kpi_price_change"),
+                match rating.as_ref().filter(|r| r.deliveries > 1) {
+                    Some(r) => format!("{:+.0}%", r.price_change_pct),
+                    None => t("dash").to_string(),
+                },
+                &match rating.as_ref().filter(|r| r.last_price > 0.0) {
+                    Some(r) => format!("{} {}", t("kpi_last_price"), money(r.last_price)),
+                    None => t("kpi_price_change_hint").to_string(),
+                },
+                match rating.as_ref() {
+                    Some(r) if r.price_change_pct > 10.0 => theme::danger(),
+                    Some(r) if r.price_change_pct > 0.0 => theme::warn(),
+                    _ => theme::muted(),
+                },
+            ),
+            stat(
+                t("kpi_input_pass"),
+                match rating.as_ref().and_then(|r| r.pass_pct) {
+                    Some(v) => format!("{v:.0}%"),
+                    None => t("dash").to_string(),
+                },
+                &match rating.as_ref().filter(|r| r.checks > 0) {
+                    Some(r) => format!(
+                        "{} {} · {} {}",
+                        r.checks,
+                        t("kpi_checks"),
+                        r.rejected,
+                        t("kpi_rejected")
+                    ),
+                    None => t("kpi_input_pass_hint").to_string(),
+                },
+                match rating.as_ref().and_then(|r| r.pass_pct) {
+                    Some(v) if v >= 99.9 => theme::ok(),
+                    Some(_) => theme::danger(),
+                    None => theme::muted(),
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---- Zanjir: qayerdan → qayerga → qaysi hujjatga.
+            card_frame(ui, t("trace_chain"), ui.available_width() - 20.0, |ui| {
+                let line = |ui: &mut egui::Ui, label: &str, value: String| {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            [190.0, 18.0],
+                            egui::Label::new(RichText::new(label).size(11.5).color(theme::muted())),
+                        );
+                        ui.label(RichText::new(value).size(12.0));
+                    });
+                };
+                line(
+                    ui,
+                    t("trace_suppliers"),
+                    if trace.suppliers.is_empty() {
+                        t("dash").to_string()
+                    } else {
+                        trace.suppliers.join(", ")
+                    },
+                );
+                line(
+                    ui,
+                    t("trace_batches"),
+                    if trace.batches.is_empty() {
+                        t("dash").to_string()
+                    } else {
+                        trace
+                            .batches
+                            .iter()
+                            .filter_map(|id| app.batches.iter().find(|b| b.id == *id))
+                            .map(|b| b.number.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    },
+                );
+                line(
+                    ui,
+                    t("trace_tasks"),
+                    if trace.tasks.is_empty() {
+                        t("dash").to_string()
+                    } else {
+                        trace
+                            .tasks
+                            .iter()
+                            .filter_map(|id| app.task(*id))
+                            .map(|x| format!("{} {}", x.wbs, x.name))
+                            .collect::<Vec<_>>()
+                            .join("; ")
+                    },
+                );
+                line(
+                    ui,
+                    t("trace_docs"),
+                    if trace.docs.is_empty() {
+                        // Hujjat yo'qligi ham javob: zanjir uzilgan.
+                        t("trace_no_docs").to_string()
+                    } else {
+                        trace
+                            .docs
+                            .iter()
+                            .filter_map(|id| app.exec_docs.iter().find(|d| d.id == *id))
+                            .map(|d| d.number.clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    },
+                );
+                line(ui, t("trace_checks"), trace.checks.len().to_string());
+            });
+            ui.add_space(10.0);
+
+            // ---- Narx tarixi.
+            card_frame(ui, t("trace_prices"), ui.available_width() - 20.0, |ui| {
+                if hist.is_empty() {
+                    ui.label(
+                        RichText::new(t("trace_no_prices"))
+                            .size(12.0)
+                            .color(theme::muted()),
+                    );
+                    return;
+                }
+                egui::Grid::new("mat_prices")
+                    .num_columns(6)
+                    .spacing([10.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for h in [
+                            t("col_date"),
+                            t("col_price"),
+                            t("col_change"),
+                            t("col_qty"),
+                            t("col_supplier"),
+                            t("col_document"),
+                        ] {
+                            ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                        }
+                        ui.end_row();
+                        for p in &hist {
+                            ui.label(
+                                RichText::new(p.date.format("%d.%m.%Y").to_string())
+                                    .size(11.5)
+                                    .monospace(),
+                            );
+                            ui.label(RichText::new(money(p.price)).size(12.0));
+                            match p.change_pct {
+                                Some(c) => {
+                                    ui.label(RichText::new(format!("{c:+.1}%")).size(11.5).color(
+                                        if c > 10.0 {
+                                            theme::danger()
+                                        } else if c > 0.0 {
+                                            theme::warn()
+                                        } else {
+                                            theme::ok()
+                                        },
+                                    ))
+                                }
+                                None => ui.label(
+                                    RichText::new(t("dash")).size(11.5).color(theme::muted()),
+                                ),
+                            };
+                            ui.label(RichText::new(trim_num(p.qty)).size(11.5));
+                            ui.label(RichText::new(&p.supplier).size(11.5));
+                            ui.label(RichText::new(&p.document).size(11.5).color(theme::muted()));
+                            ui.end_row();
+                        }
+                    });
+            });
+            ui.add_space(10.0);
+
+            // ---- Brak.
+            let defects =
+                crate::checks::defect_lines(&app.materials, &app.stock_moves, &app.quality);
+            if let Some(d) = defects.iter().find(|d| d.material_id == mid) {
+                card_frame(ui, t("trace_defects"), ui.available_width() - 20.0, |ui| {
+                    ui.label(
+                        RichText::new(format!("{} {}", t("trace_rejected"), d.rejected))
+                            .size(12.0)
+                            .color(theme::danger()),
+                    );
+                    ui.label(
+                        RichText::new(format!(
+                            "{} {} · {} {}",
+                            t("mk_writeoff"),
+                            trim_num(d.written_off),
+                            t("mk_to_supplier"),
+                            trim_num(d.returned)
+                        ))
+                        .size(11.5)
+                        .color(theme::muted()),
+                    );
+                    if d.unresolved {
+                        ui.label(
+                            RichText::new(t("trace_unresolved"))
+                                .size(11.5)
+                                .color(theme::danger()),
+                        );
+                    }
+                    for r in &d.reasons {
+                        cell_l(ui, ui.available_width() - 10.0, RichText::new(r).size(11.5));
+                    }
+                });
+            }
+        });
+}
+
+// ================================================================ Tayyorlik
+
+/// Yaqinda boshlanadigan ishlar uchun material yetarlimi (TZ XII.28).
+fn ready_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let lines = app.readiness();
+
+    ui.label(
+        RichText::new(t("ready_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(8.0);
+
+    if lines.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(t("ready_ok")).color(theme::ok()).size(15.0));
+        });
+        return;
+    }
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("mat_ready")
+                .num_columns(7)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 280.0, t("col_task"));
+                    head_r(ui, 90.0, t("col_days_left"));
+                    head_l(ui, 220.0, t("col_material"));
+                    head_r(ui, 110.0, t("col_needed"));
+                    head_r(ui, 110.0, t("col_available"));
+                    head_r(ui, 110.0, t("col_short"));
+                    head_l(ui, 70.0, t("col_unit"));
+                    ui.end_row();
+
+                    for l in &lines {
+                        let task = app.task(l.task_id);
+                        cell_l(
+                            ui,
+                            280.0,
+                            RichText::new(super::issues::truncate(
+                                &task
+                                    .map(|x| format!("{} {}", x.wbs, x.name))
+                                    .unwrap_or_default(),
+                                40,
+                            ))
+                            .size(12.0),
+                        );
+                        // Kam kun qolgani qanchalik shoshilinchligini ko'rsatadi.
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(l.days_left.to_string()).size(12.0).color(
+                                if l.days_left <= 0 {
+                                    theme::danger()
+                                } else if l.days_left <= 3 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                },
+                            ),
+                        );
+                        let m = app.materials.iter().find(|m| m.id == l.material_id);
+                        cell_l(
+                            ui,
+                            220.0,
+                            RichText::new(super::issues::truncate(
+                                &material_label(app, l.material_id),
+                                28,
+                            ))
+                            .size(12.0),
+                        );
+                        cell_r(ui, 110.0, RichText::new(trim_num(l.needed)).size(12.0));
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(trim_num(l.available))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(trim_num(l.short))
+                                .size(12.5)
+                                .strong()
+                                .color(theme::danger()),
+                        );
+                        cell_l(
+                            ui,
+                            70.0,
+                            RichText::new(m.map(|m| m.unit.clone()).unwrap_or_default())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {

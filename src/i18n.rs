@@ -2785,6 +2785,99 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "col_evidence" => ("Hisob", "Расчёт"),
         "col_action" => ("Tavsiya", "Рекомендация"),
 
+        // ---------- XII.5-11, 19, 28-38. Bog'lanish, analog, tarix, brak ----------
+        "mat_tab_alts" => ("Analoglar", "Аналоги"),
+        "mat_tab_trace" => ("Kuzatuvchanlik", "Прослеживаемость"),
+        "mat_tab_ready" => ("Ish tayyorligi", "Готовность к работам"),
+        "mk_to_supplier" => ("Yetkazib beruvchiga qaytarish", "Возврат поставщику"),
+
+        // Katalog ustunlari
+        "col_estimate_code" => ("Rasenka", "Расценка"),
+        "col_spec_ref" => ("Spetsifikatsiya", "Спецификация"),
+        "col_special" => ("Maxsus talab", "Особое требование"),
+        "col_banned" => ("Taqiq", "Запрет"),
+        "material_banned" => ("ishlatib bo'lmaydi", "нельзя применять"),
+        "ban_reason_hint" => (
+            "Taqiq sababi yozilmagan — sababsiz taqiq bajarilmaydi",
+            "Причина запрета не указана — запрет без причины не соблюдают",
+        ),
+
+        // Analoglar (TZ XII.9-11)
+        "add_alt" => ("+ Analog", "+ Аналог"),
+        "alts_hint" => (
+            "Almashtiruvchi material tasdiqlangan bo'lishi kerak: kim va qachon ruxsat berganini bilmasak, almashtirish loyihadan chetga chiqish bo'lib qoladi.",
+            "Замена должна быть согласована: если неизвестно, кто и когда разрешил, замена превращается в отступление от проекта.",
+        ),
+        "alts_empty" => (
+            "Analog kiritilmagan — «+ Analog» bilan boshlang",
+            "Аналоги не внесены — начните с «+ Аналог»",
+        ),
+        "col_alt" => ("Analog", "Аналог"),
+        "col_alt_diff" => ("Narx farqi", "Разница цены"),
+        "col_approved_by" => ("Kim tasdiqladi", "Кто согласовал"),
+        "col_approved_at" => ("Qachon", "Когда"),
+        "alt_approved" => ("tasdiqlangan", "согласован"),
+        "alt_not_approved" => ("tasdiqlanmagan", "не согласован"),
+        "alt_banned" => ("analog taqiqlangan", "аналог запрещён"),
+        "alt_needs_two" => (
+            "Analog uchun kamida ikkita material kerak",
+            "Для аналога нужно минимум два материала",
+        ),
+
+        // Kuzatuvchanlik (TZ XII.19, 29-30, 35-36)
+        "trace_hint" => (
+            "Bitta material bo'yicha: qayerdan kelgan, qayerga ketgan, qaysi hujjatga kirgan va narxi qanday o'zgargan.",
+            "По одному материалу: откуда пришёл, куда ушёл, в какой документ попал и как менялась цена.",
+        ),
+        "kpi_trace_in" => ("Kelgan", "Поступило"),
+        "kpi_trace_in_hint" => ("jami kirim", "всего прихода"),
+        "kpi_issued" => ("Berilgan", "Выдано"),
+        "kpi_issued_hint" => ("ta ishga", "работам"),
+        "kpi_deliveries" => ("Yetkazishlar", "Поставок"),
+        "kpi_deliveries_hint" => ("narxi bor kirimlar", "приходов с ценой"),
+        "kpi_price_change" => ("Narx o'zgarishi", "Изменение цены"),
+        "kpi_price_change_hint" => ("birinchi kirimdan", "с первого прихода"),
+        "kpi_input_pass" => ("Kirish nazorati", "Входной контроль"),
+        "kpi_input_pass_hint" => ("o'tgan tekshiruvlar", "пройденных проверок"),
+        "kpi_last_price" => ("oxirgi narx:", "последняя цена:"),
+        "kpi_checks" => ("tekshiruv", "проверок"),
+        "kpi_rejected" => ("rad etilgan", "отклонено"),
+        "trace_chain" => ("Zanjir", "Цепочка"),
+        "trace_suppliers" => ("Yetkazib beruvchilar", "Поставщики"),
+        "trace_batches" => ("Partiyalar", "Партии"),
+        "trace_tasks" => ("Qaysi ishlarga berilgan", "На какие работы выдан"),
+        "trace_docs" => ("Ijro hujjatlari", "Исполнительные документы"),
+        "trace_no_docs" => (
+            "hujjat yo'q — zanjir uzilgan",
+            "документов нет — цепочка разорвана",
+        ),
+        "trace_checks" => ("Sifat tekshiruvlari", "Проверок качества"),
+        "trace_prices" => ("Narx tarixi", "История цены"),
+        "trace_no_prices" => (
+            "Narxi ko'rsatilgan kirim yo'q",
+            "Нет приходов с указанной ценой",
+        ),
+        "col_change" => ("O'zgarish", "Изменение"),
+        "trace_defects" => ("Brak", "Брак"),
+        "trace_rejected" => ("Kirish nazoratida rad etilgan:", "Отклонено на входном контроле:"),
+        "trace_unresolved" => (
+            "Brak ombordan chiqmagan — u hali ham ishlatilishi mumkin",
+            "Брак не выведен со склада — его всё ещё могут применить",
+        ),
+
+        // Ish tayyorligi (TZ XII.28)
+        "ready_hint" => (
+            "Ikki hafta ichida boshlanadigan ishlar uchun material yetarlimi. Tekshiruv butun hajmga qaraydi: yetishmasligini oldindan bilish kerak, buyurtma vaqt oladi.",
+            "Хватает ли материалов на работы, начинающиеся в ближайшие две недели. Проверка смотрит на полный объём: о нехватке надо знать заранее, закупка занимает время.",
+        ),
+        "ready_ok" => (
+            "Yaqin ishlar uchun material yetarli",
+            "На ближайшие работы материалов хватает",
+        ),
+        "col_days_left" => ("Kun qoldi", "Дней"),
+        "col_needed" => ("Kerak", "Нужно"),
+        "col_short" => ("Yetishmaydi", "Не хватает"),
+
         // ---------- XIII. Tabel ----------
         "add_worker" => ("+ Ishchi", "+ Рабочий"),
         "worker_new_name" => ("Yangi ishchi", "Новый рабочий"),

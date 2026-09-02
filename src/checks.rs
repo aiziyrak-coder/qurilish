@@ -1450,7 +1450,8 @@ pub fn consumption(
                 .map(|m| match m.kind {
                     MoveKind::Out | MoveKind::WriteOff => m.qty,
                     MoveKind::Return => -m.qty,
-                    MoveKind::In => 0.0,
+                    // Kirim va yetkazib beruvchiga qaytarish ishga sarf emas.
+                    MoveKind::In | MoveKind::ToSupplier => 0.0,
                 })
                 .sum();
             let diff = fact - norm;
@@ -2577,6 +2578,307 @@ pub fn machine_lines(
                 service_left,
                 blocks,
             }
+        })
+        .collect()
+}
+
+// ================= XII. Material: tarix, kuzatuvchanlik, reyting =================
+
+/// Materialning bitta kirimi — narx tarixi uchun (TZ XII.19).
+#[derive(Debug, Clone)]
+pub struct PricePoint {
+    pub date: NaiveDate,
+    pub price: f64,
+    pub qty: f64,
+    pub supplier: String,
+    pub document: String,
+    /// Oldingi kirimdan farq, foizda. Birinchi kirimda `None`.
+    pub change_pct: Option<f64>,
+}
+
+/// TZ XII.19: material narxining kirimlar bo'yicha tarixi.
+///
+/// Narx katalogda bitta son bo'lib turadi, lekin u vaqt o'tishi bilan
+/// o'zgaradi. Tarix ombor kirimlaridan olinadi — bu haqiqatda to'langan narx,
+/// katalogdagi taxmin emas.
+pub fn price_history(material_id: i64, moves: &[StockMove]) -> Vec<PricePoint> {
+    let mut list: Vec<&StockMove> = moves
+        .iter()
+        .filter(|m| m.material_id == material_id)
+        .filter(|m| m.kind == MoveKind::In && m.price > 0.0)
+        .collect();
+    list.sort_by_key(|m| (m.date, m.id));
+
+    let mut out: Vec<PricePoint> = Vec::with_capacity(list.len());
+    let mut prev: Option<f64> = None;
+    for m in list {
+        out.push(PricePoint {
+            date: m.date,
+            price: m.price,
+            qty: m.qty,
+            supplier: m.counterparty.clone(),
+            document: m.document.clone(),
+            change_pct: prev.filter(|p| *p > 0.0).map(|p| (m.price - p) / p * 100.0),
+        });
+        prev = Some(m.price);
+    }
+    out
+}
+
+/// Materialning to'liq kuzatuvchanligi (TZ XII.29–30).
+#[derive(Debug, Clone, Default)]
+pub struct MaterialTrace {
+    /// Qayerdan kelgan: yetkazib beruvchilar.
+    pub suppliers: Vec<String>,
+    /// Qaysi partiyalar bilan kelgan.
+    pub batches: Vec<i64>,
+    /// Qaysi ishlarga berilgan.
+    pub tasks: Vec<i64>,
+    /// Shu ishlarni qamragan ijro hujjatlari.
+    pub docs: Vec<i64>,
+    /// Shu materialga tegishli sifat tekshiruvlari.
+    pub checks: Vec<i64>,
+    pub received: f64,
+    pub issued: f64,
+}
+
+/// TZ XII.30: material qayerdan kelib, qayerga ketganini bir joyda ko'rsatadi.
+///
+/// Zanjir hujjatlarga borib taqaladi: material → ish → ijro hujjati. Shunda
+/// «bu beton qaysi dalolatnomaga kirgan» degan savolga javob bor.
+pub fn material_trace(
+    material_id: i64,
+    moves: &[StockMove],
+    docs: &[ExecDoc],
+    quality: &[QualityCheck],
+) -> MaterialTrace {
+    let mine: Vec<&StockMove> = moves
+        .iter()
+        .filter(|m| m.material_id == material_id)
+        .collect();
+    let mut t = MaterialTrace {
+        received: mine
+            .iter()
+            .filter(|m| m.kind == MoveKind::In)
+            .map(|m| m.qty)
+            .sum(),
+        issued: mine
+            .iter()
+            .filter(|m| m.kind == MoveKind::Out)
+            .map(|m| m.qty)
+            .sum(),
+        ..Default::default()
+    };
+
+    t.suppliers = mine
+        .iter()
+        .filter(|m| m.kind == MoveKind::In)
+        .map(|m| m.counterparty.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    t.suppliers.sort();
+    t.suppliers.dedup();
+
+    t.batches = mine.iter().filter_map(|m| m.batch_id).collect();
+    t.batches.sort_unstable();
+    t.batches.dedup();
+
+    t.tasks = mine
+        .iter()
+        .filter(|m| m.kind == MoveKind::Out)
+        .filter_map(|m| m.task_id)
+        .collect();
+    t.tasks.sort_unstable();
+    t.tasks.dedup();
+
+    // Ijro hujjati ishga bog'langan bo'lsa — zanjir shu yerda yopiladi.
+    t.docs = docs
+        .iter()
+        .filter(|d| d.task_id.is_some_and(|id| t.tasks.contains(&id)))
+        .map(|d| d.id)
+        .collect();
+
+    t.checks = quality
+        .iter()
+        .filter(|q| {
+            q.material_id == Some(material_id) || q.task_id.is_some_and(|id| t.tasks.contains(&id))
+        })
+        .map(|q| q.id)
+        .collect();
+    t
+}
+
+/// Material reytingi (TZ XII.35).
+#[derive(Debug, Clone)]
+pub struct MaterialRating {
+    pub material_id: i64,
+    /// Nechta kirim bo'lgan.
+    pub deliveries: usize,
+    /// Oxirgi narx.
+    pub last_price: f64,
+    /// Birinchi kirimdan narx o'zgarishi, foizda.
+    pub price_change_pct: f64,
+    /// Kirish nazoratida nechta marta rad etilgan.
+    pub rejected: usize,
+    /// Jami kirish nazorati.
+    pub checks: usize,
+    /// Sifat ulushi, foizda. Tekshiruv bo'lmasa `None` — nol emas.
+    pub pass_pct: Option<f64>,
+}
+
+/// TZ XII.35: materialni tarixdan baholaydi.
+///
+/// Ball qo'yilmaydi — sonlar ko'rsatiladi: nechta kirim, narx qanday
+/// o'zgargan, kirish nazoratidan qanday o'tgan. Bitta raqamga siqib qo'yish
+/// qaror qabul qilishga yordam bermaydi, sabab ko'rinmay qoladi.
+pub fn material_ratings(
+    materials: &[Material],
+    moves: &[StockMove],
+    quality: &[QualityCheck],
+) -> Vec<MaterialRating> {
+    materials
+        .iter()
+        .map(|m| {
+            let hist = price_history(m.id, moves);
+            let checks: Vec<&QualityCheck> = quality
+                .iter()
+                .filter(|q| q.material_id == Some(m.id))
+                .filter(|q| q.kind == QualityKind::Input)
+                .collect();
+            let rejected = checks
+                .iter()
+                .filter(|q| q.result == QualityResult::Fail)
+                .count();
+            MaterialRating {
+                material_id: m.id,
+                deliveries: hist.len(),
+                last_price: hist.last().map_or(0.0, |p| p.price),
+                price_change_pct: match (hist.first(), hist.last()) {
+                    (Some(a), Some(b)) if a.price > 0.0 => (b.price - a.price) / a.price * 100.0,
+                    _ => 0.0,
+                },
+                rejected,
+                checks: checks.len(),
+                pass_pct: (!checks.is_empty())
+                    .then(|| (checks.len() - rejected) as f64 / checks.len() as f64 * 100.0),
+            }
+        })
+        .collect()
+}
+
+/// Brak yozuvi (TZ XII.36–37).
+#[derive(Debug, Clone)]
+pub struct DefectLine {
+    pub material_id: i64,
+    /// Kirish nazoratida rad etilgan marta.
+    pub rejected: usize,
+    /// Hisobdan chiqarilgan miqdor.
+    pub written_off: f64,
+    /// Yetkazib beruvchiga qaytarilgan miqdor.
+    pub returned: f64,
+    /// Qaytarilmagan brak: rad etilgan, lekin ombordan chiqmagan.
+    pub unresolved: bool,
+    pub reasons: Vec<String>,
+}
+
+/// TZ XII.36: brakka chiqarilgan material va u bilan nima bo'lgani.
+///
+/// Rad etilgan material ombordan chiqmagan bo'lsa — bu ochiq masala: u hali
+/// ham ishlatilishi mumkin. Shuning uchun alohida belgilanadi.
+pub fn defect_lines(
+    materials: &[Material],
+    moves: &[StockMove],
+    quality: &[QualityCheck],
+) -> Vec<DefectLine> {
+    materials
+        .iter()
+        .filter_map(|m| {
+            let bad: Vec<&QualityCheck> = quality
+                .iter()
+                .filter(|q| q.material_id == Some(m.id) && q.result == QualityResult::Fail)
+                .collect();
+            if bad.is_empty() {
+                return None;
+            }
+            let sum = |k: MoveKind| -> f64 {
+                moves
+                    .iter()
+                    .filter(|x| x.material_id == m.id && x.kind == k)
+                    .map(|x| x.qty)
+                    .sum()
+            };
+            let written_off = sum(MoveKind::WriteOff);
+            let returned = sum(MoveKind::ToSupplier);
+            Some(DefectLine {
+                material_id: m.id,
+                rejected: bad.len(),
+                written_off,
+                returned,
+                unresolved: written_off + returned <= 0.0001,
+                reasons: bad
+                    .iter()
+                    .map(|q| q.defect.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect(),
+            })
+        })
+        .collect()
+}
+
+/// Ish boshlanishidan oldin material yetarlimi (TZ XII.28).
+#[derive(Debug, Clone)]
+pub struct Readiness {
+    pub task_id: i64,
+    pub material_id: i64,
+    /// Ish uchun kerak bo'lgan miqdor: norma × butun hajm.
+    pub needed: f64,
+    /// Omborda erkin qoldiq.
+    pub available: f64,
+    /// Yetishmayotgan miqdor.
+    pub short: f64,
+    /// Ish shuncha kundan keyin boshlanadi. Manfiy — allaqachon boshlangan.
+    pub days_left: i64,
+}
+
+/// TZ XII.28: yaqinda boshlanadigan ishlar uchun material yetarlimi.
+///
+/// Tekshiruv **butun hajmga** qaraydi, bajarilganiga emas: ish boshlanishidan
+/// oldin materialning hammasi kerak bo'lmasa ham, yetishmasligini oldindan
+/// bilish kerak — buyurtma vaqt oladi.
+pub fn readiness(
+    norms: &[MaterialNorm],
+    tasks: &[Task],
+    stock: &[StockLine],
+    today: NaiveDate,
+    within_days: i64,
+) -> Vec<Readiness> {
+    norms
+        .iter()
+        .filter_map(|n| {
+            let task = tasks.iter().find(|t| t.id == n.task_id)?;
+            // Tugallangan ishga material kerak emas.
+            if task.progress >= 100.0 {
+                return None;
+            }
+            let start = task.fact_start.unwrap_or(task.plan_start);
+            let days_left = (start - today).num_days();
+            if days_left > within_days {
+                return None;
+            }
+            let needed = n.per_unit * task.volume;
+            let available = stock
+                .iter()
+                .find(|l| l.material_id == n.material_id)
+                .map_or(0.0, |l| l.available);
+            let short = needed - available;
+            (short > 0.0001).then_some(Readiness {
+                task_id: n.task_id,
+                material_id: n.material_id,
+                needed,
+                available,
+                short,
+                days_left,
+            })
         })
         .collect()
 }
