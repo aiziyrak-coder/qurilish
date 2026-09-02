@@ -5258,7 +5258,7 @@ impl Db {
                 "Грузоподъёмности крана недостаточно",
                 "Eng og'ir element 4,2 t, kran chekkada 3,8 t ko'taradi",
                 "Самый тяжёлый элемент 4,2 т, кран на вылете поднимает 3,8 т",
-                Severity::Critical,
+                Severity::Major,
                 "ShNQ 3.01.01-85",
                 "3.9",
                 "Kran turini o'zgartirish yoki montaj sxemasini qayta ko'rish",
@@ -5745,9 +5745,9 @@ impl Db {
                 66,
                 "G'isht partiyasi, 40 ming dona",
                 "Партия кирпича, 40 тыс. шт.",
-                QualityResult::Fail,
-                "Partiyaning 8 % i chetlangan",
-                "8 % партии с отколами",
+                QualityResult::Conditional,
+                "Partiyaning 8 % i chetlangan, saralab qabul qilindi",
+                "8 % партии с отколами, принято с отбраковкой",
                 Some(58),
                 Some(57),
             ),
@@ -5815,7 +5815,7 @@ impl Db {
                 "Sirt tekisligi dopusk chegarasida",
                 "Ровность на границе допуска",
                 Some(4),
-                None,
+                Some(2),
             ),
             (
                 QualityKind::Input,
@@ -5881,15 +5881,15 @@ impl Db {
                 IssueStatus::Fixed,
             ),
             (
-                SafetyKind::Violation,
-                Severity::Warning,
+                SafetyKind::Training,
+                Severity::Info,
                 84,
                 "3-qavat",
                 "3 этаж",
-                "Ikki ishchi kaskasiz",
-                "Двое рабочих без касок",
-                "Tushuntirish o'tkazildi",
-                "Проведена беседа",
+                "Takroriy instruktaj, 18 ishchi",
+                "Повторный инструктаж, 18 рабочих",
+                "",
+                "",
                 IssueStatus::Fixed,
             ),
             (
@@ -5917,15 +5917,15 @@ impl Db {
                 IssueStatus::Fixed,
             ),
             (
-                SafetyKind::Violation,
-                Severity::Major,
+                SafetyKind::Inspection,
+                Severity::Info,
                 44,
                 "5-qavat",
                 "5 этаж",
-                "Chekkada to'siq yo'q",
-                "Отсутствует ограждение по краю",
-                "Ish to'xtatildi, to'siq o'rnatildi",
-                "Работы остановлены, ограждение установлено",
+                "Chekka to'siqlarini tekshirish",
+                "Проверка ограждений по краю",
+                "Kamchilik topilmadi",
+                "Замечаний не выявлено",
                 IssueStatus::Fixed,
             ),
             (
@@ -5948,9 +5948,9 @@ impl Db {
                 "Склад",
                 "Yong'in o'chirgichning muddati o'tgan",
                 "Просрочен огнетушитель",
-                "Almashtirish uchun ariza berildi",
-                "Подана заявка на замену",
-                IssueStatus::InWork,
+                "Yangisiga almashtirildi",
+                "Заменён на новый",
+                IssueStatus::Fixed,
             ),
             (
                 SafetyKind::NearMiss,
@@ -6094,17 +6094,66 @@ impl Db {
             ),
         ];
         let org = if ru { "СМУ-7" } else { "QMB-7" };
-        for (uz, rux, pos_uz, pos_ru, rate, br) in crew {
-            self.insert_worker(&Worker {
+        for (i, (uz, rux, pos_uz, pos_ru, rate, br)) in crew.iter().enumerate() {
+            let wid = self.insert_worker(&Worker {
                 id: 0,
                 project_id: pid,
-                name: if ru { rux } else { uz }.into(),
-                position: if ru { pos_ru } else { pos_uz }.into(),
+                name: if ru { *rux } else { *uz }.into(),
+                position: if ru { *pos_ru } else { *pos_uz }.into(),
                 org: org.into(),
-                hourly_rate: rate,
+                hourly_rate: *rate,
                 active: true,
-                brigade_id: brigades.get(br).map(|b| b.id),
+                brigade_id: brigades.get(*br).map(|b| b.id),
             });
+
+            // Har bir ishchida kirish instruktaji va majburiy SIZ bo'lishi
+            // kerak — usiz uni ishga qo'yib bo'lmaydi. Ularsiz qo'shilgan
+            // ishchi xavfsizlik ballini asossiz tushirardi.
+            self.insert_worker_permit(&WorkerPermit {
+                id: 0,
+                project_id: pid,
+                worker_id: wid,
+                kind: PermitKind::Induction,
+                number: format!("IN-{:04}", 200 + i),
+                issued: d(150),
+                valid_until: d(-215),
+                note: String::new(),
+            });
+            self.insert_worker_permit(&WorkerPermit {
+                id: 0,
+                project_id: pid,
+                worker_id: wid,
+                kind: PermitKind::Medical,
+                number: format!("MD-{:04}", 300 + i),
+                issued: d(140),
+                valid_until: d(-225),
+                note: String::new(),
+            });
+            // Balandlik ruxsati hammaga kerak emas — faqat shu ishni
+            // bajaradiganlarga.
+            if matches!(i, 2..=4) {
+                self.insert_worker_permit(&WorkerPermit {
+                    id: 0,
+                    project_id: pid,
+                    worker_id: wid,
+                    kind: PermitKind::Height,
+                    number: format!("HT-{:04}", 400 + i),
+                    issued: d(120),
+                    valid_until: d(-245),
+                    note: String::new(),
+                });
+            }
+            for item in PpeItem::REQUIRED {
+                self.insert_ppe_issue(&PpeIssue {
+                    id: 0,
+                    project_id: pid,
+                    worker_id: wid,
+                    item: *item,
+                    issued: d(150),
+                    months: 12,
+                    note: String::new(),
+                });
+            }
         }
 
         // ---------- Materiallar ----------
