@@ -788,7 +788,7 @@ impl App {
         self.reload_modules();
     }
 
-    fn clear_modules(&mut self) {
+    pub fn clear_modules(&mut self) {
         self.issues.clear();
         self.documents.clear();
         self.ppr_docs.clear();

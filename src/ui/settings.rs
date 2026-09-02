@@ -11,6 +11,7 @@ const AUDIT_SHOWN: i64 = 25;
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut changed = false;
     let mut make_demo = false;
+    let mut clear_demo = false;
     let mut make_backup = false;
     let mut add_user = false;
     let mut export_pkg = false;
@@ -178,6 +179,20 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             field(ui, "", |ui| {
                 if ui.button(t("set_create_demo")).clicked() {
                     make_demo = true;
+                }
+                // Mijozga ko'rsatgandan keyin namuna kerak bo'lmaydi.
+                // Tugma faqat namuna bazada turganda ko'rinadi.
+                let has_demo = app
+                    .projects
+                    .iter()
+                    .any(|p| crate::db::Db::DEMO_CODES.contains(&p.code.as_str()));
+                if has_demo
+                    && ui
+                        .button(RichText::new(t("set_clear_demo")).color(theme::danger()))
+                        .on_hover_text(t("set_clear_demo_hint"))
+                        .clicked()
+                {
+                    clear_demo = true;
                 }
             });
             // Qurilmalar orasida ma'lumot fayl orqali ko'chadi (server yo'q).
@@ -553,6 +568,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 Ok(p) => app.notify(format!("{} {}", t("set_backup_done"), p.display())),
                 Err(e) => app.notify(format!("{}: {e}", t("set_backup_failed"))),
             }
+        }
+    }
+
+    if clear_demo {
+        match app.db.clear_demo() {
+            Ok(n) => {
+                app.current = None;
+                app.reload_projects();
+                if let Some(p) = app.projects.first().map(|p| p.id) {
+                    app.select_project(p);
+                } else {
+                    app.clear_modules();
+                }
+                app.notify(format!("{} {n}", t("set_demo_cleared")));
+            }
+            Err(e) => app.notify(format!("{}: {e}", t("err_delete"))),
         }
     }
 

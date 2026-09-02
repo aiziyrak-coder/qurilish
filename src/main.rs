@@ -45,7 +45,9 @@ fn main() -> eframe::Result<()> {
     };
 
     // Первый запуск: наполняем демонстрационным объектом, чтобы ГПР было на чем показать.
-    if database.project_count().unwrap_or(0) == 0 {
+    // Namuna faqat birinchi ochilishda yaratiladi. Foydalanuvchi uni
+    // tozalagan bo'lsa — qaytarib bermaymiz.
+    if database.project_count().unwrap_or(0) == 0 && !database.demo_cleared() {
         let _ = database.seed_demo();
     }
 

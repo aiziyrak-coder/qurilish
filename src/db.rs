@@ -477,6 +477,34 @@ impl Db {
             .query_row("SELECT COUNT(*) FROM project", [], |r| r.get(0))
     }
 
+    /// Namunaviy obyektlarning shifrlari.
+    ///
+    /// Tozalash ularni shu ro'yxat bo'yicha topadi: foydalanuvchi o'zi
+    /// yaratgan obyektga tegib ketmasligi kerak.
+    pub const DEMO_CODES: [&'static str; 2] = ["NVZ-15", "BB-240"];
+
+    /// Namunaviy obyektlarni o'chiradi va ularni qayta yaratishni to'xtatadi.
+    ///
+    /// Qaytaradi: nechta obyekt o'chirildi. Ilova bo'sh bazada namunani
+    /// o'zi yaratadi, shuning uchun sozlamaga bayroq qo'yiladi — aks holda
+    /// tozalangan namuna keyingi ochilishda qaytib kelardi.
+    pub fn clear_demo(&self) -> SqlResult<usize> {
+        let mut n = 0;
+        for p in self.projects()? {
+            if Self::DEMO_CODES.contains(&p.code.as_str()) {
+                self.delete_project(p.id)?;
+                n += 1;
+            }
+        }
+        let _ = self.set_setting("demo_cleared", "1");
+        Ok(n)
+    }
+
+    /// Namuna tozalanganmi — bo'sh bazada uni qayta yaratmaslik uchun.
+    pub fn demo_cleared(&self) -> bool {
+        self.get_setting("demo_cleared").as_deref() == Some("1")
+    }
+
     /// Namoyish obyekti: bog'lanishlari va kritik yo'li bor GPR ko'rsatadi.
     /// Nomlar joriy tilda yoziladi — bu foydalanuvchi ma'lumoti, tarjima qilinmaydi.
     pub fn seed_demo(&self) -> SqlResult<i64> {
@@ -4901,6 +4929,51 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         // O'chirish ham oshiradi.
         assert!(t.db.delete_inspection(x.id));
         assert!(t.db.revision() > after_update);
+    }
+
+    /// Namunani tozalash: obyektlar ham, ularning yozuvlari ham ketadi va
+    /// keyingi ochilishda qaytib kelmaydi.
+    #[test]
+    fn demo_can_be_cleared_and_does_not_return() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        assert_eq!(t.db.project_count().unwrap(), 2);
+        assert!(!t.db.tasks(pid).unwrap().is_empty());
+
+        // Foydalanuvchining o'z obyekti tegilmasligi kerak.
+        let mine =
+            t.db.insert_project(&crate::model::Project {
+                id: 0,
+                name: "Mening obyektim".into(),
+                code: "MY-1".into(),
+                address: String::new(),
+                object_type: String::new(),
+                floors: 0,
+                area_total: 0.0,
+                status: crate::model::ObjectStatus::Design,
+                start_date: chrono::Local::now().date_naive(),
+                planned_end: chrono::Local::now().date_naive(),
+                contract_sum: 0.0,
+                paid_total: 0.0,
+                currency: "UZS".into(),
+                funding_source: String::new(),
+                notes: String::new(),
+            })
+            .unwrap();
+
+        assert_eq!(t.db.clear_demo().unwrap(), 2);
+        let left = t.db.projects().unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].id, mine, "foydalanuvchi obyekti o'chib ketdi");
+
+        // Namunaning yozuvlari ham qoldiqsiz ketadi.
+        assert!(t.db.tasks(pid).unwrap().is_empty());
+        assert!(t.db.inspections(pid).is_empty());
+        assert!(t.db.contracts(pid).is_empty());
+        assert!(t.db.journal(pid).is_empty());
+
+        // Bayroq qo'yilgan: bo'sh bazada ham namuna qayta yaratilmaydi.
+        assert!(t.db.demo_cleared());
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

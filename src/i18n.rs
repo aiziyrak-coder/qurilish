@@ -524,6 +524,13 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "set_backup_failed" => ("Zaxira nusxa saqlanmadi", "Резервная копия не сохранена"),
         "set_create_demo" => ("Namoyish obyektini yaratish", "Создать демо-объект"),
         "set_demo_created" => ("Namoyish obyekti yaratildi", "Демо-объект создан"),
+        "set_clear_demo" => ("Namunani o'chirish", "Удалить демо-данные"),
+        "set_clear_demo_hint" => (
+            "Namunaviy obyektlar va ularning barcha yozuvlari o'chiriladi. Bu amalni qaytarib bo'lmaydi — avval zaxira nusxa oling.",
+            "Демонстрационные объекты и все их записи будут удалены. Действие необратимо — сначала сделайте резервную копию.",
+        ),
+        "set_demo_cleared" => ("Namunaviy obyekt o'chirildi:", "Удалено демо-объектов:"),
+        "err_delete" => ("O'chirib bo'lmadi", "Не удалось удалить"),
         "set_group_about" => ("Dastur haqi", "О программе"),
         "set_version" => ("Versiya", "Версия"),
         "set_stack" => ("Texnologiya", "Технология"),
