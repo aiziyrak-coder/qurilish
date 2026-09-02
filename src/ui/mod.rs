@@ -17,6 +17,7 @@ mod journal;
 mod machines;
 pub mod materials;
 mod passport;
+mod portfolio;
 mod ppr;
 mod purchases;
 mod quality;
@@ -137,6 +138,7 @@ pub fn draw(ctx: &Context, app: &mut App) {
         }
         match app.screen {
             Screen::Dashboard => dashboard::show(ui, app),
+            Screen::Portfolio => portfolio::show(ui, app),
             Screen::Passport => passport::show(ui, app),
             Screen::Gantt => gantt::show(ui, app),
             Screen::Ppr => ppr::show(ui, app),

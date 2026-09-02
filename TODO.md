@@ -13,16 +13,19 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 
 ## Umumiy hisob
 
+> Jadval qo'lda yuritilmaydi: `python tools/todo_count.py` uni shu
+> fayldagi belgilardan qayta hisoblaydi.
+
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 19 | 8 | 7 | 4 | 0 |
+| II. AI loyiha tekshiruvi | 22 | 9 | 7 | 6 | 2 |
 | III. AI smeta tekshiruvi | 34 | 15 | 8 | 11 | 2 |
 | IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
-| V. Kunlik jurnal | 34 | 17 | 7 | 10 | 6 |
-| VI. Prorab (mobil) | 37 | 16 | 9 | 12 | 8 |
-| VII. Texnik nazorat | 38 | 13 | 10 | 15 | 3 |
-| VIII. Buyurtmachi | 37 | 10 | 13 | 14 | 3 |
+| V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
+| VI. Prorab ilovasi | 37 | 16 | 9 | 12 | 8 |
+| VII. Texnik nazorat kabineti | 38 | 13 | 10 | 15 | 3 |
+| VIII. Buyurtmachi kabineti | 37 | 10 | 13 | 14 | 3 |
 | IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
 | X. Xaridlar | 48 | 16 | 16 | 16 | 2 |
 | XI. Ombor | 48 | 26 | 9 | 13 | 1 |
@@ -31,11 +34,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 19 | 9 | 13 | 2 |
 | XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
 | XVI. Mashinalar | 50 | 28 | 7 | 15 | 3 |
-| XVII. AI analitika | 51 | 22 | 12 | 17 | 0 |
+| XVII. AI analitika | 51 | 23 | 12 | 16 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
-| **Jami** | **683** | **302** | **176** | **205** | **52** |
+| Umumiy (TZ dan tashqari) | 14 | 9 | 1 | 4 | 2 |
+| **Jami** | **700** | **313** | **177** | **210** | **56** |
 
-Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
+Ya'ni **~45 % to'liq**, **~25 % qisman**, **~30 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -722,7 +726,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Asosiy vazifa
 - [x] 2. Direktorning bosh ekrani
 - [~] 3. **AI 5 ta savolga javob berishi** — *«nima bo'lyapti», «nima qilish kerak» bor; «nega», «qancha turadi», «keyin nima bo'ladi» qisman*
-- [ ] 4. Obyektlar bo'yicha analitika — *bir necha obyekt*
+- [x] 4. Obyektlar bo'yicha analitika — *«Obyektlar» ekrani: barcha obyektlar yonma-yon, e'tibor talab qiladiganlari oldinda*
 - [x] 5. Plan-fakt
 - [x] 6. GPR tahlili
 - [~] 7. AI kechikish sababini aniqlashi
@@ -804,11 +808,11 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] Zaxira nusxa (`VACUUM INTO`)
 - [x] Qurilmalar orasida paket almashish
 - [x] Baza migratsiyasi (eski baza ochilaveradi)
-- [ ] 🔒 **Bir necha obyekt bo'yicha konsolidatsiya** — *hozir bitta obyekt kesimida*
+- [x] **Bir necha obyekt bo'yicha konsolidatsiya** — *«Obyektlar» ekrani, vaznlangan bajarilish, Excel eksporti*
 - [ ] 🔒 **Server va jonli sinxronizatsiya**
 - [ ] 🔒 **Mobil klient**
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
-- [~] **Excel eksporti** — *15 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
+- [~] **Excel eksporti** — *18 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
 - [ ] **Bildirishnomalar tizimi**
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
 - [ ] **Izoh va muhokama** (yozuvlarga sharh)
@@ -839,7 +843,7 @@ Birinchi to'qqiz band bajarildi. Endi eng ko'p foyda beradigan qolgan ishlar:
    naryad-dopusk blankasi (XI.25, XV.11), ijro sxemasi (IV.7)
 2. ~~Excel eksporti: har bir jadval uchun~~ — **bajarildi** (15 ekran, Ctrl+E).
    Qoldi: PDF ga chiqarish
-3. **Bir nechta obyekt kesimida analitika** (XVII.4, X.33, XV.34)
+3. ~~Bir nechta obyekt kesimida analitika~~ — **bajarildi** (XVII.4: «Obyektlar» ekrani)
 4. **Smeta ↔ material ↔ ish bog'lanishi**: pozitsiya darajasida (III.28, XII.5–7)
 5. **Debitorlik va to'lov intizomi** (XVII.32–33, XX)
 6. **Pudratchilar va yetkazib beruvchilar reytingi** (XIV.28–29, XV.35, XVII.23–24)

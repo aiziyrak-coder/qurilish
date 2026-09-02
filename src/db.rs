@@ -852,12 +852,197 @@ impl Db {
         // II-III modullar uchun namoyish ma'lumoti: elementlar grafi va smeta.
         self.seed_demo_modules(pid);
 
+        // «Obyektlar» ekrani bitta obyektda o'z vazifasini ko'rsatmaydi, shuning
+        // uchun namunada ikkinchi obyekt ham bor: kichikroq, boshqa holatda va
+        // ataylab orqada qolgan — konsolidatsiya nima uchun kerakligi ko'rinsin.
+        self.seed_second_object(ru, today)?;
+
+        Ok(pid)
+    }
+
+    /// Ikkinchi namoyish obyekti: faqat pasport va GPR.
+    ///
+    /// Bu yerda boshqa modullar to'ldirilmaydi — atayin: portfelda «ma'lumoti
+    /// to'liq emas» obyekt qanday ko'rinishini ham ko'rsatish kerak.
+    fn seed_second_object(&self, ru: bool, today: NaiveDate) -> SqlResult<i64> {
+        let start = today - chrono::Duration::days(210);
+        let pid = self.insert_project(&Project {
+            id: 0,
+            name: if ru {
+                "Детский сад на 240 мест"
+            } else {
+                "240 o'rinli bolalar bog'chasi"
+            }
+            .into(),
+            code: "BB-240".into(),
+            address: if ru {
+                "Ташкентская обл., Зангиатинский р-н"
+            } else {
+                "Toshkent vil., Zangiota tumani"
+            }
+            .into(),
+            object_type: if ru {
+                "Социальный объект"
+            } else {
+                "Ijtimoiy obyekt"
+            }
+            .into(),
+            floors: 2,
+            area_total: 4_180.0,
+            status: ObjectStatus::InProgress,
+            start_date: start,
+            planned_end: start + chrono::Duration::days(300),
+            contract_sum: 9_200_000_000.0,
+            paid_total: 3_100_000_000.0,
+            currency: "UZS".into(),
+            funding_source: if ru {
+                "Государственный бюджет"
+            } else {
+                "Davlat byudjeti"
+            }
+            .into(),
+            notes: String::new(),
+        })?;
+
+        let plan: [SecondTaskDef; 8] = [
+            (
+                "1",
+                "Tayyorgarlik ishlari",
+                "Подготовительные работы",
+                Section::None,
+                20,
+                100.0,
+                1.0,
+                "kompleks",
+            ),
+            (
+                "2",
+                "Kotlovan va poydevor",
+                "Котлован и фундамент",
+                Section::Kj,
+                45,
+                100.0,
+                1_240.0,
+                "m3",
+            ),
+            (
+                "3",
+                "Karkas va devorlar",
+                "Каркас и стены",
+                Section::Kj,
+                90,
+                82.0,
+                2_950.0,
+                "m3",
+            ),
+            (
+                "4",
+                "Tom yopish",
+                "Кровля",
+                Section::Ar,
+                35,
+                40.0,
+                2_180.0,
+                "m2",
+            ),
+            (
+                "5",
+                "Muhandislik tarmoqlari",
+                "Инженерные сети",
+                Section::Ov,
+                60,
+                25.0,
+                1.0,
+                "kompleks",
+            ),
+            (
+                "6",
+                "Ichki pardozlash",
+                "Внутренняя отделка",
+                Section::Ar,
+                70,
+                8.0,
+                6_400.0,
+                "m2",
+            ),
+            (
+                "7",
+                "Obodonlashtirish",
+                "Благоустройство",
+                Section::None,
+                30,
+                0.0,
+                3_100.0,
+                "m2",
+            ),
+            (
+                "8",
+                "Topshirish",
+                "Сдача объекта",
+                Section::None,
+                15,
+                0.0,
+                1.0,
+                "kompleks",
+            ),
+        ];
+        let boss = if ru {
+            "Рахимов О.С."
+        } else {
+            "Rahimov O.S."
+        };
+        let mut ids: Vec<i64> = Vec::new();
+        let mut cursor = start;
+        for (wbs, uz, rux, section, days, progress, volume, unit) in plan {
+            let id = self.insert_task(&Task {
+                id: 0,
+                project_id: pid,
+                wbs: wbs.into(),
+                name: if ru { rux } else { uz }.into(),
+                section,
+                responsible: boss.into(),
+                duration: days,
+                plan_start: cursor,
+                // Boshlangan ish sanasi bor, tugagani yopilgan.
+                fact_start: (progress > 0.0).then_some(cursor),
+                fact_end: (progress >= 100.0).then_some(cursor + chrono::Duration::days(days)),
+                progress,
+                pinned: false,
+                volume,
+                unit: unit.into(),
+            })?;
+            cursor += chrono::Duration::days(days);
+            ids.push(id);
+        }
+        // Zanjir: har bir ish oldingisidan keyin.
+        for w in ids.windows(2) {
+            self.insert_link(&Link {
+                id: 0,
+                pred: w[0],
+                succ: w[1],
+                kind: LinkType::Fs,
+                lag: 0,
+            })?;
+        }
         Ok(pid)
     }
 }
 
 /// Namoyish ishining tavsifi:
 /// VBS, nomi (uz), nomi (ru), bo'lim, davomiyligi, mas'ul, bajarilgan %, hajm, birlik.
+/// Namunaning ikkinchi obyekti uchun ish tavsifi:
+/// VBS, nomi (uz), nomi (ru), bo'lim, davomiyligi, bajarilgan %, hajm, birlik.
+type SecondTaskDef = (
+    &'static str,
+    &'static str,
+    &'static str,
+    Section,
+    i64,
+    f64,
+    f64,
+    &'static str,
+);
+
 type TaskDef = (
     &'static str,
     &'static str,
@@ -913,9 +1098,15 @@ mod tests {
         let t = TempDb::new();
         let pid = t.db.seed_demo().expect("namoyish obyekti");
 
-        assert_eq!(t.db.project_count().unwrap(), 1);
+        // Namunada ikkita obyekt: asosiysi va portfel uchun ikkinchisi.
+        assert_eq!(t.db.project_count().unwrap(), 2);
         // Obyekt holati saqlanganidek qaytishi kerak.
-        let project = t.db.projects().unwrap().remove(0);
+        let project =
+            t.db.projects()
+                .unwrap()
+                .into_iter()
+                .find(|p| p.id == pid)
+                .expect("asosiy obyekt");
         assert_eq!(project.status, ObjectStatus::InProgress);
         assert_eq!(project.floors, 9);
         assert!(project.paid_total > 0.0);
@@ -1511,7 +1702,9 @@ mod tests {
         let pid = t.db.seed_demo().unwrap();
         t.db.delete_project(pid).unwrap();
 
-        assert_eq!(t.db.project_count().unwrap(), 0);
+        // Namunadagi ikkinchi obyekt joyida qoladi — o'chirish faqat bittasiga
+        // tegishi kerak.
+        assert_eq!(t.db.project_count().unwrap(), 1);
         assert!(t.db.tasks(pid).unwrap().is_empty());
         assert!(t.db.elements(pid).is_empty());
         assert!(t.db.estimates(pid).is_empty());
@@ -3232,6 +3425,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             Screen::Deals,
             Screen::Sales,
             Screen::Analytics,
+            Screen::Portfolio,
         ];
         for s in screens {
             let table = crate::ui::export::table_of(&app, s)

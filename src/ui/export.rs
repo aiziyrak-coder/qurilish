@@ -16,6 +16,7 @@ use crate::i18n::t;
 /// Joriy ekran uchun eksport jadvali. Ekranda jadval bo'lmasa — `None`.
 pub fn table_of(app: &App, screen: Screen) -> Option<Table> {
     let mut table = match screen {
+        Screen::Portfolio => portfolio(app),
         Screen::Gantt => gantt(app),
         Screen::Ppr => ppr(app),
         Screen::AiCheck => issues(app),
@@ -71,6 +72,65 @@ fn table(name: &str, headers: &[&str], rows: Vec<Vec<Cell>>) -> Table {
         headers: headers.iter().map(|h| h.to_string()).collect(),
         rows,
     }
+}
+
+// ================================================================ XVII.4 Obyektlar
+
+fn portfolio(app: &App) -> Table {
+    let rows = crate::portfolio::summaries(&app.db, app.today)
+        .into_iter()
+        .map(|p| {
+            vec![
+                txt(&p.code),
+                txt(&p.name),
+                txt(p.status.label()),
+                Cell::Num(p.fact_pct),
+                Cell::Num(p.plan_pct),
+                Cell::Num(p.deviation()),
+                Cell::Num(p.delay_days as f64),
+                Cell::Num(p.overdue_tasks as f64),
+                Cell::Money(p.contract_sum),
+                Cell::Money(p.paid_total),
+                Cell::Money(p.estimate_total),
+                Cell::Money(p.stock_value),
+                Cell::Num(p.critical_issues as f64),
+                match p.quality_score {
+                    Some(v) => Cell::Num(v),
+                    None => Cell::Empty,
+                },
+                Cell::Num(p.safety_score),
+                Cell::Num(p.late_purchases as f64),
+                Cell::Num(p.units_sold as f64),
+                Cell::Num(p.units_total as f64),
+                Cell::Money(p.sales_paid),
+            ]
+        })
+        .collect();
+    table(
+        "",
+        &[
+            t("col_code"),
+            t("pf_object"),
+            t("col_status"),
+            t("pf_fact"),
+            t("pf_plan"),
+            t("pf_deviation"),
+            t("col_delay_days"),
+            t("col_overdue"),
+            t("pf_contract_short"),
+            t("pf_paid_short"),
+            t("col_estimate"),
+            t("pf_stock"),
+            t("col_critical_count"),
+            t("pf_quality"),
+            t("pf_safety"),
+            t("col_late_delivery"),
+            t("pf_sales"),
+            t("col_units_total"),
+            t("pf_sales_paid"),
+        ],
+        rows,
+    )
 }
 
 // ================================================================ I.2 GPR

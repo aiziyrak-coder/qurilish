@@ -17,6 +17,7 @@ mod import;
 mod llm;
 mod model;
 mod package;
+mod portfolio;
 mod roles;
 mod sales;
 mod store;

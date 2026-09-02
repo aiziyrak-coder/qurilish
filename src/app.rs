@@ -21,6 +21,8 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Dashboard,
+    /// Barcha obyektlar bo'yicha konsolidatsiya (TZ XVII.4).
+    Portfolio,
     // I. Qurilish loyihasini boshqarish
     Passport,
     Gantt,
@@ -69,6 +71,7 @@ impl Screen {
     pub fn label(self) -> &'static str {
         match self {
             Screen::Dashboard => t("screen_dashboard"),
+            Screen::Portfolio => t("screen_portfolio"),
             Screen::Passport => t("screen_passport"),
             Screen::Gantt => t("screen_gantt"),
             Screen::Ppr => t("screen_ppr"),
@@ -98,7 +101,7 @@ impl Screen {
     /// TZ dagi bo'lim raqami. Umumiy ko'rinish va sozlamalar TZ moduli emas.
     pub fn numeral(self) -> &'static str {
         match self {
-            Screen::Dashboard | Screen::Settings => "",
+            Screen::Dashboard | Screen::Portfolio | Screen::Settings => "",
             Screen::Passport => "I.1",
             Screen::Gantt => "I.2",
             Screen::Ppr => "I.3",
@@ -127,6 +130,7 @@ impl Screen {
     pub fn readiness(self) -> Readiness {
         match self {
             Screen::Dashboard
+            | Screen::Portfolio
             | Screen::Passport
             | Screen::Gantt
             | Screen::Ppr
@@ -159,6 +163,7 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
     (
         "nav_object",
         &[
+            Screen::Portfolio,
             Screen::Dashboard,
             Screen::Passport,
             Screen::Gantt,
