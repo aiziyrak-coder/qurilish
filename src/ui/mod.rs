@@ -131,6 +131,13 @@ pub fn draw(ctx: &Context, app: &mut App) {
         app.restyle = false;
     }
 
+    // Bazada yozuv o'zgargan bo'lsa bildirishnomalarni qayta yig'amiz.
+    // Tekshiruv — bitta atomik son bilan, hisob esa faqat kerak bo'lganda.
+    if app.db.revision() != app.notices_rev {
+        app.notices_rev = app.db.revision();
+        app.refresh_notices();
+    }
+
     top_bar(ctx, app);
     side_bar(ctx, app);
 
@@ -553,11 +560,10 @@ fn side_bar(ctx: &Context, app: &mut App) {
                 .max_height(list_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
-                    // Ro'yxat kadr boshida bir marta hisoblanadi: uni har bir
-                    // qator uchun qayta yig'ish behuda ish bo'lardi.
-                    let notices = crate::notify::collect(app);
-                    let notice_count = notices.len();
-                    let notice_color = match crate::notify::top_severity(&notices) {
+                    // Ro'yxat App da keshlangan: uni har kadrda qayta yig'ish
+                    // o'nlab SQL so'rovni anglatardi.
+                    let notice_count = app.notices.len();
+                    let notice_color = match crate::notify::top_severity(&app.notices) {
                         Some(crate::domain::Severity::Critical) => theme::danger(),
                         Some(crate::domain::Severity::Major) => theme::warn(),
                         _ => theme::accent(),

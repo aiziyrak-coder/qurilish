@@ -1974,6 +1974,9 @@ impl Db {
         if table.is_empty() || table == "audit_log" {
             return;
         }
+        // Har bir yozuv o'zgarishi shu yerdan o'tadi — hisoblagich ham
+        // shu yerda oshadi, aks holda biror joyda unutilardi.
+        self.bump_revision();
         let _ = self.conn().execute(
             "INSERT INTO audit_log (at,user,action,table_name,row_id) VALUES (?1,?2,?3,?4,?5)",
             params![

@@ -1347,7 +1347,17 @@ pub fn num_edit(ui: &mut egui::Ui, w: f32, v: &mut f64, speed: f64, max: f64) ->
         egui::DragValue::new(v)
             .speed(speed)
             .range(0.0..=max)
-            .max_decimals(4),
+            .max_decimals(4)
+            // Milliardli summalar ajratkichsiz o'qilmaydi. Kiritishda esa
+            // bo'shliqli ham, bo'shliqsiz ham raqam qabul qilinadi.
+            .custom_formatter(|n, _| {
+                if n.abs() >= 10_000.0 {
+                    super::money(n)
+                } else {
+                    trim_num(n)
+                }
+            })
+            .custom_parser(|s| s.replace([' ', '\u{00a0}'], "").parse().ok()),
     )
     .changed()
 }

@@ -148,19 +148,27 @@ pub fn top_severity(list: &[Notice]) -> Option<Severity> {
 // ---------------------------------------------------------------- I. GPR
 
 fn schedule_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
+    // Ro'yxat CPM hisobidan olinadi — boshqaruv panelidagi son bilan bir xil
+    // bo'lishi uchun. Bu yerda o'z shartimizni yozsak, ikki ekranda ikki xil
+    // son chiqardi.
     let overdue: Vec<&crate::model::Task> = app
-        .tasks
+        .progress
+        .overdue
         .iter()
-        .filter(|x| {
-            x.fact_end.is_none() && x.plan_start + chrono::Duration::days(x.duration) < today
-        })
+        .filter_map(|id| app.tasks.iter().find(|t| t.id == *id))
         .collect();
     if !overdue.is_empty() {
-        let worst = overdue
-            .iter()
-            .map(|x| (today - (x.plan_start + chrono::Duration::days(x.duration))).num_days())
-            .max()
-            .unwrap_or(0);
+        // Kechikish CPM jadvalidagi erta tugash sanasidan o'lchanadi —
+        // boshqaruv panelidagi bilan bir xil qoida.
+        let start = app.project().map(|p| p.start_date);
+        let late = |x: &crate::model::Task| {
+            let end = match (start, app.schedule.get(x.id)) {
+                (Some(s), Some(c)) => s + chrono::Duration::days(c.ef),
+                _ => x.plan_start + chrono::Duration::days(x.duration),
+            };
+            (today - end).num_days()
+        };
+        let worst = overdue.iter().map(|x| late(x)).max().unwrap_or(0);
         out.push(Notice::new(
             "NT-S1",
             Source::Schedule,
@@ -176,9 +184,7 @@ fn schedule_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
                 t("nt_worst"),
                 overdue
                     .iter()
-                    .max_by_key(|x| {
-                        (today - (x.plan_start + chrono::Duration::days(x.duration))).num_days()
-                    })
+                    .max_by_key(|x| late(x))
                     .map(|x| x.name.clone())
                     .unwrap_or_default(),
                 worst,
@@ -732,6 +738,28 @@ mod tests {
                 .count();
             assert_eq!(n.count, waiting);
         }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Bildirishnomadagi son boshqaruv panelidagi bilan bir xil bo'lishi kerak.
+    ///
+    /// Bu asosiy va'da: agar bu yerda o'z shartimizni yozsak, ikki ekranda
+    /// ikki xil son chiqadi va foydalanuvchi qaysi biriga ishonishni bilmaydi.
+    #[test]
+    fn overdue_count_matches_the_dashboard() {
+        let (path, app) = demo_app("overdue");
+        let list = collect(&app);
+        let n = list
+            .iter()
+            .find(|n| n.code == "NT-S1")
+            .expect("muddati o'tgan ishlar bildirishnomasi");
+
+        assert_eq!(
+            n.count,
+            app.progress.overdue.len(),
+            "bildirishnoma va CPM hisobidagi son mos emas"
+        );
+        assert!(n.days > 0, "kechikish kunlari nolga teng");
         let _ = std::fs::remove_file(&path);
     }
 

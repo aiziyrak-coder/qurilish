@@ -13,6 +13,11 @@ pub struct Db {
     /// `Db` foydalanuvchini o'zi bilmaydi — uni ilova o'rnatadi. Bo'sh bo'lsa
     /// jurnalda «tanlanmagan» deb qoladi: kimdir deb o'ylab topmaymiz.
     user: std::sync::Mutex<String>,
+    /// Har bir yozuv o'zgarishida oshadigan hisoblagich.
+    ///
+    /// Interfeys shu son bo'yicha «bazada nimadir o'zgardimi» degan savolga
+    /// arzon javob oladi — aks holda hisoblar har kadrda qayta bajarilardi.
+    revision: std::sync::atomic::AtomicU64,
 }
 
 /// Путь к файлу базы: рядом с исполняемым файлом в подпапке `data`,
@@ -59,6 +64,17 @@ impl Db {
     }
 
     /// Joriy foydalanuvchi nomi. O'rnatilmagan bo'lsa bo'sh satr.
+    /// Yozuv o'zgarishlari hisoblagichi.
+    pub fn revision(&self) -> u64 {
+        self.revision.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Hisoblagichni oshiradi — yozuv chokepointlaridan chaqiriladi.
+    pub(crate) fn bump_revision(&self) {
+        self.revision
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+
     pub(crate) fn audit_user(&self) -> String {
         self.user.lock().map(|u| u.clone()).unwrap_or_default()
     }
@@ -72,6 +88,7 @@ impl Db {
         let db = Db {
             conn,
             user: std::sync::Mutex::new(String::new()),
+            revision: std::sync::atomic::AtomicU64::new(0),
         };
         db.migrate()?;
         db.migrate_modules()?;
@@ -4505,6 +4522,32 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!((c.retention() - c.sum * c.retention_pct / 100.0).abs() < 0.01);
         assert!(c.advance() > 0.0);
         assert!(c.retention() > 0.0);
+    }
+
+    /// Yozuv o'zgarishi baza revizyasini oshiradi — interfeys shu son
+    /// bo'yicha hisobni qayta bajarish kerakligini biladi.
+    #[test]
+    fn writes_bump_the_revision() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let start = t.db.revision();
+        assert!(start > 0, "namuna yozuvlari hisoblanmadi");
+
+        // O'qish revizyani o'zgartirmaydi.
+        let _ = t.db.inspections(pid);
+        let _ = t.db.contracts(pid);
+        assert_eq!(t.db.revision(), start, "o'qish revizyani oshirdi");
+
+        // Yozuv oshiradi.
+        let mut x = t.db.inspections(pid).remove(0);
+        x.note = "sinov".into();
+        assert!(t.db.update_inspection(&x));
+        let after_update = t.db.revision();
+        assert!(after_update > start);
+
+        // O'chirish ham oshiradi.
+        assert!(t.db.delete_inspection(x.id));
+        assert!(t.db.revision() > after_update);
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

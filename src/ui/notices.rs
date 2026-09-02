@@ -8,7 +8,7 @@
 
 use super::*;
 use crate::domain::Severity;
-use crate::notify::{self, Notice};
+use crate::notify::Notice;
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.current.is_none() {
@@ -23,7 +23,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
-    let list = notify::collect(app);
+    let list = app.notices.clone();
 
     ui.horizontal(|ui| {
         ui.label(RichText::new(t("nt_hint")).size(11.0).color(theme::muted()));

@@ -487,6 +487,13 @@ pub struct App {
     pub machine_logs: Vec<MachineLog>,
     /// VII. Texnik nazorat: tekshiruvlar, beton sinovlari, geodeziya.
     pub inspections: Vec<Inspection>,
+    /// Bildirishnomalar: ma'lumot o'zgarganda bir marta hisoblanadi.
+    ///
+    /// Uni har kadrda qayta yig'ish bo'lmaydi — hisob o'nlab SQL so'rovni
+    /// o'z ichiga oladi va yon panel har kadrda chiziladi.
+    pub notices: Vec<crate::notify::Notice>,
+    /// Ro'yxat qaysi baza revizyasida yig'ilgani.
+    pub notices_rev: u64,
     /// VIII. Buyurtmachi: shartnomalar, o'zgarishlar, to'lovlar, qabul.
     pub contracts: Vec<Contract>,
     pub contract_changes: Vec<ContractChange>,
@@ -554,6 +561,10 @@ impl App {
             progress: Progress::default(),
             // Diagnostika uchun: QURAI_SCREEN=passport bilan kerakli ekranda ochiladi.
             screen: match std::env::var("QURAI_SCREEN").as_deref() {
+                Ok("portfolio") => Screen::Portfolio,
+                Ok("notices") => Screen::Notices,
+                Ok("inspections") => Screen::Inspections,
+                Ok("contracts") => Screen::Contracts,
                 Ok("passport") => Screen::Passport,
                 Ok("gantt") => Screen::Gantt,
                 Ok("ppr") => Screen::Ppr,
@@ -634,6 +645,8 @@ impl App {
             safety: Vec::new(),
             machines: Vec::new(),
             machine_logs: Vec::new(),
+            notices: Vec::new(),
+            notices_rev: 0,
             inspections: Vec::new(),
             contracts: Vec::new(),
             contract_changes: Vec::new(),
@@ -816,6 +829,7 @@ impl App {
         self.safety.clear();
         self.machines.clear();
         self.machine_logs.clear();
+        self.notices.clear();
         self.inspections.clear();
         self.contracts.clear();
         self.contract_changes.clear();
@@ -908,6 +922,19 @@ impl App {
         {
             self.selected_issue = None;
         }
+
+        // Bildirishnomalar barcha modul ma'lumotidan yig'iladi — shuning
+        // uchun ular oxirida, hamma narsa yuklangandan keyin hisoblanadi.
+        self.refresh_notices();
+    }
+
+    /// Bildirishnomalar ro'yxatini qayta yig'adi.
+    ///
+    /// Yozuv o'zgartirilgan joyda chaqiriladi: ro'yxat eskirib qolsa, yon
+    /// paneldagi son haqiqatdan orqada qoladi.
+    pub fn refresh_notices(&mut self) {
+        self.notices = crate::notify::collect(self);
+        self.notices_rev = self.db.revision();
     }
 
     pub fn reload_estimate_items(&mut self) {
