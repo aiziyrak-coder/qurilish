@@ -116,6 +116,13 @@ pub fn accent() -> Color32 {
     )
 }
 
+/// Rangli fon ustidagi matn: urg'u, ogohlantirish yoki xato rangida.
+///
+/// Ikkala mavzuda ham shu ranglar to'q, shuning uchun matn oq qoladi.
+pub fn on_accent() -> Color32 {
+    Color32::from_rgb(255, 255, 255)
+}
+
 pub fn ok() -> Color32 {
     pick(
         Color32::from_rgb(21, 128, 71),

@@ -18,6 +18,7 @@ mod issues;
 mod journal;
 mod machines;
 pub mod materials;
+mod notices;
 mod passport;
 mod portfolio;
 mod ppr;
@@ -141,6 +142,7 @@ pub fn draw(ctx: &Context, app: &mut App) {
         match app.screen {
             Screen::Dashboard => dashboard::show(ui, app),
             Screen::Portfolio => portfolio::show(ui, app),
+            Screen::Notices => notices::show(ui, app),
             Screen::Inspections => inspections::show(ui, app),
             Screen::Contracts => contracts::show(ui, app),
             Screen::Passport => passport::show(ui, app),
@@ -432,7 +434,12 @@ fn readiness_color(r: Readiness) -> Option<Color32> {
 }
 
 /// Navigatsiyaning bitta qatori: TZ raqami, nomi va holat belgisi.
-fn nav_item(ui: &mut egui::Ui, screen: Screen, active: bool) -> egui::Response {
+fn nav_item(
+    ui: &mut egui::Ui,
+    screen: Screen,
+    active: bool,
+    badge: Option<(usize, egui::Color32)>,
+) -> egui::Response {
     let h = 31.0;
     let width = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(width, h), egui::Sense::click());
@@ -484,6 +491,26 @@ fn nav_item(ui: &mut egui::Ui, screen: Screen, active: bool) -> egui::Response {
             name_color,
         );
 
+        // Bildirishnoma soni — o'ng chekkada rangli belgi.
+        if let Some((n, color)) = badge {
+            let text = if n > 99 {
+                "99+".to_string()
+            } else {
+                n.to_string()
+            };
+            let w = 14.0 + text.len() as f32 * 5.5;
+            let br =
+                Rect::from_center_size(pos2(rect.max.x - 8.0 - w / 2.0, cy), egui::vec2(w, 17.0));
+            p.rect_filled(br, 8.5, color);
+            p.text(
+                br.center(),
+                Align2::CENTER_CENTER,
+                text,
+                egui::FontId::proportional(10.5),
+                theme::on_accent(),
+            );
+        }
+
         // Tugallanmagan modul o'ng chekkada nuqta bilan belgilanadi.
         if let Some(c) = readiness_color(ready) {
             let center = pos2(rect.max.x - 11.0, cy);
@@ -526,6 +553,16 @@ fn side_bar(ctx: &Context, app: &mut App) {
                 .max_height(list_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    // Ro'yxat kadr boshida bir marta hisoblanadi: uni har bir
+                    // qator uchun qayta yig'ish behuda ish bo'lardi.
+                    let notices = crate::notify::collect(app);
+                    let notice_count = notices.len();
+                    let notice_color = match crate::notify::top_severity(&notices) {
+                        Some(crate::domain::Severity::Critical) => theme::danger(),
+                        Some(crate::domain::Severity::Major) => theme::warn(),
+                        _ => theme::accent(),
+                    };
+
                     for (title_key, screens) in NAV_GROUPS {
                         ui.add_space(10.0);
                         ui.horizontal(|ui| {
@@ -541,7 +578,12 @@ fn side_bar(ctx: &Context, app: &mut App) {
 
                         for &screen in *screens {
                             let active = app.screen == screen;
-                            let resp = nav_item(ui, screen, active);
+                            // Bildirishnomalar ekrani yonida ochiq savollar soni.
+                            let badge = (screen == Screen::Notices).then_some(()).and_then(|_| {
+                                let n = notice_count;
+                                (n > 0).then_some((n, notice_color))
+                            });
+                            let resp = nav_item(ui, screen, active, badge);
                             // Ochiq modul ro'yxatdan tashqarida qolmasin:
                             // ilova ochilganda yoki oyna kichrayganda uni
                             // ko'rinadigan joyga suramiz.

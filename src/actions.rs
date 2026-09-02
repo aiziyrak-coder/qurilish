@@ -34,6 +34,8 @@ pub enum ActionKind {
     CreateExecDoc { task_id: i64, kind: ExecDocKind },
     /// Nuqsonga bartaraf etish muddatini qo'yish.
     SetDefectDeadline { check_id: i64, days: i64 },
+    /// Tekshiruv nuqsoniga bartaraf etish muddatini qo'yish (TZ VII.19, 21).
+    SetInspectionDeadline { inspection_id: i64, days: i64 },
     /// Muddati o'tgan ochiq naryadni yopish.
     ClosePermit { permit_id: i64 },
     /// Arizaga kelishuv marshrutini ochish.
@@ -64,6 +66,7 @@ pub fn suggest(app: &App, stock: &[StockLine]) -> Vec<Action> {
     supply_actions(app, stock, &mut out);
     document_actions(app, &mut out);
     quality_actions(app, &mut out);
+    inspection_actions(app, &mut out);
     safety_actions(app, &mut out);
     out
 }
@@ -283,6 +286,31 @@ fn quality_actions(app: &App, out: &mut Vec<Action>) {
 /// Nuqsonga sukut bo'yicha shuncha kun beriladi.
 const DEFECT_DAYS: i64 = 7;
 
+// ================================================================ Texnik nazorat
+
+/// Salbiy tekshiruv natijasi muddatsiz qolmasin (TZ VII.19, 21).
+///
+/// Ro'yxat `notify` modulidan olinadi: bir xil savolga ikki joyda ikki xil
+/// javob bo'lmasligi kerak.
+fn inspection_actions(app: &App, out: &mut Vec<Action>) {
+    for id in crate::notify::defects_without_deadline(app) {
+        let Some(x) = app.inspections.iter().find(|x| x.id == id) else {
+            continue;
+        };
+        push(
+            out,
+            "AC-V1",
+            ActionKind::SetInspectionDeadline {
+                inspection_id: id,
+                days: DEFECT_DAYS,
+            },
+            format!("{} {}", t("ac_set_deadline"), x.number),
+            format!("{} · {}", x.result.label(), x.place),
+            Screen::Inspections,
+        );
+    }
+}
+
 // ================================================================ Xavfsizlik
 
 fn safety_actions(app: &App, out: &mut Vec<Action>) {
@@ -469,6 +497,32 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
                 "{} {}",
                 t("ac_done_deadline"),
                 q.deadline
+                    .map(|d| d.format("%d.%m.%Y").to_string())
+                    .unwrap_or_default()
+            )
+        }
+
+        ActionKind::SetInspectionDeadline {
+            inspection_id,
+            days,
+        } => {
+            let mut x = app
+                .inspections
+                .iter()
+                .find(|x| x.id == *inspection_id)
+                .cloned()
+                .ok_or_else(|| t("ac_no_inspection").to_string())?;
+            // Ijobiy natijaga muddat qo'yish mantiqsiz — bartaraf etadigan
+            // narsa yo'q.
+            if x.result == crate::domain::InspectionResult::Pass {
+                return Err(t("ac_check_passed").to_string());
+            }
+            x.deadline = Some(app.today + chrono::Duration::days(*days));
+            app.db.update_inspection(&x);
+            format!(
+                "{} {}",
+                t("ac_done_deadline"),
+                x.deadline
                     .map(|d| d.format("%d.%m.%Y").to_string())
                     .unwrap_or_default()
             )

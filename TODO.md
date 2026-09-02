@@ -23,7 +23,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | III. AI smeta tekshiruvi | 34 | 15 | 8 | 11 | 2 |
 | IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
-| VI. Prorab ilovasi | 37 | 16 | 9 | 12 | 8 |
+| VI. Prorab ilovasi | 37 | 16 | 10 | 11 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 17 | 14 | 6 | 2 |
 | IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
@@ -33,13 +33,13 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIII. Tabel | 44 | 18 | 11 | 15 | 6 |
 | XIV. Sifat | 41 | 19 | 9 | 13 | 2 |
 | XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
-| XVI. Mashinalar | 50 | 28 | 7 | 15 | 3 |
+| XVI. Mashinalar | 50 | 28 | 8 | 14 | 2 |
 | XVII. AI analitika | 51 | 23 | 12 | 16 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
-| Umumiy (TZ dan tashqari) | 14 | 9 | 1 | 4 | 2 |
-| **Jami** | **700** | **328** | **177** | **195** | **55** |
+| Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
+| **Jami** | **700** | **329** | **179** | **192** | **53** |
 
-Ya'ni **~47 % to'liq**, **~25 % qisman**, **~28 % hali yo'q**.
+Ya'ni **~47 % to'liq**, **~26 % qisman**, **~27 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -229,7 +229,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. Texnika xavfsizligi
 - [x] 27. Instruktaj
 - [ ] 🔒 28. Internetsiz ishlash — *lokal baza; sinxronizatsiya paket orqali*
-- [ ] 🔒 29. Bildirishnomalar
+- [~] 29. Bildirishnomalar — *ilova ichida bildirishnomalar markazi; push tashqi omil*
 - [~] 30. AI-yordamchi — *qoidalarga asoslangan yordamchi*
 - [x] 31. AI aniq obyektni bilishi
 - [ ] 🔒 32. Ofis bilan chat
@@ -712,7 +712,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 42. AI samaradorlik tahlili
 - [ ] 43. «Ta'mirlash yoki almashtirish» qarori
 - [~] 44. Mashina hujjatlari — *texnik ko'rik*
-- [ ] 🔒 45. Bildirishnomalar
+- [~] 45. Bildirishnomalar — *TX muddati markazga chiqadi; push tashqi omil*
 - [ ] 46. Mexanik kabineti
 - [~] 47. Direktor kabineti
 - [~] 48. XVI ning bosh zanjiri
@@ -813,7 +813,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 **Mobil klient**
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
 - [~] **Excel eksporti** — *20 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
-- [ ] **Bildirishnomalar tizimi**
+- [x] **Bildirishnomalar tizimi** — *ilova ichida: 9 modul signali, yon panelda son; SMS/Telegram tashqi omil*
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
 - [ ] **Izoh va muhokama** (yozuvlarga sharh)
 

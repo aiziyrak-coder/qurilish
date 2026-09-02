@@ -16,6 +16,7 @@ mod ifc;
 mod import;
 mod llm;
 mod model;
+mod notify;
 mod package;
 mod portfolio;
 mod roles;

@@ -24,6 +24,8 @@ pub enum Screen {
     Dashboard,
     /// Barcha obyektlar bo'yicha konsolidatsiya (TZ XVII.4).
     Portfolio,
+    /// Barcha modullardan e'tibor talab qiladigan yozuvlar (umumiy talab).
+    Notices,
     /// Texnik nazorat tekshiruvlari (TZ VII.3-6, 12-14).
     Inspections,
     /// Shartnomalar, o'zgarishlar, to'lov jadvali va qabul (TZ VIII.11-12, 21, 27-30).
@@ -77,6 +79,7 @@ impl Screen {
         match self {
             Screen::Dashboard => t("screen_dashboard"),
             Screen::Portfolio => t("screen_portfolio"),
+            Screen::Notices => t("screen_notices"),
             Screen::Inspections => t("screen_inspections"),
             Screen::Contracts => t("screen_contracts"),
             Screen::Passport => t("screen_passport"),
@@ -108,7 +111,7 @@ impl Screen {
     /// TZ dagi bo'lim raqami. Umumiy ko'rinish va sozlamalar TZ moduli emas.
     pub fn numeral(self) -> &'static str {
         match self {
-            Screen::Dashboard | Screen::Portfolio | Screen::Settings => "",
+            Screen::Dashboard | Screen::Portfolio | Screen::Notices | Screen::Settings => "",
             Screen::Passport => "I.1",
             Screen::Gantt => "I.2",
             Screen::Ppr => "I.3",
@@ -138,6 +141,7 @@ impl Screen {
         match self {
             Screen::Dashboard
             | Screen::Portfolio
+            | Screen::Notices
             | Screen::Inspections
             | Screen::Contracts
             | Screen::Passport
@@ -173,6 +177,7 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
         "nav_object",
         &[
             Screen::Portfolio,
+            Screen::Notices,
             Screen::Dashboard,
             Screen::Passport,
             Screen::Gantt,
