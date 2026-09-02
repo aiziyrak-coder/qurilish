@@ -41,6 +41,35 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     );
     ui.add_space(8.0);
 
+    // Ikki ko'rinish: savol-javob va bajarish uchun takliflar.
+    let tab_key = egui::Id::new("cp_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+    let pending = crate::actions::suggest(app, &app.stock()).len();
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in [
+            (0u8, t("cp_tab_ask").to_string()),
+            (
+                1,
+                if pending > 0 {
+                    format!("{} · {pending}", t("cp_tab_actions"))
+                } else {
+                    t("cp_tab_actions").to_string()
+                },
+            ),
+        ] {
+            if ui.selectable_label(tab == i, label).clicked() {
+                tab = i;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(10.0);
+
+    if tab == 1 {
+        actions_tab(ui, app);
+        return;
+    }
+
     // Erkin savol.
     ui.horizontal(|ui| {
         let edit = ui.add_sized(
@@ -162,6 +191,132 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     if let Some(s) = go {
         app.screen = s;
+    }
+}
+
+// ================================================================ Takliflar
+
+/// Bajarish uchun takliflar (TZ XVIII.12–30, 44).
+///
+/// Har bir taklif — bajarilmagan qoralama: nima qilinishi va qaysi sondan
+/// chiqqani yozilgan. Bajarish uchun ikki bosqich: «Bajarish» bosiladi,
+/// keyin tasdiqlanadi. Bir bosishda yozuv yaratilib qolmasin.
+fn actions_tab(ui: &mut egui::Ui, app: &mut App) {
+    let list = crate::actions::suggest(app, &app.stock());
+
+    ui.label(
+        RichText::new(t("cp_actions_hint"))
+            .size(11.5)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    if list.is_empty() {
+        ui.add_space(20.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("cp_actions_empty"))
+                    .size(15.0)
+                    .color(theme::ok()),
+            );
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("cp_actions_empty_hint"))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+        });
+        return;
+    }
+
+    // Tasdiq kutayotgan taklif — kod bo'yicha eslab qolinadi.
+    let confirm_key = egui::Id::new("cp_confirm");
+    let mut confirming = ui.data(|d| d.get_temp::<String>(confirm_key));
+    let mut run: Option<usize> = None;
+    let mut goto: Option<Screen> = None;
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for (i, a) in list.iter().enumerate() {
+                let id = format!("{}-{i}", a.code);
+                let can = app.can_edit(a.screen);
+                egui::Frame::new()
+                    .fill(theme::card())
+                    .stroke(Stroke::new(1.0_f32, theme::line()))
+                    .corner_radius(8)
+                    .inner_margin(egui::Margin::symmetric(14, 12))
+                    .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width() - 4.0);
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(a.code)
+                                    .size(10.5)
+                                    .monospace()
+                                    .color(theme::muted()),
+                            );
+                            ui.label(RichText::new(&a.title).size(13.5).strong());
+                        });
+                        ui.label(RichText::new(&a.evidence).size(11.5).color(theme::muted()));
+                        ui.add_space(6.0);
+                        ui.horizontal_wrapped(|ui| {
+                            if confirming.as_deref() == Some(id.as_str()) {
+                                // Tasdiq bosqichi: nima bo'lishi yana bir bor aytiladi.
+                                ui.label(
+                                    RichText::new(t("cp_confirm_q"))
+                                        .size(12.0)
+                                        .color(theme::warn()),
+                                );
+                                if ui
+                                    .button(RichText::new(t("cp_confirm_yes")).strong())
+                                    .clicked()
+                                {
+                                    run = Some(i);
+                                    confirming = None;
+                                }
+                                if ui.button(t("cancel")).clicked() {
+                                    confirming = None;
+                                }
+                            } else {
+                                if ui
+                                    .add_enabled(can, egui::Button::new(t("cp_run")))
+                                    .on_disabled_hover_text(format!(
+                                        "{} — {}",
+                                        t("role_readonly"),
+                                        app.role().label()
+                                    ))
+                                    .clicked()
+                                {
+                                    confirming = Some(id.clone());
+                                }
+                                if ui.small_button(t("cp_open")).clicked() {
+                                    goto = Some(a.screen);
+                                }
+                            }
+                            ui.label(
+                                RichText::new(a.screen.label())
+                                    .size(11.0)
+                                    .color(theme::muted()),
+                            );
+                        });
+                    });
+                ui.add_space(8.0);
+            }
+        });
+
+    ui.data_mut(|d| match &confirming {
+        Some(v) => d.insert_temp(confirm_key, v.clone()),
+        None => d.remove::<String>(confirm_key),
+    });
+
+    if let Some(i) = run {
+        match crate::actions::perform(app, &list[i]) {
+            Ok(msg) => app.notify(msg),
+            Err(e) => app.notify(e),
+        }
+    }
+    if let Some(screen) = goto {
+        app.screen = screen;
     }
 }
 

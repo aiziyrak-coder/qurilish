@@ -967,6 +967,15 @@ impl App {
         self.screen = self.role().home();
     }
 
+    /// Joriy foydalanuvchi nomi. Tanlanmagan bo'lsa bo'sh satr — hujjatga
+    /// «Administrator» deb yozib qo'yish yolg'on bo'lardi.
+    pub fn user_name(&self) -> String {
+        self.current_user
+            .and_then(|id| self.users.iter().find(|u| u.id == id))
+            .map(|u| u.name.clone())
+            .unwrap_or_default()
+    }
+
     /// Amallar tarixiga yoziladigan nomni yangilaydi.
     ///
     /// Foydalanuvchi tanlanmagan bo'lsa jurnalda bo'sh qoladi — «Administrator»

@@ -2479,6 +2479,70 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_budget_over" => ("Oshib ketgan", "Превышено"),
         "kpi_budget_over_hint" => ("bo'lim", "разделов"),
 
+        // ---------- XVIII.12-30, 44. Takliflar va bajarish ----------
+        "cp_tab_ask" => ("Savol-javob", "Вопрос-ответ"),
+        "cp_tab_actions" => ("Takliflar", "Предложения"),
+        "cp_actions_hint" => (
+            "Bazadagi holatdan chiqqan takliflar. Har biri qoralama: nima qilinishi va qaysi sondan chiqqani yozilgan. Bajarish uchun tasdiqlash kerak.",
+            "Предложения, вытекающие из состояния базы. Каждое — черновик: указано, что будет сделано и из каких цифр это следует. Для выполнения нужно подтверждение.",
+        ),
+        "cp_actions_empty" => (
+            "Hozircha taklif yo'q",
+            "Предложений пока нет",
+        ),
+        "cp_actions_empty_hint" => (
+            "Ta'minot, hujjatlar, sifat va xavfsizlik bo'yicha ochiq masala topilmadi",
+            "По снабжению, документам, качеству и безопасности открытых вопросов не найдено",
+        ),
+        "cp_run" => ("Bajarish", "Выполнить"),
+        "cp_open" => ("Ochish", "Открыть"),
+        "cp_confirm_q" => (
+            "Yozuv yaratiladi. Bajarilsinmi?",
+            "Будет создана запись. Выполнить?",
+        ),
+        "cp_confirm_yes" => ("Ha, bajarilsin", "Да, выполнить"),
+
+        // Taklif matnlari
+        "ac_create_request" => ("Ariza ochish:", "Открыть заявку:"),
+        "ac_create_purchase" => ("Xarid ochish, ariza:", "Открыть заказ, заявка:"),
+        "ac_post_stock" => ("Omborga kirim qilish:", "Оприходовать на склад:"),
+        "ac_create_doc" => ("Ijro hujjati ochish:", "Открыть исполнительный документ:"),
+        "ac_set_deadline" => ("Bartaraf etish muddatini qo'yish:", "Задать срок устранения:"),
+        "ac_close_permit" => ("Naryadni yopish:", "Закрыть наряд:"),
+        "ac_build_route" => ("Kelishuv marshrutini ochish:", "Открыть маршрут согласования:"),
+
+        "ac_free" => ("erkin qoldiq", "свободный остаток"),
+        "ac_min" => ("minimal zaxira", "минимальный запас"),
+        "ac_needed" => ("kerak:", "нужно:"),
+        "ac_arrived" => ("kelgan:", "поступило:"),
+        "ac_done" => ("ish tugallangan, bo'lim", "работа завершена, раздел"),
+        "ac_permit_expired" => ("muddati tugagan:", "срок истёк:"),
+        "ac_from_copilot" => (
+            "Yordamchi taklifi bo'yicha yaratildi",
+            "Создано по предложению помощника",
+        ),
+
+        // Bajarish natijalari
+        "ac_done_request" => ("Ariza ochildi:", "Заявка открыта:"),
+        "ac_done_purchase" => ("Xarid ochildi:", "Заказ открыт:"),
+        "ac_done_stock" => ("Omborga kirim qilindi:", "Оприходовано на склад:"),
+        "ac_done_doc" => ("Hujjat ochildi:", "Документ открыт:"),
+        "ac_done_deadline" => ("Muddat qo'yildi:", "Срок задан:"),
+        "ac_done_permit" => ("Naryad yopildi:", "Наряд закрыт:"),
+        "ac_done_route" => ("Marshrut ochildi, bosqich:", "Маршрут открыт, этапов:"),
+
+        // Xatolar
+        "ac_no_material" => ("Material topilmadi", "Материал не найден"),
+        "ac_no_request" => ("Ariza topilmadi", "Заявка не найдена"),
+        "ac_no_purchase" => ("Xarid topilmadi", "Заказ не найден"),
+        "ac_no_task" => ("Ish topilmadi", "Работа не найдена"),
+        "ac_no_check" => ("Tekshiruv topilmadi", "Проверка не найдена"),
+        "ac_no_permit" => ("Naryad topilmadi", "Наряд не найден"),
+        "ac_check_passed" => (
+            "Tekshiruv o'tgan — muddat kerak emas",
+            "Проверка пройдена — срок не нужен",
+        ),
+
         // ---------- XI. Omborlar, partiyalar, rezerv, inventarizatsiya ----------
         // Ombor turlari (TZ XI.3)
         "wk_central" => ("Markaziy", "Центральный"),

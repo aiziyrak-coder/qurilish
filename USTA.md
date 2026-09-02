@@ -20,6 +20,7 @@ kvartiralarni sotish.
 - `src/import.rs` — smeta importi · `src/db.rs` + `src/store.rs` — ombor
 - `src/docgen.rs` — KS-2, KS-3, M-29, AOSR va Excel yozish
 - `src/ui/export.rs` — ekran jadvalini eksportga tayyorlash
+- `src/actions.rs` — yordamchining takliflari va ularni bajarish
 - `src/ui/` — har bir ekran alohida fayl · `src/i18n.rs` — uz/ru satrlar
 
 Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo clippy`
@@ -76,6 +77,9 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
       chiqadi, sarlavha qatori qotadi va filtr qo'yiladi
 - [x] **Amallar tarixi** — har bir yozish `store.rs` ning uchta chorrahasidan
       o'tadi, shuning uchun bironta o'zgarish jurnaldan chetda qolmaydi
+- [x] **XVIII Yordamchi — operatsion qatlam** — bazadagi holatdan taklif
+      chiqaradi (ariza, xarid, kirim, ijro hujjati, muddat, naryad, marshrut),
+      tasdiqdan keyin bajaradi va rol huquqini hurmat qiladi
 - [x] **XII Materiallar** — smeta va spetsifikatsiya havolasi, tasdiqlangan
       analoglar, narx tarixi, brak va yetkazib beruvchiga qaytarish, taqiq,
       to'liq kuzatuvchanlik (yetkazuvchi → partiya → ish → hujjat) va ish

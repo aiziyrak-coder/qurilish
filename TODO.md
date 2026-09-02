@@ -32,8 +32,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
 | XVI. Mashinalar | 50 | 28 | 7 | 15 | 3 |
 | XVII. AI analitika | 51 | 22 | 12 | 17 | 0 |
-| XVIII. AI Copilot | 45 | 5 | 3 | 37 | 7 |
-| **Jami** | **683** | **285** | **156** | **242** | **52** |
+| XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
+| **Jami** | **683** | **295** | **176** | **212** | **52** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -785,13 +785,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 3. Tabiiy nutqni tushunish — *kalit so'zlar; LLM ixtiyoriy*
 - [ ] 🔒 4–10. Ovoz, kontekst, ko'p bosqichli suhbat
 - [x] 11. Rol bo'yicha kirish chegarasi
-- [ ] 12–20. Hujjat va ariza qoralamalarini yaratish
-- [ ] 21–30. Amalni bajarish (tasdiqdan keyin)
-- [ ] 31–40. Hodisa → tahlil → ogohlantirish → tavsiya → nazorat sikli
+- [~] 12–20. Qoralamalar — *ariza, xarid, ijro hujjati, kelishuv marshruti*
+- [x] 21–30. Amalni bajarish — *tasdiqdan keyin, rol huquqi bilan*
+- [~] 31–40. Hodisa → tavsiya → nazorat — *taklif bajarilgach ro'yxatdan chiqadi*
 - [~] 41. Ma'lumot manbasini ko'rsatish — *«Tekshirish» tugmasi*
 - [x] 42. Sonni o'ylab topmaslik
 - [~] 43. Modullar bo'ylab kirish — *13 mavzu*
-- [ ] 44. Copilot — operatsion qatlam
+- [~] 44. Copilot — operatsion qatlam — *yetti xil amal; til modeli yo'q*
 - [x] 45. TZ uchun asosiy ta'rif — *chegara ochiq yozilgan*
 
 ---

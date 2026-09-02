@@ -15,7 +15,7 @@ mod gantt;
 mod issues;
 mod journal;
 mod machines;
-mod materials;
+pub mod materials;
 mod passport;
 mod ppr;
 mod purchases;

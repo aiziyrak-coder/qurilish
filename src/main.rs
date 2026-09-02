@@ -1,6 +1,7 @@
 // Нативное десктоп-приложение: окно рисуется через wgpu/glow, без webview.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod actions;
 mod analytics;
 mod app;
 mod backup;
