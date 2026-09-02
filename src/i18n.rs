@@ -2796,6 +2796,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "col_when" => ("Qachon", "Когда"),
         "col_who" => ("Kim", "Кто"),
+        "col_module" => ("Modul", "Модуль"),
+        "col_recommendation" => ("Tavsiya", "Рекомендация"),
         "col_what" => ("Amal", "Действие"),
         "set_audit_shown" => (
             "Ro'yxatda oxirgi yozuvlar ko'rsatilgan:",

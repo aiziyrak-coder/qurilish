@@ -3210,9 +3210,14 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let pid = t.db.seed_demo().unwrap();
         let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
         app.select_project(pid);
+        // Nomuvofiqliklar ekran ochilganda hisoblanadi — eksport ham shu
+        // ma'lumotdan chiqadi, shuning uchun tekshiruvni ishga tushiramiz.
+        app.auto_check(crate::domain::IssueModule::Project);
 
         let screens = [
             Screen::Gantt,
+            Screen::Ppr,
+            Screen::AiCheck,
             Screen::Estimate,
             Screen::ExecDocs,
             Screen::Journal,

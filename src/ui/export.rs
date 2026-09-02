@@ -17,6 +17,8 @@ use crate::i18n::t;
 pub fn table_of(app: &App, screen: Screen) -> Option<Table> {
     let mut table = match screen {
         Screen::Gantt => gantt(app),
+        Screen::Ppr => ppr(app),
+        Screen::AiCheck => issues(app),
         Screen::Estimate => estimate(app),
         Screen::ExecDocs => exec_docs(app),
         Screen::Journal => journal(app),
@@ -116,6 +118,97 @@ fn gantt(app: &App) -> Table {
             t("col_unit"),
             t("col_slack"),
             t("col_critical"),
+        ],
+        rows,
+    )
+}
+
+// ================================================================ I.3 PPR
+
+fn ppr(app: &App) -> Table {
+    let rows = app
+        .ppr_docs
+        .iter()
+        .map(|d| {
+            vec![
+                txt(d.kind.label()),
+                txt(&d.number),
+                txt(&d.name),
+                txt(d.section.code()),
+                txt(d
+                    .task_id
+                    .and_then(|id| app.task(id).map(|t| format!("{} {}", t.wbs, t.name)))
+                    .unwrap_or_default()),
+                txt(&d.author),
+                odate(d.approved_at),
+                txt(if d.approved { t("yes") } else { t("no") }),
+                Cell::Num(d.workers as f64),
+                Cell::Num(d.machines as f64),
+                txt(&d.note),
+            ]
+        })
+        .collect();
+    table(
+        "",
+        &[
+            t("col_kind"),
+            t("col_number"),
+            t("col_name"),
+            t("col_section"),
+            t("col_task"),
+            t("col_author"),
+            t("col_approved_at"),
+            t("col_approved"),
+            t("col_workers"),
+            t("col_machines"),
+            t("col_note"),
+        ],
+        rows,
+    )
+}
+
+// ================================================================ II Nomuvofiqliklar
+
+fn issues(app: &App) -> Table {
+    let rows = app
+        .issues
+        .iter()
+        .map(|i| {
+            vec![
+                txt(&i.code),
+                txt(i.severity.label()),
+                txt(i.module.label()),
+                txt(i.section.code()),
+                txt(&i.title),
+                txt(&i.description),
+                txt(&i.element),
+                txt(&i.location),
+                txt(&i.sheet),
+                txt(format!("{} {}", i.norm_doc, i.norm_clause).trim()),
+                txt(&i.recommendation),
+                txt(&i.responsible),
+                odate(i.deadline),
+                txt(i.status.label()),
+            ]
+        })
+        .collect();
+    table(
+        "",
+        &[
+            t("col_code"),
+            t("col_severity"),
+            t("col_module"),
+            t("col_section"),
+            t("col_title"),
+            t("col_description"),
+            t("col_element"),
+            t("col_location"),
+            t("col_sheet"),
+            t("col_norm"),
+            t("col_recommendation"),
+            t("col_responsible"),
+            t("col_deadline"),
+            t("col_status"),
         ],
         rows,
     )
