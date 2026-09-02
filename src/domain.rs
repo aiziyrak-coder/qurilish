@@ -198,7 +198,51 @@ pub struct Estimate {
     pub currency: String,
     /// Hujjatda ko'rsatilgan yakuniy summa — hisoblangani bilan solishtiriladi.
     pub declared_total: f64,
+    /// Ustama xarajatlar, to'g'ridan-to'g'ri xarajatlarga foizda (TZ III.18).
+    pub overhead_pct: f64,
+    /// Smeta foydasi, foizda (TZ III.19).
+    pub profit_pct: f64,
+    /// QQS stavkasi, foizda (TZ III.20).
+    pub vat_pct: f64,
     pub added_at: String,
+}
+
+/// Smetaning tuzilishi: to'g'ridan-to'g'ri xarajatdan yakuniy summagacha.
+///
+/// Har bosqich alohida ko'rsatiladi — «qancha» degan savolga «shundan qancha
+/// va nima uchun» deb javob berish uchun.
+#[derive(Debug, Clone, Default)]
+pub struct EstimateTotals {
+    /// Pozitsiyalar yig'indisi.
+    pub direct: f64,
+    pub overhead: f64,
+    pub profit: f64,
+    /// QQS gacha bo'lgan summa.
+    pub before_vat: f64,
+    pub vat: f64,
+    pub total: f64,
+}
+
+impl Estimate {
+    /// Pozitsiyalar yig'indisidan yakuniy summani hisoblaydi.
+    ///
+    /// Ketma-ketlik smeta qoidasi bo'yicha: ustama to'g'ridan-to'g'ri
+    /// xarajatga, foyda esa ustama bilan birga olingan summaga qo'yiladi,
+    /// QQS eng oxirida.
+    pub fn totals(&self, direct: f64) -> EstimateTotals {
+        let overhead = direct * self.overhead_pct / 100.0;
+        let profit = (direct + overhead) * self.profit_pct / 100.0;
+        let before_vat = direct + overhead + profit;
+        let vat = before_vat * self.vat_pct / 100.0;
+        EstimateTotals {
+            direct,
+            overhead,
+            profit,
+            before_vat,
+            vat,
+            total: before_vat + vat,
+        }
+    }
 }
 
 /// Smeta pozitsiyasi.
@@ -216,6 +260,9 @@ pub struct EstimateItem {
     pub price: f64,
     /// Hujjatdagi summa — qty*price bilan solishtiriladi.
     pub cost: f64,
+    /// Qaysi GPR ishiga tegishli (TZ III.26). Bog'lanmagan pozitsiya
+    /// tekshiruvda ko'rinadi: uni kim va qachon bajarishi noma'lum.
+    pub task_id: Option<i64>,
     pub note: String,
 }
 

@@ -17,7 +17,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 19 | 8 | 7 | 4 | 0 |
-| III. AI smeta tekshiruvi | 34 | 8 | 8 | 18 | 2 |
+| III. AI smeta tekshiruvi | 34 | 15 | 8 | 11 | 2 |
 | IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
 | V. Kunlik jurnal | 34 | 17 | 7 | 10 | 6 |
 | VI. Prorab (mobil) | 37 | 16 | 9 | 12 | 8 |
@@ -33,7 +33,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 28 | 7 | 15 | 3 |
 | XVII. AI analitika | 51 | 22 | 12 | 17 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
-| **Jami** | **683** | **295** | **176** | **212** | **52** |
+| **Jami** | **683** | **302** | **176** | **205** | **52** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -97,16 +97,16 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 14.1–14.4. Tarixiy narx, taklif narxi, bozor diapazoni bilan solishtirish
 - [ ] 🔒 15. **Narxlar bazasi (PRICE DATABASE)**
 - [ ] 16. Tijorat takliflari (KP)
-- [ ] 17. Koeffitsiyentlarni tekshirish
-- [ ] 18. Ustama xarajatlarni tekshirish
-- [ ] 19. Foydani tekshirish
-- [ ] 20. QQS ni tekshirish
-- [ ] 21. Bir necha smeta variantini solishtirish
+- [x] 17. Koeffitsiyentlarni tekshirish — *ko'rsatilmagani va haddan tashqarisi*
+- [x] 18. Ustama xarajatlarni tekshirish — *to'g'ridan-to'g'ri xarajatdan foizda*
+- [x] 19. Foydani tekshirish — *ustama bilan birga summadan*
+- [x] 20. QQS ni tekshirish — *yakuniy summadan*
+- [x] 21. Bir necha smeta variantini solishtirish — *bo'lim kesimida*
 - [~] 22. Smetani shartnoma bilan solishtirish — *analitikada AN-C4 qoidasi*
-- [ ] 23. Smetani byudjet bilan solishtirish
+- [x] 23. Smetani byudjet bilan solishtirish — *bo'lim bo'yicha*
 - [ ] 24. Smeta → Xaridlar (avtomatik)
 - [ ] 25. Smeta → Ombor (avtomatik)
-- [ ] 26. Smeta → GPR (avtomatik bog'lanish)
+- [x] 26. Smeta → GPR — *pozitsiya ishga bog'lanadi, qoplanish foizi*
 - [ ] 27. Smeta → Prorabning kunlik hisoboti
 - [x] 28. Ortiqcha sarfni nazorat qilish — *sarf normalari bilan*
 - [ ] 29. AI yakuniy qiymat prognozi

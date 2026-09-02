@@ -3609,6 +3609,221 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(materials.iter().any(|m| !m.special.is_empty()));
     }
 
+    /// TZ III.17–20: ustama, foyda va QQS ketma-ket qo'yiladi.
+    #[test]
+    fn estimate_totals_follow_the_order() {
+        use crate::domain::Estimate;
+
+        let e = Estimate {
+            id: 1,
+            project_id: 1,
+            name: String::new(),
+            currency: "UZS".into(),
+            declared_total: 0.0,
+            overhead_pct: 10.0,
+            profit_pct: 5.0,
+            vat_pct: 12.0,
+            added_at: String::new(),
+        };
+        let x = e.totals(1_000.0);
+        assert_eq!(x.direct, 1_000.0);
+        assert_eq!(x.overhead, 100.0, "ustama to'g'ridan-to'g'ri xarajatdan");
+        assert_eq!(x.profit, 55.0, "foyda ustama bilan birga summadan");
+        assert_eq!(x.before_vat, 1_155.0);
+        assert_eq!(x.vat, 138.6);
+        assert!((x.total - 1_293.6).abs() < 0.001);
+
+        // Koeffitsiyentsiz smetada yakuniy summa to'g'ridan-to'g'ri xarajatga teng.
+        let zero = Estimate {
+            overhead_pct: 0.0,
+            profit_pct: 0.0,
+            vat_pct: 0.0,
+            ..e
+        };
+        assert_eq!(zero.totals(1_000.0).total, 1_000.0);
+    }
+
+    /// Koeffitsiyent ko'rsatilmagani va haddan tashqari kattasi topiladi.
+    #[test]
+    fn estimate_issues_catch_missing_and_extreme_coefficients() {
+        use crate::checks::{estimate_issues, EstimateIssue, OVERHEAD_LIMIT};
+        use crate::domain::Estimate;
+
+        let base = Estimate {
+            id: 1,
+            project_id: 1,
+            name: String::new(),
+            currency: "UZS".into(),
+            declared_total: 0.0,
+            overhead_pct: 0.0,
+            profit_pct: 0.0,
+            vat_pct: 0.0,
+            added_at: String::new(),
+        };
+        let issues = estimate_issues(&base, &[]);
+        assert!(issues.contains(&EstimateIssue::NoOverhead));
+        assert!(issues.contains(&EstimateIssue::NoProfit));
+        assert!(issues.contains(&EstimateIssue::NoVat));
+
+        // Normal koeffitsiyentlarda kamchilik yo'q.
+        let ok = Estimate {
+            overhead_pct: 14.0,
+            profit_pct: 8.0,
+            vat_pct: 12.0,
+            ..base.clone()
+        };
+        assert!(estimate_issues(&ok, &[]).is_empty());
+
+        // Haddan tashqari ustama belgilanadi.
+        let big = Estimate {
+            overhead_pct: OVERHEAD_LIMIT + 1.0,
+            ..ok.clone()
+        };
+        assert!(estimate_issues(&big, &[]).iter().any(|i| matches!(
+            i,
+            EstimateIssue::Suspicious {
+                name: "overhead",
+                ..
+            }
+        )));
+    }
+
+    /// Hujjatdagi summa hisoblangandan farq qilsa aytiladi.
+    #[test]
+    fn estimate_total_mismatch_is_reported() {
+        use crate::checks::{estimate_issues, EstimateIssue};
+        use crate::domain::{Estimate, EstimateItem};
+
+        let e = Estimate {
+            id: 7,
+            project_id: 1,
+            name: String::new(),
+            currency: "UZS".into(),
+            // Hisob bo'yicha 1000, hujjatda esa 1500.
+            declared_total: 1_500.0,
+            overhead_pct: 0.0,
+            profit_pct: 0.0,
+            vat_pct: 0.0,
+            added_at: String::new(),
+        };
+        let items = vec![EstimateItem {
+            id: 1,
+            estimate_id: 7,
+            pos: 1,
+            section: crate::model::Section::Kj,
+            code: String::new(),
+            name: String::new(),
+            unit: String::new(),
+            qty: 10.0,
+            price: 100.0,
+            cost: 1_000.0,
+            task_id: None,
+            note: String::new(),
+        }];
+        assert!(estimate_issues(&e, &items)
+            .iter()
+            .any(|i| matches!(i, EstimateIssue::TotalMismatch { .. })));
+
+        // Yaxlitlash farqi kamchilik emas.
+        let close = Estimate {
+            declared_total: 1_000.4,
+            ..e
+        };
+        assert!(!estimate_issues(&close, &items)
+            .iter()
+            .any(|i| matches!(i, EstimateIssue::TotalMismatch { .. })));
+    }
+
+    /// TZ III.26: smeta va GPR bog'lanishi ikki tomondan tekshiriladi.
+    #[test]
+    fn estimate_coverage_looks_both_ways() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let tasks = t.db.tasks(pid).unwrap_or_default();
+        let est = t.db.estimates(pid).into_iter().next().expect("smeta");
+        let items = t.db.estimate_items(est.id);
+
+        let c = crate::checks::estimate_coverage(&items, &tasks);
+        assert!(c.linked_pct > 0.0, "namunada bog'lanish yo'q");
+        assert!(
+            c.linked_pct < 100.0,
+            "namunada bog'lanmagan pozitsiya bo'lishi kerak"
+        );
+        assert!(c.free_cost > 0.0);
+        assert!(!c.free_tasks.is_empty(), "smetasiz ish yo'q");
+
+        // Bo'sh smetada bo'linish ham bo'lmaydi.
+        let empty = crate::checks::estimate_coverage(&[], &tasks);
+        assert_eq!(empty.linked_pct, 0.0);
+        assert!(empty.free_items.is_empty());
+    }
+
+    /// TZ III.23: smeta va byudjet bo'lim kesimida solishtiriladi.
+    #[test]
+    fn estimate_is_compared_with_the_budget() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let est = t.db.estimates(pid).into_iter().next().expect("smeta");
+        let items = t.db.estimate_items(est.id);
+        let lines = crate::checks::estimate_vs_budget(&items, &t.db.purchase_budgets(pid));
+
+        assert!(!lines.is_empty());
+        for l in &lines {
+            assert!((l.gap - (l.budget - l.estimate)).abs() < 0.01);
+        }
+        // Byudjeti yo'q bo'limlar ham chiqadi.
+        assert!(lines.iter().any(|l| l.budget == 0.0 && l.estimate > 0.0));
+    }
+
+    /// TZ III.21: ikki variant bo'lim kesimida solishtiriladi.
+    #[test]
+    fn two_estimates_are_compared_by_section() {
+        use crate::domain::{Estimate, EstimateItem};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let first = t.db.estimates(pid).into_iter().next().expect("smeta");
+
+        // Ikkinchi variant: bir xil bo'lim, boshqa narx.
+        let second = t.db.insert_estimate(&Estimate {
+            id: 0,
+            project_id: pid,
+            name: "2-variant".into(),
+            currency: "UZS".into(),
+            declared_total: 0.0,
+            overhead_pct: 14.0,
+            profit_pct: 8.0,
+            vat_pct: 12.0,
+            added_at: String::new(),
+        });
+        t.db.insert_estimate_item(&EstimateItem {
+            id: 0,
+            estimate_id: second,
+            pos: 1,
+            section: crate::model::Section::Kj,
+            code: "E6-1-1".into(),
+            name: "Sinov".into(),
+            unit: "m3".into(),
+            qty: 10.0,
+            price: 100.0,
+            cost: 1_000.0,
+            task_id: None,
+            note: String::new(),
+        });
+
+        let mut all = t.db.estimate_items(first.id);
+        all.extend(t.db.estimate_items(second));
+        let diff = crate::checks::compare_estimates(&all, first.id, second);
+        let kj = diff
+            .iter()
+            .find(|l| l.section == crate::model::Section::Kj)
+            .expect("KJ bo'limi");
+        assert!(kj.left > 0.0);
+        assert_eq!(kj.right, 1_000.0);
+        assert_eq!(kj.diff, kj.right - kj.left);
+        assert!(kj.diff < 0.0, "ikkinchi variant arzonroq");
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

@@ -1677,6 +1677,9 @@ impl App {
             name: imported.name,
             currency: self.settings.default_currency.clone(),
             declared_total: imported.declared_total,
+            overhead_pct: 0.0,
+            profit_pct: 0.0,
+            vat_pct: 0.0,
             added_at: String::new(),
         });
         if eid == 0 {

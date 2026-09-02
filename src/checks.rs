@@ -2883,6 +2883,215 @@ pub fn readiness(
         .collect()
 }
 
+// ================= III. Smeta: tuzilish, bog'lanish, variantlar =================
+
+/// Smeta tuzilishidagi kamchilik (TZ III.17–20).
+#[derive(Debug, Clone, PartialEq)]
+pub enum EstimateIssue {
+    /// Ustama xarajat foizi ko'rsatilmagan.
+    NoOverhead,
+    /// Smeta foydasi ko'rsatilmagan.
+    NoProfit,
+    /// QQS ko'rsatilmagan.
+    NoVat,
+    /// Koeffitsiyent haqiqatga to'g'ri kelmaydigan darajada katta.
+    Suspicious { name: &'static str, pct: f64 },
+    /// Hisoblangan yakuniy summa hujjatdagidan farq qiladi.
+    TotalMismatch { computed: f64, declared: f64 },
+}
+
+/// Koeffitsiyent shu foizdan oshsa — tekshirish kerak.
+///
+/// Chegara qat'iy taqiq emas: murakkab obyektlarda ustama yuqori bo'lishi
+/// mumkin. Lekin 60% dan oshgan ustama yoki 40% dan oshgan foyda odatda
+/// xato yoki asossiz — buni jim o'tkazib yubormaymiz.
+pub const OVERHEAD_LIMIT: f64 = 60.0;
+pub const PROFIT_LIMIT: f64 = 40.0;
+
+/// TZ III.17–20: smetaning tuzilishini tekshiradi.
+///
+/// Nol koeffitsiyent «xato» emas, «ko'rsatilmagan»: smeta to'liq emas degani.
+/// Shuning uchun bu ogohlantirish, taqiq emas.
+pub fn estimate_issues(estimate: &Estimate, items: &[EstimateItem]) -> Vec<EstimateIssue> {
+    let mut out = Vec::new();
+    if estimate.overhead_pct <= 0.0 {
+        out.push(EstimateIssue::NoOverhead);
+    } else if estimate.overhead_pct > OVERHEAD_LIMIT {
+        out.push(EstimateIssue::Suspicious {
+            name: "overhead",
+            pct: estimate.overhead_pct,
+        });
+    }
+    if estimate.profit_pct <= 0.0 {
+        out.push(EstimateIssue::NoProfit);
+    } else if estimate.profit_pct > PROFIT_LIMIT {
+        out.push(EstimateIssue::Suspicious {
+            name: "profit",
+            pct: estimate.profit_pct,
+        });
+    }
+    if estimate.vat_pct <= 0.0 {
+        out.push(EstimateIssue::NoVat);
+    }
+
+    // Hujjatdagi summa hisoblangani bilan solishtiriladi.
+    let direct: f64 = items
+        .iter()
+        .filter(|i| i.estimate_id == estimate.id)
+        .map(|i| i.computed())
+        .sum();
+    let totals = estimate.totals(direct);
+    if estimate.declared_total > 0.0 {
+        let diff = (totals.total - estimate.declared_total).abs();
+        // 0.1% — yaxlitlash farqi; undan kattasi haqiqiy nomuvofiqlik.
+        if diff > estimate.declared_total * 0.001 {
+            out.push(EstimateIssue::TotalMismatch {
+                computed: totals.total,
+                declared: estimate.declared_total,
+            });
+        }
+    }
+    out
+}
+
+/// Smeta va GPR bog'lanishi (TZ III.26).
+#[derive(Debug, Clone, Default)]
+pub struct EstimateCoverage {
+    /// Ishga bog'lanmagan pozitsiyalar va ularning summasi.
+    pub free_items: Vec<i64>,
+    pub free_cost: f64,
+    /// Smetada pozitsiyasi yo'q ishlar.
+    pub free_tasks: Vec<i64>,
+    /// Bog'langan pozitsiyalar ulushi, foizda.
+    pub linked_pct: f64,
+}
+
+/// TZ III.26: smeta pozitsiyalari GPR ishlariga bog'langanmi.
+///
+/// Bog'lanish ikki tomonlama tekshiriladi: pozitsiya ishsiz qolsa uni kim
+/// bajarishi noma'lum, ish pozitsiyasiz qolsa uning qiymati noma'lum.
+/// Nomi bo'yicha taxminiy moslik hisoblanmaydi — bog'lanish aniq bo'lishi
+/// kerak, aks holda KS-2 da noto'g'ri narx chiqadi.
+pub fn estimate_coverage(items: &[EstimateItem], tasks: &[Task]) -> EstimateCoverage {
+    let mut c = EstimateCoverage::default();
+    if items.is_empty() {
+        return c;
+    }
+    for i in items {
+        match i.task_id {
+            Some(id) if tasks.iter().any(|t| t.id == id) => {}
+            _ => {
+                c.free_items.push(i.id);
+                c.free_cost += i.computed();
+            }
+        }
+    }
+    c.free_tasks = tasks
+        .iter()
+        .filter(|t| !items.iter().any(|i| i.task_id == Some(t.id)))
+        .map(|t| t.id)
+        .collect();
+    let linked = items.len() - c.free_items.len();
+    c.linked_pct = linked as f64 / items.len() as f64 * 100.0;
+    c
+}
+
+/// Smeta va byudjetni bo'lim kesimida solishtirish (TZ III.23).
+#[derive(Debug, Clone)]
+pub struct EstimateBudgetLine {
+    pub section: Section,
+    /// Smetadagi to'g'ridan-to'g'ri xarajat.
+    pub estimate: f64,
+    /// Bo'lim uchun belgilangan xarid byudjeti.
+    pub budget: f64,
+    /// Byudjet minus smeta. Manfiy — byudjet yetmaydi.
+    pub gap: f64,
+}
+
+/// Bo'lim bo'yicha smeta va byudjetni yonma-yon qo'yadi.
+///
+/// Byudjet belgilanmagan bo'lim ham chiqadi: nol byudjet ham javob — u yerda
+/// reja yo'q degani.
+pub fn estimate_vs_budget(
+    items: &[EstimateItem],
+    budgets: &[PurchaseBudget],
+) -> Vec<EstimateBudgetLine> {
+    let mut sections: Vec<Section> = items.iter().map(|i| i.section).collect();
+    sections.extend(budgets.iter().map(|b| b.section));
+    sections.sort_by_key(|s| s.code());
+    sections.dedup();
+
+    sections
+        .into_iter()
+        .map(|section| {
+            let estimate: f64 = items
+                .iter()
+                .filter(|i| i.section == section)
+                .map(|i| i.computed())
+                .sum();
+            let budget: f64 = budgets
+                .iter()
+                .filter(|b| b.section == section)
+                .map(|b| b.planned)
+                .sum();
+            EstimateBudgetLine {
+                section,
+                estimate,
+                budget,
+                gap: budget - estimate,
+            }
+        })
+        .collect()
+}
+
+/// Ikki smeta variantini solishtirish natijasi (TZ III.21).
+#[derive(Debug, Clone)]
+pub struct EstimateDiffLine {
+    pub section: Section,
+    pub left: f64,
+    pub right: f64,
+    pub diff: f64,
+    /// Farq foizda. Chap tomon nol bo'lsa `None`.
+    pub diff_pct: Option<f64>,
+}
+
+/// Ikki smetani bo'lim kesimida solishtiradi.
+pub fn compare_estimates(
+    items: &[EstimateItem],
+    left_id: i64,
+    right_id: i64,
+) -> Vec<EstimateDiffLine> {
+    let mut sections: Vec<Section> = items
+        .iter()
+        .filter(|i| i.estimate_id == left_id || i.estimate_id == right_id)
+        .map(|i| i.section)
+        .collect();
+    sections.sort_by_key(|s| s.code());
+    sections.dedup();
+
+    let sum = |eid: i64, section: Section| -> f64 {
+        items
+            .iter()
+            .filter(|i| i.estimate_id == eid && i.section == section)
+            .map(|i| i.computed())
+            .sum()
+    };
+    sections
+        .into_iter()
+        .map(|section| {
+            let left = sum(left_id, section);
+            let right = sum(right_id, section);
+            EstimateDiffLine {
+                section,
+                left,
+                right,
+                diff: right - left,
+                diff_pct: (left > 0.0).then(|| (right - left) / left * 100.0),
+            }
+        })
+        .collect()
+}
+
 // ================= IV. Ijro hujjatlari =================
 
 /// Ish uchun talab qilinadigan bitta hujjat.
@@ -3358,6 +3567,7 @@ mod tests {
             qty,
             price,
             cost,
+            task_id: None,
             note: String::new(),
         }
     }

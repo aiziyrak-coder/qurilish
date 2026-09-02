@@ -264,6 +264,7 @@ fn rows_to_items(rows: &[Vec<Cell>], name: String) -> Result<Imported, String> {
             qty,
             price,
             cost,
+            task_id: None,
             note: String::new(),
         });
     }

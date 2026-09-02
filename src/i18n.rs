@@ -1151,6 +1151,64 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "работ без указанного объема",
         ),
 
+        // ---------- III.17-26. Smeta tuzilishi va bog'lanishlari ----------
+        "tab_structure" => ("Tuzilish", "Структура"),
+        "nav_estimate_short" => ("Smeta", "Смета"),
+        "estimate_empty" => (
+            "Smeta kiritilmagan — «Pozitsiyalar» bo'limidan boshlang",
+            "Смета не внесена — начните с раздела «Позиции»",
+        ),
+
+        "est_coefficients" => ("Koeffitsiyentlar va yakuniy summa", "Коэффициенты и итог"),
+        "est_coefficients_hint" => (
+            "Ustama to'g'ridan-to'g'ri xarajatga, foyda ustama bilan birga olingan summaga, QQS eng oxirida qo'yiladi.",
+            "Накладные — на прямые затраты, прибыль — на сумму с накладными, НДС — в самом конце.",
+        ),
+        "est_overhead" => ("Ustama xarajatlar", "Накладные расходы"),
+        "est_overhead_hint" => ("to'g'ridan-to'g'ri xarajatdan", "от прямых затрат"),
+        "est_profit" => ("Smeta foydasi", "Сметная прибыль"),
+        "est_profit_hint" => ("ustama bilan birga summadan", "от суммы с накладными"),
+        "est_vat" => ("QQS", "НДС"),
+        "est_vat_hint" => ("yakuniy summadan", "от итоговой суммы"),
+        "est_direct" => ("To'g'ridan-to'g'ri xarajat", "Прямые затраты"),
+        "est_before_vat" => ("QQS gacha", "Итого без НДС"),
+        "est_total" => ("Yakuniy summa", "Всего по смете"),
+        "est_declared" => ("Hujjatda ko'rsatilgan", "Указано в документе"),
+
+        "est_no_overhead" => (
+            "Ustama xarajat foizi ko'rsatilmagan — smeta to'liq emas",
+            "Не указан процент накладных расходов — смета неполная",
+        ),
+        "est_no_profit" => (
+            "Smeta foydasi ko'rsatilmagan",
+            "Не указана сметная прибыль",
+        ),
+        "est_no_vat" => ("QQS ko'rsatilmagan", "Не указан НДС"),
+        "est_suspicious" => ("Koeffitsiyent juda yuqori —", "Коэффициент слишком высокий —"),
+        "est_mismatch" => (
+            "Hisoblangan summa hujjatdagidan farq qiladi:",
+            "Расчётная сумма отличается от указанной в документе:",
+        ),
+
+        "est_link" => ("GPR bilan bog'lanish", "Связь с ГПР"),
+        "est_link_hint" => (
+            "Pozitsiya ishga bog'lanmasa uni kim bajarishi noma'lum; ish pozitsiyasiz qolsa uning qiymati noma'lum. Nom bo'yicha taxminiy moslik hisoblanmaydi.",
+            "Если позиция не связана с работой — неизвестно, кто её выполнит; если работа без позиции — неизвестна её стоимость. Приблизительное совпадение по названию не считается.",
+        ),
+        "est_linked" => ("pozitsiya ishga bog'langan", "позиций связано с работами"),
+        "est_free_items" => ("Bog'lanmagan pozitsiya:", "Несвязанных позиций:"),
+        "est_free_tasks" => ("Smetada pozitsiyasi yo'q ish:", "Работ без позиции в смете:"),
+
+        "est_compare" => ("Variantlarni solishtirish", "Сравнение вариантов"),
+        "est_compare_with" => ("Solishtirish:", "Сравнить с:"),
+        "est_current" => ("Joriy", "Текущая"),
+        "est_other" => ("Boshqa variant", "Другой вариант"),
+        "est_budget" => ("Byudjet bilan solishtirish", "Сверка с бюджетом"),
+        "est_budget_hint" => (
+            "Bo'lim bo'yicha smeta va xarid byudjeti. Byudjet belgilanmagan bo'lim ham chiqadi — nol byudjet ham javob.",
+            "Смета и бюджет закупок по разделам. Разделы без бюджета тоже показаны — нулевой бюджет тоже ответ.",
+        ),
+
         // ---------- IV. Ijro hujjatlari ----------
         "add_exec_doc" => ("+ Hujjat", "+ Документ"),
         "exec_docs_hint" => (

@@ -616,6 +616,10 @@ impl Db {
             "ALTER TABLE request ADD COLUMN reject_reason TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE quality_check ADD COLUMN checklist_id INTEGER",
             "ALTER TABLE material ADD COLUMN estimate_code TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE estimate ADD COLUMN overhead_pct REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE estimate ADD COLUMN profit_pct REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE estimate ADD COLUMN vat_pct REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE estimate_item ADD COLUMN task_id INTEGER",
             "ALTER TABLE material ADD COLUMN spec_ref TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE material ADD COLUMN special TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE material ADD COLUMN banned INTEGER NOT NULL DEFAULT 0",
@@ -2232,7 +2236,8 @@ impl Db {
 
     pub fn estimates(&self, pid: i64) -> Vec<Estimate> {
         self.list(
-            "SELECT id,project_id,name,currency,declared_total,added_at
+            "SELECT id,project_id,name,currency,declared_total,overhead_pct,profit_pct,vat_pct,
+                    added_at
              FROM estimate WHERE project_id=?1 ORDER BY id",
             pid,
             |r| {
@@ -2242,7 +2247,10 @@ impl Db {
                     name: r.get(2)?,
                     currency: r.get(3)?,
                     declared_total: r.get(4)?,
-                    added_at: r.get(5)?,
+                    overhead_pct: r.get(5)?,
+                    profit_pct: r.get(6)?,
+                    vat_pct: r.get(7)?,
+                    added_at: r.get(8)?,
                 })
             },
         )
@@ -2250,21 +2258,40 @@ impl Db {
 
     pub fn insert_estimate(&self, e: &Estimate) -> i64 {
         self.ins(
-            "INSERT INTO estimate (project_id,name,currency,declared_total) VALUES (?1,?2,?3,?4)",
-            params![e.project_id, e.name, e.currency, e.declared_total],
+            "INSERT INTO estimate (project_id,name,currency,declared_total,overhead_pct,
+                                   profit_pct,vat_pct)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                e.project_id,
+                e.name,
+                e.currency,
+                e.declared_total,
+                e.overhead_pct,
+                e.profit_pct,
+                e.vat_pct
+            ],
         )
     }
 
     pub fn update_estimate(&self, e: &Estimate) -> bool {
         self.upd(
-            "UPDATE estimate SET name=?2,currency=?3,declared_total=?4 WHERE id=?1",
-            params![e.id, e.name, e.currency, e.declared_total],
+            "UPDATE estimate SET name=?2,currency=?3,declared_total=?4,overhead_pct=?5,
+                    profit_pct=?6,vat_pct=?7 WHERE id=?1",
+            params![
+                e.id,
+                e.name,
+                e.currency,
+                e.declared_total,
+                e.overhead_pct,
+                e.profit_pct,
+                e.vat_pct
+            ],
         )
     }
 
     pub fn estimate_items(&self, eid: i64) -> Vec<EstimateItem> {
         self.list(
-            "SELECT id,estimate_id,pos,section,code,name,unit,qty,price,cost,note
+            "SELECT id,estimate_id,pos,section,code,name,unit,qty,price,cost,task_id,note
              FROM estimate_item WHERE estimate_id=?1 ORDER BY pos,id",
             eid,
             |r| {
@@ -2279,7 +2306,8 @@ impl Db {
                     qty: r.get(7)?,
                     price: r.get(8)?,
                     cost: r.get(9)?,
-                    note: r.get(10)?,
+                    task_id: r.get(10)?,
+                    note: r.get(11)?,
                 })
             },
         )
@@ -2287,8 +2315,9 @@ impl Db {
 
     pub fn insert_estimate_item(&self, i: &EstimateItem) -> i64 {
         self.ins(
-            "INSERT INTO estimate_item (estimate_id,pos,section,code,name,unit,qty,price,cost,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO estimate_item (estimate_id,pos,section,code,name,unit,qty,price,cost,
+                                        task_id,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
                 i.estimate_id,
                 i.pos,
@@ -2299,6 +2328,7 @@ impl Db {
                 i.qty,
                 i.price,
                 i.cost,
+                i.task_id,
                 i.note
             ],
         )
@@ -2323,7 +2353,7 @@ impl Db {
     pub fn update_estimate_item(&self, i: &EstimateItem) -> bool {
         self.upd(
             "UPDATE estimate_item SET pos=?2,section=?3,code=?4,name=?5,unit=?6,qty=?7,price=?8,
-                    cost=?9,note=?10 WHERE id=?1",
+                    cost=?9,task_id=?10,note=?11 WHERE id=?1",
             params![
                 i.id,
                 i.pos,
@@ -2334,6 +2364,7 @@ impl Db {
                 i.qty,
                 i.price,
                 i.cost,
+                i.task_id,
                 i.note
             ],
         )
@@ -6063,6 +6094,10 @@ impl Db {
             },
             currency: "UZS".into(),
             declared_total: 0.0,
+            // O'zbekistonda odatdagi darajalar: ustama 14%, foyda 8%, QQS 12%.
+            overhead_pct: 14.0,
+            profit_pct: 8.0,
+            vat_pct: 12.0,
             added_at: String::new(),
         });
         if eid == 0 {
@@ -6071,13 +6106,15 @@ impl Db {
 
         let mut pos = 0;
         let mut total = 0.0;
+        #[allow(clippy::too_many_arguments)]
         let mut add = |section: Section,
                        code: &str,
                        name: String,
                        unit: &str,
                        qty: f64,
                        price: f64,
-                       cost: f64| {
+                       cost: f64,
+                       task_id: Option<i64>| {
             pos += 1;
             total += cost;
             self.insert_estimate_item(&EstimateItem {
@@ -6091,6 +6128,7 @@ impl Db {
                 qty,
                 price,
                 cost,
+                task_id,
                 note: String::new(),
             });
         };
@@ -6105,6 +6143,7 @@ impl Db {
                 t.volume,
                 1_250_000.0,
                 t.volume * 1_250_000.0,
+                Some(t.id),
             );
         }
         // 2. Hajm loyihadagidan 18 % ga oshirilgan.
@@ -6118,6 +6157,7 @@ impl Db {
                 qty,
                 1_480_000.0,
                 qty * 1_480_000.0,
+                Some(t.id),
             );
         }
         // 3. Birlik loyihadagiga mos emas: m2 o'rniga m3.
@@ -6130,6 +6170,7 @@ impl Db {
                 950.0,
                 2_100_000.0,
                 950.0 * 2_100_000.0,
+                Some(t.id),
             );
         }
         // 4. Arifmetik xato: miqdor x narx summaga teng emas.
@@ -6142,6 +6183,7 @@ impl Db {
                 1450.0,
                 1_850_000.0,
                 2_900_000_000.0,
+                Some(t.id),
             );
         }
         // 5-6. Dublikat: bir xil nom, bir xil miqdor.
@@ -6158,6 +6200,7 @@ impl Db {
             4200.0,
             185_000.0,
             4200.0 * 185_000.0,
+            None,
         );
         add(
             Section::Ar,
@@ -6167,6 +6210,7 @@ impl Db {
             4200.0,
             185_000.0,
             4200.0 * 185_000.0,
+            None,
         );
         // 7. Noma'lum o'lchov birligi.
         add(
@@ -6181,6 +6225,7 @@ impl Db {
             860.0,
             420_000.0,
             860.0 * 420_000.0,
+            None,
         );
         // 8. Nol miqdor.
         add(
@@ -6195,6 +6240,7 @@ impl Db {
             0.0,
             9_800_000.0,
             0.0,
+            None,
         );
         // 9-10. Bir xil rasenka kodi, narx 42 % ga farq qiladi.
         add(
@@ -6209,6 +6255,7 @@ impl Db {
             9200.0,
             38_000.0,
             9200.0 * 38_000.0,
+            None,
         );
         add(
             Section::Eom,
@@ -6222,6 +6269,7 @@ impl Db {
             9300.0,
             54_000.0,
             9300.0 * 54_000.0,
+            None,
         );
 
         // Hujjatdagi yakun pozitsiyalar yig'indisiga teng emas — TZ III.4.

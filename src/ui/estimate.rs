@@ -35,6 +35,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (0u8, t("tab_estimate_items")),
             (1, t("tab_cost_control")),
             (2, t("tab_issues")),
+            (3, t("tab_structure")),
         ];
         for (i, label) in tabs {
             if ui.selectable_label(tab == i, label).clicked() {
@@ -48,7 +49,348 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     match tab {
         1 => cost_tab(ui, app),
         2 => issues_tab(ui, app),
+        3 => structure_tab(ui, app),
         _ => items(ui, app),
+    }
+}
+
+// ================================================================ Tuzilish
+
+/// Smeta tuzilishi: koeffitsiyentlar, GPR bog'lanishi va byudjet (TZ III.17–26).
+fn structure_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let Some(est) = app.estimate().cloned() else {
+        no_estimate(ui);
+        return;
+    };
+    let items: Vec<crate::domain::EstimateItem> = app
+        .estimate_items
+        .iter()
+        .filter(|i| i.estimate_id == est.id)
+        .cloned()
+        .collect();
+    if items.is_empty() {
+        no_estimate(ui);
+        return;
+    }
+
+    let direct: f64 = items.iter().map(|i| i.computed()).sum();
+    let totals = est.totals(direct);
+    let issues = crate::checks::estimate_issues(&est, &items);
+    let mut edited: Option<crate::domain::Estimate> = None;
+
+    // ---- Koeffitsiyentlar.
+    let w = (ui.available_width() - 20.0).min(880.0);
+    card_frame(ui, t("est_coefficients"), w, |ui| {
+        ui.label(
+            RichText::new(t("est_coefficients_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        let mut e = est.clone();
+        let mut changed = false;
+        let mut row = |ui: &mut egui::Ui, label: &str, v: &mut f64, hint: &str| {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [200.0, 20.0],
+                    egui::Label::new(RichText::new(label).size(12.0).color(theme::muted())),
+                );
+                changed |= ui
+                    .add_sized(
+                        [90.0, 22.0],
+                        egui::DragValue::new(v)
+                            .speed(0.5)
+                            .range(0.0..=200.0)
+                            .max_decimals(2)
+                            .suffix(" %"),
+                    )
+                    .changed();
+                ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+            });
+        };
+        row(
+            ui,
+            t("est_overhead"),
+            &mut e.overhead_pct,
+            t("est_overhead_hint"),
+        );
+        row(ui, t("est_profit"), &mut e.profit_pct, t("est_profit_hint"));
+        row(ui, t("est_vat"), &mut e.vat_pct, t("est_vat_hint"));
+        if changed {
+            edited = Some(e);
+        }
+
+        ui.add_space(8.0);
+        // Hisob ochiq turadi: qaysi son qayerdan chiqqani ko'rinsin.
+        let line = |ui: &mut egui::Ui, label: &str, v: f64, strong: bool| {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [200.0, 20.0],
+                    egui::Label::new(RichText::new(label).size(12.0).color(theme::muted())),
+                );
+                let text = RichText::new(money(v)).size(if strong { 13.5 } else { 12.5 });
+                ui.label(if strong { text.strong() } else { text });
+            });
+        };
+        line(ui, t("est_direct"), totals.direct, false);
+        line(ui, t("est_overhead"), totals.overhead, false);
+        line(ui, t("est_profit"), totals.profit, false);
+        line(ui, t("est_before_vat"), totals.before_vat, false);
+        line(ui, t("est_vat"), totals.vat, false);
+        line(ui, t("est_total"), totals.total, true);
+        if est.declared_total > 0.0 {
+            line(ui, t("est_declared"), est.declared_total, false);
+        }
+
+        // Kamchiliklar ochiq aytiladi.
+        for i in &issues {
+            let (text, color) = issue_text(i);
+            ui.label(RichText::new(text).size(11.5).color(color));
+        }
+    });
+    ui.add_space(10.0);
+
+    // ---- GPR bilan bog'lanish.
+    let cov = crate::checks::estimate_coverage(&items, &app.tasks);
+    card_frame(ui, t("est_link"), w, |ui| {
+        ui.label(
+            RichText::new(t("est_link_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(format!("{:.0}%", cov.linked_pct))
+                    .size(16.0)
+                    .strong()
+                    .color(if cov.linked_pct >= 80.0 {
+                        theme::ok()
+                    } else if cov.linked_pct >= 40.0 {
+                        theme::warn()
+                    } else {
+                        theme::danger()
+                    }),
+            );
+            ui.label(
+                RichText::new(t("est_linked"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+        });
+        if !cov.free_items.is_empty() {
+            ui.label(
+                RichText::new(format!(
+                    "{} {} · {}",
+                    t("est_free_items"),
+                    cov.free_items.len(),
+                    money(cov.free_cost)
+                ))
+                .size(11.5)
+                .color(theme::warn()),
+            );
+        }
+        if !cov.free_tasks.is_empty() {
+            ui.label(
+                RichText::new(format!("{} {}", t("est_free_tasks"), cov.free_tasks.len()))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+        }
+    });
+    ui.add_space(10.0);
+
+    // ---- Byudjet bilan solishtirish.
+    let budget = crate::checks::estimate_vs_budget(&items, &app.purchase_budgets);
+    card_frame(ui, t("est_budget"), w, |ui| {
+        ui.label(
+            RichText::new(t("est_budget_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        egui::Grid::new("est_budget_grid")
+            .num_columns(4)
+            .spacing([10.0, 4.0])
+            .striped(true)
+            .show(ui, |ui| {
+                for h in [
+                    t("col_section"),
+                    t("nav_estimate_short"),
+                    t("col_planned"),
+                    t("col_diff"),
+                ] {
+                    ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                }
+                ui.end_row();
+                for l in &budget {
+                    cell_l(ui, 140.0, RichText::new(l.section.label()).size(12.0));
+                    cell_r(ui, 150.0, RichText::new(money(l.estimate)).size(12.0));
+                    cell_r(
+                        ui,
+                        150.0,
+                        RichText::new(if l.budget > 0.0 {
+                            money(l.budget)
+                        } else {
+                            t("dash").to_string()
+                        })
+                        .size(12.0)
+                        .color(theme::muted()),
+                    );
+                    // Byudjet smetadan kam bo'lsa — yetishmaydi.
+                    cell_r(
+                        ui,
+                        150.0,
+                        RichText::new(if l.budget > 0.0 {
+                            money(l.gap)
+                        } else {
+                            t("dash").to_string()
+                        })
+                        .size(12.0)
+                        .color(if l.budget > 0.0 && l.gap < 0.0 {
+                            theme::danger()
+                        } else if l.budget > 0.0 {
+                            theme::ok()
+                        } else {
+                            theme::muted()
+                        }),
+                    );
+                    ui.end_row();
+                }
+            });
+    });
+
+    // ---- Variantlarni solishtirish (TZ III.21).
+    let others: Vec<&crate::domain::Estimate> =
+        app.estimates.iter().filter(|x| x.id != est.id).collect();
+    if !others.is_empty() {
+        ui.add_space(10.0);
+        let key = egui::Id::new("est_cmp");
+        let mut other = ui
+            .data(|d| d.get_temp::<i64>(key))
+            .filter(|id| others.iter().any(|x| x.id == *id))
+            .unwrap_or(others[0].id);
+        card_frame(ui, t("est_compare"), w, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(t("est_compare_with"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+                egui::ComboBox::from_id_salt("est_cmp_pick")
+                    .selected_text(
+                        others
+                            .iter()
+                            .find(|x| x.id == other)
+                            .map(|x| x.name.clone())
+                            .unwrap_or_default(),
+                    )
+                    .width(260.0)
+                    .show_ui(ui, |ui| {
+                        for x in &others {
+                            ui.selectable_value(&mut other, x.id, &x.name);
+                        }
+                    });
+            });
+            ui.add_space(6.0);
+            let diff = crate::checks::compare_estimates(&app.estimate_items, est.id, other);
+            egui::Grid::new("est_cmp_grid")
+                .num_columns(5)
+                .spacing([10.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    for h in [
+                        t("col_section"),
+                        t("est_current"),
+                        t("est_other"),
+                        t("col_diff"),
+                        "%",
+                    ] {
+                        ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+                    for l in &diff {
+                        cell_l(ui, 140.0, RichText::new(l.section.label()).size(12.0));
+                        cell_r(ui, 150.0, RichText::new(money(l.left)).size(12.0));
+                        cell_r(ui, 150.0, RichText::new(money(l.right)).size(12.0));
+                        // Ikkinchi variant qimmatroq bo'lsa qizil.
+                        let color = if l.diff > 0.0 {
+                            theme::danger()
+                        } else if l.diff < 0.0 {
+                            theme::ok()
+                        } else {
+                            theme::muted()
+                        };
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(l.diff)).size(12.0).color(color),
+                        );
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(match l.diff_pct {
+                                Some(v) => format!("{v:+.0}%"),
+                                None => t("dash").to_string(),
+                            })
+                            .size(11.5)
+                            .color(color),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+        ui.data_mut(|d| d.insert_temp(key, other));
+    }
+
+    if let Some(e) = edited {
+        app.db.update_estimate(&e);
+        app.reload_modules();
+    }
+}
+
+/// Smeta yo'q — nima qilish kerakligini aytamiz.
+fn no_estimate(ui: &mut egui::Ui) {
+    ui.add_space(40.0);
+    ui.vertical_centered(|ui| {
+        ui.label(
+            RichText::new(t("estimate_empty"))
+                .color(theme::muted())
+                .size(15.0),
+        );
+    });
+}
+
+/// Kamchilikning o'qiladigan matni va rangi.
+fn issue_text(i: &crate::checks::EstimateIssue) -> (String, Color32) {
+    use crate::checks::EstimateIssue;
+    match i {
+        EstimateIssue::NoOverhead => (t("est_no_overhead").to_string(), theme::warn()),
+        EstimateIssue::NoProfit => (t("est_no_profit").to_string(), theme::warn()),
+        EstimateIssue::NoVat => (t("est_no_vat").to_string(), theme::warn()),
+        EstimateIssue::Suspicious { name, pct } => (
+            format!(
+                "{} {}: {pct:.1}%",
+                t("est_suspicious"),
+                if *name == "overhead" {
+                    t("est_overhead")
+                } else {
+                    t("est_profit")
+                }
+            ),
+            theme::danger(),
+        ),
+        EstimateIssue::TotalMismatch { computed, declared } => (
+            format!(
+                "{} {} · {} {}",
+                t("est_mismatch"),
+                money(*computed),
+                t("est_declared"),
+                money(*declared)
+            ),
+            theme::danger(),
+        ),
     }
 }
 
@@ -423,6 +765,9 @@ fn header(ui: &mut egui::Ui, app: &mut App) {
                 name: t("estimate_new_name").to_string(),
                 currency: app.settings.default_currency.clone(),
                 declared_total: 0.0,
+                overhead_pct: 0.0,
+                profit_pct: 0.0,
+                vat_pct: 0.0,
                 added_at: String::new(),
             };
             let id = app.db.insert_estimate(&e);
@@ -598,6 +943,7 @@ fn items(ui: &mut egui::Ui, app: &mut App) {
             qty: 0.0,
             price: 0.0,
             cost: 0.0,
+            task_id: None,
             note: String::new(),
         });
         app.reload_estimate_items();

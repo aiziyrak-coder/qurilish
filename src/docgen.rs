@@ -736,6 +736,7 @@ mod tests {
             qty: 100.0,
             price,
             cost: 0.0,
+            task_id: None,
             note: String::new(),
         }
     }
