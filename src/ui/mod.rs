@@ -222,6 +222,54 @@ pub fn doc_period(app: &App) -> (chrono::NaiveDate, chrono::NaiveDate) {
     (start, app.today)
 }
 
+/// Ilova belgisi va nomi.
+///
+/// Nom va tagsarlavha ikki qatorda turadi: bitta qatorga cho'zilganda ular
+/// bir-biriga yopishib, siqilgan ko'rinardi.
+fn logo(ui: &mut egui::Ui, wide: bool) {
+    let size = 30.0;
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        let p = ui.painter();
+        p.rect_filled(rect, 8.0, theme::accent());
+        p.text(
+            rect.center() + egui::vec2(0.0, -0.5),
+            Align2::CENTER_CENTER,
+            "Q",
+            egui::FontId::proportional(18.0),
+            theme::on_accent(),
+        );
+    }
+    ui.add_space(9.0);
+
+    ui.vertical(|ui| {
+        // Ikki qator markazga tekislanadi: panel balandligi 52 px, matn 30 px.
+        ui.add_space(if wide { 3.0 } else { 7.0 });
+        ui.label(
+            RichText::new("QURAi")
+                .size(16.5)
+                .strong()
+                .color(theme::text()),
+        );
+        if wide {
+            ui.add_space(-3.0);
+            ui.label(
+                RichText::new(t("app_subtitle"))
+                    .size(9.5)
+                    .color(theme::muted()),
+            );
+        }
+    });
+}
+
+/// Yuqori paneldagi vertikal ajratkich.
+fn divider(ui: &mut egui::Ui) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(1.0, 24.0), egui::Sense::hover());
+    if ui.is_rect_visible(rect) {
+        ui.painter().rect_filled(rect, 0.0, theme::line());
+    }
+}
+
 fn top_bar(ctx: &Context, app: &mut App) {
     egui::TopBottomPanel::top("top")
         .exact_height(52.0)
@@ -239,20 +287,12 @@ fn top_bar(ctx: &Context, app: &mut App) {
             let medium = w > 1000.0;
 
             ui.horizontal_centered(|ui| {
-                ui.label(
-                    RichText::new("QURAi")
-                        .size(20.0)
-                        .strong()
-                        .color(theme::accent()),
-                );
-                if wide {
-                    ui.label(
-                        RichText::new(t("app_subtitle"))
-                            .size(12.0)
-                            .color(theme::muted()),
-                    );
-                }
-                ui.add_space(if wide { 20.0 } else { 10.0 });
+                logo(ui, wide);
+                ui.add_space(if wide { 16.0 } else { 8.0 });
+                // Nozik ajratkich: logotip va ish maydoni bir-biriga
+                // yopishib qolmasin.
+                divider(ui);
+                ui.add_space(if wide { 14.0 } else { 8.0 });
 
                 if medium {
                     ui.label(RichText::new(t("object")).color(theme::muted()));

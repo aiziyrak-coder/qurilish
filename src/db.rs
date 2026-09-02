@@ -1,6 +1,10 @@
 //! Локальное хранилище (SQLite). Схема писалась с расчетом на будущую
 //! синхронизацию с сервером: у каждой записи есть `updated_at`, ключи не переиспользуются.
 
+use crate::domain::{
+    Contract, ContractKind, ContractStatus, Estimate, EstimateItem, Inspection, InspectionKind,
+    InspectionResult, PaymentStage,
+};
 use crate::model::*;
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, Result as SqlResult};
@@ -881,6 +885,294 @@ impl Db {
     ///
     /// Bu yerda boshqa modullar to'ldirilmaydi — atayin: portfelda «ma'lumoti
     /// to'liq emas» obyekt qanday ko'rinishini ham ko'rsatish kerak.
+    /// Ikkinchi obyektning smetasi, shartnomasi va tekshiruvlari.
+    ///
+    /// Bu yerda alohida matnlar: umumiy namuna 9 qavatli turar-joy uchun
+    /// yozilgan, bu esa ikki qavatli ijtimoiy obyekt. «3-qavat plitasi»
+    /// degan yozuv unda xatoday ko'rinardi.
+    fn seed_second_details(&self, pid: i64, ru: bool, today: NaiveDate) -> SqlResult<()> {
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        // ---------- Smeta ----------
+        let eid = self.insert_estimate(&Estimate {
+            id: 0,
+            project_id: pid,
+            name: if ru {
+                "Смета — детский сад на 240 мест".into()
+            } else {
+                "Smeta — 240 o'rinli bolalar bog'chasi".into()
+            },
+            currency: "UZS".into(),
+            declared_total: 0.0,
+            overhead_pct: 14.0,
+            profit_pct: 8.0,
+            vat_pct: 12.0,
+            added_at: String::new(),
+        });
+        if eid != 0 {
+            // (bo'lim, kod, nomi uz/ru, birlik, miqdor, narx, VBS)
+            let items: [SecondItemDef; 7] = [
+                (
+                    Section::None,
+                    "E1-1-1",
+                    "Maydonni tayyorlash",
+                    "Подготовка площадки",
+                    "m2",
+                    4_180.0,
+                    28_000.0,
+                    "1",
+                ),
+                (
+                    Section::Kj,
+                    "E6-1-1",
+                    "Poydevor plitasi, beton B25",
+                    "Фундаментная плита, бетон B25",
+                    "m3",
+                    1_240.0,
+                    780_000.0,
+                    "2",
+                ),
+                (
+                    Section::Kj,
+                    "E6-1-22",
+                    "Karkas va devorlar, beton B25",
+                    "Каркас и стены, бетон B25",
+                    "m3",
+                    2_950.0,
+                    860_000.0,
+                    "3",
+                ),
+                (
+                    Section::Ar,
+                    "E12-1-4",
+                    "Tom yopish, rulonli",
+                    "Кровля рулонная",
+                    "m2",
+                    2_180.0,
+                    195_000.0,
+                    "4",
+                ),
+                (
+                    Section::Ov,
+                    "E20-2-1",
+                    "Muhandislik tarmoqlari",
+                    "Инженерные сети",
+                    "kompleks",
+                    1.0,
+                    1_050_000_000.0,
+                    "5",
+                ),
+                (
+                    Section::Ar,
+                    "E11-1-9",
+                    "Ichki pardozlash",
+                    "Внутренняя отделка",
+                    "m2",
+                    6_400.0,
+                    168_000.0,
+                    "6",
+                ),
+                (
+                    Section::None,
+                    "E2-1-8",
+                    "Obodonlashtirish",
+                    "Благоустройство",
+                    "m2",
+                    3_100.0,
+                    74_000.0,
+                    "7",
+                ),
+            ];
+            for (i, (section, code, uz, rux, unit, qty, price, wbs)) in items.iter().enumerate() {
+                self.insert_estimate_item(&EstimateItem {
+                    id: 0,
+                    estimate_id: eid,
+                    pos: (i + 1) as i64,
+                    section: *section,
+                    code: (*code).into(),
+                    name: if ru { *rux } else { *uz }.into(),
+                    unit: (*unit).into(),
+                    qty: *qty,
+                    price: *price,
+                    cost: qty * price,
+                    task_id: by_wbs(wbs),
+                    note: String::new(),
+                });
+            }
+        }
+
+        // ---------- Shartnoma va to'lov jadvali ----------
+        let cid = self.insert_contract(&Contract {
+            id: 0,
+            project_id: pid,
+            number: "P-2026/22".into(),
+            name: if ru {
+                "Генподряд: детский сад на 240 мест"
+            } else {
+                "Bosh pudrat: 240 o'rinli bolalar bog'chasi"
+            }
+            .into(),
+            kind: ContractKind::General,
+            party_id: None,
+            signed: d(220),
+            start: d(210),
+            end: d(210) + chrono::Duration::days(300),
+            sum: 9_200_000_000.0,
+            advance_pct: 15.0,
+            retention_pct: 5.0,
+            currency: "UZS".into(),
+            status: ContractStatus::Active,
+            note: String::new(),
+        });
+
+        // (raqam, asos uz/ru, muddat kuni, summa, to'langan, to'langan kun)
+        let stages: [SecondStageDef; 4] = [
+            (
+                "T-1",
+                "Avans",
+                "Аванс",
+                205,
+                1_380_000_000.0,
+                1_380_000_000.0,
+                Some(203),
+            ),
+            (
+                "T-2",
+                "1-bosqich bajarilgan ish",
+                "Работы 1 этапа",
+                140,
+                900_000_000.0,
+                900_000_000.0,
+                Some(132),
+            ),
+            (
+                "T-3",
+                "2-bosqich bajarilgan ish",
+                "Работы 2 этапа",
+                62,
+                820_000_000.0,
+                820_000_000.0,
+                Some(44),
+            ),
+            // Uchinchi to'lov kechikkan — portfelda bu obyekt e'tibor
+            // talab qilishining yana bir sababi.
+            (
+                "T-4",
+                "3-bosqich bajarilgan ish",
+                "Работы 3 этапа",
+                18,
+                760_000_000.0,
+                0.0,
+                None,
+            ),
+        ];
+        for (number, uz, rux, back, amount, paid, paid_back) in stages {
+            self.insert_payment_stage(&PaymentStage {
+                id: 0,
+                project_id: pid,
+                contract_id: Some(cid),
+                number: number.into(),
+                basis: if ru { rux } else { uz }.into(),
+                due: d(back),
+                amount,
+                paid,
+                paid_at: paid_back.map(d),
+                note: String::new(),
+            });
+        }
+
+        // ---------- Tekshiruvlar ----------
+        // (tur, raqam, reja kuni, o'tkazilgan kuni, joy uz/ru, natija, VBS)
+        let checks: [SecondCheckDef; 5] = [
+            (
+                InspectionKind::Hidden,
+                "TN-101",
+                168,
+                Some(168),
+                "Poydevor armaturasi",
+                "Арматура фундамента",
+                InspectionResult::Pass,
+                "2",
+            ),
+            (
+                InspectionKind::Concrete,
+                "TN-102",
+                160,
+                Some(160),
+                "Poydevor plitasi, beton quyish",
+                "Фундаментная плита, бетонирование",
+                InspectionResult::Pass,
+                "2",
+            ),
+            (
+                InspectionKind::Hidden,
+                "TN-103",
+                96,
+                Some(95),
+                "1-qavat devorlari armaturasi",
+                "Арматура стен 1 этажа",
+                InspectionResult::Conditional,
+                "3",
+            ),
+            (
+                InspectionKind::Physical,
+                "TN-104",
+                24,
+                Some(24),
+                "Tom qoplamasi germetikligi",
+                "Герметичность кровельного покрытия",
+                InspectionResult::Fail,
+                "4",
+            ),
+            (
+                InspectionKind::Volume,
+                "TN-105",
+                -4,
+                None,
+                "Bajarilgan ish hajmi, 2-qavat",
+                "Объём выполненных работ, 2 этаж",
+                InspectionResult::Waiting,
+                "3",
+            ),
+        ];
+        for (kind, number, plan, done, uz, rux, result, wbs) in checks {
+            self.insert_inspection(&Inspection {
+                id: 0,
+                project_id: pid,
+                task_id: by_wbs(wbs),
+                kind,
+                number: number.into(),
+                planned: d(plan),
+                done: done.map(d),
+                requested_by: if ru {
+                    "Рахимов О.С."
+                } else {
+                    "Rahimov O.S."
+                }
+                .into(),
+                inspector: if done.is_some() {
+                    if ru {
+                        "Собиров Р.Х.".into()
+                    } else {
+                        "Sobirov R.X.".to_string()
+                    }
+                } else {
+                    String::new()
+                },
+                place: if ru { rux } else { uz }.into(),
+                result,
+                // Salbiy natijaga muddat qo'yiladi, ijobiysiga kerak emas.
+                deadline: (result == InspectionResult::Fail).then(|| d(18)),
+                fixed_at: (result == InspectionResult::Conditional).then(|| d(88)),
+                note: String::new(),
+            });
+        }
+
+        Ok(())
+    }
+
     fn seed_second_object(&self, ru: bool, today: NaiveDate) -> SqlResult<i64> {
         let start = today - chrono::Duration::days(210);
         let pid = self.insert_project(&Project {
@@ -1041,12 +1333,61 @@ impl Db {
                 lag: 0,
             })?;
         }
+
+        // Ikkinchi obyektda ham ombor, ishchilar va ta'minot bo'lishi kerak:
+        // mijoz uni ochganda bo'sh ekranlarni ko'rmasin. Hajmi kichikroq —
+        // bu obyekt kichikroq va portfelda «ma'lumoti to'liq emas» emas,
+        // «kichikroq» bo'lib turishi kerak.
+        self.seed_demo_stock(pid, ru);
+        self.seed_demo_resources(pid, ru);
+        self.seed_demo_supply(pid, ru);
+        self.seed_demo_history(pid, ru);
+        self.seed_second_details(pid, ru, today)?;
+
         Ok(pid)
     }
 }
 
 /// Namoyish ishining tavsifi:
 /// VBS, nomi (uz), nomi (ru), bo'lim, davomiyligi, mas'ul, bajarilgan %, hajm, birlik.
+/// Ikkinchi obyekt smetasining pozitsiyasi: bo'lim, kod, nomi (uz/ru),
+/// birlik, miqdor, narx, VBS.
+type SecondItemDef = (
+    Section,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    f64,
+    f64,
+    &'static str,
+);
+
+/// Ikkinchi obyektning to'lov bosqichi: raqam, asos (uz/ru), muddat (orqaga),
+/// summa, to'langan, to'langan kun.
+type SecondStageDef = (
+    &'static str,
+    &'static str,
+    &'static str,
+    i64,
+    f64,
+    f64,
+    Option<i64>,
+);
+
+/// Ikkinchi obyektning tekshiruvi: tur, raqam, reja kuni, o'tkazilgan kuni,
+/// joy (uz/ru), natija, VBS.
+type SecondCheckDef = (
+    InspectionKind,
+    &'static str,
+    i64,
+    Option<i64>,
+    &'static str,
+    &'static str,
+    InspectionResult,
+    &'static str,
+);
+
 /// Namunaning ikkinchi obyekti uchun ish tavsifi:
 /// VBS, nomi (uz), nomi (ru), bo'lim, davomiyligi, bajarilgan %, hajm, birlik.
 type SecondTaskDef = (
@@ -1135,7 +1476,8 @@ mod tests {
         assert!(tasks.iter().filter(|x| x.volume > 0.0).count() >= 15);
         assert!(!t.db.elements(pid).is_empty());
         assert!(!t.db.element_links(pid).is_empty());
-        assert_eq!(t.db.estimates(pid).len(), 1);
+        // Namunada ikki smeta varianti bor — ularni solishtirish uchun.
+        assert_eq!(t.db.estimates(pid).len(), 2);
     }
 
     /// Namoyish ma'lumotida ikkala tekshiruv ham ishlaydi va natija saqlanadi.
@@ -1179,8 +1521,10 @@ mod tests {
 
         t.db.replace_auto_issues(pid, IssueModule::Project, &project_issues);
         t.db.replace_auto_issues(pid, IssueModule::Estimate, &estimate_issues);
-        let saved = t.db.issues(pid);
-        assert_eq!(saved.len(), project_issues.len() + estimate_issues.len());
+        // Namunada qo'lda kiritilgan nomuvofiqliklar ham bor — avtomatik
+        // tekshiruv faqat o'z yozuvlarini almashtiradi.
+        let auto: Vec<_> = t.db.issues(pid).into_iter().filter(|i| i.auto).collect();
+        assert_eq!(auto.len(), project_issues.len() + estimate_issues.len());
     }
 
     /// Foydalanuvchi yopgan nomuvofiqlik qayta tekshiruvda tirilib qolmasin.
@@ -1228,10 +1572,19 @@ mod tests {
         let task = app.tasks.iter().find(|x| x.wbs == "7").cloned().unwrap();
         assert!(task.volume > 0.0, "namoyish ishida hajm bo'lishi kerak");
 
+        // Kutilgan foiz jurnalning o'zidan hisoblanadi: namuna tarixi
+        // o'zgarsa ham sinov o'z ma'nosini yo'qotmasin.
+        let logged: f64 = app
+            .journal
+            .iter()
+            .filter(|j| j.task_id == Some(task.id))
+            .map(|j| j.volume)
+            .sum();
+        assert!(logged > 0.0, "jurnalda shu ish bo'yicha yozuv yo'q");
+
         app.apply_journal_to_tasks();
 
-        // Namoyish jurnalida shu ish bo'yicha 420 + 380 + 365 = 1165 birlik.
-        let expected = 1165.0 / task.volume * 100.0;
+        let expected = (logged / task.volume * 100.0).min(100.0);
         let after = app.tasks.iter().find(|x| x.id == task.id).unwrap();
         assert!(
             (after.progress - expected).abs() < 0.01,
@@ -1493,8 +1846,8 @@ mod tests {
         let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
         app.select_project(pid);
 
-        // Boshida natija yo'q.
-        assert!(app.issues.is_empty());
+        // Boshida avtomatik natija yo'q: namunadagi yozuvlar qo'lda kiritilgan.
+        assert!(!app.issues.iter().any(|i| i.auto));
 
         // Birinchi ochilish — natija hisoblanadi.
         app.auto_check(IssueModule::Project);
@@ -1929,7 +2282,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
 
         let workers = t.db.workers(pid);
         let sheet = t.db.timesheet(pid);
-        assert_eq!(workers.len(), 6);
+        assert!(workers.len() >= 6, "namunada ishchilar yetarli emas");
         assert!(!sheet.is_empty(), "tabel bo'sh");
         // Tabelda faqat mavjud ishchilar va real soatlar. Yo'qlik kunida
         // soat nol bo'lishi mumkin — ishchi kelmagan.

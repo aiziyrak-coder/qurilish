@@ -176,9 +176,9 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
     (
         "nav_object",
         &[
+            Screen::Dashboard,
             Screen::Portfolio,
             Screen::Notices,
-            Screen::Dashboard,
             Screen::Passport,
             Screen::Gantt,
             Screen::Ppr,

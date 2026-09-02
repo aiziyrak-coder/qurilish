@@ -4363,6 +4363,10 @@ impl Db {
         self.seed_demo_resources(pid, ru);
         self.seed_demo_supervision(pid, ru);
         self.seed_demo_client(pid, ru);
+        self.seed_demo_docs(pid, ru);
+        self.seed_demo_history(pid, ru);
+        self.seed_demo_supply_extra(pid, ru);
+        self.seed_demo_estimate_alt(pid, ru);
     }
 
     /// Resurs va nazorat modullari namunasi (TZ XIII-XVI).
@@ -4950,6 +4954,1639 @@ impl Db {
                 } else {
                     String::new()
                 },
+            });
+        }
+    }
+
+    /// Loyiha hujjatlari, saqlangan nomuvofiqliklar va inventarizatsiya.
+    ///
+    /// AI tekshiruvi topgan nomuvofiqliklar har safar qaytadan hisoblanadi va
+    /// almashadi. Bu yerdagilar esa **qaror qabul qilingan** yozuvlar: mas'ul,
+    /// muddat va holat bilan — shuning uchun ular qo'lda kiritilgan deb
+    /// belgilanadi va avtomatik tekshiruv ularni o'chirmaydi.
+    pub fn seed_demo_docs(&self, pid: i64, ru: bool) {
+        /// Hisob bo'yicha qoldiq: kirim va qaytarish qo'shiladi, chiqim ayriladi.
+        fn balance(moves: &[StockMove], material: i64) -> f64 {
+            moves
+                .iter()
+                .filter(|x| x.material_id == material)
+                .map(|x| match x.kind {
+                    MoveKind::In | MoveKind::Return => x.qty,
+                    _ => -x.qty,
+                })
+                .sum()
+        }
+
+        if !self.documents(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let stamp = |back: i64| format!("{} 09:00:00", d(back));
+
+        // ---------- Loyiha hujjatlari (TZ II.2) ----------
+        // (bo'lim, nomi uz/ru, format, varaq, kun oldin)
+        let docs: [(Section, &str, &str, &str, i64, i64); 9] = [
+            (
+                Section::Ar,
+                "AR — Arxitektura yechimlari",
+                "АР — Архитектурные решения",
+                "pdf",
+                42,
+                138,
+            ),
+            (
+                Section::Kj,
+                "KJ — Temir-beton konstruksiyalar",
+                "КЖ — Железобетонные конструкции",
+                "pdf",
+                64,
+                138,
+            ),
+            (
+                Section::Km,
+                "KM — Metall konstruksiyalar",
+                "КМ — Металлические конструкции",
+                "pdf",
+                18,
+                132,
+            ),
+            (
+                Section::Vk,
+                "VK — Suv va kanalizatsiya",
+                "ВК — Водоснабжение и канализация",
+                "pdf",
+                26,
+                126,
+            ),
+            (
+                Section::Ov,
+                "OV — Isitish va shamollatish",
+                "ОВ — Отопление и вентиляция",
+                "pdf",
+                31,
+                126,
+            ),
+            (
+                Section::Eom,
+                "EOM — Elektr jihozlari",
+                "ЭОМ — Электрооборудование",
+                "pdf",
+                29,
+                120,
+            ),
+            (
+                Section::Ss,
+                "SS — Kuchsiz tok tizimlari",
+                "СС — Слаботочные системы",
+                "pdf",
+                14,
+                118,
+            ),
+            (
+                Section::Pb,
+                "PB — Yong'in xavfsizligi",
+                "ПБ — Пожарная безопасность",
+                "pdf",
+                12,
+                118,
+            ),
+            (
+                Section::None,
+                "Bosh reja va obodonlashtirish",
+                "Генплан и благоустройство",
+                "pdf",
+                9,
+                140,
+            ),
+        ];
+        for (section, uz, rux, fmt, sheets, back) in docs {
+            self.insert_document(&Document {
+                id: 0,
+                project_id: pid,
+                section,
+                name: if ru { rux } else { uz }.into(),
+                format: fmt.into(),
+                // Fayl yo'li namunada bo'sh: ilova mavjud bo'lmagan faylga
+                // havola ko'rsatmasligi kerak.
+                path: String::new(),
+                sheets,
+                added_at: stamp(back),
+            });
+        }
+
+        // ---------- Nomuvofiqliklar (TZ II.16-20) ----------
+        // (modul, bo'lim, kod, varaq, joy, element, sarlavha uz/ru, tavsif uz/ru,
+        //  og'irlik, norma, band, tavsiya uz/ru, mas'ul, muddat, holat, avto)
+        let issues: [IssueDef; 12] = [
+            (
+                IssueModule::Project,
+                Section::Kj,
+                "KJ-00118",
+                "KJ-14",
+                "3-qavat, A/2 o'qi",
+                "K-2",
+                "Ustun armaturasi qoplamasi yetarli emas",
+                "Недостаточный защитный слой арматуры колонны",
+                "Chizmada qoplama 20 mm, konstruktiv talab 30 mm",
+                "На чертеже слой 20 мм, конструктивное требование 30 мм",
+                Severity::Critical,
+                "ShNQ 2.03.01-96",
+                "5.12",
+                "Qoplamani 30 mm ga oshirish yoki hisobni qayta ko'rish",
+                "Увеличить слой до 30 мм либо пересмотреть расчёт",
+                "Rahimov O.S.",
+                Some(96),
+                IssueStatus::Fixed,
+                false,
+            ),
+            (
+                IssueModule::Project,
+                Section::Vk,
+                "VK-00452",
+                "VK-07",
+                "Yerto'la, nasos xonasi",
+                "N-1",
+                "Nasos quvuri diametri hisobga mos emas",
+                "Диаметр трубы насоса не соответствует расчёту",
+                "Chizmada DN80, gidravlik hisobda DN100 talab qilingan",
+                "На чертеже DN80, в гидравлическом расчёте требуется DN100",
+                Severity::Major,
+                "ShNQ 2.04.01-97",
+                "8.4",
+                "Quvurni DN100 ga almashtirish",
+                "Заменить трубу на DN100",
+                "Elektromontaj-Servis",
+                Some(64),
+                IssueStatus::Fixed,
+                false,
+            ),
+            (
+                IssueModule::Project,
+                Section::Ar,
+                "AR-00231",
+                "AR-22",
+                "1-qavat, kirish guruhi",
+                "D-3",
+                "Evakuatsiya eshigi eni normadan kichik",
+                "Ширина эвакуационного выхода меньше нормы",
+                "Chizmada 900 mm, yong'in normasi bo'yicha 1200 mm kerak",
+                "На чертеже 900 мм, по пожарной норме требуется 1200 мм",
+                Severity::Critical,
+                "ShNQ 2.01.02-94",
+                "4.7",
+                "Eshik enini 1200 mm ga oshirish",
+                "Увеличить ширину двери до 1200 мм",
+                "Loyiha instituti",
+                Some(12),
+                IssueStatus::InWork,
+                false,
+            ),
+            (
+                IssueModule::Project,
+                Section::Eom,
+                "EOM-00087",
+                "EOM-05",
+                "Elektr shchiti xonasi",
+                "SHCH-1",
+                "Yerga ulash konturi ko'rsatilmagan",
+                "Не показан контур заземления",
+                "Shchit xonasi chizmasida yerga ulash sxemasi yo'q",
+                "На чертеже щитовой отсутствует схема заземления",
+                Severity::Major,
+                "PUE",
+                "1.7.62",
+                "Yerga ulash konturi chizmasini qo'shish",
+                "Дополнить чертёж контуром заземления",
+                "Loyiha instituti",
+                Some(5),
+                IssueStatus::InWork,
+                false,
+            ),
+            (
+                IssueModule::Project,
+                Section::Ov,
+                "OV-00164",
+                "OV-11",
+                "6-qavat, shamollatish kamerasi",
+                "V-4",
+                "Havo sarfi xonalar bo'yicha mos kelmaydi",
+                "Расход воздуха не сходится по помещениям",
+                "Tarmoq bo'yicha yig'indi 12 % ga farq qiladi",
+                "Сумма по сети расходится на 12 %",
+                Severity::Warning,
+                "ShNQ 2.04.05-97",
+                "6.2",
+                "Aeraulik hisobni qayta bajarish",
+                "Пересчитать аэравлический расчёт",
+                "Loyiha instituti",
+                Some(-4),
+                IssueStatus::Open,
+                false,
+            ),
+            (
+                IssueModule::Project,
+                Section::Km,
+                "KM-00042",
+                "KM-03",
+                "Tom, ferma tayanchi",
+                "F-2",
+                "Payvand chokining o'lchami ko'rsatilmagan",
+                "Не указан размер сварного шва",
+                "Tayanch tugunida chok belgisi yo'q",
+                "В узле опирания отсутствует обозначение шва",
+                Severity::Major,
+                "ShNQ 2.03.05-97",
+                "12.3",
+                "Tugun chizmasiga chok belgisini qo'yish",
+                "Проставить обозначение шва на чертеже узла",
+                "Loyiha instituti",
+                Some(-9),
+                IssueStatus::Open,
+                false,
+            ),
+            (
+                IssueModule::Estimate,
+                Section::Kj,
+                "SM-00071",
+                "",
+                "Smeta, 3-bo'lim",
+                "",
+                "Beton hajmi chizmadagidan katta",
+                "Объём бетона больше, чем на чертеже",
+                "Smetada 1 240 m3, chizma bo'yicha 1 186 m3",
+                "В смете 1 240 м3, по чертежу 1 186 м3",
+                Severity::Major,
+                "",
+                "",
+                "Hajmni chizma bo'yicha aniqlashtirish",
+                "Уточнить объём по чертежу",
+                "Karimova N.A.",
+                Some(20),
+                IssueStatus::InWork,
+                false,
+            ),
+            (
+                IssueModule::Estimate,
+                Section::Ar,
+                "SM-00089",
+                "",
+                "Smeta, 5-bo'lim",
+                "",
+                "Pardozlash narxi bozordan yuqori",
+                "Цена отделки выше рыночной",
+                "Pozitsiya narxi o'rtachadan 34 % yuqori",
+                "Цена позиции выше средней на 34 %",
+                Severity::Warning,
+                "",
+                "",
+                "Narxni yetkazib beruvchi takliflari bilan solishtirish",
+                "Сверить цену с предложениями поставщиков",
+                "Karimova N.A.",
+                Some(-2),
+                IssueStatus::Open,
+                false,
+            ),
+            (
+                IssueModule::Ppr,
+                Section::Kj,
+                "PPR-00013",
+                "",
+                "PPR, beton ishlari",
+                "",
+                "Kran yuk ko'tarish qobiliyati yetarli emas",
+                "Грузоподъёмности крана недостаточно",
+                "Eng og'ir element 4,2 t, kran chekkada 3,8 t ko'taradi",
+                "Самый тяжёлый элемент 4,2 т, кран на вылете поднимает 3,8 т",
+                Severity::Critical,
+                "ShNQ 3.01.01-85",
+                "3.9",
+                "Kran turini o'zgartirish yoki montaj sxemasini qayta ko'rish",
+                "Сменить тип крана либо пересмотреть схему монтажа",
+                "Yusupov B.R.",
+                Some(-1),
+                IssueStatus::Open,
+                false,
+            ),
+            (
+                IssueModule::Quality,
+                Section::Ar,
+                "SF-00027",
+                "",
+                "4-qavat, 12-xonadon",
+                "",
+                "Suvoq sirti tekisligi dopuskdan tashqarida",
+                "Ровность штукатурки вне допуска",
+                "2 m reyka ostida tirqish 6 mm, dopusk 3 mm",
+                "Просвет под 2-метровой рейкой 6 мм, допуск 3 мм",
+                Severity::Major,
+                "ShNQ 3.04.01-87",
+                "3.12",
+                "Uchastkani qayta suvoqlash",
+                "Перештукатурить участок",
+                "Umarov D.K.",
+                Some(3),
+                IssueStatus::InWork,
+                false,
+            ),
+            (
+                IssueModule::Safety,
+                Section::None,
+                "XV-00009",
+                "",
+                "5-qavat, chekka kontur",
+                "",
+                "Chekkada to'siq o'rnatilmagan",
+                "Не установлено ограждение по краю",
+                "Perimetrning 18 m qismida to'siq yo'q",
+                "На участке периметра 18 м ограждение отсутствует",
+                Severity::Critical,
+                "ShNQ 3.01.03-85",
+                "6.2",
+                "To'siqni darhol o'rnatish, ishni to'xtatish",
+                "Немедленно установить ограждение, работы приостановить",
+                "Yusupov B.R.",
+                Some(8),
+                IssueStatus::Fixed,
+                false,
+            ),
+            (
+                IssueModule::Project,
+                Section::Ss,
+                "SS-00018",
+                "SS-04",
+                "Server xonasi",
+                "",
+                "Kabel yo'llari yong'in bo'limlari bilan kesishadi",
+                "Кабельные трассы пересекают противопожарные отсеки",
+                "O'tish joylarida yong'in to'siqlari ko'rsatilmagan",
+                "В местах прохода не показаны противопожарные заделки",
+                Severity::Warning,
+                "ShNQ 2.01.02-94",
+                "5.14",
+                "O'tish joylarida yong'in to'sig'ini ko'rsatish",
+                "Показать противопожарную заделку в местах прохода",
+                "Loyiha instituti",
+                None,
+                IssueStatus::Rejected,
+                false,
+            ),
+        ];
+        for (
+            module,
+            section,
+            code,
+            sheet,
+            location,
+            element,
+            title_uz,
+            title_ru,
+            desc_uz,
+            desc_ru,
+            severity,
+            norm_doc,
+            norm_clause,
+            rec_uz,
+            rec_ru,
+            responsible,
+            deadline,
+            status,
+            auto,
+        ) in issues
+        {
+            self.insert_issue(&Issue {
+                id: 0,
+                project_id: pid,
+                module,
+                section,
+                code: code.into(),
+                sheet: sheet.into(),
+                location: location.into(),
+                element: element.into(),
+                title: if ru { title_ru } else { title_uz }.into(),
+                description: if ru { desc_ru } else { desc_uz }.into(),
+                severity,
+                norm_doc: norm_doc.into(),
+                norm_clause: norm_clause.into(),
+                // Norma matni namunada saqlanmaydi: uni o'ylab topib bo'lmaydi,
+                // haqiqiy matn reyestrdan olinadi.
+                norm_text: String::new(),
+                recommendation: if ru { rec_ru } else { rec_uz }.into(),
+                responsible: responsible.into(),
+                deadline: deadline.map(d),
+                status,
+                auto,
+                created_at: stamp(deadline.map(|x| x + 14).unwrap_or(30)),
+            });
+        }
+
+        // ---------- Inventarizatsiya (TZ XI.24-25) ----------
+        let warehouses = self.warehouses(pid);
+        let materials = self.materials(pid);
+        if let (Some(wh), false) = (warehouses.first(), materials.is_empty()) {
+            let inv = self.insert_inventory(&Inventory {
+                id: 0,
+                project_id: pid,
+                warehouse_id: Some(wh.id),
+                date: d(21),
+                responsible: if ru {
+                    "Хасанов Ф.М."
+                } else {
+                    "Xasanov F.M."
+                }
+                .into(),
+                closed: true,
+                note: if ru {
+                    "Ежеквартальная инвентаризация".into()
+                } else {
+                    "Choraklik inventarizatsiya".to_string()
+                },
+            });
+            // Farqlar ataylab uchta: kam chiqqan, ortiqcha chiqqan va mos kelgan.
+            let moves = self.stock_moves(pid);
+            for (i, m) in materials.iter().take(5).enumerate() {
+                let book = balance(&moves, m.id);
+                let fact = match i {
+                    0 => book * 0.98,
+                    2 => book * 1.03,
+                    _ => book,
+                };
+                self.insert_inventory_line(&InventoryLine {
+                    id: 0,
+                    inventory_id: inv,
+                    material_id: m.id,
+                    book,
+                    fact,
+                    note: String::new(),
+                });
+            }
+
+            // Ikkinchisi hali ochiq: prorab uni to'ldirayotgan bo'ladi.
+            let open = self.insert_inventory(&Inventory {
+                id: 0,
+                project_id: pid,
+                warehouse_id: warehouses.get(1).map(|w| w.id).or(Some(wh.id)),
+                date: d(2),
+                responsible: if ru {
+                    "Хасанов Ф.М."
+                } else {
+                    "Xasanov F.M."
+                }
+                .into(),
+                closed: false,
+                note: if ru {
+                    "Выборочная проверка".into()
+                } else {
+                    "Tanlab tekshirish".to_string()
+                },
+            });
+            for m in materials.iter().skip(2).take(3) {
+                let book = balance(&moves, m.id);
+                self.insert_inventory_line(&InventoryLine {
+                    id: 0,
+                    inventory_id: open,
+                    material_id: m.id,
+                    book,
+                    fact: book,
+                    note: String::new(),
+                });
+            }
+        }
+    }
+
+    /// Kunlik ish tarixi: jurnal, ijro hujjatlari, sifat va xavfsizlik.
+    ///
+    /// Namunada bir necha yozuv emas, **ikki oylik hayot** bo'lishi kerak:
+    /// grafiklar, o'rtachalar va «jurnal to'ldirilgan kunlar» kabi
+    /// ko'rsatkichlar faqat shunday ma'noli chiqadi.
+    pub fn seed_demo_history(&self, pid: i64, ru: bool) {
+        // Jurnalda uchdan ko'p yozuv bo'lsa — tarix allaqachon to'ldirilgan.
+        if self.journal(pid).len() > 3 {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        // ---------- Jurnal: 60 kunlik tarix ----------
+        // Yozuvlar dam olish kunlarisiz, ish mazmuni davrga qarab o'zgaradi.
+        let works: [(&str, &str, &str, &str, f64); 6] = [
+            (
+                "5",
+                "Poydevor plitasini betonlash",
+                "Бетонирование фундаментной плиты",
+                "m3",
+                96.0,
+            ),
+            (
+                "6",
+                "3-qavat ustunlarini armaturalash",
+                "Армирование колонн 3 этажа",
+                "t",
+                4.2,
+            ),
+            (
+                "7",
+                "4-qavat oralig'ini betonlash",
+                "Бетонирование перекрытия 4 этажа",
+                "m3",
+                78.0,
+            ),
+            (
+                "8",
+                "5-qavat karkasini montaj qilish",
+                "Монтаж каркаса 5 этажа",
+                "m3",
+                64.0,
+            ),
+            (
+                "9",
+                "G'ishtin devor terish",
+                "Кирпичная кладка стен",
+                "m3",
+                42.0,
+            ),
+            (
+                "10",
+                "6-qavat ustunlarini armaturalash",
+                "Армирование колонн 6 этажа",
+                "t",
+                3.8,
+            ),
+        ];
+        // Ob-havo: qurilish jurnalida u har kuni qayd etiladi.
+        let weather: [(&str, &str, f64); 5] = [
+            ("Ochiq", "Ясно", 27.0),
+            ("Bulutli", "Облачно", 23.0),
+            ("Yomg'ir", "Дождь", 18.0),
+            ("Ochiq", "Ясно", 31.0),
+            ("Shamol", "Ветрено", 21.0),
+        ];
+        let foreman = if ru {
+            "Юсупов Б.Р."
+        } else {
+            "Yusupov B.R."
+        };
+
+        for back in 4..64i64 {
+            let day = d(back);
+            // Yakshanba ish kuni emas.
+            if day.weekday() == chrono::Weekday::Sun {
+                continue;
+            }
+            // Ishlar davr bo'yicha almashadi: eski kunlar — quyi qavatlar.
+            let w = &works[((63 - back) / 11).clamp(0, 5) as usize];
+            let (wu, wr, temp) = weather[(back % 5) as usize];
+            // Yomg'irli kunda hajm kamayadi — bu jurnalda ko'rinishi kerak.
+            let rain = wu == "Yomg'ir";
+            let k = if rain {
+                0.45
+            } else {
+                0.85 + (back % 7) as f64 * 0.05
+            };
+
+            self.insert_journal(&JournalEntry {
+                id: 0,
+                project_id: pid,
+                date: day,
+                author: foreman.into(),
+                weather: if ru { wr } else { wu }.into(),
+                temperature: temp,
+                workers: if rain { 14 } else { 22 + back % 11 },
+                machines: if rain { 1 } else { 2 + back % 3 },
+                task_id: by_wbs(w.0),
+                volume: (w.4 * k * 10.0).round() / 10.0,
+                unit: w.3.into(),
+                text: if ru { w.2 } else { w.1 }.into(),
+                remarks: if rain {
+                    if ru {
+                        "Бетонные работы приостановлены из-за осадков".into()
+                    } else {
+                        "Yog'ingarchilik tufayli beton ishlari to'xtatildi".to_string()
+                    }
+                } else {
+                    String::new()
+                },
+                photos: String::new(),
+            });
+        }
+
+        // ---------- Ijro hujjatlari ----------
+        // (tur, raqam, nomi uz/ru, VBS, kun oldin, holat)
+        let docs: [ExecDocDef; 12] = [
+            (
+                ExecDocKind::Hidden,
+                "AOSR-014",
+                "Poydevor armaturasi",
+                "Арматура фундамента",
+                "5",
+                118,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Hidden,
+                "AOSR-015",
+                "Poydevor gidroizolyatsiyasi",
+                "Гидроизоляция фундамента",
+                "5",
+                112,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Test,
+                "PR-004",
+                "Beton mustahkamligi sinovi, poydevor",
+                "Испытание прочности бетона, фундамент",
+                "5",
+                108,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Hidden,
+                "AOSR-016",
+                "2-qavat ustun armaturasi",
+                "Арматура колонн 2 этажа",
+                "6",
+                96,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Acceptance,
+                "AKT-007",
+                "2-qavat oralig'ini qabul qilish",
+                "Приёмка перекрытия 2 этажа",
+                "6",
+                88,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Hidden,
+                "AOSR-017",
+                "3-qavat ustun armaturasi",
+                "Арматура колонн 3 этажа",
+                "6",
+                74,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Passport,
+                "PS-011",
+                "Beton B25 sifat pasporti",
+                "Паспорт качества бетона B25",
+                "7",
+                66,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Hidden,
+                "AOSR-018",
+                "4-qavat ustun armaturasi",
+                "Арматура колонн 4 этажа",
+                "7",
+                52,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Scheme,
+                "IS-003",
+                "4-qavat ijro syomkasi",
+                "Исполнительная съёмка 4 этажа",
+                "7",
+                44,
+                ExecDocStatus::Rejected,
+            ),
+            (
+                ExecDocKind::Hidden,
+                "AOSR-019",
+                "5-qavat ustun armaturasi",
+                "Арматура колонн 5 этажа",
+                "8",
+                32,
+                ExecDocStatus::Signed,
+            ),
+            (
+                ExecDocKind::Acceptance,
+                "AKT-008",
+                "5-qavat oralig'ini qabul qilish",
+                "Приёмка перекрытия 5 этажа",
+                "8",
+                18,
+                ExecDocStatus::OnReview,
+            ),
+            (
+                ExecDocKind::Hidden,
+                "AOSR-020",
+                "6-qavat ustun armaturasi",
+                "Арматура колонн 6 этажа",
+                "10",
+                4,
+                ExecDocStatus::Draft,
+            ),
+        ];
+        for (kind, number, uz, rux, wbs, back, status) in docs {
+            self.insert_exec_doc(&ExecDoc {
+                id: 0,
+                project_id: pid,
+                kind,
+                number: number.into(),
+                name: if ru { rux } else { uz }.into(),
+                date: d(back),
+                task_id: by_wbs(wbs),
+                status,
+                responsible: if ru {
+                    "Собиров Р.Х."
+                } else {
+                    "Sobirov R.X."
+                }
+                .into(),
+                note: String::new(),
+            });
+        }
+
+        // ---------- Sifat nazorati ----------
+        // (tur, kun oldin, mavzu uz/ru, natija, nuqson uz/ru, muddat, yopilgan)
+        let checks: [QualityDef; 11] = [
+            (
+                QualityKind::Input,
+                104,
+                "Sement partiyasi M400",
+                "Партия цемента М400",
+                QualityResult::Pass,
+                "",
+                "",
+                None,
+                None,
+            ),
+            (
+                QualityKind::Operational,
+                92,
+                "Poydevor armaturasi qoplamasi",
+                "Защитный слой арматуры фундамента",
+                QualityResult::Conditional,
+                "Ayrim joyda qoplama 22 mm",
+                "Местами слой 22 мм",
+                Some(85),
+                Some(86),
+            ),
+            (
+                QualityKind::Acceptance,
+                78,
+                "2-qavat oralig'i sirti",
+                "Поверхность перекрытия 2 этажа",
+                QualityResult::Pass,
+                "",
+                "",
+                None,
+                None,
+            ),
+            (
+                QualityKind::Input,
+                66,
+                "G'isht partiyasi, 40 ming dona",
+                "Партия кирпича, 40 тыс. шт.",
+                QualityResult::Fail,
+                "Partiyaning 8 % i chetlangan",
+                "8 % партии с отколами",
+                Some(58),
+                Some(57),
+            ),
+            (
+                QualityKind::Operational,
+                54,
+                "3-qavat ustunlari vertikalligi",
+                "Вертикальность колонн 3 этажа",
+                QualityResult::Pass,
+                "",
+                "",
+                None,
+                None,
+            ),
+            (
+                QualityKind::Input,
+                42,
+                "Armatura A500S, 12 t",
+                "Арматура А500С, 12 т",
+                QualityResult::Pass,
+                "",
+                "",
+                None,
+                None,
+            ),
+            (
+                QualityKind::Operational,
+                34,
+                "4-qavat oralig'i qalinligi",
+                "Толщина перекрытия 4 этажа",
+                QualityResult::Conditional,
+                "Ikki joyda 8 mm og'ish",
+                "В двух местах отклонение 8 мм",
+                Some(27),
+                Some(25),
+            ),
+            (
+                QualityKind::Acceptance,
+                22,
+                "G'ishtin devor terimi, 4-qavat",
+                "Кирпичная кладка, 4 этаж",
+                QualityResult::Fail,
+                "Chok qalinligi bir xil emas",
+                "Неравномерная толщина шва",
+                Some(15),
+                None,
+            ),
+            (
+                QualityKind::Input,
+                16,
+                "Issiqlik izolyatsiyasi, 40 m3",
+                "Теплоизоляция, 40 м3",
+                QualityResult::Pass,
+                "",
+                "",
+                None,
+                None,
+            ),
+            (
+                QualityKind::Operational,
+                9,
+                "5-qavat oralig'i sirti",
+                "Поверхность перекрытия 5 этажа",
+                QualityResult::Conditional,
+                "Sirt tekisligi dopusk chegarasida",
+                "Ровность на границе допуска",
+                Some(4),
+                None,
+            ),
+            (
+                QualityKind::Input,
+                3,
+                "Beton B30, 60 m3",
+                "Бетон B30, 60 м3",
+                QualityResult::Pass,
+                "",
+                "",
+                None,
+                None,
+            ),
+        ];
+        let inspector = if ru {
+            "Назарова Г.А."
+        } else {
+            "Nazarova G.A."
+        };
+        for (kind, back, uz, rux, result, def_uz, def_ru, deadline, fixed) in checks {
+            self.insert_quality(&QualityCheck {
+                id: 0,
+                project_id: pid,
+                kind,
+                date: d(back),
+                task_id: None,
+                material_id: None,
+                subject: if ru { rux } else { uz }.into(),
+                inspector: inspector.into(),
+                result,
+                defect: if ru { def_ru } else { def_uz }.into(),
+                deadline: deadline.map(d),
+                checklist_id: None,
+                fixed_at: fixed.map(d),
+                note: String::new(),
+            });
+        }
+
+        // ---------- Mehnat xavfsizligi ----------
+        // (tur, og'irlik, kun oldin, joy uz/ru, tavsif uz/ru, chora uz/ru, holat)
+        let events: [SafetyDef; 10] = [
+            (
+                SafetyKind::Training,
+                Severity::Info,
+                112,
+                "Uchastka",
+                "Участок",
+                "Kirish instruktaji, 12 ishchi",
+                "Вводный инструктаж, 12 рабочих",
+                "",
+                "",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Inspection,
+                Severity::Info,
+                96,
+                "Butun obyekt",
+                "Весь объект",
+                "Rejali tekshiruv",
+                "Плановая проверка",
+                "",
+                "",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Violation,
+                Severity::Warning,
+                84,
+                "3-qavat",
+                "3 этаж",
+                "Ikki ishchi kaskasiz",
+                "Двое рабочих без касок",
+                "Tushuntirish o'tkazildi",
+                "Проведена беседа",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::NearMiss,
+                Severity::Major,
+                68,
+                "Kran zonasi",
+                "Зона крана",
+                "Yuk yo'lida odam bo'lgan",
+                "Человек в зоне перемещения груза",
+                "Zona to'sildi, signalchi tayinlandi",
+                "Зона ограждена, назначен сигнальщик",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Training,
+                Severity::Info,
+                60,
+                "Uchastka",
+                "Участок",
+                "Balandlikda ishlash bo'yicha instruktaj",
+                "Инструктаж по работе на высоте",
+                "",
+                "",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Violation,
+                Severity::Major,
+                44,
+                "5-qavat",
+                "5 этаж",
+                "Chekkada to'siq yo'q",
+                "Отсутствует ограждение по краю",
+                "Ish to'xtatildi, to'siq o'rnatildi",
+                "Работы остановлены, ограждение установлено",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Inspection,
+                Severity::Info,
+                30,
+                "Butun obyekt",
+                "Весь объект",
+                "Naryad-dopusklar tekshiruvi",
+                "Проверка нарядов-допусков",
+                "",
+                "",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Violation,
+                Severity::Warning,
+                17,
+                "Ombor",
+                "Склад",
+                "Yong'in o'chirgichning muddati o'tgan",
+                "Просрочен огнетушитель",
+                "Almashtirish uchun ariza berildi",
+                "Подана заявка на замену",
+                IssueStatus::InWork,
+            ),
+            (
+                SafetyKind::NearMiss,
+                Severity::Warning,
+                8,
+                "2-qavat",
+                "2 этаж",
+                "Vaqtinchalik kabel yo'lakda yotgan",
+                "Временный кабель лежал в проходе",
+                "Kabel osildi",
+                "Кабель подвешен",
+                IssueStatus::Fixed,
+            ),
+            (
+                SafetyKind::Violation,
+                Severity::Major,
+                2,
+                "6-qavat",
+                "6 этаж",
+                "Payvandchi ko'zoynaksiz ishlagan",
+                "Сварщик работал без щитка",
+                "Ish to'xtatildi, SIZ berildi",
+                "Работы остановлены, выданы СИЗ",
+                IssueStatus::Open,
+            ),
+        ];
+        for (kind, severity, back, pl_uz, pl_ru, de_uz, de_ru, me_uz, me_ru, status) in events {
+            self.insert_safety(&SafetyEvent {
+                id: 0,
+                project_id: pid,
+                date: d(back),
+                kind,
+                severity,
+                place: if ru { pl_ru } else { pl_uz }.into(),
+                description: if ru { de_ru } else { de_uz }.into(),
+                responsible: if ru {
+                    "Юсупов Б.Р."
+                } else {
+                    "Yusupov B.R."
+                }
+                .into(),
+                measure: if ru { me_ru } else { me_uz }.into(),
+                deadline: (status != IssueStatus::Fixed).then(|| d(back - 10)),
+                status,
+            });
+        }
+    }
+
+    /// Ta'minot va resurslar tarixi: ishchilar, materiallar, arizalar, xaridlar.
+    ///
+    /// Namunadagi ro'yxatlar mijozga ko'rsatish uchun yetarli bo'lishi kerak:
+    /// bir necha qatorli jadval reytinglar, byudjet kesimlari va narx
+    /// tarixining ma'nosini ochib bermaydi.
+    pub fn seed_demo_supply_extra(&self, pid: i64, ru: bool) {
+        // Arizalar to'rttadan ko'p bo'lsa — bu qism allaqachon to'ldirilgan.
+        if self.requests(pid).len() > 4 {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let brigades = self.brigades(pid);
+        let materials = self.materials(pid);
+        let by_code = |c: &str| materials.iter().find(|m| m.code == c).map(|m| m.id);
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        // ---------- Ishchilar ----------
+        // (ism uz/ru, lavozim uz/ru, tashkilot, soatlik stavka, brigada)
+        let crew: [WorkerDef; 9] = [
+            (
+                "Sultonov J.B.",
+                "Султонов Ж.Б.",
+                "Beton quyuvchi",
+                "Бетонщик",
+                31_000.0,
+                0,
+            ),
+            (
+                "Qodirov M.T.",
+                "Кодиров М.Т.",
+                "Armaturachi",
+                "Арматурщик",
+                33_000.0,
+                0,
+            ),
+            (
+                "Ismoilov S.A.",
+                "Исмоилов С.А.",
+                "G'isht teruvchi",
+                "Каменщик",
+                30_000.0,
+                1,
+            ),
+            (
+                "Rustamov A.N.",
+                "Рустамов А.Н.",
+                "G'isht teruvchi",
+                "Каменщик",
+                29_000.0,
+                1,
+            ),
+            (
+                "Toshpo'latov E.R.",
+                "Ташпулатов Э.Р.",
+                "Payvandchi",
+                "Сварщик",
+                38_000.0,
+                0,
+            ),
+            (
+                "Ergashev N.M.",
+                "Эргашев Н.М.",
+                "Suvoqchi",
+                "Штукатур",
+                28_000.0,
+                1,
+            ),
+            (
+                "Abdullayev K.S.",
+                "Абдуллаев К.С.",
+                "Santexnik",
+                "Сантехник",
+                34_000.0,
+                1,
+            ),
+            (
+                "Yo'ldoshev B.T.",
+                "Юлдашев Б.Т.",
+                "Kranchi",
+                "Крановщик",
+                42_000.0,
+                0,
+            ),
+            (
+                "Mahmudov O'.A.",
+                "Махмудов У.А.",
+                "Yordamchi ishchi",
+                "Разнорабочий",
+                24_000.0,
+                0,
+            ),
+        ];
+        let org = if ru { "СМУ-7" } else { "QMB-7" };
+        for (uz, rux, pos_uz, pos_ru, rate, br) in crew {
+            self.insert_worker(&Worker {
+                id: 0,
+                project_id: pid,
+                name: if ru { rux } else { uz }.into(),
+                position: if ru { pos_ru } else { pos_uz }.into(),
+                org: org.into(),
+                hourly_rate: rate,
+                active: true,
+                brigade_id: brigades.get(br).map(|b| b.id),
+            });
+        }
+
+        // ---------- Materiallar ----------
+        // (kod, nomi uz/ru, birlik, bo'lim, minimal zaxira, narx, sertifikat)
+        let mats: [MaterialDef; 11] = [
+            (
+                "M-104",
+                "Beton B30 F150",
+                "Бетон B30 F150",
+                "m3",
+                Section::Kj,
+                20.0,
+                780_000.0,
+                "SF-2026/118",
+            ),
+            (
+                "M-105",
+                "Qum, yuvilgan",
+                "Песок мытый",
+                "m3",
+                Section::Kj,
+                40.0,
+                96_000.0,
+                "SF-2026/094",
+            ),
+            (
+                "M-106",
+                "Shag'al 5-20 mm",
+                "Щебень 5-20 мм",
+                "m3",
+                Section::Kj,
+                40.0,
+                132_000.0,
+                "SF-2026/095",
+            ),
+            (
+                "M-107",
+                "Sement M400",
+                "Цемент М400",
+                "t",
+                Section::Kj,
+                8.0,
+                1_240_000.0,
+                "SF-2026/101",
+            ),
+            (
+                "M-203",
+                "Armatura A500S d14",
+                "Арматура А500С d14",
+                "t",
+                Section::Kj,
+                5.0,
+                8_900_000.0,
+                "SF-2026/077",
+            ),
+            (
+                "M-204",
+                "Payvandlangan to'r 100x100",
+                "Сетка сварная 100х100",
+                "m2",
+                Section::Kj,
+                200.0,
+                34_000.0,
+                "SF-2026/079",
+            ),
+            (
+                "M-305",
+                "Issiqlik izolyatsiyasi, 100 mm",
+                "Теплоизоляция 100 мм",
+                "m3",
+                Section::Ar,
+                15.0,
+                620_000.0,
+                "SF-2026/133",
+            ),
+            (
+                "M-306",
+                "Gipskarton 12,5 mm",
+                "Гипсокартон 12,5 мм",
+                "m2",
+                Section::Ar,
+                300.0,
+                42_000.0,
+                "",
+            ),
+            (
+                "M-403",
+                "PP quvur d32",
+                "Труба ПП d32",
+                "m",
+                Section::Vk,
+                150.0,
+                18_000.0,
+                "SF-2026/142",
+            ),
+            (
+                "M-501",
+                "Kabel VVGng 3x2,5",
+                "Кабель ВВГнг 3х2,5",
+                "m",
+                Section::Eom,
+                400.0,
+                21_000.0,
+                "SF-2026/151",
+            ),
+            (
+                "M-502",
+                "Avtomat 25A",
+                "Автомат 25А",
+                "dona",
+                Section::Eom,
+                30.0,
+                78_000.0,
+                "",
+            ),
+        ];
+        for (code, uz, rux, unit, section, min_stock, price, cert) in mats {
+            self.insert_material(&Material {
+                id: 0,
+                project_id: pid,
+                code: code.into(),
+                name: if ru { rux } else { uz }.into(),
+                unit: unit.into(),
+                section,
+                spec: String::new(),
+                cert_no: cert.into(),
+                // Sertifikatsiz material ham bor — ekranda u ajratib ko'rsatiladi.
+                cert_until: (!cert.is_empty()).then(|| d(-180)),
+                min_stock,
+                price,
+                estimate_code: String::new(),
+                spec_ref: String::new(),
+                special: String::new(),
+                banned: false,
+                ban_reason: String::new(),
+                note: String::new(),
+            });
+        }
+
+        // ---------- Arizalar ----------
+        // (raqam, kun oldin, tur, mavzu uz/ru, material kodi, miqdor, birlik,
+        //  muhimlik, holat, VBS, rad sababi uz/ru)
+        let reqs: [RequestDef; 10] = [
+            (
+                "A-0031",
+                62,
+                RequestKind::Material,
+                "Beton B25, 4-qavat oralig'i",
+                "Бетон B25, перекрытие 4 этажа",
+                "M-101",
+                80.0,
+                "m3",
+                Priority::High,
+                RequestStatus::Closed,
+                "7",
+                "",
+                "",
+            ),
+            (
+                "A-0032",
+                54,
+                RequestKind::Material,
+                "Armatura A500S d12",
+                "Арматура А500С d12",
+                "M-201",
+                6.0,
+                "t",
+                Priority::Normal,
+                RequestStatus::Closed,
+                "7",
+                "",
+                "",
+            ),
+            (
+                "A-0033",
+                41,
+                RequestKind::Machine,
+                "Avtokran 25 t, 3 kun",
+                "Автокран 25 т, 3 дня",
+                "",
+                3.0,
+                "smena",
+                Priority::High,
+                RequestStatus::Closed,
+                "8",
+                "",
+                "",
+            ),
+            (
+                "A-0034",
+                33,
+                RequestKind::Material,
+                "G'isht, 5-qavat devorlari",
+                "Кирпич, стены 5 этажа",
+                "M-301",
+                24_000.0,
+                "dona",
+                Priority::Normal,
+                RequestStatus::Delivered,
+                "9",
+                "",
+                "",
+            ),
+            (
+                "A-0035",
+                26,
+                RequestKind::Labor,
+                "Qo'shimcha 4 ta g'isht teruvchi",
+                "Дополнительно 4 каменщика",
+                "",
+                4.0,
+                "kishi",
+                Priority::Normal,
+                RequestStatus::Rejected,
+                "9",
+                "Byudjetda o'rin yo'q, muddat qayta ko'rildi",
+                "Нет бюджета, срок пересмотрен",
+            ),
+            (
+                "A-0036",
+                19,
+                RequestKind::Material,
+                "Issiqlik izolyatsiyasi, fasad",
+                "Теплоизоляция, фасад",
+                "M-305",
+                40.0,
+                "m3",
+                Priority::Normal,
+                RequestStatus::InPurchase,
+                "12",
+                "",
+                "",
+            ),
+            (
+                "A-0037",
+                14,
+                RequestKind::Document,
+                "Yangilangan KJ chizmalari",
+                "Обновлённые чертежи КЖ",
+                "",
+                1.0,
+                "komplekt",
+                Priority::High,
+                RequestStatus::Approved,
+                "",
+                "",
+                "",
+            ),
+            (
+                "A-0038",
+                9,
+                RequestKind::Material,
+                "Kabel VVGng 3x2,5",
+                "Кабель ВВГнг 3х2,5",
+                "M-501",
+                1_200.0,
+                "m",
+                Priority::Normal,
+                RequestStatus::Approved,
+                "13",
+                "",
+                "",
+            ),
+            (
+                "A-0039",
+                5,
+                RequestKind::Material,
+                "Beton B30, 6-qavat ustunlari",
+                "Бетон B30, колонны 6 этажа",
+                "M-104",
+                60.0,
+                "m3",
+                Priority::Urgent,
+                RequestStatus::New,
+                "10",
+                "",
+                "",
+            ),
+            (
+                "A-0040",
+                2,
+                RequestKind::Machine,
+                "Beton nasosi, 2 smena",
+                "Бетононасос, 2 смены",
+                "",
+                2.0,
+                "smena",
+                Priority::High,
+                RequestStatus::New,
+                "10",
+                "",
+                "",
+            ),
+        ];
+        let requester = if ru {
+            "Юсупов Б.Р."
+        } else {
+            "Yusupov B.R."
+        };
+        let mut req_ids: Vec<(String, i64)> = Vec::new();
+        for (number, back, kind, uz, rux, code, qty, unit, priority, status, wbs, rj_uz, rj_ru) in
+            reqs
+        {
+            let id = self.insert_request(&Request {
+                id: 0,
+                project_id: pid,
+                number: number.into(),
+                date: d(back),
+                kind,
+                title: if ru { rux } else { uz }.into(),
+                material_id: by_code(code),
+                qty,
+                unit: unit.into(),
+                requester: requester.into(),
+                need_date: d(back - 12),
+                priority,
+                status,
+                task_id: by_wbs(wbs),
+                reject_reason: if ru { rj_ru } else { rj_uz }.into(),
+                note: String::new(),
+            });
+            req_ids.push((number.to_string(), id));
+        }
+
+        // ---------- Xaridlar ----------
+        // (raqam, ariza, kun oldin, yetkazib beruvchi, mavzu uz/ru, miqdor, birlik,
+        //  narx, yetkazish kuni, holat, kelgan miqdor, bo'lim)
+        let buys: [PurchaseDef; 8] = [
+            (
+                "X-0044",
+                "A-0031",
+                60,
+                "Toshkent Beton",
+                "Beton B25",
+                "Бетон B25",
+                80.0,
+                "m3",
+                720_000.0,
+                56,
+                PurchaseStatus::Closed,
+                80.0,
+                Section::Kj,
+            ),
+            (
+                "X-0045",
+                "A-0032",
+                52,
+                "Uzmetkombinat",
+                "Armatura A500S d12",
+                "Арматура А500С d12",
+                6.0,
+                "t",
+                8_600_000.0,
+                46,
+                PurchaseStatus::Closed,
+                6.0,
+                Section::Kj,
+            ),
+            (
+                "X-0046",
+                "A-0033",
+                40,
+                "Kran-Servis",
+                "Avtokran 25 t ijarasi",
+                "Аренда автокрана 25 т",
+                3.0,
+                "smena",
+                2_400_000.0,
+                37,
+                PurchaseStatus::Closed,
+                3.0,
+                Section::None,
+            ),
+            (
+                "X-0047",
+                "A-0034",
+                32,
+                "G'isht zavodi №3",
+                "Qizil g'isht M150",
+                "Кирпич красный М150",
+                24_000.0,
+                "dona",
+                1_450.0,
+                24,
+                PurchaseStatus::Delivered,
+                24_000.0,
+                Section::Ar,
+            ),
+            (
+                "X-0048",
+                "A-0036",
+                18,
+                "IzolyatsiyaPro",
+                "Issiqlik izolyatsiyasi 100 mm",
+                "Теплоизоляция 100 мм",
+                40.0,
+                "m3",
+                610_000.0,
+                6,
+                PurchaseStatus::Paid,
+                24.0,
+                Section::Ar,
+            ),
+            (
+                "X-0049",
+                "A-0038",
+                8,
+                "ElektroSnab",
+                "Kabel VVGng 3x2,5",
+                "Кабель ВВГнг 3х2,5",
+                1_200.0,
+                "m",
+                20_500.0,
+                -3,
+                PurchaseStatus::Ordered,
+                0.0,
+                Section::Eom,
+            ),
+            (
+                "X-0050",
+                "",
+                6,
+                "Toshkent Beton",
+                "Beton B30",
+                "Бетон B30",
+                60.0,
+                "m3",
+                770_000.0,
+                -1,
+                PurchaseStatus::Ordered,
+                0.0,
+                Section::Kj,
+            ),
+            (
+                "X-0051",
+                "",
+                3,
+                "SantexTrade",
+                "PP quvur d32",
+                "Труба ПП d32",
+                800.0,
+                "m",
+                17_500.0,
+                -8,
+                PurchaseStatus::Draft,
+                0.0,
+                Section::Vk,
+            ),
+        ];
+        for (
+            number,
+            req,
+            back,
+            supplier,
+            uz,
+            rux,
+            qty,
+            unit,
+            price,
+            deliver,
+            status,
+            got,
+            section,
+        ) in buys
+        {
+            self.insert_purchase(&Purchase {
+                id: 0,
+                project_id: pid,
+                request_id: req_ids.iter().find(|(n, _)| n == req).map(|(_, id)| *id),
+                number: number.into(),
+                date: d(back),
+                supplier: supplier.into(),
+                title: if ru { rux } else { uz }.into(),
+                qty,
+                unit: unit.into(),
+                price,
+                currency: "UZS".into(),
+                delivery_date: d(deliver),
+                status,
+                delivered_qty: got,
+                section,
+                note: String::new(),
             });
         }
     }
@@ -6466,8 +8103,12 @@ impl Db {
                 note: String::new(),
             });
         };
-        budget(Section::Kj, 400_000_000.0);
-        budget(Section::Ar, 150_000_000.0);
+        // Byudjet obyekt hajmiga mos: KJ bo'yicha xaridlar 200 mln dan
+        // oshadi, shuning uchun reja undan sezilarli katta bo'lishi kerak.
+        budget(Section::Kj, 900_000_000.0);
+        budget(Section::Ar, 250_000_000.0);
+        // EOM ataylab qoldirilgan: byudjeti tuzilmagan bo'limda xarid
+        // bo'lishi — ekranda ko'rinishi kerak bo'lgan holat.
         // Suv va kanalizatsiya byudjeti ataylab kam — oshib ketgani ko'rinsin.
         budget(Section::Vk, 5_000_000.0);
     }
@@ -7305,6 +8946,69 @@ impl Db {
 
     /// Smeta namunasi. Pozitsiyalar nomi GPR ishlari nomiga mos qilib olinadi —
     /// shunda hajm va birlik bo'yicha solishtirish ishlaydi (TZ III.5-III.6).
+    /// Smetaning ikkinchi varianti (TZ III.21).
+    ///
+    /// Variantlarni solishtirish funksiyasi bitta smeta bilan ishlamaydi:
+    /// namunada ikkinchi variant bo'lishi kerak. U qayta ko'rib chiqilgan
+    /// narxlar bilan — shuning uchun farq bo'lim kesimida ko'rinadi.
+    fn seed_demo_estimate_alt(&self, pid: i64, ru: bool) {
+        if self.estimates(pid).len() > 1 {
+            return;
+        }
+        let Some(first) = self.estimates(pid).into_iter().next() else {
+            return;
+        };
+        let items = self.estimate_items(first.id);
+        if items.is_empty() {
+            return;
+        }
+
+        let eid = self.insert_estimate(&Estimate {
+            id: 0,
+            project_id: pid,
+            name: if ru {
+                "Смета № 2 — после пересмотра цен".into()
+            } else {
+                "2-son smeta — narxlar qayta ko'rilgandan keyin".into()
+            },
+            currency: "UZS".into(),
+            declared_total: 0.0,
+            overhead_pct: 12.0,
+            profit_pct: 7.0,
+            vat_pct: 12.0,
+            added_at: String::new(),
+        });
+        if eid == 0 {
+            return;
+        }
+
+        // Ikkinchi variant birinchisidan tuziladi: shunda solishtirish
+        // haqiqiy bo'ladi — bir xil ishlar, boshqa narx va hajm.
+        for (i, it) in items.iter().enumerate() {
+            // Har uchinchi pozitsiya arzonlashgan, qolganlari biroz qimmatlashgan.
+            let k = if i % 3 == 0 { 0.88 } else { 1.06 };
+            // Dublikat pozitsiya ikkinchi variantda olib tashlangan.
+            if i == 5 {
+                continue;
+            }
+            let price = (it.price * k / 1000.0).round() * 1000.0;
+            self.insert_estimate_item(&EstimateItem {
+                id: 0,
+                estimate_id: eid,
+                pos: (i + 1) as i64,
+                section: it.section,
+                code: it.code.clone(),
+                name: it.name.clone(),
+                unit: it.unit.clone(),
+                qty: it.qty,
+                price,
+                cost: it.qty * price,
+                task_id: it.task_id,
+                note: String::new(),
+            });
+        }
+    }
+
     fn seed_demo_estimate(&self, pid: i64, ru: bool) {
         let tasks = self.tasks(pid).unwrap_or_default();
         let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).cloned();
@@ -7570,4 +9274,129 @@ type AcceptDef = (
     &'static str,
     f64,
     AcceptState,
+);
+
+/// Namunaviy nomuvofiqlik tavsifi: modul, bo'lim, kod, varaq, joy, element,
+/// sarlavha (uz/ru), tavsif (uz/ru), og'irlik, norma hujjati va bandi,
+/// tavsiya (uz/ru), mas'ul, muddat (kun, orqaga), holat, avtomatikmi.
+type IssueDef = (
+    IssueModule,
+    Section,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    Severity,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    Option<i64>,
+    IssueStatus,
+    bool,
+);
+
+/// Namunaviy ijro hujjati: tur, raqam, nomi (uz/ru), VBS, kun (orqaga), holat.
+type ExecDocDef = (
+    ExecDocKind,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    i64,
+    ExecDocStatus,
+);
+
+/// Namunaviy sifat tekshiruvi: tur, kun (orqaga), mavzu (uz/ru), natija,
+/// nuqson (uz/ru), bartaraf muddati, bartaraf etilgan kun.
+type QualityDef = (
+    QualityKind,
+    i64,
+    &'static str,
+    &'static str,
+    QualityResult,
+    &'static str,
+    &'static str,
+    Option<i64>,
+    Option<i64>,
+);
+
+/// Namunaviy xavfsizlik hodisasi: tur, og'irlik, kun (orqaga), joy (uz/ru),
+/// tavsif (uz/ru), chora (uz/ru), holat.
+type SafetyDef = (
+    SafetyKind,
+    Severity,
+    i64,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    IssueStatus,
+);
+
+/// Namunaviy ishchi: ism (uz/ru), lavozim (uz/ru), soatlik stavka, brigada.
+type WorkerDef = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    f64,
+    usize,
+);
+
+/// Namunaviy material: kod, nomi (uz/ru), birlik, bo'lim, minimal zaxira,
+/// narx, sertifikat raqami.
+type MaterialDef = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    Section,
+    f64,
+    f64,
+    &'static str,
+);
+
+/// Namunaviy ariza: raqam, kun (orqaga), tur, mavzu (uz/ru), material kodi,
+/// miqdor, birlik, muhimlik, holat, VBS, rad sababi (uz/ru).
+type RequestDef = (
+    &'static str,
+    i64,
+    RequestKind,
+    &'static str,
+    &'static str,
+    &'static str,
+    f64,
+    &'static str,
+    Priority,
+    RequestStatus,
+    &'static str,
+    &'static str,
+    &'static str,
+);
+
+/// Namunaviy xarid: raqam, ariza raqami, kun (orqaga), yetkazib beruvchi,
+/// mavzu (uz/ru), miqdor, birlik, narx, yetkazish kuni, holat, kelgan
+/// miqdor, bo'lim.
+type PurchaseDef = (
+    &'static str,
+    &'static str,
+    i64,
+    &'static str,
+    &'static str,
+    &'static str,
+    f64,
+    &'static str,
+    f64,
+    i64,
+    PurchaseStatus,
+    f64,
+    Section,
 );
