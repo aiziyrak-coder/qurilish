@@ -17,6 +17,8 @@ use crate::i18n::t;
 pub fn table_of(app: &App, screen: Screen) -> Option<Table> {
     let mut table = match screen {
         Screen::Portfolio => portfolio(app),
+        Screen::Inspections => inspections(app),
+        Screen::Contracts => contracts(app),
         Screen::Gantt => gantt(app),
         Screen::Ppr => ppr(app),
         Screen::AiCheck => issues(app),
@@ -72,6 +74,119 @@ fn table(name: &str, headers: &[&str], rows: Vec<Vec<Cell>>) -> Table {
         headers: headers.iter().map(|h| h.to_string()).collect(),
         rows,
     }
+}
+
+// ================================================================ VII Tekshiruvlar
+
+/// Uch jadval bitta varaqqa sig'maydi, shuning uchun eksportga tekshiruvlar
+/// ro'yxati chiqadi — beton va geodeziya unga ustun sifatida qo'shiladi.
+fn inspections(app: &App) -> Table {
+    let rows = app
+        .inspections
+        .iter()
+        .map(|x| {
+            vec![
+                txt(&x.number),
+                txt(x.kind.label()),
+                Cell::Date(x.planned),
+                odate(x.done),
+                txt(&x.place),
+                txt(x.result.label()),
+                txt(&x.requested_by),
+                txt(&x.inspector),
+                txt(x
+                    .task_id
+                    .and_then(|id| app.task(id).map(|t| format!("{} {}", t.wbs, t.name)))
+                    .unwrap_or_default()),
+                odate(x.deadline),
+                odate(x.fixed_at),
+                txt(if x.open_defect() { t("yes") } else { t("no") }),
+                txt(&x.note),
+            ]
+        })
+        .collect();
+    table(
+        "",
+        &[
+            t("col_number"),
+            t("col_kind"),
+            t("in_planned"),
+            t("in_done"),
+            t("col_place"),
+            t("col_result"),
+            t("in_requested_by"),
+            t("in_inspector"),
+            t("col_task"),
+            t("col_fix_deadline"),
+            t("in_fixed_at"),
+            t("in_open_defect"),
+            t("col_note"),
+        ],
+        rows,
+    )
+}
+
+// ================================================================ VIII Shartnomalar
+
+/// Shartnomalar ro'yxati: hisoblangan ustunlar (amaldagi summa, to'langan,
+/// qarz) ham chiqadi — ular ekranda ko'rinadi, lekin bazada saqlanmaydi.
+fn contracts(app: &App) -> Table {
+    let rows = app
+        .contracts
+        .iter()
+        .map(|c| {
+            let st = crate::checks::contract_state(
+                c,
+                &app.contract_changes,
+                &app.payment_stages,
+                app.today,
+            );
+            vec![
+                txt(&c.number),
+                txt(&c.name),
+                txt(c.kind.label()),
+                Cell::Date(c.signed),
+                Cell::Date(c.start),
+                Cell::Date(c.end),
+                Cell::Money(c.base_sum()),
+                Cell::Money(st.approved_changes),
+                Cell::Money(st.pending_changes),
+                Cell::Money(st.current),
+                Cell::Num(st.approved_days as f64),
+                Cell::Money(st.planned),
+                Cell::Money(st.paid),
+                Cell::Money(st.overdue),
+                Cell::Money(c.advance()),
+                Cell::Money(c.retention()),
+                txt(c.status.label()),
+                txt(&c.note),
+            ]
+        })
+        .collect();
+    table(
+        "",
+        &[
+            t("col_number"),
+            t("col_name"),
+            t("col_kind"),
+            t("ct_signed"),
+            t("col_start"),
+            t("ct_end"),
+            t("ct_base"),
+            t("ct_approved"),
+            t("ct_pending"),
+            t("ct_current"),
+            t("ct_days_shift"),
+            t("ct_scheduled"),
+            t("ct_paid"),
+            t("ct_debt"),
+            t("ct_advance"),
+            t("ct_retention"),
+            t("col_status"),
+            t("col_note"),
+        ],
+        rows,
+    )
 }
 
 // ================================================================ XVII.4 Obyektlar

@@ -188,7 +188,7 @@ impl Role {
             // shartnomalar bo'yicha qaror qabul qiladi.
             Role::Director => matches!(
                 screen,
-                S::Passport | S::Deals | S::Analytics | S::Estimate | S::Purchases
+                S::Passport | S::Deals | S::Analytics | S::Estimate | S::Purchases | S::Contracts
             ),
             Role::ProjectManager => matches!(
                 screen,
@@ -209,7 +209,13 @@ impl Role {
             Role::Brigadier => matches!(screen, S::Foreman | S::Journal | S::Timesheet),
             Role::Supervisor => matches!(
                 screen,
-                S::TechSupervision | S::ExecDocs | S::Quality | S::Safety | S::AiCheck | S::Ppr
+                S::TechSupervision
+                    | S::Inspections
+                    | S::ExecDocs
+                    | S::Quality
+                    | S::Safety
+                    | S::AiCheck
+                    | S::Ppr
             ),
             // Mualliflik nazorati loyiha yechimlarini yuritadi, ijroga tegmaydi.
             Role::Designer => matches!(screen, S::AiCheck | S::Ppr | S::Passport),
@@ -220,7 +226,7 @@ impl Role {
             ),
             Role::Storekeeper => matches!(screen, S::Warehouse | S::Materials),
             Role::Mechanic => matches!(screen, S::Machines),
-            Role::QualityEngineer => matches!(screen, S::Quality | S::ExecDocs),
+            Role::QualityEngineer => matches!(screen, S::Quality | S::Inspections | S::ExecDocs),
             Role::SafetyEngineer => matches!(screen, S::Safety),
             Role::Hr => matches!(screen, S::Timesheet),
             Role::SalesManager => matches!(screen, S::Sales | S::Deals | S::Client),

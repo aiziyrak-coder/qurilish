@@ -84,6 +84,8 @@ enum_kind!(IssueModule {
     Ppr      => "ppr",      "imod_ppr";
     Quality  => "quality",  "imod_quality";
     Safety   => "safety",   "imod_safety";
+    Client   => "client",   "imod_client";
+    Tech     => "tech",     "imod_tech";
 });
 
 /// Loyiha yoki smeta tekshiruvida topilgan nomuvofiqlik (TZ II.16, III).
@@ -1365,5 +1367,347 @@ impl MachineLog {
         } else {
             WaybillState::Open
         }
+    }
+}
+
+// ================================================================ VII. Texnik nazorat
+
+enum_kind!(InspectionKind {
+    Hidden   => "hidden",   "ik_hidden";
+    Physical => "physical", "ik_physical";
+    Concrete => "concrete", "ik_concrete";
+    Geodesy  => "geodesy",  "ik_geodesy";
+    Material => "material", "ik_material";
+    Volume   => "volume",   "ik_volume";
+    Final    => "final",    "ik_final";
+});
+
+enum_kind!(InspectionResult {
+    Waiting     => "waiting",     "ir_waiting";
+    Pass        => "pass",        "ir_pass";
+    Conditional => "conditional", "ir_conditional";
+    Fail        => "fail",        "ir_fail";
+});
+
+/// Texnik nazorat tekshiruvi (TZ VII.3-6, 12-14).
+///
+/// Bitta yozuv butun tekshiruv hayotini saqlaydi: qachonga rejalashtirilgan,
+/// kim chaqirgan, qachon o'tkazilgan va natija nima. Rejalashtirilgan sana
+/// o'tib ketgani — kalendarning asosiy signali.
+#[derive(Debug, Clone)]
+pub struct Inspection {
+    pub id: i64,
+    pub project_id: i64,
+    /// Qaysi ishni tekshirish — GPR bilan bog'lanish (TZ VII.28).
+    pub task_id: Option<i64>,
+    pub kind: InspectionKind,
+    pub number: String,
+    /// Rejalashtirilgan sana.
+    pub planned: NaiveDate,
+    /// O'tkazilgan sana. Bo'sh — hali o'tkazilmagan.
+    pub done: Option<NaiveDate>,
+    /// Kim chaqirdi (pudratchi vakili) — TZ VII.4.
+    pub requested_by: String,
+    /// Kim tekshirdi.
+    pub inspector: String,
+    pub place: String,
+    pub result: InspectionResult,
+    /// Salbiy natijada — bartaraf etish muddati.
+    pub deadline: Option<NaiveDate>,
+    /// Bartaraf etilgan sana.
+    pub fixed_at: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl Inspection {
+    /// Hali o'tkazilmagan tekshiruv.
+    pub fn open(&self) -> bool {
+        self.done.is_none()
+    }
+
+    /// Muddati o'tgan, lekin o'tkazilmagan.
+    pub fn overdue(&self, today: NaiveDate) -> bool {
+        self.open() && self.planned < today
+    }
+
+    /// Salbiy natija va hali bartaraf etilmagan.
+    pub fn open_defect(&self) -> bool {
+        !self.open() && self.result != InspectionResult::Pass && self.fixed_at.is_none()
+    }
+}
+
+/// Beton namunasining sinovi (TZ VII.12).
+///
+/// Mustahkamlik loyiha markasidan hisoblanmaydi — laboratoriya natijasi
+/// kiritiladi. Ilova faqat solishtiradi va foizni ko'rsatadi.
+#[derive(Debug, Clone)]
+pub struct ConcreteTest {
+    pub id: i64,
+    pub project_id: i64,
+    pub inspection_id: Option<i64>,
+    pub task_id: Option<i64>,
+    /// Namuna raqami.
+    pub sample: String,
+    /// Loyiha markasi, masalan «B25».
+    pub grade: String,
+    pub structure: String,
+    /// Beton quyilgan sana.
+    pub poured: NaiveDate,
+    /// Sinov yoshi, kunlarda (odatda 7 yoki 28).
+    pub age_days: i64,
+    /// Talab qilinadigan mustahkamlik, MPa.
+    pub required: f64,
+    /// Laboratoriya natijasi, MPa. Natija hali yo'q bo'lsa — `None`.
+    pub actual: Option<f64>,
+    pub lab: String,
+    pub note: String,
+}
+
+impl ConcreteTest {
+    /// Sinov sanasi: quyilgan kun + yosh.
+    pub fn test_date(&self) -> NaiveDate {
+        self.poured + chrono::Duration::days(self.age_days)
+    }
+
+    /// Natija talabga javob beradimi. Natija yo'q bo'lsa — `None`.
+    pub fn passed(&self) -> Option<bool> {
+        self.actual.map(|a| a + 1e-9 >= self.required)
+    }
+
+    /// Talabdan foizda: 100 % — aynan loyiha markasi.
+    pub fn pct(&self) -> Option<f64> {
+        if self.required <= 0.0 {
+            return None;
+        }
+        self.actual.map(|a| a / self.required * 100.0)
+    }
+}
+
+/// Geodezik o'lchov nuqtasi (TZ VII.14).
+#[derive(Debug, Clone)]
+pub struct GeodesyPoint {
+    pub id: i64,
+    pub project_id: i64,
+    pub inspection_id: Option<i64>,
+    pub mark: String,
+    pub axis: String,
+    pub level: String,
+    /// Loyiha qiymati.
+    pub design: f64,
+    /// O'lchangan qiymat.
+    pub fact: f64,
+    /// Ruxsat etilgan chetlanish (musbat son).
+    pub tolerance: f64,
+    pub unit: String,
+    pub measured: NaiveDate,
+    pub surveyor: String,
+    pub note: String,
+}
+
+impl GeodesyPoint {
+    /// Chetlanish: fakt minus loyiha.
+    pub fn deviation(&self) -> f64 {
+        self.fact - self.design
+    }
+
+    /// Dopusk ichidami.
+    pub fn within(&self) -> bool {
+        self.deviation().abs() <= self.tolerance + 1e-9
+    }
+}
+
+// ================================================================ VIII. Buyurtmachi
+
+enum_kind!(ContractKind {
+    General => "general", "ck_general";
+    Sub     => "sub",     "ck_sub";
+    Supply  => "supply",  "ck_supply";
+    Design  => "design",  "ck_design";
+    Service => "service", "ck_service";
+});
+
+enum_kind!(ContractStatus {
+    Draft     => "draft",     "cs_draft";
+    Active    => "active",    "cs_active";
+    Suspended => "suspended", "cs_suspended";
+    Closed    => "closed",    "cs_closed";
+});
+
+/// Shartnoma (TZ VIII.27-28).
+///
+/// Obyekt pasportidagi shartnoma summasi umumiy raqam; bu yerda esa har bir
+/// shartnoma alohida turadi — bosh pudrat, subpudrat, yetkazib berish.
+#[derive(Debug, Clone)]
+pub struct Contract {
+    pub id: i64,
+    pub project_id: i64,
+    pub number: String,
+    pub name: String,
+    pub kind: ContractKind,
+    /// Ikkinchi tomon (TZ I.1 ishtirokchilari).
+    pub party_id: Option<i64>,
+    pub signed: NaiveDate,
+    pub start: NaiveDate,
+    /// Shartnoma bo'yicha tugash sanasi.
+    pub end: NaiveDate,
+    pub sum: f64,
+    /// Avans ulushi, foizda.
+    pub advance_pct: f64,
+    /// Kafolat ushlanmasi, foizda.
+    pub retention_pct: f64,
+    pub currency: String,
+    pub status: ContractStatus,
+    pub note: String,
+}
+
+impl Contract {
+    /// Shartnomadagi dastlabki summa.
+    ///
+    /// `sum` maydoni to'g'ridan-to'g'ri ham o'qiladi; bu nom hisobotlarda
+    /// «amaldagi summa» bilan chalkashmaslik uchun.
+    pub fn base_sum(&self) -> f64 {
+        self.sum
+    }
+
+    /// Avans summasi.
+    pub fn advance(&self) -> f64 {
+        self.sum * self.advance_pct / 100.0
+    }
+
+    /// Kafolat ushlanmasi summasi.
+    pub fn retention(&self) -> f64 {
+        self.sum * self.retention_pct / 100.0
+    }
+
+    /// Muddati o'tgan, lekin yopilmagan.
+    pub fn overdue(&self, today: NaiveDate) -> bool {
+        self.status == ContractStatus::Active && self.end < today
+    }
+}
+
+enum_kind!(ChangeKind {
+    Extra  => "extra",  "cch_extra";
+    Reduce => "reduce", "cch_reduce";
+    Price  => "price",  "cch_price";
+    Term   => "term",   "cch_term";
+});
+
+enum_kind!(ChangeStatus {
+    Draft    => "draft",    "chs_draft";
+    Sent     => "sent",     "chs_sent";
+    Approved => "approved", "chs_approved";
+    Rejected => "rejected", "chs_rejected";
+});
+
+/// Shartnoma qiymati yoki muddatining o'zgarishi (TZ VIII.11-12).
+///
+/// Qo'shimcha ish ham, arzonlashtirish ham, muddat surilishi ham bitta
+/// ro'yxatda: buyurtmachiga «shartnomadan qancha chetga chiqdik» degan savol
+/// bitta joydan ko'rinishi kerak.
+#[derive(Debug, Clone)]
+pub struct ContractChange {
+    pub id: i64,
+    pub project_id: i64,
+    pub contract_id: Option<i64>,
+    pub number: String,
+    pub kind: ChangeKind,
+    pub date: NaiveDate,
+    pub description: String,
+    /// Summaga ta'siri. Kamaytirish uchun manfiy.
+    pub amount: f64,
+    /// Muddatga ta'siri, kunlarda.
+    pub days: i64,
+    pub reason: String,
+    pub status: ChangeStatus,
+    pub decided_at: Option<NaiveDate>,
+    pub decided_by: String,
+    pub note: String,
+}
+
+impl ContractChange {
+    /// Tasdiqlangan o'zgarish shartnomaga qo'shiladi.
+    pub fn counts(&self) -> bool {
+        self.status == ChangeStatus::Approved
+    }
+
+    /// Qaror kutilmoqda.
+    pub fn pending(&self) -> bool {
+        self.status == ChangeStatus::Sent
+    }
+}
+
+/// To'lov jadvalidagi bosqich (TZ VIII.29-30).
+#[derive(Debug, Clone)]
+pub struct PaymentStage {
+    pub id: i64,
+    pub project_id: i64,
+    pub contract_id: Option<i64>,
+    pub number: String,
+    /// Asos: avans, bajarilgan ish, kafolat qaytarilishi.
+    pub basis: String,
+    pub due: NaiveDate,
+    pub amount: f64,
+    /// Haqiqatda to'langan summa.
+    pub paid: f64,
+    pub paid_at: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl PaymentStage {
+    /// To'lanmagan qoldiq.
+    pub fn left(&self) -> f64 {
+        (self.amount - self.paid).max(0.0)
+    }
+
+    /// To'liq to'langan.
+    pub fn closed(&self) -> bool {
+        self.paid + 0.01 >= self.amount
+    }
+
+    /// Muddati o'tgan qarz.
+    pub fn overdue(&self, today: NaiveDate) -> bool {
+        !self.closed() && self.due < today
+    }
+
+    /// Kechikish, kunlarda. Muddati o'tmagan bo'lsa nol.
+    pub fn delay_days(&self, today: NaiveDate) -> i64 {
+        if self.overdue(today) {
+            (today - self.due).num_days()
+        } else {
+            0
+        }
+    }
+}
+
+enum_kind!(AcceptState {
+    Submitted => "submitted", "as_submitted";
+    Accepted  => "accepted",  "as_accepted";
+    Rejected  => "rejected",  "as_rejected";
+});
+
+/// Bajarilgan ishni buyurtmachiga topshirish (TZ VIII.21-22).
+///
+/// Bu yerdagi «kelishuv» — ilova ichidagi qaror, elektron raqamli imzo emas.
+/// Kim va qachon qabul qilgani yoziladi; yuridik imzo hujjat ustida qoladi.
+#[derive(Debug, Clone)]
+pub struct WorkAcceptance {
+    pub id: i64,
+    pub project_id: i64,
+    pub task_id: Option<i64>,
+    pub number: String,
+    pub date: NaiveDate,
+    pub volume: f64,
+    pub unit: String,
+    pub amount: f64,
+    pub state: AcceptState,
+    pub decided_at: Option<NaiveDate>,
+    pub decided_by: String,
+    pub comment: String,
+}
+
+impl WorkAcceptance {
+    /// Qaror kutilmoqda.
+    pub fn pending(&self) -> bool {
+        self.state == AcceptState::Submitted
     }
 }

@@ -3,6 +3,7 @@
 mod aicheck;
 mod analytics;
 mod client;
+mod contracts;
 mod copilot;
 mod dashboard;
 mod deals;
@@ -12,6 +13,7 @@ mod execdocs;
 pub mod export;
 mod foreman;
 mod gantt;
+mod inspections;
 mod issues;
 mod journal;
 mod machines;
@@ -139,6 +141,8 @@ pub fn draw(ctx: &Context, app: &mut App) {
         match app.screen {
             Screen::Dashboard => dashboard::show(ui, app),
             Screen::Portfolio => portfolio::show(ui, app),
+            Screen::Inspections => inspections::show(ui, app),
+            Screen::Contracts => contracts::show(ui, app),
             Screen::Passport => passport::show(ui, app),
             Screen::Gantt => gantt::show(ui, app),
             Screen::Ppr => ppr::show(ui, app),

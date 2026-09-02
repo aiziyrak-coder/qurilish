@@ -4,10 +4,11 @@ use crate::checks::{self, Norm};
 use crate::cpm::{self, Progress, Schedule};
 use crate::db::Db;
 use crate::domain::{
-    Batch, Block, DayKind, Deal, Document, Element, ElementLink, Estimate, EstimateItem, ExecDoc,
-    Inventory, InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog,
-    Material, Payment, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent, Severity,
-    Shift, StockMove, TimesheetEntry, Unit, Warehouse, Worker,
+    Batch, Block, ConcreteTest, Contract, ContractChange, DayKind, Deal, Document, Element,
+    ElementLink, Estimate, EstimateItem, ExecDoc, GeodesyPoint, Inspection, Inventory,
+    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material,
+    Payment, PaymentStage, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent,
+    Severity, Shift, StockMove, TimesheetEntry, Unit, Warehouse, WorkAcceptance, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -23,6 +24,10 @@ pub enum Screen {
     Dashboard,
     /// Barcha obyektlar bo'yicha konsolidatsiya (TZ XVII.4).
     Portfolio,
+    /// Texnik nazorat tekshiruvlari (TZ VII.3-6, 12-14).
+    Inspections,
+    /// Shartnomalar, o'zgarishlar, to'lov jadvali va qabul (TZ VIII.11-12, 21, 27-30).
+    Contracts,
     // I. Qurilish loyihasini boshqarish
     Passport,
     Gantt,
@@ -72,6 +77,8 @@ impl Screen {
         match self {
             Screen::Dashboard => t("screen_dashboard"),
             Screen::Portfolio => t("screen_portfolio"),
+            Screen::Inspections => t("screen_inspections"),
+            Screen::Contracts => t("screen_contracts"),
             Screen::Passport => t("screen_passport"),
             Screen::Gantt => t("screen_gantt"),
             Screen::Ppr => t("screen_ppr"),
@@ -110,8 +117,8 @@ impl Screen {
             Screen::ExecDocs => "IV",
             Screen::Journal => "V",
             Screen::Foreman => "VI",
-            Screen::TechSupervision => "VII",
-            Screen::Client => "VIII",
+            Screen::TechSupervision | Screen::Inspections => "VII",
+            Screen::Client | Screen::Contracts => "VIII",
             Screen::Requests => "IX",
             Screen::Purchases => "X",
             Screen::Warehouse => "XI",
@@ -131,6 +138,8 @@ impl Screen {
         match self {
             Screen::Dashboard
             | Screen::Portfolio
+            | Screen::Inspections
+            | Screen::Contracts
             | Screen::Passport
             | Screen::Gantt
             | Screen::Ppr
@@ -182,7 +191,13 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
     ),
     (
         "nav_cabinets",
-        &[Screen::Foreman, Screen::TechSupervision, Screen::Client],
+        &[
+            Screen::Foreman,
+            Screen::TechSupervision,
+            Screen::Inspections,
+            Screen::Client,
+            Screen::Contracts,
+        ],
     ),
     (
         "nav_supply",
@@ -465,6 +480,15 @@ pub struct App {
     pub safety: Vec<SafetyEvent>,
     pub machines: Vec<Machine>,
     pub machine_logs: Vec<MachineLog>,
+    /// VII. Texnik nazorat: tekshiruvlar, beton sinovlari, geodeziya.
+    pub inspections: Vec<Inspection>,
+    /// VIII. Buyurtmachi: shartnomalar, o'zgarishlar, to'lovlar, qabul.
+    pub contracts: Vec<Contract>,
+    pub contract_changes: Vec<ContractChange>,
+    pub payment_stages: Vec<PaymentStage>,
+    pub acceptances: Vec<WorkAcceptance>,
+    pub concrete_tests: Vec<ConcreteTest>,
+    pub geodesy_points: Vec<GeodesyPoint>,
     /// Tabelda ko'rsatilayotgan hafta boshi (dushanba).
     pub timesheet_week: Option<chrono::NaiveDate>,
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
@@ -605,6 +629,13 @@ impl App {
             safety: Vec::new(),
             machines: Vec::new(),
             machine_logs: Vec::new(),
+            inspections: Vec::new(),
+            contracts: Vec::new(),
+            contract_changes: Vec::new(),
+            payment_stages: Vec::new(),
+            acceptances: Vec::new(),
+            concrete_tests: Vec::new(),
+            geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
             users: Vec::new(),
@@ -639,8 +670,16 @@ impl App {
         };
         app.reload_projects();
         if app.current.is_none() {
-            if let Some(p) = app.projects.first() {
-                app.select_project(p.id);
+            // Oxirgi tanlangan obyekt tiklanadi: bir necha obyektli bazada
+            // har ochilganda alifbo bo'yicha birinchisiga tushib qolish
+            // noqulay. Obyekt o'chirilgan bo'lsa — birinchisi.
+            let last = app
+                .db
+                .get_setting("last_project")
+                .and_then(|v| v.parse::<i64>().ok())
+                .filter(|id| app.projects.iter().any(|p| p.id == *id));
+            if let Some(p) = last.or_else(|| app.projects.first().map(|p| p.id)) {
+                app.select_project(p);
             }
         }
         // Til modeli sozlamasi. Yig'ilishda tarmoq qismi bo'lmasa — doim o'chiq.
@@ -691,6 +730,7 @@ impl App {
 
     pub fn select_project(&mut self, id: i64) {
         self.current = Some(id);
+        let _ = self.db.set_setting("last_project", &id.to_string());
         self.selected_task = None;
         self.linking_from = None;
         self.row_offset = 0.0;
@@ -771,6 +811,13 @@ impl App {
         self.safety.clear();
         self.machines.clear();
         self.machine_logs.clear();
+        self.inspections.clear();
+        self.contracts.clear();
+        self.contract_changes.clear();
+        self.payment_stages.clear();
+        self.acceptances.clear();
+        self.concrete_tests.clear();
+        self.geodesy_points.clear();
         self.sales_block = None;
         self.selected_unit = None;
         self.selected_deal = None;
@@ -820,6 +867,13 @@ impl App {
         self.safety = self.db.safety_events(id);
         self.machines = self.db.machines(id);
         self.machine_logs = self.db.machine_logs(id);
+        self.inspections = self.db.inspections(id);
+        self.contracts = self.db.contracts(id);
+        self.contract_changes = self.db.contract_changes(id);
+        self.payment_stages = self.db.payment_stages(id);
+        self.acceptances = self.db.work_acceptances(id);
+        self.concrete_tests = self.db.concrete_tests(id);
+        self.geodesy_points = self.db.geodesy_points(id);
         self.blocks = self.db.blocks(id);
         self.units = self.db.units(id);
         self.deals = self.db.deals(id);

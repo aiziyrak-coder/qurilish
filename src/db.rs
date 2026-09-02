@@ -3426,6 +3426,8 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             Screen::Sales,
             Screen::Analytics,
             Screen::Portfolio,
+            Screen::Inspections,
+            Screen::Contracts,
         ];
         for s in screens {
             let table = crate::ui::export::table_of(&app, s)
@@ -4021,6 +4023,488 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(kj.right, 1_000.0);
         assert_eq!(kj.diff, kj.right - kj.left);
         assert!(kj.diff < 0.0, "ikkinchi variant arzonroq");
+    }
+
+    /// TZ VII.3: kalendar faqat o'tkazilmagan tekshiruvlarni ko'rsatadi va
+    /// kunlarga guruhlaydi.
+    #[test]
+    fn inspection_calendar_groups_open_checks_by_day() {
+        use crate::checks::inspection_calendar;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let list = t.db.inspections(pid);
+        assert!(!list.is_empty(), "namunada tekshiruv yo'q");
+
+        let days = inspection_calendar(&list, today);
+        assert!(!days.is_empty());
+        // Kunlar o'sish tartibida.
+        for w in days.windows(2) {
+            assert!(w[0].date < w[1].date, "kunlar tartibi buzilgan");
+        }
+        // Kalendardagi har bir yozuv haqiqatan ochiq.
+        let open: std::collections::HashSet<i64> =
+            list.iter().filter(|x| x.open()).map(|x| x.id).collect();
+        let in_calendar: usize = days.iter().map(|d| d.ids.len()).sum();
+        assert_eq!(in_calendar, open.len());
+        for d in &days {
+            for id in &d.ids {
+                assert!(open.contains(id), "yopilgan tekshiruv kalendarda");
+            }
+            assert_eq!(d.overdue, d.date < today);
+        }
+    }
+
+    /// Muddati o'tgan tekshiruv yakunda alohida sanaladi.
+    #[test]
+    fn overdue_inspection_is_counted_separately() {
+        use crate::checks::inspection_summary;
+        use crate::domain::{Inspection, InspectionKind, InspectionResult};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 5, 10).unwrap();
+        let mk = |planned: NaiveDate, done: Option<NaiveDate>, result| Inspection {
+            id: 0,
+            project_id: 1,
+            task_id: None,
+            kind: InspectionKind::Hidden,
+            number: String::new(),
+            planned,
+            done,
+            requested_by: String::new(),
+            inspector: String::new(),
+            place: String::new(),
+            result,
+            deadline: None,
+            fixed_at: None,
+            note: String::new(),
+        };
+        let day = |d: i64| today + chrono::Duration::days(d);
+        let list = vec![
+            mk(day(-3), None, InspectionResult::Waiting), // muddati o'tgan
+            mk(day(0), None, InspectionResult::Waiting),  // bugun
+            mk(day(4), None, InspectionResult::Waiting),  // shu hafta
+            mk(day(20), None, InspectionResult::Waiting), // uzoq
+            mk(day(-5), Some(day(-5)), InspectionResult::Pass),
+            mk(day(-6), Some(day(-6)), InspectionResult::Fail),
+        ];
+        let s = inspection_summary(&list, today);
+        assert_eq!(s.overdue, 1);
+        assert_eq!(s.today, 1);
+        assert_eq!(s.week, 1, "yigirma kundan keyingisi haftaga kirmaydi");
+        assert_eq!(s.passed, 1);
+        assert_eq!(s.open_defects, 1);
+        assert_eq!(s.total, 6);
+    }
+
+    /// TZ VII.12: beton mustahkamligi hisoblanmaydi — laboratoriya natijasi
+    /// talab bilan solishtiriladi.
+    #[test]
+    fn concrete_strength_is_compared_not_invented() {
+        use crate::domain::ConcreteTest;
+
+        let poured = chrono::NaiveDate::from_ymd_opt(2026, 4, 1).unwrap();
+        let base = ConcreteTest {
+            id: 0,
+            project_id: 1,
+            inspection_id: None,
+            task_id: None,
+            sample: String::new(),
+            grade: "B25".into(),
+            structure: String::new(),
+            poured,
+            age_days: 28,
+            required: 25.0,
+            actual: None,
+            lab: String::new(),
+            note: String::new(),
+        };
+        // Natija yo'q — hukm ham yo'q.
+        assert_eq!(base.passed(), None);
+        assert_eq!(base.pct(), None);
+        assert_eq!(base.test_date(), poured + chrono::Duration::days(28));
+
+        let ok = ConcreteTest {
+            actual: Some(27.5),
+            ..base.clone()
+        };
+        assert_eq!(ok.passed(), Some(true));
+        assert!((ok.pct().unwrap() - 110.0).abs() < 0.001);
+
+        let bad = ConcreteTest {
+            actual: Some(24.9),
+            ..base.clone()
+        };
+        assert_eq!(bad.passed(), Some(false));
+
+        // Aynan talab darajasi — o'tgan hisoblanadi.
+        let exact = ConcreteTest {
+            actual: Some(25.0),
+            ..base
+        };
+        assert_eq!(exact.passed(), Some(true));
+    }
+
+    /// Beton yakunida kutilayotgan natijalar alohida sanaladi.
+    #[test]
+    fn concrete_summary_separates_pending_results() {
+        use crate::checks::concrete_summary;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let list = t.db.concrete_tests(pid);
+        let s = concrete_summary(&list, today);
+
+        assert_eq!(s.total, list.len());
+        assert_eq!(s.tested, list.iter().filter(|x| x.actual.is_some()).count());
+        assert_eq!(s.tested, s.passed + s.failed);
+        assert!(
+            s.failed > 0,
+            "namunada talabga yetmagan sinov bo'lishi kerak"
+        );
+        assert!(s.avg_pct > 0.0);
+        assert!(s.worst_pct < 100.0, "eng past natija talabdan past");
+    }
+
+    /// TZ VII.14: dopuskdan chiqqan nuqtalar eng katta chetlanishdan boshlanadi.
+    #[test]
+    fn geodesy_issues_are_sorted_by_excess() {
+        use crate::checks::geodesy_issues;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let points = t.db.geodesy_points(pid);
+        assert!(!points.is_empty());
+
+        let bad = geodesy_issues(&points);
+        assert!(!bad.is_empty(), "namunada dopuskdan chiqqan nuqta yo'q");
+        for p in &bad {
+            assert!(!p.within(), "dopusk ichidagi nuqta ro'yxatga tushdi");
+        }
+        // Ortiqcha chetlanish kamayish tartibida.
+        for w in bad.windows(2) {
+            let ex = |p: &crate::domain::GeodesyPoint| p.deviation().abs() - p.tolerance;
+            assert!(ex(w[0]) >= ex(w[1]), "tartib buzilgan");
+        }
+        // Dopusk chegarasidagi nuqta muammo emas.
+        let edge = crate::domain::GeodesyPoint {
+            tolerance: 8.0,
+            design: 0.0,
+            fact: 8.0,
+            ..points[0].clone()
+        };
+        assert!(edge.within());
+    }
+
+    /// TZ VII.34: kunlik hisobot bazadagi yozuvlardan yig'iladi.
+    #[test]
+    fn supervision_day_report_is_built_from_records() {
+        use crate::checks::supervision_day;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let inspections = t.db.inspections(pid);
+        let day = inspections
+            .iter()
+            .find_map(|x| x.done)
+            .expect("o'tkazilgan tekshiruv");
+
+        let r = supervision_day(
+            day,
+            &inspections,
+            &t.db.issues(pid),
+            &t.db.quality_checks(pid),
+            &t.db.exec_docs(pid),
+            &t.db.concrete_tests(pid),
+            &t.db.geodesy_points(pid),
+        );
+        assert_eq!(r.date, day);
+        assert!(r.inspections > 0);
+        assert!(!r.is_empty());
+        assert_eq!(
+            r.inspections,
+            inspections.iter().filter(|x| x.done == Some(day)).count()
+        );
+
+        // Hech narsa bo'lmagan kun bo'sh hisobot beradi.
+        let quiet = day - chrono::Duration::days(3650);
+        assert!(supervision_day(
+            quiet,
+            &inspections,
+            &t.db.issues(pid),
+            &t.db.quality_checks(pid),
+            &t.db.exec_docs(pid),
+            &t.db.concrete_tests(pid),
+            &t.db.geodesy_points(pid),
+        )
+        .is_empty());
+    }
+
+    /// Tekshiruv yozuvi bazadan o'zgarishsiz qaytadi.
+    #[test]
+    fn inspection_round_trips() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut x = t.db.inspections(pid).remove(0);
+
+        x.result = crate::domain::InspectionResult::Conditional;
+        x.inspector = "Sinov".into();
+        x.fixed_at = Some(chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap());
+        assert!(t.db.update_inspection(&x));
+
+        let back =
+            t.db.inspections(pid)
+                .into_iter()
+                .find(|y| y.id == x.id)
+                .expect("yozuv yo'qoldi");
+        assert_eq!(back.result, crate::domain::InspectionResult::Conditional);
+        assert_eq!(back.inspector, "Sinov");
+        assert_eq!(back.fixed_at, x.fixed_at);
+
+        assert!(t.db.delete_inspection(x.id));
+        assert!(!t.db.inspections(pid).iter().any(|y| y.id == x.id));
+    }
+
+    /// Oxirgi tanlangan obyekt keyingi ochilishda tiklanadi.
+    #[test]
+    fn last_project_is_remembered() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let other =
+            t.db.projects()
+                .unwrap()
+                .into_iter()
+                .find(|p| p.id != pid)
+                .expect("ikkinchi obyekt");
+
+        // Birinchi ochilish: sozlama yo'q, alifbo bo'yicha birinchisi.
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        let first = app.current.expect("obyekt tanlanmadi");
+
+        // Boshqasiga o'tamiz va ilovani qaytadan ochamiz.
+        app.select_project(if first == other.id { pid } else { other.id });
+        let chosen = app.current;
+        drop(app);
+
+        let again = crate::app::App::new(Db::open(&t.path).unwrap());
+        assert_eq!(again.current, chosen, "oxirgi obyekt tiklanmadi");
+        assert_ne!(again.current, Some(first), "eski tanlov qaytdi");
+    }
+
+    /// TZ VIII.11-12: faqat tasdiqlangan o'zgarish shartnoma summasini o'zgartiradi.
+    #[test]
+    fn only_approved_changes_move_the_contract_sum() {
+        use crate::checks::contract_state;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let contracts = t.db.contracts(pid);
+        let changes = t.db.contract_changes(pid);
+        let stages = t.db.payment_stages(pid);
+
+        let general = contracts
+            .iter()
+            .find(|c| c.kind == crate::domain::ContractKind::General)
+            .expect("bosh pudrat");
+        let st = contract_state(general, &changes, &stages, today);
+
+        assert_eq!(st.base, general.sum);
+        assert!(st.approved_changes > 0.0, "tasdiqlangan o'zgarish yo'q");
+        assert!(st.pending_changes > 0.0, "kutayotgan o'zgarish yo'q");
+        // Amaldagi summa faqat tasdiqlanganini o'z ichiga oladi.
+        assert!((st.current - (st.base + st.approved_changes)).abs() < 0.01);
+        assert!(
+            st.current < st.base + st.approved_changes + st.pending_changes,
+            "kutayotgan o'zgarish summaga qo'shilib ketgan"
+        );
+        assert!(st.approved_days > 0, "tasdiqlangan muddat surilishi yo'q");
+        assert!(st.change_pct() > 0.0);
+    }
+
+    /// Kamaytiruvchi o'zgarish summani pasaytiradi.
+    #[test]
+    fn a_reduction_lowers_the_contract_sum() {
+        use crate::checks::contract_state;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let contracts = t.db.contracts(pid);
+        let sub = contracts
+            .iter()
+            .find(|c| c.kind == crate::domain::ContractKind::Sub)
+            .expect("subpudrat");
+
+        let st = contract_state(
+            sub,
+            &t.db.contract_changes(pid),
+            &t.db.payment_stages(pid),
+            today,
+        );
+        assert!(st.approved_changes < 0.0, "kamaytirish yo'q");
+        assert!(st.current < st.base);
+        assert!(st.change_pct() < 0.0);
+    }
+
+    /// TZ VIII.30: to'lov intizomi qarz va kechikishni ajratadi.
+    #[test]
+    fn payment_discipline_separates_debt_from_delay() {
+        use crate::checks::payment_discipline;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let stages = t.db.payment_stages(pid);
+        let d = payment_discipline(&stages, today);
+
+        assert_eq!(d.stages, stages.len());
+        assert!(d.closed > 0);
+        assert!(d.paid > 0.0);
+        assert!(
+            d.paid < d.planned,
+            "hammasi to'langan bo'lsa sinov ma'nosiz"
+        );
+        // Muddati o'tgan qarz bor va u to'lanmagan qoldiqdan oshmaydi.
+        assert!(d.debt > 0.0, "muddati o'tgan to'lov yo'q");
+        assert!(d.debt <= d.planned - d.paid + 0.01);
+        assert!(d.max_delay > 0);
+        // O'rtacha kechikish faqat to'langan bosqichlardan — namunada erta
+        // to'langanlar bor, shuning uchun u nolga teng bo'lishi mumkin.
+        assert!(d.avg_delay >= 0.0);
+        // Kelgusi muddatlar alohida sanaladi.
+        assert!(d.due_soon >= 0.0);
+    }
+
+    /// To'lov bosqichining chetki holatlari.
+    #[test]
+    fn payment_stage_edges_are_handled() {
+        use crate::domain::PaymentStage;
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let base = PaymentStage {
+            id: 0,
+            project_id: 1,
+            contract_id: None,
+            number: String::new(),
+            basis: String::new(),
+            due: today - chrono::Duration::days(10),
+            amount: 1_000.0,
+            paid: 0.0,
+            paid_at: None,
+            note: String::new(),
+        };
+        assert!(base.overdue(today));
+        assert_eq!(base.delay_days(today), 10);
+        assert_eq!(base.left(), 1_000.0);
+
+        // To'liq to'langan bosqich muddati o'tgan hisoblanmaydi.
+        let closed = PaymentStage {
+            paid: 1_000.0,
+            paid_at: Some(today),
+            ..base.clone()
+        };
+        assert!(closed.closed());
+        assert!(!closed.overdue(today));
+        assert_eq!(closed.delay_days(today), 0);
+        assert_eq!(closed.left(), 0.0);
+
+        // Ortiqcha to'lov qoldiqni manfiy qilmaydi.
+        let over = PaymentStage {
+            paid: 1_200.0,
+            ..base
+        };
+        assert_eq!(over.left(), 0.0);
+    }
+
+    /// TZ VIII.33: haftalik hisobot yozuvlardan yig'iladi.
+    #[test]
+    fn week_report_is_built_from_records() {
+        use crate::checks::week_report;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let r = week_report(
+            today,
+            &t.db.tasks(pid).unwrap_or_default(),
+            &t.db.journal(pid),
+            &t.db.inspections(pid),
+            &t.db.issues(pid),
+            &t.db.exec_docs(pid),
+            &t.db.payment_stages(pid),
+            &t.db.contract_changes(pid),
+            &t.db.work_acceptances(pid),
+        );
+
+        assert_eq!(r.to, today);
+        assert_eq!((r.to - r.from).num_days(), 7);
+        // Bajarilish hafta davomida kamaymaydi.
+        assert!(r.progress_end >= r.progress_start - 0.001);
+        assert!(r.progress_end > 0.0 && r.progress_end <= 100.0);
+        assert!(r.changes_pending > 0, "namunada kutayotgan o'zgarish yo'q");
+        assert!(
+            r.acceptances_pending > 0,
+            "namunada kutayotgan qabul hujjati yo'q"
+        );
+    }
+
+    /// TZ VIII.21: qabul hujjati qaror kutadi, keyin yopiladi.
+    #[test]
+    fn work_acceptance_round_trips() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let list = t.db.work_acceptances(pid);
+        assert!(!list.is_empty());
+        assert!(list.iter().any(|x| x.pending()), "kutayotgani yo'q");
+        assert!(
+            list.iter()
+                .any(|x| x.state == crate::domain::AcceptState::Rejected),
+            "rad etilgani yo'q"
+        );
+        // Rad etilgan hujjatda sabab yozilgan bo'lishi kerak.
+        for x in list
+            .iter()
+            .filter(|x| x.state == crate::domain::AcceptState::Rejected)
+        {
+            assert!(!x.comment.is_empty(), "rad etish sababi yo'q");
+        }
+
+        let mut x = list
+            .into_iter()
+            .find(|x| x.pending())
+            .expect("kutayotgan hujjat");
+        x.state = crate::domain::AcceptState::Accepted;
+        x.decided_at = Some(t.db.projects().unwrap()[0].start_date);
+        x.decided_by = "Sinov".into();
+        assert!(t.db.update_work_acceptance(&x));
+
+        let back =
+            t.db.work_acceptances(pid)
+                .into_iter()
+                .find(|y| y.id == x.id)
+                .expect("yozuv yo'qoldi");
+        assert_eq!(back.state, crate::domain::AcceptState::Accepted);
+        assert_eq!(back.decided_by, "Sinov");
+        assert!(!back.pending());
+    }
+
+    /// Shartnoma avansi va kafolat ushlanmasi foizdan hisoblanadi.
+    #[test]
+    fn contract_advance_and_retention_follow_the_percent() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let c =
+            t.db.contracts(pid)
+                .into_iter()
+                .find(|c| c.kind == crate::domain::ContractKind::General)
+                .expect("bosh pudrat");
+
+        assert!((c.advance() - c.sum * c.advance_pct / 100.0).abs() < 0.01);
+        assert!((c.retention() - c.sum * c.retention_pct / 100.0).abs() < 0.01);
+        assert!(c.advance() > 0.0);
+        assert!(c.retention() > 0.0);
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

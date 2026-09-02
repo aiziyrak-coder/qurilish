@@ -48,6 +48,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(12.0);
                 finance_block(ui, app, &project);
                 ui.add_space(12.0);
+                week_block(ui, app);
+                if !app.contracts.is_empty() {
+                    ui.add_space(12.0);
+                    contracts_block(ui, app);
+                }
+                ui.add_space(12.0);
+                payments_block(ui, app);
+                acceptance_block(ui, app);
+                ui.add_space(12.0);
                 recent_block(ui, app);
                 if !app.units.is_empty() {
                     ui.add_space(12.0);
@@ -339,5 +348,274 @@ fn sales_block(ui: &mut egui::Ui, app: &App) {
                 theme::ok()
             },
         );
+    });
+}
+
+/// Shartnoma qiymati qanday o'zgargani (TZ VIII.11-12, 27).
+fn contracts_block(ui: &mut egui::Ui, app: &App) {
+    block(ui, t("cl_contracts"), |ui| {
+        for c in &app.contracts {
+            let st = crate::checks::contract_state(
+                c,
+                &app.contract_changes,
+                &app.payment_stages,
+                app.today,
+            );
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [230.0, 18.0],
+                    egui::Label::new(
+                        RichText::new(format!("{} · {}", c.number, c.kind.label()))
+                            .size(12.0)
+                            .color(theme::muted()),
+                    ),
+                );
+                ui.add_sized(
+                    [150.0, 18.0],
+                    egui::Label::new(RichText::new(money(st.current)).size(13.0).strong()),
+                );
+                // Dastlabki summadan chetlanish — buyurtmachi uchun asosiy savol.
+                ui.add_sized(
+                    [90.0, 18.0],
+                    egui::Label::new(
+                        RichText::new(if st.approved_changes == 0.0 {
+                            t("cl_no_change").to_string()
+                        } else {
+                            format!("{:+.1}%", st.change_pct())
+                        })
+                        .size(12.0)
+                        .color(if st.approved_changes > 0.0 {
+                            theme::warn()
+                        } else if st.approved_changes < 0.0 {
+                            theme::ok()
+                        } else {
+                            theme::muted()
+                        }),
+                    ),
+                );
+                if st.pending_changes != 0.0 {
+                    ui.label(
+                        RichText::new(format!("{} {}", t("cl_pending"), money(st.pending_changes)))
+                            .size(11.5)
+                            .color(theme::accent()),
+                    );
+                }
+                if st.approved_days > 0 {
+                    ui.label(
+                        RichText::new(format!("+{} {}", st.approved_days, t("cl_days")))
+                            .size(11.5)
+                            .color(theme::warn()),
+                    );
+                }
+            });
+        }
+        if app.contracts.is_empty() {
+            ui.label(
+                RichText::new(t("cl_no_contracts"))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+        }
+    });
+}
+
+/// To'lov jadvali bo'yicha intizom (TZ VIII.29-30).
+fn payments_block(ui: &mut egui::Ui, app: &App) {
+    let d = crate::checks::payment_discipline(&app.payment_stages, app.today);
+    if d.stages == 0 {
+        return;
+    }
+    block(ui, t("cl_payments"), |ui| {
+        let line = |ui: &mut egui::Ui, label: &str, value: String, color: Color32| {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [230.0, 18.0],
+                    egui::Label::new(RichText::new(label).size(12.0).color(theme::muted())),
+                );
+                ui.label(RichText::new(value).size(13.5).color(color));
+            });
+        };
+        ui.horizontal(|ui| {
+            ui.add_sized(
+                [230.0, 18.0],
+                egui::Label::new(
+                    RichText::new(t("cl_pay_progress"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                ),
+            );
+            let pct = if d.planned > 0.0 {
+                d.paid / d.planned * 100.0
+            } else {
+                0.0
+            };
+            bar(ui, pct, 300.0);
+            ui.label(
+                RichText::new(format!("{pct:.0}%"))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+        });
+        ui.add_space(4.0);
+        line(ui, t("cl_pay_planned"), money(d.planned), theme::text());
+        line(ui, t("cl_pay_paid"), money(d.paid), theme::ok());
+        line(
+            ui,
+            t("cl_pay_debt"),
+            if d.debt == 0.0 {
+                t("cl_no_debt").to_string()
+            } else {
+                format!("{} · {} {}", money(d.debt), d.max_delay, t("cl_days_late"))
+            },
+            if d.debt == 0.0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
+        );
+        line(ui, t("cl_pay_soon"), money(d.due_soon), theme::text());
+    });
+}
+
+/// Buyurtmachining qaroriga qolgan hujjatlar (TZ VIII.21).
+fn acceptance_block(ui: &mut egui::Ui, app: &App) {
+    let waiting: Vec<&crate::domain::WorkAcceptance> =
+        app.acceptances.iter().filter(|x| x.pending()).collect();
+    if waiting.is_empty() {
+        return;
+    }
+    block(ui, t("cl_acceptance"), |ui| {
+        for x in &waiting {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [110.0, 18.0],
+                    egui::Label::new(RichText::new(&x.number).size(12.5).strong()),
+                );
+                ui.add_sized(
+                    [104.0, 18.0],
+                    egui::Label::new(
+                        RichText::new(x.date.format("%d.%m.%Y").to_string())
+                            .size(12.0)
+                            .color(theme::muted()),
+                    ),
+                );
+                let task = x
+                    .task_id
+                    .and_then(|id| app.task(id).map(|t| format!("{} {}", t.wbs, t.name)))
+                    .unwrap_or_default();
+                ui.add_sized(
+                    [280.0, 18.0],
+                    egui::Label::new(RichText::new(super::issues::truncate(&task, 34)).size(12.0)),
+                );
+                ui.add_sized(
+                    [150.0, 18.0],
+                    egui::Label::new(RichText::new(money(x.amount)).size(12.5)),
+                );
+            });
+        }
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(t("cl_acceptance_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+}
+
+/// Haftalik hisobot (TZ VIII.33): oxirgi yetti kunda nima bo'ldi.
+fn week_block(ui: &mut egui::Ui, app: &App) {
+    let r = crate::checks::week_report(
+        app.today,
+        &app.tasks,
+        &app.journal,
+        &app.inspections,
+        &app.issues,
+        &app.exec_docs,
+        &app.payment_stages,
+        &app.contract_changes,
+        &app.acceptances,
+    );
+    block(ui, t("cl_week"), |ui| {
+        ui.label(
+            RichText::new(format!(
+                "{} — {}",
+                r.from.format("%d.%m.%Y"),
+                r.to.format("%d.%m.%Y")
+            ))
+            .size(11.5)
+            .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+
+        let line = |ui: &mut egui::Ui, label: &str, value: String, color: Color32| {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [230.0, 18.0],
+                    egui::Label::new(RichText::new(label).size(12.0).color(theme::muted())),
+                );
+                ui.label(RichText::new(value).size(13.0).color(color));
+            });
+        };
+        line(
+            ui,
+            t("cl_w_progress"),
+            format!(
+                "{:.1}% → {:.1}% ({:+.1})",
+                r.progress_start,
+                r.progress_end,
+                r.progress_end - r.progress_start
+            ),
+            if r.progress_end > r.progress_start {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
+        );
+        line(
+            ui,
+            t("cl_w_tasks"),
+            format!("{} / {}", r.tasks_done, r.tasks_started),
+            theme::text(),
+        );
+        line(
+            ui,
+            t("cl_w_journal"),
+            format!("{} / 7", r.journal_days),
+            if r.journal_days >= 5 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
+        );
+        line(
+            ui,
+            t("cl_w_inspections"),
+            format!("{} / {}", r.inspections, r.inspections_failed),
+            if r.inspections_failed == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
+        );
+        line(
+            ui,
+            t("cl_w_issues"),
+            r.issues_opened.to_string(),
+            if r.issues_opened == 0 {
+                theme::ok()
+            } else {
+                theme::warn()
+            },
+        );
+        line(ui, t("cl_w_docs"), r.docs_signed.to_string(), theme::text());
+        line(ui, t("cl_w_paid"), money(r.paid), theme::ok());
+        if r.changes_pending > 0 || r.acceptances_pending > 0 {
+            line(
+                ui,
+                t("cl_w_waiting"),
+                format!("{} · {}", r.changes_pending, r.acceptances_pending),
+                theme::accent(),
+            );
+        }
     });
 }

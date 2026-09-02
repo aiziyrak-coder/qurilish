@@ -4187,3 +4187,473 @@ mod tests {
         assert!(out.iter().any(|(s, n)| *s == Section::Eom && *n == 1));
     }
 }
+
+// ================================================================ VII. Texnik nazorat
+
+/// Tekshiruvlar bo'yicha yakun (TZ VII.3, 34).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct InspectionSummary {
+    /// Bugunga rejalashtirilgan.
+    pub today: usize,
+    /// Kelgusi yetti kun ichida.
+    pub week: usize,
+    /// Muddati o'tgan, lekin o'tkazilmagan.
+    pub overdue: usize,
+    /// O'tkazilgan va ijobiy.
+    pub passed: usize,
+    /// Salbiy natija, bartaraf etilmagan.
+    pub open_defects: usize,
+    /// Jami yozuv.
+    pub total: usize,
+}
+
+/// Tekshiruvlar bo'yicha yakunni hisoblaydi.
+pub fn inspection_summary(list: &[Inspection], today: NaiveDate) -> InspectionSummary {
+    let week_end = today + chrono::Duration::days(7);
+    InspectionSummary {
+        today: list
+            .iter()
+            .filter(|x| x.open() && x.planned == today)
+            .count(),
+        week: list
+            .iter()
+            .filter(|x| x.open() && x.planned > today && x.planned <= week_end)
+            .count(),
+        overdue: list.iter().filter(|x| x.overdue(today)).count(),
+        passed: list
+            .iter()
+            .filter(|x| !x.open() && x.result == InspectionResult::Pass)
+            .count(),
+        open_defects: list.iter().filter(|x| x.open_defect()).count(),
+        total: list.len(),
+    }
+}
+
+/// Kalendar uchun bir kun (TZ VII.3).
+#[derive(Debug, Clone, PartialEq)]
+pub struct InspectionDay {
+    pub date: NaiveDate,
+    pub ids: Vec<i64>,
+    /// Shu kunda muddati o'tgan tekshiruv bormi.
+    pub overdue: bool,
+}
+
+/// Tekshiruvlarni kunlar bo'yicha guruhlaydi — kalendar shu ro'yxatdan chiziladi.
+///
+/// Faqat o'tkazilmagan tekshiruvlar kiradi: kalendar «nima qilish kerak»
+/// degan savolga javob beradi, arxiv emas.
+pub fn inspection_calendar(list: &[Inspection], today: NaiveDate) -> Vec<InspectionDay> {
+    let mut days: Vec<InspectionDay> = Vec::new();
+    let mut open: Vec<&Inspection> = list.iter().filter(|x| x.open()).collect();
+    open.sort_by_key(|x| x.planned);
+    for x in open {
+        match days.last_mut() {
+            Some(d) if d.date == x.planned => {
+                d.ids.push(x.id);
+                d.overdue |= x.planned < today;
+            }
+            _ => days.push(InspectionDay {
+                date: x.planned,
+                ids: vec![x.id],
+                overdue: x.planned < today,
+            }),
+        }
+    }
+    days
+}
+
+/// Beton sinovlari bo'yicha yakun (TZ VII.12).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ConcreteSummary {
+    pub total: usize,
+    /// Natijasi kelgan sinovlar.
+    pub tested: usize,
+    pub passed: usize,
+    pub failed: usize,
+    /// Natijasi kutilayotgan, sinov sanasi kelgan.
+    pub due: usize,
+    /// O'rtacha ko'rsatkich, talabga nisbatan foizda.
+    pub avg_pct: f64,
+    /// Eng past natija, foizda.
+    pub worst_pct: f64,
+}
+
+/// Beton sinovlarini yig'adi.
+pub fn concrete_summary(list: &[ConcreteTest], today: NaiveDate) -> ConcreteSummary {
+    let pcts: Vec<f64> = list.iter().filter_map(|x| x.pct()).collect();
+    ConcreteSummary {
+        total: list.len(),
+        tested: list.iter().filter(|x| x.actual.is_some()).count(),
+        passed: list.iter().filter(|x| x.passed() == Some(true)).count(),
+        failed: list.iter().filter(|x| x.passed() == Some(false)).count(),
+        due: list
+            .iter()
+            .filter(|x| x.actual.is_none() && x.test_date() <= today)
+            .count(),
+        avg_pct: if pcts.is_empty() {
+            0.0
+        } else {
+            pcts.iter().sum::<f64>() / pcts.len() as f64
+        },
+        worst_pct: pcts.iter().copied().fold(f64::INFINITY, f64::min),
+    }
+}
+
+/// Dopuskdan chiqqan geodezik nuqtalar (TZ VII.14).
+///
+/// Eng katta chetlanish oldinda: texnik nazorat avval shu nuqtaga qaraydi.
+pub fn geodesy_issues(list: &[GeodesyPoint]) -> Vec<&GeodesyPoint> {
+    let mut out: Vec<&GeodesyPoint> = list.iter().filter(|x| !x.within()).collect();
+    out.sort_by(|a, b| {
+        (b.deviation().abs() - b.tolerance).total_cmp(&(a.deviation().abs() - a.tolerance))
+    });
+    out
+}
+
+/// Texnik nazoratning kunlik hisoboti (TZ VII.34).
+///
+/// Bir kunda nima bo'lganini bitta yozuvga yig'adi: hisobot qo'lda emas,
+/// bazadagi yozuvlardan tug'iladi.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SupervisionDay {
+    pub date: NaiveDate,
+    /// O'tkazilgan tekshiruvlar.
+    pub inspections: usize,
+    pub inspections_failed: usize,
+    /// Shu kuni ochilgan nomuvofiqliklar.
+    pub issues_opened: usize,
+    /// Shu kuni yopilgan nomuvofiqliklar.
+    pub issues_closed: usize,
+    /// Sifat tekshiruvlari.
+    pub quality_checks: usize,
+    pub quality_failed: usize,
+    /// Imzolangan ijro hujjatlari.
+    pub docs_signed: usize,
+    /// Beton sinovi natijalari.
+    pub concrete_results: usize,
+    /// Dopuskdan chiqqan geodezik nuqtalar.
+    pub geodesy_out: usize,
+}
+
+impl SupervisionDay {
+    /// Kunda hech narsa bo'lmagan bo'lsa hisobot ham keraksiz.
+    pub fn is_empty(&self) -> bool {
+        self.inspections == 0
+            && self.issues_opened == 0
+            && self.issues_closed == 0
+            && self.quality_checks == 0
+            && self.docs_signed == 0
+            && self.concrete_results == 0
+            && self.geodesy_out == 0
+    }
+}
+
+/// Bir kunlik texnik nazorat hisobotini yig'adi.
+pub fn supervision_day(
+    day: NaiveDate,
+    inspections: &[Inspection],
+    issues: &[Issue],
+    quality: &[QualityCheck],
+    docs: &[ExecDoc],
+    concrete: &[ConcreteTest],
+    geodesy: &[GeodesyPoint],
+) -> SupervisionDay {
+    let done: Vec<&Inspection> = inspections.iter().filter(|x| x.done == Some(day)).collect();
+    SupervisionDay {
+        date: day,
+        inspections: done.len(),
+        inspections_failed: done
+            .iter()
+            .filter(|x| x.result != InspectionResult::Pass)
+            .count(),
+        // Nomuvofiqlikda sana matn ko'rinishida saqlanadi — boshini solishtiramiz.
+        issues_opened: issues
+            .iter()
+            .filter(|i| i.created_at.starts_with(&day.to_string()))
+            .count(),
+        issues_closed: issues
+            .iter()
+            .filter(|i| i.status == IssueStatus::Fixed && i.deadline == Some(day))
+            .count(),
+        quality_checks: quality.iter().filter(|q| q.date == day).count(),
+        quality_failed: quality
+            .iter()
+            .filter(|q| q.date == day && q.result != QualityResult::Pass)
+            .count(),
+        docs_signed: docs
+            .iter()
+            .filter(|d| d.date == day && d.status == ExecDocStatus::Signed)
+            .count(),
+        concrete_results: concrete
+            .iter()
+            .filter(|c| c.actual.is_some() && c.test_date() == day)
+            .count(),
+        geodesy_out: geodesy
+            .iter()
+            .filter(|g| g.measured == day && !g.within())
+            .count(),
+    }
+}
+
+// ================================================================ VIII. Buyurtmachi
+
+/// Shartnoma bo'yicha yakuniy holat (TZ VIII.27-28).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ContractState {
+    pub contract_id: i64,
+    /// Shartnomadagi dastlabki summa.
+    pub base: f64,
+    /// Tasdiqlangan o'zgarishlar summasi (musbat yoki manfiy).
+    pub approved_changes: f64,
+    /// Qaror kutayotgan o'zgarishlar summasi.
+    pub pending_changes: f64,
+    /// Amaldagi summa: dastlabki + tasdiqlangan.
+    pub current: f64,
+    /// Tasdiqlangan muddat surilishi, kunlarda.
+    pub approved_days: i64,
+    /// To'lov jadvali bo'yicha jami.
+    pub planned: f64,
+    pub paid: f64,
+    /// Muddati o'tgan qarz.
+    pub overdue: f64,
+    /// Eng katta kechikish, kunlarda.
+    pub max_delay: i64,
+}
+
+impl ContractState {
+    /// Dastlabki summadan chetlanish, foizda.
+    pub fn change_pct(&self) -> f64 {
+        if self.base <= 0.0 {
+            return 0.0;
+        }
+        self.approved_changes / self.base * 100.0
+    }
+
+    /// To'lov jadvali amaldagi summani qoplaydimi.
+    ///
+    /// Farq katta bo'lsa — jadval eskirgan yoki to'liq tuzilmagan.
+    pub fn schedule_gap(&self) -> f64 {
+        self.current - self.planned
+    }
+}
+
+/// Bitta shartnoma bo'yicha holatni yig'adi.
+pub fn contract_state(
+    c: &Contract,
+    changes: &[ContractChange],
+    stages: &[PaymentStage],
+    today: NaiveDate,
+) -> ContractState {
+    let mine = |id: Option<i64>| id == Some(c.id);
+    let approved: f64 = changes
+        .iter()
+        .filter(|x| mine(x.contract_id) && x.counts())
+        .map(|x| x.amount)
+        .sum();
+    let pending: f64 = changes
+        .iter()
+        .filter(|x| mine(x.contract_id) && x.pending())
+        .map(|x| x.amount)
+        .sum();
+    let my_stages: Vec<&PaymentStage> = stages.iter().filter(|x| mine(x.contract_id)).collect();
+
+    ContractState {
+        contract_id: c.id,
+        base: c.sum,
+        approved_changes: approved,
+        pending_changes: pending,
+        current: c.sum + approved,
+        approved_days: changes
+            .iter()
+            .filter(|x| mine(x.contract_id) && x.counts())
+            .map(|x| x.days)
+            .sum(),
+        planned: my_stages.iter().map(|x| x.amount).sum(),
+        paid: my_stages.iter().map(|x| x.paid).sum(),
+        overdue: my_stages
+            .iter()
+            .filter(|x| x.overdue(today))
+            .map(|x| x.left())
+            .sum(),
+        max_delay: my_stages
+            .iter()
+            .map(|x| x.delay_days(today))
+            .max()
+            .unwrap_or(0),
+    }
+}
+
+/// To'lov intizomi (TZ VIII.30, XVII.32-33).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PaymentDiscipline {
+    pub stages: usize,
+    pub closed: usize,
+    pub overdue: usize,
+    pub planned: f64,
+    pub paid: f64,
+    /// Muddati o'tgan qarz.
+    pub debt: f64,
+    /// Eng katta kechikish, kunlarda.
+    pub max_delay: i64,
+    /// O'rtacha kechikish yopilgan bosqichlar bo'yicha.
+    pub avg_delay: f64,
+    /// Yaqin o'ttiz kunda to'lanishi kerak.
+    pub due_soon: f64,
+}
+
+/// To'lov jadvali bo'yicha intizomni hisoblaydi.
+///
+/// Kechikish faqat haqiqatda to'langan bosqichlardan o'lchanadi: hali
+/// to'lanmagan bosqichda «qancha kechikdi» degan savol boshqa (u qarz).
+pub fn payment_discipline(stages: &[PaymentStage], today: NaiveDate) -> PaymentDiscipline {
+    let soon = today + chrono::Duration::days(30);
+    let paid_delays: Vec<i64> = stages
+        .iter()
+        .filter_map(|x| x.paid_at.map(|p| (p - x.due).num_days().max(0)))
+        .collect();
+
+    PaymentDiscipline {
+        stages: stages.len(),
+        closed: stages.iter().filter(|x| x.closed()).count(),
+        overdue: stages.iter().filter(|x| x.overdue(today)).count(),
+        planned: stages.iter().map(|x| x.amount).sum(),
+        paid: stages.iter().map(|x| x.paid).sum(),
+        debt: stages
+            .iter()
+            .filter(|x| x.overdue(today))
+            .map(|x| x.left())
+            .sum(),
+        max_delay: stages
+            .iter()
+            .map(|x| x.delay_days(today))
+            .max()
+            .unwrap_or(0),
+        avg_delay: if paid_delays.is_empty() {
+            0.0
+        } else {
+            paid_delays.iter().sum::<i64>() as f64 / paid_delays.len() as f64
+        },
+        due_soon: stages
+            .iter()
+            .filter(|x| !x.closed() && x.due >= today && x.due <= soon)
+            .map(|x| x.left())
+            .sum(),
+    }
+}
+
+/// Buyurtmachining haftalik hisoboti (TZ VIII.33).
+///
+/// Hafta — bugundan orqaga yetti kun. Barcha sonlar bazadagi yozuvlardan,
+/// shuning uchun hisobot obyekt ekranlaridagi sonlar bilan zid kelmaydi.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct WeekReport {
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+    /// Hafta boshida va oxirida bajarilish, foizda.
+    pub progress_start: f64,
+    pub progress_end: f64,
+    /// Haftada tugallangan ishlar.
+    pub tasks_done: usize,
+    /// Haftada boshlangan ishlar.
+    pub tasks_started: usize,
+    /// Jurnalga yozilgan kunlar.
+    pub journal_days: usize,
+    /// O'tkazilgan tekshiruvlar va ulardan salbiylari.
+    pub inspections: usize,
+    pub inspections_failed: usize,
+    /// Yangi nomuvofiqliklar.
+    pub issues_opened: usize,
+    /// Imzolangan ijro hujjatlari.
+    pub docs_signed: usize,
+    /// Haftada to'langan summa.
+    pub paid: f64,
+    /// Qaror kutayotgan o'zgarishlar soni.
+    pub changes_pending: usize,
+    /// Qaror kutayotgan qabul hujjatlari.
+    pub acceptances_pending: usize,
+}
+
+/// Haftalik hisobotni yig'adi.
+#[allow(clippy::too_many_arguments)]
+pub fn week_report(
+    today: NaiveDate,
+    tasks: &[Task],
+    journal: &[JournalEntry],
+    inspections: &[Inspection],
+    issues: &[Issue],
+    docs: &[ExecDoc],
+    stages: &[PaymentStage],
+    changes: &[ContractChange],
+    acceptances: &[WorkAcceptance],
+) -> WeekReport {
+    let from = today - chrono::Duration::days(7);
+    let in_week = |d: NaiveDate| d > from && d <= today;
+
+    // Bajarilish: hajmga qarab vaznlangan o'rtacha — GPR ekranidagi bilan
+    // bir xil qoida.
+    let done_pct = |at: NaiveDate| -> f64 {
+        let total: f64 = tasks.iter().map(|t| t.duration.max(1) as f64).sum();
+        if total <= 0.0 {
+            return 0.0;
+        }
+        tasks
+            .iter()
+            .map(|t| {
+                let w = t.duration.max(1) as f64;
+                // Hafta boshidagi holat: shu sanadan keyin tugagan ish hali
+                // tugamagan hisoblanadi.
+                let p = match t.fact_end {
+                    Some(e) if e <= at => 100.0,
+                    Some(_) => 0.0,
+                    None => t.progress,
+                };
+                w * p
+            })
+            .sum::<f64>()
+            / total
+    };
+
+    WeekReport {
+        from,
+        to: today,
+        progress_start: done_pct(from),
+        progress_end: done_pct(today),
+        tasks_done: tasks
+            .iter()
+            .filter(|t| t.fact_end.is_some_and(in_week))
+            .count(),
+        tasks_started: tasks
+            .iter()
+            .filter(|t| t.fact_start.is_some_and(in_week))
+            .count(),
+        journal_days: journal.iter().filter(|j| in_week(j.date)).count(),
+        inspections: inspections
+            .iter()
+            .filter(|x| x.done.is_some_and(in_week))
+            .count(),
+        inspections_failed: inspections
+            .iter()
+            .filter(|x| x.done.is_some_and(in_week) && x.result != InspectionResult::Pass)
+            .count(),
+        issues_opened: issues
+            .iter()
+            .filter(|i| {
+                i.created_at
+                    .get(..10)
+                    .and_then(|d| d.parse::<NaiveDate>().ok())
+                    .is_some_and(in_week)
+            })
+            .count(),
+        docs_signed: docs
+            .iter()
+            .filter(|d| in_week(d.date) && d.status == ExecDocStatus::Signed)
+            .count(),
+        paid: stages
+            .iter()
+            .filter(|x| x.paid_at.is_some_and(in_week))
+            .map(|x| x.paid)
+            .sum(),
+        changes_pending: changes.iter().filter(|x| x.pending()).count(),
+        acceptances_pending: acceptances.iter().filter(|x| x.pending()).count(),
+    }
+}

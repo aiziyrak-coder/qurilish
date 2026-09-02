@@ -601,6 +601,125 @@ impl Db {
                 note TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_invline ON inventory_line(inventory_id);
+
+            CREATE TABLE IF NOT EXISTS inspection (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                task_id INTEGER,
+                kind TEXT NOT NULL DEFAULT 'hidden',
+                number TEXT NOT NULL DEFAULT '',
+                planned TEXT NOT NULL,
+                done TEXT,
+                requested_by TEXT NOT NULL DEFAULT '',
+                inspector TEXT NOT NULL DEFAULT '',
+                place TEXT NOT NULL DEFAULT '',
+                result TEXT NOT NULL DEFAULT 'waiting',
+                deadline TEXT,
+                fixed_at TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_inspection_pid ON inspection(project_id);
+
+            CREATE TABLE IF NOT EXISTS concrete_test (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                inspection_id INTEGER,
+                task_id INTEGER,
+                sample TEXT NOT NULL DEFAULT '',
+                grade TEXT NOT NULL DEFAULT '',
+                structure TEXT NOT NULL DEFAULT '',
+                poured TEXT NOT NULL,
+                age_days INTEGER NOT NULL DEFAULT 28,
+                required REAL NOT NULL DEFAULT 0,
+                actual REAL,
+                lab TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_concrete_pid ON concrete_test(project_id);
+
+            CREATE TABLE IF NOT EXISTS geodesy_point (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                inspection_id INTEGER,
+                mark TEXT NOT NULL DEFAULT '',
+                axis TEXT NOT NULL DEFAULT '',
+                level TEXT NOT NULL DEFAULT '',
+                design REAL NOT NULL DEFAULT 0,
+                fact REAL NOT NULL DEFAULT 0,
+                tolerance REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT 'mm',
+                measured TEXT NOT NULL,
+                surveyor TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_geodesy_pid ON geodesy_point(project_id);
+
+            CREATE TABLE IF NOT EXISTS contract (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                number TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'general',
+                party_id INTEGER,
+                signed TEXT NOT NULL,
+                start TEXT NOT NULL,
+                finish TEXT NOT NULL,
+                sum REAL NOT NULL DEFAULT 0,
+                advance_pct REAL NOT NULL DEFAULT 0,
+                retention_pct REAL NOT NULL DEFAULT 0,
+                currency TEXT NOT NULL DEFAULT 'UZS',
+                status TEXT NOT NULL DEFAULT 'active',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_contract_pid ON contract(project_id);
+
+            CREATE TABLE IF NOT EXISTS contract_change (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                contract_id INTEGER,
+                number TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'extra',
+                date TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                amount REAL NOT NULL DEFAULT 0,
+                days INTEGER NOT NULL DEFAULT 0,
+                reason TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'draft',
+                decided_at TEXT,
+                decided_by TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_change_pid ON contract_change(project_id);
+
+            CREATE TABLE IF NOT EXISTS payment_stage (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                contract_id INTEGER,
+                number TEXT NOT NULL DEFAULT '',
+                basis TEXT NOT NULL DEFAULT '',
+                due TEXT NOT NULL,
+                amount REAL NOT NULL DEFAULT 0,
+                paid REAL NOT NULL DEFAULT 0,
+                paid_at TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_pstage_pid ON payment_stage(project_id);
+
+            CREATE TABLE IF NOT EXISTS work_acceptance (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                task_id INTEGER,
+                number TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                volume REAL NOT NULL DEFAULT 0,
+                unit TEXT NOT NULL DEFAULT '',
+                amount REAL NOT NULL DEFAULT 0,
+                state TEXT NOT NULL DEFAULT 'submitted',
+                decided_at TEXT,
+                decided_by TEXT NOT NULL DEFAULT '',
+                comment TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_accept_pid ON work_acceptance(project_id);
             "#,
         )?;
 
@@ -3132,6 +3251,523 @@ impl Db {
         )
     }
 
+    // ---------- VII. Texnik nazorat ----------
+
+    pub fn inspections(&self, pid: i64) -> Vec<Inspection> {
+        self.list(
+            "SELECT id,project_id,task_id,kind,number,planned,done,requested_by,inspector,place,
+                    result,deadline,fixed_at,note
+             FROM inspection WHERE project_id=?1 ORDER BY planned DESC,id DESC",
+            pid,
+            |r| {
+                Ok(Inspection {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    task_id: r.get(2)?,
+                    kind: InspectionKind::parse(&r.get::<_, String>(3)?),
+                    number: r.get(4)?,
+                    planned: date(&r.get::<_, String>(5)?),
+                    done: odate(r.get(6)?),
+                    requested_by: r.get(7)?,
+                    inspector: r.get(8)?,
+                    place: r.get(9)?,
+                    result: InspectionResult::parse(&r.get::<_, String>(10)?),
+                    deadline: odate(r.get(11)?),
+                    fixed_at: odate(r.get(12)?),
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_inspection(&self, x: &Inspection) -> i64 {
+        self.ins(
+            "INSERT INTO inspection (project_id,task_id,kind,number,planned,done,requested_by,
+                                     inspector,place,result,deadline,fixed_at,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                x.project_id,
+                x.task_id,
+                x.kind.code(),
+                x.number,
+                x.planned.to_string(),
+                ods(x.done),
+                x.requested_by,
+                x.inspector,
+                x.place,
+                x.result.code(),
+                ods(x.deadline),
+                ods(x.fixed_at),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_inspection(&self, x: &Inspection) -> bool {
+        self.upd(
+            "UPDATE inspection SET task_id=?2,kind=?3,number=?4,planned=?5,done=?6,requested_by=?7,
+                    inspector=?8,place=?9,result=?10,deadline=?11,fixed_at=?12,note=?13
+             WHERE id=?1",
+            params![
+                x.id,
+                x.task_id,
+                x.kind.code(),
+                x.number,
+                x.planned.to_string(),
+                ods(x.done),
+                x.requested_by,
+                x.inspector,
+                x.place,
+                x.result.code(),
+                ods(x.deadline),
+                ods(x.fixed_at),
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_inspection(&self, id: i64) -> bool {
+        self.del("inspection", id)
+    }
+
+    pub fn concrete_tests(&self, pid: i64) -> Vec<ConcreteTest> {
+        self.list(
+            "SELECT id,project_id,inspection_id,task_id,sample,grade,structure,poured,age_days,
+                    required,actual,lab,note
+             FROM concrete_test WHERE project_id=?1 ORDER BY poured DESC,id DESC",
+            pid,
+            |r| {
+                Ok(ConcreteTest {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    inspection_id: r.get(2)?,
+                    task_id: r.get(3)?,
+                    sample: r.get(4)?,
+                    grade: r.get(5)?,
+                    structure: r.get(6)?,
+                    poured: date(&r.get::<_, String>(7)?),
+                    age_days: r.get(8)?,
+                    required: r.get(9)?,
+                    actual: r.get(10)?,
+                    lab: r.get(11)?,
+                    note: r.get(12)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_concrete_test(&self, x: &ConcreteTest) -> i64 {
+        self.ins(
+            "INSERT INTO concrete_test (project_id,inspection_id,task_id,sample,grade,structure,
+                                        poured,age_days,required,actual,lab,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            params![
+                x.project_id,
+                x.inspection_id,
+                x.task_id,
+                x.sample,
+                x.grade,
+                x.structure,
+                x.poured.to_string(),
+                x.age_days,
+                x.required,
+                x.actual,
+                x.lab,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_concrete_test(&self, x: &ConcreteTest) -> bool {
+        self.upd(
+            "UPDATE concrete_test SET inspection_id=?2,task_id=?3,sample=?4,grade=?5,structure=?6,
+                    poured=?7,age_days=?8,required=?9,actual=?10,lab=?11,note=?12 WHERE id=?1",
+            params![
+                x.id,
+                x.inspection_id,
+                x.task_id,
+                x.sample,
+                x.grade,
+                x.structure,
+                x.poured.to_string(),
+                x.age_days,
+                x.required,
+                x.actual,
+                x.lab,
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_concrete_test(&self, id: i64) -> bool {
+        self.del("concrete_test", id)
+    }
+
+    pub fn geodesy_points(&self, pid: i64) -> Vec<GeodesyPoint> {
+        self.list(
+            "SELECT id,project_id,inspection_id,mark,axis,level,design,fact,tolerance,unit,
+                    measured,surveyor,note
+             FROM geodesy_point WHERE project_id=?1 ORDER BY measured DESC,id DESC",
+            pid,
+            |r| {
+                Ok(GeodesyPoint {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    inspection_id: r.get(2)?,
+                    mark: r.get(3)?,
+                    axis: r.get(4)?,
+                    level: r.get(5)?,
+                    design: r.get(6)?,
+                    fact: r.get(7)?,
+                    tolerance: r.get(8)?,
+                    unit: r.get(9)?,
+                    measured: date(&r.get::<_, String>(10)?),
+                    surveyor: r.get(11)?,
+                    note: r.get(12)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_geodesy_point(&self, x: &GeodesyPoint) -> i64 {
+        self.ins(
+            "INSERT INTO geodesy_point (project_id,inspection_id,mark,axis,level,design,fact,
+                                        tolerance,unit,measured,surveyor,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
+            params![
+                x.project_id,
+                x.inspection_id,
+                x.mark,
+                x.axis,
+                x.level,
+                x.design,
+                x.fact,
+                x.tolerance,
+                x.unit,
+                x.measured.to_string(),
+                x.surveyor,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_geodesy_point(&self, x: &GeodesyPoint) -> bool {
+        self.upd(
+            "UPDATE geodesy_point SET inspection_id=?2,mark=?3,axis=?4,level=?5,design=?6,fact=?7,
+                    tolerance=?8,unit=?9,measured=?10,surveyor=?11,note=?12 WHERE id=?1",
+            params![
+                x.id,
+                x.inspection_id,
+                x.mark,
+                x.axis,
+                x.level,
+                x.design,
+                x.fact,
+                x.tolerance,
+                x.unit,
+                x.measured.to_string(),
+                x.surveyor,
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_geodesy_point(&self, id: i64) -> bool {
+        self.del("geodesy_point", id)
+    }
+
+    // ---------- VIII. Buyurtmachi: shartnomalar va to'lovlar ----------
+
+    pub fn contracts(&self, pid: i64) -> Vec<Contract> {
+        self.list(
+            "SELECT id,project_id,number,name,kind,party_id,signed,start,finish,sum,
+                    advance_pct,retention_pct,currency,status,note
+             FROM contract WHERE project_id=?1 ORDER BY signed DESC,id DESC",
+            pid,
+            |r| {
+                Ok(Contract {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    number: r.get(2)?,
+                    name: r.get(3)?,
+                    kind: ContractKind::parse(&r.get::<_, String>(4)?),
+                    party_id: r.get(5)?,
+                    signed: date(&r.get::<_, String>(6)?),
+                    start: date(&r.get::<_, String>(7)?),
+                    end: date(&r.get::<_, String>(8)?),
+                    sum: r.get(9)?,
+                    advance_pct: r.get(10)?,
+                    retention_pct: r.get(11)?,
+                    currency: r.get(12)?,
+                    status: ContractStatus::parse(&r.get::<_, String>(13)?),
+                    note: r.get(14)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_contract(&self, x: &Contract) -> i64 {
+        self.ins(
+            "INSERT INTO contract (project_id,number,name,kind,party_id,signed,start,finish,sum,
+                                   advance_pct,retention_pct,currency,status,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+            params![
+                x.project_id,
+                x.number,
+                x.name,
+                x.kind.code(),
+                x.party_id,
+                x.signed.to_string(),
+                x.start.to_string(),
+                x.end.to_string(),
+                x.sum,
+                x.advance_pct,
+                x.retention_pct,
+                x.currency,
+                x.status.code(),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_contract(&self, x: &Contract) -> bool {
+        self.upd(
+            "UPDATE contract SET number=?2,name=?3,kind=?4,party_id=?5,signed=?6,start=?7,
+                    finish=?8,sum=?9,advance_pct=?10,retention_pct=?11,currency=?12,status=?13,
+                    note=?14 WHERE id=?1",
+            params![
+                x.id,
+                x.number,
+                x.name,
+                x.kind.code(),
+                x.party_id,
+                x.signed.to_string(),
+                x.start.to_string(),
+                x.end.to_string(),
+                x.sum,
+                x.advance_pct,
+                x.retention_pct,
+                x.currency,
+                x.status.code(),
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_contract(&self, id: i64) -> bool {
+        self.del("contract", id)
+    }
+
+    pub fn contract_changes(&self, pid: i64) -> Vec<ContractChange> {
+        self.list(
+            "SELECT id,project_id,contract_id,number,kind,date,description,amount,days,reason,
+                    status,decided_at,decided_by,note
+             FROM contract_change WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(ContractChange {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    contract_id: r.get(2)?,
+                    number: r.get(3)?,
+                    kind: ChangeKind::parse(&r.get::<_, String>(4)?),
+                    date: date(&r.get::<_, String>(5)?),
+                    description: r.get(6)?,
+                    amount: r.get(7)?,
+                    days: r.get(8)?,
+                    reason: r.get(9)?,
+                    status: ChangeStatus::parse(&r.get::<_, String>(10)?),
+                    decided_at: odate(r.get(11)?),
+                    decided_by: r.get(12)?,
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_contract_change(&self, x: &ContractChange) -> i64 {
+        self.ins(
+            "INSERT INTO contract_change (project_id,contract_id,number,kind,date,description,
+                                          amount,days,reason,status,decided_at,decided_by,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                x.project_id,
+                x.contract_id,
+                x.number,
+                x.kind.code(),
+                x.date.to_string(),
+                x.description,
+                x.amount,
+                x.days,
+                x.reason,
+                x.status.code(),
+                ods(x.decided_at),
+                x.decided_by,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_contract_change(&self, x: &ContractChange) -> bool {
+        self.upd(
+            "UPDATE contract_change SET contract_id=?2,number=?3,kind=?4,date=?5,description=?6,
+                    amount=?7,days=?8,reason=?9,status=?10,decided_at=?11,decided_by=?12,note=?13
+             WHERE id=?1",
+            params![
+                x.id,
+                x.contract_id,
+                x.number,
+                x.kind.code(),
+                x.date.to_string(),
+                x.description,
+                x.amount,
+                x.days,
+                x.reason,
+                x.status.code(),
+                ods(x.decided_at),
+                x.decided_by,
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_contract_change(&self, id: i64) -> bool {
+        self.del("contract_change", id)
+    }
+
+    pub fn payment_stages(&self, pid: i64) -> Vec<PaymentStage> {
+        self.list(
+            "SELECT id,project_id,contract_id,number,basis,due,amount,paid,paid_at,note
+             FROM payment_stage WHERE project_id=?1 ORDER BY due,id",
+            pid,
+            |r| {
+                Ok(PaymentStage {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    contract_id: r.get(2)?,
+                    number: r.get(3)?,
+                    basis: r.get(4)?,
+                    due: date(&r.get::<_, String>(5)?),
+                    amount: r.get(6)?,
+                    paid: r.get(7)?,
+                    paid_at: odate(r.get(8)?),
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_payment_stage(&self, x: &PaymentStage) -> i64 {
+        self.ins(
+            "INSERT INTO payment_stage (project_id,contract_id,number,basis,due,amount,paid,
+                                        paid_at,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                x.project_id,
+                x.contract_id,
+                x.number,
+                x.basis,
+                x.due.to_string(),
+                x.amount,
+                x.paid,
+                ods(x.paid_at),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_payment_stage(&self, x: &PaymentStage) -> bool {
+        self.upd(
+            "UPDATE payment_stage SET contract_id=?2,number=?3,basis=?4,due=?5,amount=?6,paid=?7,
+                    paid_at=?8,note=?9 WHERE id=?1",
+            params![
+                x.id,
+                x.contract_id,
+                x.number,
+                x.basis,
+                x.due.to_string(),
+                x.amount,
+                x.paid,
+                ods(x.paid_at),
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_payment_stage(&self, id: i64) -> bool {
+        self.del("payment_stage", id)
+    }
+
+    pub fn work_acceptances(&self, pid: i64) -> Vec<WorkAcceptance> {
+        self.list(
+            "SELECT id,project_id,task_id,number,date,volume,unit,amount,state,decided_at,
+                    decided_by,comment
+             FROM work_acceptance WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(WorkAcceptance {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    task_id: r.get(2)?,
+                    number: r.get(3)?,
+                    date: date(&r.get::<_, String>(4)?),
+                    volume: r.get(5)?,
+                    unit: r.get(6)?,
+                    amount: r.get(7)?,
+                    state: AcceptState::parse(&r.get::<_, String>(8)?),
+                    decided_at: odate(r.get(9)?),
+                    decided_by: r.get(10)?,
+                    comment: r.get(11)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_work_acceptance(&self, x: &WorkAcceptance) -> i64 {
+        self.ins(
+            "INSERT INTO work_acceptance (project_id,task_id,number,date,volume,unit,amount,state,
+                                          decided_at,decided_by,comment)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                x.project_id,
+                x.task_id,
+                x.number,
+                x.date.to_string(),
+                x.volume,
+                x.unit,
+                x.amount,
+                x.state.code(),
+                ods(x.decided_at),
+                x.decided_by,
+                x.comment
+            ],
+        )
+    }
+
+    pub fn update_work_acceptance(&self, x: &WorkAcceptance) -> bool {
+        self.upd(
+            "UPDATE work_acceptance SET task_id=?2,number=?3,date=?4,volume=?5,unit=?6,amount=?7,
+                    state=?8,decided_at=?9,decided_by=?10,comment=?11 WHERE id=?1",
+            params![
+                x.id,
+                x.task_id,
+                x.number,
+                x.date.to_string(),
+                x.volume,
+                x.unit,
+                x.amount,
+                x.state.code(),
+                ods(x.decided_at),
+                x.decided_by,
+                x.comment
+            ],
+        )
+    }
+
+    pub fn delete_work_acceptance(&self, id: i64) -> bool {
+        self.del("work_acceptance", id)
+    }
+
     // ---------- XV. Xavfsizlik ----------
 
     pub fn safety_events(&self, pid: i64) -> Vec<SafetyEvent> {
@@ -3722,6 +4358,8 @@ impl Db {
         self.seed_demo_supply(pid, ru);
         self.seed_demo_sales(pid, ru);
         self.seed_demo_resources(pid, ru);
+        self.seed_demo_supervision(pid, ru);
+        self.seed_demo_client(pid, ru);
     }
 
     /// Resurs va nazorat modullari namunasi (TZ XIII-XVI).
@@ -3729,6 +4367,590 @@ impl Db {
     /// Ataylab bir nechta muammoli holat qoldirilgan: bitta materialning kirish
     /// nazorati «mos emas», bitta xavfsizlik yozuvi muddati o'tgan, bitta
     /// texnikaning texnik ko'rigi tugagan.
+    /// VII. Texnik nazorat: tekshiruvlar, beton sinovlari va geodeziya.
+    pub fn seed_demo_supervision(&self, pid: i64, ru: bool) {
+        if !self.inspections(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+        let d = |back: i64| today - chrono::Duration::days(back);
+
+        let tech = if ru {
+            "Собиров Р.Х."
+        } else {
+            "Sobirov R.X."
+        };
+        let foreman = if ru {
+            "Юсупов Б.Р."
+        } else {
+            "Yusupov B.R."
+        };
+
+        let list: [InspectionDef; 9] = [
+            (
+                InspectionKind::Hidden,
+                "TN-011",
+                40,
+                Some(40),
+                "3-qavat, A-D o'qlari, armatura",
+                "3 этаж, оси А-Д, арматура",
+                InspectionResult::Pass,
+                None,
+                None,
+                "6",
+            ),
+            (
+                InspectionKind::Concrete,
+                "TN-012",
+                38,
+                Some(38),
+                "3-qavat plita, beton quyish",
+                "Плита 3 этажа, бетонирование",
+                InspectionResult::Pass,
+                None,
+                None,
+                "6",
+            ),
+            (
+                InspectionKind::Geodesy,
+                "TN-013",
+                31,
+                Some(31),
+                "4-qavat, ustunlar o'qi",
+                "4 этаж, оси колонн",
+                InspectionResult::Conditional,
+                Some(24),
+                Some(22),
+                "7",
+            ),
+            (
+                InspectionKind::Hidden,
+                "TN-014",
+                18,
+                Some(17),
+                "5-qavat, A-D o'qlari, armatura",
+                "5 этаж, оси А-Д, арматура",
+                InspectionResult::Fail,
+                Some(11),
+                None,
+                "8",
+            ),
+            (
+                InspectionKind::Material,
+                "TN-015",
+                12,
+                Some(12),
+                "Kirish nazorati: g'isht partiyasi",
+                "Входной контроль: партия кирпича",
+                InspectionResult::Pass,
+                None,
+                None,
+                "9",
+            ),
+            (
+                InspectionKind::Volume,
+                "TN-016",
+                6,
+                Some(6),
+                "G'ishtin devor hajmi, 4-qavat",
+                "Объём кирпичной кладки, 4 этаж",
+                InspectionResult::Conditional,
+                Some(1),
+                None,
+                "9",
+            ),
+            (
+                InspectionKind::Hidden,
+                "TN-017",
+                0,
+                None,
+                "6-qavat, A-D o'qlari, armatura",
+                "6 этаж, оси А-Д, арматура",
+                InspectionResult::Waiting,
+                None,
+                None,
+                "10",
+            ),
+            (
+                InspectionKind::Physical,
+                "TN-018",
+                -3,
+                None,
+                "Fasad panellarini mahkamlash",
+                "Крепление фасадных панелей",
+                InspectionResult::Waiting,
+                None,
+                None,
+                "12",
+            ),
+            (
+                InspectionKind::Concrete,
+                "TN-019",
+                -6,
+                None,
+                "6-qavat plita, beton quyish",
+                "Плита 6 этажа, бетонирование",
+                InspectionResult::Waiting,
+                None,
+                None,
+                "10",
+            ),
+        ];
+
+        let mut ids: Vec<i64> = Vec::new();
+        for (kind, number, plan_back, done_back, place_uz, place_ru, result, dl, fixed, wbs) in list
+        {
+            let id = self.insert_inspection(&Inspection {
+                id: 0,
+                project_id: pid,
+                task_id: by_wbs(wbs),
+                kind,
+                number: number.into(),
+                planned: d(plan_back),
+                done: done_back.map(d),
+                requested_by: foreman.into(),
+                inspector: if done_back.is_some() {
+                    tech.to_string()
+                } else {
+                    String::new()
+                },
+                place: if ru { place_ru } else { place_uz }.into(),
+                result,
+                deadline: dl.map(d),
+                fixed_at: fixed.map(d),
+                note: String::new(),
+            });
+            ids.push(id);
+        }
+
+        // Beton sinovlari: 7 va 28 kunlik namunalar.
+        let concrete: [ConcreteDef; 6] = [
+            (
+                "N-101",
+                "B25",
+                "3-qavat plitasi",
+                "Плита 3 этажа",
+                38,
+                7,
+                17.5,
+                Some(19.2),
+            ),
+            (
+                "N-101",
+                "B25",
+                "3-qavat plitasi",
+                "Плита 3 этажа",
+                38,
+                28,
+                25.0,
+                Some(27.8),
+            ),
+            (
+                "N-102",
+                "B25",
+                "4-qavat plitasi",
+                "Плита 4 этажа",
+                24,
+                7,
+                17.5,
+                Some(16.1),
+            ),
+            (
+                "N-102",
+                "B25",
+                "4-qavat plitasi",
+                "Плита 4 этажа",
+                24,
+                28,
+                25.0,
+                Some(24.1),
+            ),
+            (
+                "N-103",
+                "B30",
+                "5-qavat ustunlari",
+                "Колонны 5 этажа",
+                12,
+                7,
+                21.0,
+                Some(22.4),
+            ),
+            (
+                "N-103",
+                "B30",
+                "5-qavat ustunlari",
+                "Колонны 5 этажа",
+                12,
+                28,
+                30.0,
+                None,
+            ),
+        ];
+        for (sample, grade, uz, rux, back, age, req, act) in concrete {
+            self.insert_concrete_test(&ConcreteTest {
+                id: 0,
+                project_id: pid,
+                inspection_id: None,
+                task_id: by_wbs("6"),
+                sample: sample.into(),
+                grade: grade.into(),
+                structure: if ru { rux } else { uz }.into(),
+                poured: d(back),
+                age_days: age,
+                required: req,
+                actual: act,
+                lab: if ru {
+                    "Стройлаборатория №4"
+                } else {
+                    "4-son qurilish laboratoriyasi"
+                }
+                .into(),
+                note: String::new(),
+            });
+        }
+
+        // Geodeziya: ustun o'qlari va qavat belgilari, mm da.
+        // (marka, o'q, qavat, loyiha, fakt, dopusk)
+        let geo: [(&str, &str, &str, f64, f64, f64); 7] = [
+            ("K-1", "A/1", "4", 0.0, 4.0, 8.0),
+            ("K-2", "A/3", "4", 0.0, -6.0, 8.0),
+            ("K-3", "B/1", "4", 0.0, 11.0, 8.0),
+            ("K-4", "B/3", "4", 0.0, 3.0, 8.0),
+            ("O-1", "A/1", "5", 14_400.0, 14_403.0, 10.0),
+            ("O-2", "B/3", "5", 14_400.0, 14_386.0, 10.0),
+            ("O-3", "D/3", "5", 14_400.0, 14_398.0, 10.0),
+        ];
+        for (mark, axis, level, design, fact, tol) in geo {
+            self.insert_geodesy_point(&GeodesyPoint {
+                id: 0,
+                project_id: pid,
+                inspection_id: ids.get(2).copied(),
+                mark: mark.into(),
+                axis: axis.into(),
+                level: level.into(),
+                design,
+                fact,
+                tolerance: tol,
+                unit: "mm".into(),
+                measured: d(31),
+                surveyor: if ru {
+                    "Эргашев Ж.Т."
+                } else {
+                    "Ergashev J.T."
+                }
+                .into(),
+                note: String::new(),
+            });
+        }
+    }
+
+    /// VIII. Buyurtmachi: shartnomalar, o'zgarishlar, to'lovlar va qabul.
+    pub fn seed_demo_client(&self, pid: i64, ru: bool) {
+        if !self.contracts(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+        let parties = self.parties(pid).unwrap_or_default();
+        let party =
+            |role: crate::model::PartyRole| parties.iter().find(|p| p.role == role).map(|p| p.id);
+
+        // ---------- Shartnomalar ----------
+        let general = self.insert_contract(&Contract {
+            id: 0,
+            project_id: pid,
+            number: "P-2026/14".into(),
+            name: if ru {
+                "Генеральный подряд: строительство блока №15"
+            } else {
+                "Bosh pudrat: 15-blok qurilishi"
+            }
+            .into(),
+            kind: ContractKind::General,
+            party_id: party(crate::model::PartyRole::Contractor),
+            signed: d(140),
+            start: d(126),
+            end: d(126) + chrono::Duration::days(400),
+            sum: 48_500_000_000.0,
+            advance_pct: 15.0,
+            retention_pct: 5.0,
+            currency: "UZS".into(),
+            status: ContractStatus::Active,
+            note: String::new(),
+        });
+
+        let sub = self.insert_contract(&Contract {
+            id: 0,
+            project_id: pid,
+            number: "S-2026/07".into(),
+            name: if ru {
+                "Субподряд: инженерные сети"
+            } else {
+                "Subpudrat: muhandislik tarmoqlari"
+            }
+            .into(),
+            kind: ContractKind::Sub,
+            party_id: party(crate::model::PartyRole::Subcontractor),
+            signed: d(96),
+            start: d(90),
+            end: d(90) + chrono::Duration::days(210),
+            sum: 6_400_000_000.0,
+            advance_pct: 20.0,
+            retention_pct: 5.0,
+            currency: "UZS".into(),
+            status: ContractStatus::Active,
+            note: String::new(),
+        });
+
+        // ---------- Qiymat va muddat o'zgarishlari ----------
+        // (shartnoma, raqam, tur, kun oldin, tavsif uz/ru, summa, kun, holat)
+        let changes: [ChangeDef; 5] = [
+            (
+                general,
+                "DS-1",
+                ChangeKind::Extra,
+                74,
+                "Yerto'la devorlariga qo'shimcha gidroizolyatsiya",
+                "Дополнительная гидроизоляция стен подвала",
+                310_000_000.0,
+                0,
+                ChangeStatus::Approved,
+            ),
+            (
+                general,
+                "DS-2",
+                ChangeKind::Price,
+                52,
+                "Armatura narxining o'zgarishi bo'yicha qayta hisob",
+                "Перерасчёт по изменению цены арматуры",
+                186_000_000.0,
+                0,
+                ChangeStatus::Approved,
+            ),
+            (
+                general,
+                "DS-3",
+                ChangeKind::Term,
+                33,
+                "Yog'ingarchilik tufayli muddatni surish",
+                "Перенос срока из-за осадков",
+                0.0,
+                14,
+                ChangeStatus::Approved,
+            ),
+            (
+                general,
+                "DS-4",
+                ChangeKind::Extra,
+                12,
+                "Kirish guruhi fasadini o'zgartirish",
+                "Изменение фасада входной группы",
+                240_000_000.0,
+                7,
+                ChangeStatus::Sent,
+            ),
+            (
+                sub,
+                "DS-5",
+                ChangeKind::Reduce,
+                20,
+                "Ikkinchi bosqich shamollatishi shartnomadan chiqarildi",
+                "Вентиляция второй очереди исключена из договора",
+                -420_000_000.0,
+                0,
+                ChangeStatus::Approved,
+            ),
+        ];
+        for (cid, number, kind, back, uz, rux, amount, days, status) in changes {
+            self.insert_contract_change(&ContractChange {
+                id: 0,
+                project_id: pid,
+                contract_id: Some(cid),
+                number: number.into(),
+                kind,
+                date: d(back),
+                description: if ru { rux } else { uz }.into(),
+                amount,
+                days,
+                reason: String::new(),
+                status,
+                decided_at: (status != ChangeStatus::Sent).then(|| d(back - 4)),
+                decided_by: if status == ChangeStatus::Sent {
+                    String::new()
+                } else if ru {
+                    "Тошматов А.А.".into()
+                } else {
+                    "Toshmatov A.A.".into()
+                },
+                note: String::new(),
+            });
+        }
+
+        // ---------- To'lov jadvali ----------
+        // (shartnoma, raqam, asos uz/ru, muddat kuni, summa, to'langan, to'langan kun)
+        let stages: [StageDef; 7] = [
+            (
+                general,
+                "T-1",
+                "Avans",
+                "Аванс",
+                120,
+                7_275_000_000.0,
+                7_275_000_000.0,
+                Some(118),
+            ),
+            (
+                general,
+                "T-2",
+                "1-oy bajarilgan ish",
+                "Работы за 1 месяц",
+                96,
+                5_200_000_000.0,
+                5_200_000_000.0,
+                Some(92),
+            ),
+            (
+                general,
+                "T-3",
+                "2-oy bajarilgan ish",
+                "Работы за 2 месяц",
+                66,
+                6_100_000_000.0,
+                6_100_000_000.0,
+                Some(51),
+            ),
+            (
+                general,
+                "T-4",
+                "3-oy bajarilgan ish",
+                "Работы за 3 месяц",
+                36,
+                5_900_000_000.0,
+                5_900_000_000.0,
+                Some(28),
+            ),
+            (
+                general,
+                "T-5",
+                "4-oy bajarilgan ish",
+                "Работы за 4 месяц",
+                6,
+                4_800_000_000.0,
+                2_825_000_000.0,
+                None,
+            ),
+            (
+                general,
+                "T-6",
+                "5-oy bajarilgan ish",
+                "Работы за 5 месяц",
+                -24,
+                5_100_000_000.0,
+                0.0,
+                None,
+            ),
+            (
+                sub,
+                "S-1",
+                "Avans",
+                "Аванс",
+                88,
+                1_280_000_000.0,
+                1_280_000_000.0,
+                Some(85),
+            ),
+        ];
+        for (cid, number, uz, rux, back, amount, paid, paid_back) in stages {
+            self.insert_payment_stage(&PaymentStage {
+                id: 0,
+                project_id: pid,
+                contract_id: Some(cid),
+                number: number.into(),
+                basis: if ru { rux } else { uz }.into(),
+                due: d(back),
+                amount,
+                paid,
+                paid_at: paid_back.map(d),
+                note: String::new(),
+            });
+        }
+
+        // ---------- Ishlarni topshirish ----------
+        // (VBS, raqam, kun oldin, hajm, birlik, summa, holat)
+        let acts: [AcceptDef; 4] = [
+            (
+                "5",
+                "QT-1",
+                58,
+                1_150.0,
+                "m3",
+                2_760_000_000.0,
+                AcceptState::Accepted,
+            ),
+            (
+                "6",
+                "QT-2",
+                34,
+                980.0,
+                "m3",
+                2_352_000_000.0,
+                AcceptState::Accepted,
+            ),
+            (
+                "7",
+                "QT-3",
+                15,
+                860.0,
+                "m3",
+                2_064_000_000.0,
+                AcceptState::Rejected,
+            ),
+            (
+                "9",
+                "QT-4",
+                3,
+                1_420.0,
+                "m2",
+                1_136_000_000.0,
+                AcceptState::Submitted,
+            ),
+        ];
+        for (wbs, number, back, volume, unit, amount, state) in acts {
+            self.insert_work_acceptance(&WorkAcceptance {
+                id: 0,
+                project_id: pid,
+                task_id: by_wbs(wbs),
+                number: number.into(),
+                date: d(back),
+                volume,
+                unit: unit.into(),
+                amount,
+                state,
+                decided_at: (state != AcceptState::Submitted).then(|| d(back - 3)),
+                decided_by: if state == AcceptState::Submitted {
+                    String::new()
+                } else if ru {
+                    "Тошматов А.А.".into()
+                } else {
+                    "Toshmatov A.A.".into()
+                },
+                comment: if state == AcceptState::Rejected {
+                    if ru {
+                        "Объём не подтверждён исполнительной съёмкой".into()
+                    } else {
+                        "Hajm ijro syomkasi bilan tasdiqlanmagan".into()
+                    }
+                } else {
+                    String::new()
+                },
+            });
+        }
+    }
+
     pub fn seed_demo_resources(&self, pid: i64, ru: bool) {
         if !self.workers(pid).is_empty() {
             return;
@@ -6280,3 +7502,69 @@ impl Db {
         );
     }
 }
+
+/// Namunaviy tekshiruv: tur, raqam, reja kuni (orqaga), o'tkazilgan kuni,
+/// joy (uz), joy (ru), natija, bartaraf muddati, bartaraf etilgan sana, VBS.
+type InspectionDef = (
+    InspectionKind,
+    &'static str,
+    i64,
+    Option<i64>,
+    &'static str,
+    &'static str,
+    InspectionResult,
+    Option<i64>,
+    Option<i64>,
+    &'static str,
+);
+
+/// Namunaviy beton sinovi: namuna, marka, konstruksiya (uz), konstruksiya (ru),
+/// quyilgan kun (orqaga), yosh, talab (MPa), natija (MPa).
+type ConcreteDef = (
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    i64,
+    i64,
+    f64,
+    Option<f64>,
+);
+
+/// Namunaviy shartnoma o'zgarishi: shartnoma, raqam, tur, kun (orqaga),
+/// tavsif (uz), tavsif (ru), summa, kun, holat.
+type ChangeDef = (
+    i64,
+    &'static str,
+    ChangeKind,
+    i64,
+    &'static str,
+    &'static str,
+    f64,
+    i64,
+    ChangeStatus,
+);
+
+/// Namunaviy to'lov bosqichi: shartnoma, raqam, asos (uz), asos (ru),
+/// muddat (orqaga), summa, to'langan, to'langan kun.
+type StageDef = (
+    i64,
+    &'static str,
+    &'static str,
+    &'static str,
+    i64,
+    f64,
+    f64,
+    Option<i64>,
+);
+
+/// Namunaviy qabul hujjati: VBS, raqam, kun (orqaga), hajm, birlik, summa, holat.
+type AcceptDef = (
+    &'static str,
+    &'static str,
+    i64,
+    f64,
+    &'static str,
+    f64,
+    AcceptState,
+);

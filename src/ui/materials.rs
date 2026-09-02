@@ -1341,7 +1341,7 @@ fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
 
 /// Son kiritish maydoni. `DragValue` ishlatilgan — sarf normasi 0.0235 kabi
 /// kichik son bo'lishi mumkin, matnli maydon esa uni yaxlitlab yuborardi.
-fn num_edit(ui: &mut egui::Ui, w: f32, v: &mut f64, speed: f64, max: f64) -> bool {
+pub fn num_edit(ui: &mut egui::Ui, w: f32, v: &mut f64, speed: f64, max: f64) -> bool {
     ui.add_sized(
         [w, 22.0],
         egui::DragValue::new(v)

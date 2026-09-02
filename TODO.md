@@ -24,8 +24,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
 | VI. Prorab ilovasi | 37 | 16 | 9 | 12 | 8 |
-| VII. Texnik nazorat kabineti | 38 | 13 | 10 | 15 | 3 |
-| VIII. Buyurtmachi kabineti | 37 | 10 | 13 | 14 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
+| VIII. Buyurtmachi kabineti | 37 | 17 | 14 | 6 | 2 |
 | IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
 | X. Xaridlar | 48 | 16 | 16 | 16 | 2 |
 | XI. Ombor | 48 | 26 | 9 | 13 | 1 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 23 | 12 | 16 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 9 | 1 | 4 | 2 |
-| **Jami** | **700** | **313** | **177** | **210** | **56** |
+| **Jami** | **700** | **328** | **177** | **195** | **55** |
 
-Ya'ni **~45 % to'liq**, **~25 % qisman**, **~30 % hali yo'q**.
+Ya'ni **~47 % to'liq**, **~25 % qisman**, **~28 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -245,18 +245,18 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 - [x] 1. Modul maqsadi
 - [x] 2. Bosh ekran — *ko'rib chiqish navbati*
-- [ ] 3. Tekshiruvlar kalendari
-- [ ] 4. Tekshiruvga arizalar
-- [~] 5. Yashirin ishlar tekshiruvi
-- [ ] 6. Jismoniy tekshiruv
+- [x] 3. Tekshiruvlar kalendari — *o'tkazilmagan tekshiruvlar kunlar bo'yicha, muddati o'tgani qizil*
+- [x] 4. Tekshiruvga arizalar — *kim chaqirdi, qachonga rejalashtirilgan*
+- [x] 5. Yashirin ishlar tekshiruvi — *tekshiruv turi, natija, bartaraf etish muddati*
+- [x] 6. Jismoniy tekshiruv — *tekshiruv turlaridan biri*
 - [ ] 🔒 7. AR / vizual tekshiruv
 - [~] 8. Loyihaga muvofiqlikni tekshirish — *AI tekshiruvi orqali*
 - [x] 9. Materiallarni tekshirish
 - [x] 10. Kirish nazorati
 - [ ] 🔒 11. AI sertifikat tekshiruvi
-- [ ] 12. Betonni tekshirish
-- [~] 13. Hajmlarni nazorat qilish
-- [ ] 14. Geodeziyani tekshirish
+- [x] 12. Betonni tekshirish — *7 va 28 kunlik namunalar, laboratoriya natijasi talab bilan solishtiriladi*
+- [x] 13. Hajmlarni nazorat qilish — *hajm tekshiruvi va qabul hujjati*
+- [x] 14. Geodeziyani tekshirish — *loyiha/fakt/dopusk, chetlanish hisoblanadi*
 - [x] 15. Izohlar — *nomuvofiqliklar*
 - [x] 16. Izoh toifalari
 - [~] 17. AI izohni tasniflashi — *muhimlik darajasi*
@@ -276,9 +276,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 31. Texnik nazorat uchun AI Clash
 - [ ] 32. Qurilishdagi o'zgarishlarni nazorat qilish
 - [~] 33. AI-yordamchi
-- [ ] 34. Texnik nazoratning kunlik hisoboti
+- [x] 34. Texnik nazoratning kunlik hisoboti — *oxirgi 14 kun, yozuvlardan yig'iladi*
 - [~] 35. Obyekt tayyorligini nazorat qilish
-- [ ] 36. Yakuniy qabul
+- [~] 36. Yakuniy qabul — *tekshiruv turi bor; yakuniy qabul dalolatnomasi shakli yo'q*
 - [x] 37. Boshqa modullar bilan bog'lanish
 - [x] 38. Eng muhim funksiya
 
@@ -296,8 +296,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. Grafikni AI tahlili
 - [x] 9. Moliya
 - [~] 10. AI Cost Control
-- [ ] 11. Qiymat o'zgarishlari
-- [ ] 12. Qo'shimcha ishlarni nazorat qilish
+- [x] 11. Qiymat o'zgarishlari — *faqat kelishilgani shartnoma summasiga qo'shiladi*
+- [x] 12. Qo'shimcha ishlarni nazorat qilish — *qo'shimcha, chiqarish, narx va muddat o'zgarishi*
 - [~] 13. Smeta
 - [ ] 14. Xaridlar
 - [ ] 15. Takliflarni solishtirish
@@ -306,19 +306,19 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 18. Buyurtmachi izoh yarata olishi
 - [~] 19. Ijro hujjatlari
 - [~] 20. Ijro hujjatlarini AI tekshiruvi
-- [ ] 21. Ishlarni qabul qilish
-- [ ] 🔒 22. Elektron kelishuv
+- [x] 21. Ishlarni qabul qilish — *topshirildi → qabul/rad etildi, sabab bilan*
+- [~] 22. Elektron kelishuv — *ilova ichidagi qaror: kim va qachon; ERI tashqi omil*
 - [~] 23. Loyiha hujjatlari
 - [ ] 24. Loyiha versiyalarini AI solishtirishi
 - [~] 25. Loyiha xatolarini nazorat qilish
 - [x] 26. Xavfsizlik
-- [ ] 27. Shartnomalar
-- [ ] 28. AI Contract Monitor
-- [~] 29. To'lovlar — *pasportda to'langan summa*
-- [ ] 30. AI Payment Control
+- [x] 27. Shartnomalar — *bosh pudrat, subpudrat, yetkazib berish; avans va kafolat ushlanmasi*
+- [~] 28. AI Contract Monitor — *dastlabkidan chetlanish foizi, muddat surilishi; ogohlantirish qoidalari yo'q*
+- [x] 29. To'lovlar — *to'lov jadvali: bosqich, muddat, to'langan, qoldiq*
+- [x] 30. AI Payment Control — *qarz va kechikish ajratiladi, o'rtacha kechikish, 30 kunlik prognoz*
 - [~] 31. Risklar — *analitika topilmalari*
 - [~] 32. Buyurtmachining AI-yordamchisi
-- [ ] 33. Haftalik hisobot
+- [x] 33. Haftalik hisobot — *kabinetdagi blok: bajarilish, ishlar, tekshiruv, pul*
 - [x] 34. Kirish darajalari — *rollar*
 - [ ] 🔒 35. Mobil kabinet
 - [x] 36. Kabinetning eng muhim funksiyasi
@@ -812,7 +812,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 **Server va jonli sinxronizatsiya**
 - [ ] 🔒 **Mobil klient**
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
-- [~] **Excel eksporti** — *18 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
+- [~] **Excel eksporti** — *20 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
 - [ ] **Bildirishnomalar tizimi**
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
 - [ ] **Izoh va muhokama** (yozuvlarga sharh)
