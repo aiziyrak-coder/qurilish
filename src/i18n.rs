@@ -2657,6 +2657,31 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "doc_pos" => ("№", "№"),
         "doc_save" => ("Hujjatni saqlash", "Сохранить документ"),
+
+        // ---------- Amallar tarixi ----------
+        "au_insert" => ("qo'shildi", "добавлено"),
+        "au_update" => ("o'zgartirildi", "изменено"),
+        "au_delete" => ("o'chirildi", "удалено"),
+        "set_group_audit" => ("Amallar tarixi", "История действий"),
+        "set_audit_hint" => (
+            "Kim nima o'zgartirgani yozib boriladi. Baza fayli ochiq bo'lgani uchun bu himoya emas — bu tiklash va tushuntirish vositasi: son qayerdan kelganini keyin ham aytib beradi.",
+            "Записывается, кто что изменил. Файл базы открыт, поэтому это не защита — это средство восстановления и объяснения: откуда взялась цифра, можно будет узнать позже.",
+        ),
+        "set_audit_count" => ("Yozuvlar", "Записей"),
+        "set_audit_empty" => (
+            "Hali hech narsa o'zgartirilmagan",
+            "Пока ничего не изменялось",
+        ),
+        "col_when" => ("Qachon", "Когда"),
+        "col_who" => ("Kim", "Кто"),
+        "col_what" => ("Amal", "Действие"),
+        "set_audit_shown" => (
+            "Ro'yxatda oxirgi yozuvlar ko'rsatilgan:",
+            "В списке показаны последние записи:",
+        ),
+        "col_table" => ("Jadval", "Таблица"),
+        "col_row" => ("Yozuv", "Запись"),
+        "no_user" => ("tanlanmagan", "не выбран"),
         "doc_saved" => ("Hujjat saqlandi:", "Документ сохранён:"),
         "doc_failed" => ("Hujjatni saqlab bo'lmadi", "Не удалось сохранить документ"),
         "doc_blank" => ("Blanka", "Бланк"),

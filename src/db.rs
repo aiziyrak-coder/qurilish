@@ -8,6 +8,11 @@ use std::path::PathBuf;
 
 pub struct Db {
     conn: Connection,
+    /// Amallar tarixiga yoziladigan foydalanuvchi nomi (umumiy talab).
+    ///
+    /// `Db` foydalanuvchini o'zi bilmaydi — uni ilova o'rnatadi. Bo'sh bo'lsa
+    /// jurnalda «tanlanmagan» deb qoladi: kimdir deb o'ylab topmaymiz.
+    user: std::sync::Mutex<String>,
 }
 
 /// Путь к файлу базы: рядом с исполняемым файлом в подпапке `data`,
@@ -46,13 +51,28 @@ impl Db {
         &self.conn
     }
 
+    /// Amallar tarixi uchun joriy foydalanuvchini o'rnatadi.
+    pub fn set_audit_user(&self, name: &str) {
+        if let Ok(mut u) = self.user.lock() {
+            *u = name.to_string();
+        }
+    }
+
+    /// Joriy foydalanuvchi nomi. O'rnatilmagan bo'lsa bo'sh satr.
+    pub(crate) fn audit_user(&self) -> String {
+        self.user.lock().map(|u| u.clone()).unwrap_or_default()
+    }
+
     pub fn open(path: &PathBuf) -> SqlResult<Db> {
         let conn = Connection::open(path)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         // Baza band bo'lsa darhol xato bermay, 5 soniya kutadi.
         conn.busy_timeout(std::time::Duration::from_secs(5))?;
-        let db = Db { conn };
+        let db = Db {
+            conn,
+            user: std::sync::Mutex::new(String::new()),
+        };
         db.migrate()?;
         db.migrate_modules()?;
         db.migrate_norms()?;
@@ -3264,6 +3284,99 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 "{s:?}: bo'sh bazada jadval qaytdi"
             );
         }
+    }
+
+    /// Umumiy talab: har bir o'zgarish jurnalga tushadi.
+    #[test]
+    fn every_change_reaches_the_audit_log() {
+        use crate::domain::AuditAction;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        t.db.set_audit_user("Yusupov B.R. · Prorab");
+        let before = t.db.audit_count();
+
+        // Qo'shish.
+        let mid = t.db.insert_material(&test_material(pid, "AU-1", 0.0));
+        assert!(mid > 0);
+        // O'zgartirish.
+        let mut m =
+            t.db.materials(pid)
+                .into_iter()
+                .find(|m| m.id == mid)
+                .expect("material");
+        m.name = "Yangi nom".into();
+        assert!(t.db.update_material(&m));
+        // O'chirish.
+        assert!(t.db.del("material", mid));
+
+        let log = t.db.audit_log(10);
+        assert!(t.db.audit_count() >= before + 3);
+
+        // Oxirgi uchta amal — teskari tartibda.
+        assert_eq!(log[0].action, AuditAction::Delete);
+        assert_eq!(log[0].table_name, "material");
+        assert_eq!(log[0].row_id, mid);
+        assert_eq!(log[1].action, AuditAction::Update);
+        assert_eq!(log[1].table_name, "material");
+        assert_eq!(log[2].action, AuditAction::Insert);
+        assert_eq!(log[2].row_id, mid);
+
+        // Kim o'zgartirgani yozilgan.
+        for e in log.iter().take(3) {
+            assert_eq!(e.user, "Yusupov B.R. · Prorab");
+            assert!(e.at.len() >= 19, "vaqt yozilmagan: {}", e.at);
+        }
+    }
+
+    /// Foydalanuvchi tanlanmagan bo'lsa jurnalda bo'sh qoladi — kim ekani
+    /// o'ylab topilmaydi.
+    #[test]
+    fn audit_user_is_empty_when_nobody_is_chosen() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        t.db.set_audit_user("");
+        t.db.insert_material(&test_material(pid, "AU-2", 0.0));
+        let log = t.db.audit_log(1);
+        assert_eq!(log[0].user, "");
+    }
+
+    /// Jurnalning o'zi jurnalga tushmaydi — aks holda cheksiz o'sardi.
+    #[test]
+    fn audit_log_does_not_log_itself() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        t.db.insert_material(&test_material(pid, "AU-3", 0.0));
+        assert!(
+            t.db.audit_log(500)
+                .iter()
+                .all(|e| e.table_name != "audit_log"),
+            "jurnal o'zini yozib qo'ygan"
+        );
+    }
+
+    /// Jurnal belgilangan hajmdan oshmaydi: eng eskilari olib tashlanadi.
+    #[test]
+    fn audit_log_is_trimmed_to_the_limit() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        for i in 0..30 {
+            t.db.insert_material(&test_material(pid, &format!("AU-T{i}"), 0.0));
+        }
+        let before = t.db.audit_count();
+        assert!(before > 20);
+
+        let removed = t.db.trim_audit_log(20);
+        assert!(removed > 0);
+        assert_eq!(t.db.audit_count(), 20);
+        // Eng yangilari qoladi.
+        let log = t.db.audit_log(20);
+        assert_eq!(log.len(), 20);
+        assert!(log[0].id > log[19].id);
+
+        // Chegaradan kam bo'lsa hech narsa o'chirilmaydi.
+        assert_eq!(t.db.trim_audit_log(100), 0);
+        assert_eq!(t.db.audit_count(), 20);
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

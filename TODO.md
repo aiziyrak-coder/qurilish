@@ -810,7 +810,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
 - [~] **Excel eksporti** — *15 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
 - [ ] **Bildirishnomalar tizimi**
-- [ ] **Amallar tarixi (audit log)** — *kim nima o'zgartirgani*
+- [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
 - [ ] **Izoh va muhokama** (yozuvlarga sharh)
 
 ---

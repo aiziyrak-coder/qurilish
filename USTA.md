@@ -74,6 +74,8 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
       dalolatnomasi `.xlsx` shaklida; son o'ylab topilmaydi, imzo joyi bo'sh
 - [x] **Excel eksporti** — 15 ta ekran jadvali, `Ctrl+E`; sonlar son bo'lib
       chiqadi, sarlavha qatori qotadi va filtr qo'yiladi
+- [x] **Amallar tarixi** — har bir yozish `store.rs` ning uchta chorrahasidan
+      o'tadi, shuning uchun bironta o'zgarish jurnaldan chetda qolmaydi
 
 Qolgan ishlar `TODO.md` da modul bo'yicha ro'yxatlangan. Xulosa jadvali
 belgilardan hisoblanadi va qulflangan (server, mobil, LLM, OCR talab

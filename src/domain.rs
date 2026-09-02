@@ -1164,6 +1164,31 @@ impl WorkPermit {
     }
 }
 
+enum_kind!(AuditAction {
+    Insert => "insert", "au_insert";
+    Update => "update", "au_update";
+    Delete => "delete", "au_delete";
+});
+
+/// Amallar tarixi yozuvi (umumiy talab: kim nima o'zgartirgani).
+///
+/// Baza fayli ochiq bo'lgani uchun bu jurnal himoya emas — u **tiklash va
+/// tushuntirish** vositasi: son qayerdan kelganini va uni kim kiritganini
+/// keyin ham aytib bera oladi. Yozuvning o'zi ham tahrirlanadi, buni
+/// yashirmaymiz.
+#[derive(Debug, Clone)]
+pub struct AuditEntry {
+    pub id: i64,
+    /// Sana va vaqt, `YYYY-MM-DD HH:MM:SS`.
+    pub at: String,
+    /// Kim: tanlangan foydalanuvchi nomi va roli.
+    pub user: String,
+    pub action: AuditAction,
+    /// Qaysi jadval o'zgardi.
+    pub table_name: String,
+    pub row_id: i64,
+}
+
 // ---------- XVI. Mashinalar ----------
 
 enum_kind!(MachineKind {

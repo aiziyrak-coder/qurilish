@@ -5,6 +5,9 @@ use crate::app::{GanttScale, Screen};
 use crate::i18n::Lang;
 use crate::theme::Theme;
 
+/// Amallar tarixida shuncha oxirgi yozuv ko'rsatiladi.
+const AUDIT_SHOWN: i64 = 25;
+
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut changed = false;
     let mut make_demo = false;
@@ -346,6 +349,97 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 .size(11.5)
                 .color(if ready { theme::ok() } else { theme::muted() }),
             );
+        });
+
+        ui.add_space(10.0);
+
+        // ---------- Amallar tarixi ----------
+        card_frame(ui, t("set_group_audit"), w, |ui| {
+            ui.label(
+                RichText::new(t("set_audit_hint"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+
+            let total = app.db.audit_count();
+            field(ui, t("set_audit_count"), |ui| {
+                ui.label(RichText::new(total.to_string()).color(theme::text()));
+            });
+
+            if total == 0 {
+                ui.label(
+                    RichText::new(t("set_audit_empty"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+                return;
+            }
+
+            ui.add_space(6.0);
+            // Ichma-ich aylantirish noqulay — sahifa o'zi suriladi, shuning
+            // uchun bu yerda faqat oxirgi yozuvlar ko'rsatiladi.
+            {
+                egui::Grid::new("audit_grid")
+                    .num_columns(5)
+                    .spacing([10.0, 4.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        for h in [
+                            t("col_when"),
+                            t("col_who"),
+                            t("col_what"),
+                            t("col_table"),
+                            t("col_row"),
+                        ] {
+                            ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                        }
+                        ui.end_row();
+
+                        for e in app.db.audit_log(AUDIT_SHOWN) {
+                            ui.label(
+                                RichText::new(&e.at)
+                                    .size(11.5)
+                                    .monospace()
+                                    .color(theme::muted()),
+                            );
+                            ui.label(
+                                RichText::new(if e.user.is_empty() {
+                                    t("no_user").to_string()
+                                } else {
+                                    e.user.clone()
+                                })
+                                .size(11.5),
+                            );
+                            // O'chirish ko'zga tashlanib tursin.
+                            let color = match e.action {
+                                crate::domain::AuditAction::Insert => theme::ok(),
+                                crate::domain::AuditAction::Update => theme::text(),
+                                crate::domain::AuditAction::Delete => theme::danger(),
+                            };
+                            ui.label(RichText::new(e.action.label()).size(11.5).color(color));
+                            ui.label(RichText::new(&e.table_name).size(11.5).monospace());
+                            ui.label(
+                                RichText::new(if e.row_id > 0 {
+                                    e.row_id.to_string()
+                                } else {
+                                    t("dash").to_string()
+                                })
+                                .size(11.5)
+                                .color(theme::muted()),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+            if total > AUDIT_SHOWN {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!("{} {AUDIT_SHOWN}", t("set_audit_shown")))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+            }
         });
 
         ui.add_space(10.0);

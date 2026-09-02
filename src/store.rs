@@ -26,6 +26,24 @@ fn ods(d: Option<NaiveDate>) -> Option<String> {
     d.map(|x| x.to_string())
 }
 
+/// SQL dan jadval nomini ajratadi: `INSERT INTO x`, `UPDATE x SET`.
+///
+/// SQL kod ichida yozilgani uchun shakl oldindan ma'lum — bu yerda tashqi
+/// matn tahlil qilinmaydi.
+fn table_of_sql(sql: &str) -> &str {
+    let s = sql.trim_start();
+    let rest = if let Some(r) = s.strip_prefix("INSERT INTO ") {
+        r
+    } else if let Some(r) = s.strip_prefix("UPDATE ") {
+        r
+    } else {
+        return "";
+    };
+    rest.split(|c: char| c.is_whitespace() || c == '(')
+        .next()
+        .unwrap_or("")
+}
+
 impl Db {
     /// Modullar jadvallari. Asosiy sxema `db.rs` da yaratilgandan keyin chaqiriladi.
     pub fn migrate_modules(&self) -> rusqlite::Result<()> {
@@ -401,6 +419,16 @@ impl Db {
                 note TEXT NOT NULL DEFAULT ''
             );
             CREATE INDEX IF NOT EXISTS idx_res_mat ON reservation(material_id);
+
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id INTEGER PRIMARY KEY,
+                at TEXT NOT NULL,
+                user TEXT NOT NULL DEFAULT '',
+                action TEXT NOT NULL DEFAULT 'update',
+                table_name TEXT NOT NULL DEFAULT '',
+                row_id INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_at ON audit_log(at DESC);
 
             CREATE TABLE IF NOT EXISTS worker_permit (
                 id INTEGER PRIMARY KEY,
@@ -1766,20 +1794,104 @@ impl Db {
 
     fn ins(&self, sql: &str, p: &[&dyn rusqlite::ToSql]) -> i64 {
         match self.conn().execute(sql, p) {
-            Ok(_) => self.conn().last_insert_rowid(),
+            Ok(_) => {
+                let id = self.conn().last_insert_rowid();
+                self.audit(AuditAction::Insert, table_of_sql(sql), id);
+                id
+            }
             Err(_) => 0,
         }
     }
 
     fn upd(&self, sql: &str, p: &[&dyn rusqlite::ToSql]) -> bool {
-        self.conn().execute(sql, p).is_ok()
+        let ok = self.conn().execute(sql, p).is_ok();
+        if ok {
+            // `UPDATE ... WHERE id=?1` — birinchi parametr doim id bo'ladi;
+            // `INSERT ... ON CONFLICT` da esa id ma'lum emas, nol qoladi.
+            self.audit(AuditAction::Update, table_of_sql(sql), 0);
+        }
+        ok
     }
 
     pub fn del(&self, table: &str, id: i64) -> bool {
         // Jadval nomi kod ichidan keladi, foydalanuvchidan emas.
-        self.conn()
+        let ok = self
+            .conn()
             .execute(&format!("DELETE FROM {table} WHERE id=?1"), [id])
-            .is_ok()
+            .is_ok();
+        if ok {
+            self.audit(AuditAction::Delete, table, id);
+        }
+        ok
+    }
+
+    // ---------- Amallar tarixi (umumiy talab) ----------
+
+    /// Bitta o'zgarishni jurnalga yozadi.
+    ///
+    /// Jurnalning o'zi jurnalga tushmaydi va bo'sh jadval nomi yozilmaydi:
+    /// aks holda sxema migratsiyasi ham «o'zgarish» bo'lib ko'rinardi.
+    fn audit(&self, action: AuditAction, table: &str, row_id: i64) {
+        if table.is_empty() || table == "audit_log" {
+            return;
+        }
+        let _ = self.conn().execute(
+            "INSERT INTO audit_log (at,user,action,table_name,row_id) VALUES (?1,?2,?3,?4,?5)",
+            params![
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+                self.audit_user(),
+                action.code(),
+                table,
+                row_id
+            ],
+        );
+    }
+
+    /// Oxirgi amallar, yangisi yuqorida.
+    pub fn audit_log(&self, limit: i64) -> Vec<AuditEntry> {
+        let Ok(mut st) = self.conn().prepare(
+            "SELECT id,at,user,action,table_name,row_id
+             FROM audit_log ORDER BY id DESC LIMIT ?1",
+        ) else {
+            return Vec::new();
+        };
+        st.query_map(params![limit], |r| {
+            Ok(AuditEntry {
+                id: r.get(0)?,
+                at: r.get(1)?,
+                user: r.get(2)?,
+                action: AuditAction::parse(&r.get::<_, String>(3)?),
+                table_name: r.get(4)?,
+                row_id: r.get(5)?,
+            })
+        })
+        .and_then(|rows| rows.collect())
+        .unwrap_or_default()
+    }
+
+    /// Jurnaldagi yozuvlar soni.
+    pub fn audit_count(&self) -> i64 {
+        self.conn()
+            .query_row("SELECT COUNT(*) FROM audit_log", [], |r| r.get(0))
+            .unwrap_or(0)
+    }
+
+    /// Jurnalni belgilangan hajmda ushlab turadi.
+    ///
+    /// Cheksiz o'sadigan jurnal bazani shishiradi, shuning uchun eng eski
+    /// yozuvlar o'chiriladi. Bu ilova ochilganda bir marta bajariladi.
+    pub fn trim_audit_log(&self, keep: i64) -> usize {
+        let extra = (self.audit_count() - keep).max(0);
+        if extra == 0 {
+            return 0;
+        }
+        self.conn()
+            .execute(
+                "DELETE FROM audit_log WHERE id IN
+                 (SELECT id FROM audit_log ORDER BY id ASC LIMIT ?1)",
+                params![extra],
+            )
+            .unwrap_or(0)
     }
 
     // ---------- II–III. Nomuvofiqliklar ----------

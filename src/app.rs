@@ -357,6 +357,12 @@ impl Settings {
     }
 }
 
+/// Amallar tarixida shuncha yozuv saqlanadi.
+///
+/// Chegara bor: jurnal bazani cheksiz shishirmasligi kerak. 50 000 yozuv
+/// bir necha oylik faol ishga yetadi.
+const AUDIT_KEEP: i64 = 50_000;
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -639,6 +645,9 @@ impl App {
             .get_setting("current_user")
             .and_then(|v| v.parse::<i64>().ok())
             .filter(|id| app.users.iter().any(|u| u.id == *id));
+        app.sync_audit_user();
+        // Jurnal cheksiz o'smasin: ochilishda eng eskilari olib tashlanadi.
+        app.db.trim_audit_log(AUDIT_KEEP);
         app
     }
 
@@ -943,7 +952,21 @@ impl App {
             "current_user",
             &id.map(|v| v.to_string()).unwrap_or_default(),
         );
+        self.sync_audit_user();
         self.screen = self.role().home();
+    }
+
+    /// Amallar tarixiga yoziladigan nomni yangilaydi.
+    ///
+    /// Foydalanuvchi tanlanmagan bo'lsa jurnalda bo'sh qoladi — «Administrator»
+    /// deb yozib qo'yish yolg'on bo'lardi, chunki hech kim tanlanmagan.
+    pub fn sync_audit_user(&self) {
+        let name = self
+            .current_user
+            .and_then(|id| self.users.iter().find(|u| u.id == id))
+            .map(|u| format!("{} · {}", u.name, u.role.label()))
+            .unwrap_or_default();
+        self.db.set_audit_user(&name);
     }
 
     // ---------- Loyiha paketi (qurilmalar orasida almashish) ----------
