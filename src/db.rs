@@ -3172,6 +3172,100 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(ranks.windows(2).all(|w| w[0] <= w[1]));
     }
 
+    /// Umumiy talab: har bir jadvalli ekran eksportga tayyor bo'lishi kerak.
+    ///
+    /// Namuna bazasida hamma modul to'ldirilgan, shuning uchun har bir
+    /// ro'yxatdagi ekran bo'sh bo'lmagan jadval qaytarishi kerak. Yangi ekran
+    /// qo'shilib, eksporti unutilsa — shu sinov aytadi.
+    #[test]
+    fn every_table_screen_can_be_exported() {
+        use crate::app::Screen;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let screens = [
+            Screen::Gantt,
+            Screen::Estimate,
+            Screen::ExecDocs,
+            Screen::Journal,
+            Screen::Materials,
+            Screen::Warehouse,
+            Screen::Requests,
+            Screen::Purchases,
+            Screen::Timesheet,
+            Screen::Quality,
+            Screen::Safety,
+            Screen::Machines,
+            Screen::Deals,
+            Screen::Sales,
+            Screen::Analytics,
+        ];
+        for s in screens {
+            let table = crate::ui::export::table_of(&app, s)
+                .unwrap_or_else(|| panic!("{s:?} uchun jadval yo'q"));
+            assert!(!table.rows.is_empty(), "{s:?}: qator yo'q");
+            assert!(!table.headers.is_empty(), "{s:?}: sarlavha yo'q");
+            // Har bir qatorda sarlavha bilan bir xil ustun bo'lishi kerak —
+            // aks holda Excel da ustunlar surilib ketadi.
+            for (i, row) in table.rows.iter().enumerate() {
+                assert_eq!(
+                    row.len(),
+                    table.headers.len(),
+                    "{s:?}: {i}-qatorda ustun soni mos emas"
+                );
+            }
+            // Nom yon paneldagi ekran nomi bilan bir xil.
+            assert_eq!(table.name, s.label());
+            // Fayl nomi xavfsiz va sanani o'z ichiga oladi.
+            let file = crate::ui::export::file_name(&app, s);
+            assert!(file.ends_with(".xlsx"));
+            assert!(!file.contains(' '));
+        }
+
+        // Jadvali yo'q ekranda eksport ham yo'q.
+        assert!(crate::ui::export::table_of(&app, Screen::Settings).is_none());
+        assert!(crate::ui::export::table_of(&app, Screen::Dashboard).is_none());
+    }
+
+    /// Bo'sh bazada eksport hech narsa qaytarmaydi — bo'sh fayl yozilmaydi.
+    #[test]
+    fn empty_project_exports_nothing() {
+        use crate::app::Screen;
+
+        let t = TempDb::new();
+        let pid =
+            t.db.insert_project(&crate::model::Project {
+                id: 0,
+                name: "Bo'sh".into(),
+                code: String::new(),
+                address: String::new(),
+                object_type: String::new(),
+                floors: 0,
+                area_total: 0.0,
+                status: crate::model::ObjectStatus::Design,
+                start_date: chrono::Local::now().date_naive(),
+                planned_end: chrono::Local::now().date_naive(),
+                contract_sum: 0.0,
+                paid_total: 0.0,
+                currency: "UZS".into(),
+                funding_source: String::new(),
+                notes: String::new(),
+            })
+            .unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        for s in [Screen::Warehouse, Screen::Quality, Screen::Deals] {
+            assert!(
+                crate::ui::export::table_of(&app, s).is_none(),
+                "{s:?}: bo'sh bazada jadval qaytdi"
+            );
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

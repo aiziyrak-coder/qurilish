@@ -45,6 +45,10 @@ pub fn draw(ctx: &Context, app: &mut App) {
             i.key_pressed(egui::Key::Escape),
         )
     });
+    // Ctrl+E — joriy ekran jadvalini Excel ga chiqarish.
+    if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(egui::Key::E)) {
+        super::export_current(app);
+    }
     // Matn maydonida yozayotganda `/` oynani ochmasligi kerak.
     let typing = ctx.memory(|m| m.focused().is_some());
     if open_key && !(typing && !ctx.input(|i| i.modifiers.ctrl)) {

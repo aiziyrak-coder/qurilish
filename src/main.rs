@@ -8,6 +8,7 @@ mod checks;
 mod copilot;
 mod cpm;
 mod db;
+mod docgen;
 mod domain;
 mod i18n;
 mod ifc;

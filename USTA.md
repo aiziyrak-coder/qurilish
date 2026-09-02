@@ -18,6 +18,8 @@ kvartiralarni sotish.
 - `src/ifc.rs` — IFC o'qish · `src/roles.rs` — rollar · `src/package.rs` — almashish
 - `src/llm.rs` — til modeli nuqtasi (ixtiyoriy `llm` xususiyati)
 - `src/import.rs` — smeta importi · `src/db.rs` + `src/store.rs` — ombor
+- `src/docgen.rs` — KS-2, KS-3, M-29, AOSR va Excel yozish
+- `src/ui/export.rs` — ekran jadvalini eksportga tayyorlash
 - `src/ui/` — har bir ekran alohida fayl · `src/i18n.rs` — uz/ru satrlar
 
 Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo clippy`
@@ -68,9 +70,14 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
 - [x] **XVI Texnika** — yo'l varaqalari, yoqilg'i normasi, rejali TX,
       foydalanish koeffitsiyenti, ishlatishga to'siq
 - [x] **XVII Analitika** — oylik pul oqimi, kassa uzilishi, kunlik xulosa
+- [x] **Hujjat generatsiyasi** — KS-2, KS-3, M-29 va yashirin ishlar
+      dalolatnomasi `.xlsx` shaklida; son o'ylab topilmaydi, imzo joyi bo'sh
+- [x] **Excel eksporti** — 15 ta ekran jadvali, `Ctrl+E`; sonlar son bo'lib
+      chiqadi, sarlavha qatori qotadi va filtr qo'yiladi
 
-Qolgan ishlar `TODO.md` da modul bo'yicha ro'yxatlangan: TZ ning 682 bandidan
-236 tasi to'liq, 130 tasi qisman bajarilgan.
+Qolgan ishlar `TODO.md` da modul bo'yicha ro'yxatlangan. Xulosa jadvali
+belgilardan hisoblanadi va qulflangan (server, mobil, LLM, OCR talab
+qiladigan) bandlar alohida ustunda ko'rinadi.
 
 ## Muhim qarorlar
 

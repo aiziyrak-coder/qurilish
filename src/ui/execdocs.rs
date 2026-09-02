@@ -22,9 +22,27 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let mut add_for: Option<(Option<i64>, ExecDocKind)> = None;
 
-    ui.horizontal(|ui| {
+    let mut make_ks2 = false;
+    let mut make_ks3 = false;
+    ui.horizontal_wrapped(|ui| {
         if ui.button(t("add_exec_doc")).clicked() {
             add_for = Some((None, ExecDocKind::Hidden));
+        }
+        ui.separator();
+        // Rasmiy shakllar bazadagi ma'lumotdan yig'iladi (TZ IV.5–7).
+        if ui
+            .button(t("doc_ks2_short"))
+            .on_hover_text(t("doc_ks2_hint"))
+            .clicked()
+        {
+            make_ks2 = true;
+        }
+        if ui
+            .button(t("doc_ks3_short"))
+            .on_hover_text(t("doc_ks3_hint"))
+            .clicked()
+        {
+            make_ks3 = true;
         }
         ui.label(
             RichText::new(t("exec_docs_hint"))
@@ -33,6 +51,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         );
     });
     ui.add_space(8.0);
+
+    if make_ks2 || make_ks3 {
+        build_act(app, make_ks2);
+    }
 
     kpis(ui, app);
     ui.add_space(10.0);
@@ -89,6 +111,105 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             });
             app.reload_modules();
         }
+    }
+}
+
+/// KS-2 yoki KS-3 ni yig'ib faylga yozadi (TZ IV.5–7).
+///
+/// KS-3 KS-2 dan chiqadi: davr summasi aynan shu davrdagi bajarilgan ish
+/// qiymati bo'lishi kerak, shuning uchun ikkalasi bitta hisobdan olinadi.
+fn build_act(app: &mut App, ks2: bool) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let lines = crate::docgen::ks2_lines(&app.tasks, &app.estimate_items, from, to);
+    if lines.is_empty() {
+        app.notify(t("doc_no_work").to_string());
+        return;
+    }
+
+    // Fayl avval tanlanadi: shundan keyin `app` dan qarz olish kerak bo'lmaydi.
+    let file = format!(
+        "{}-{}.xlsx",
+        if ks2 { "KS-2" } else { "KS-3" },
+        to.format("%Y-%m")
+    );
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+
+    // Shartnoma boshidan jami — KS-3 uchun; KS-2 da ishlatilmaydi.
+    let since_start: f64 = crate::docgen::ks2_lines(
+        &app.tasks,
+        &app.estimate_items,
+        project.start_date,
+        app.today,
+    )
+    .iter()
+    .map(|l| l.cost)
+    .sum();
+    let period_total: f64 = lines.iter().map(|l| l.cost).sum();
+    let cost = app.cost_summary();
+
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    let result = if ks2 {
+        crate::docgen::write_ks2(&path, &inp, &lines).map(money)
+    } else {
+        crate::docgen::write_ks3(&path, &inp, period_total, since_start, &cost)
+            .map(|()| money(period_total))
+    };
+    match result {
+        Ok(sum) => app.notify(format!("{} {sum} · {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
+    }
+}
+
+/// Yashirin ishlar dalolatnomasini faylga yozadi (TZ IV.5).
+fn write_aosr(app: &mut App, doc_id: i64) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let Some(doc) = app.exec_docs.iter().find(|d| d.id == doc_id).cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let file = format!(
+        "AOSR-{}-{}.xlsx",
+        doc.number.replace(['/', '\\', ' '], "-"),
+        doc.date.format("%Y-%m-%d")
+    );
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    match crate::docgen::write_aosr(&path, &inp, &doc, &app.stock_moves, &app.materials) {
+        Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
     }
 }
 
@@ -262,13 +383,14 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
 
     let mut edited: Option<ExecDoc> = None;
     let mut removed: Option<i64> = None;
+    let mut make_aosr: Option<i64> = None;
 
     egui::ScrollArea::both()
         .auto_shrink([false, !fill])
         .max_height(if fill { f32::INFINITY } else { 320.0 })
         .show(ui, |ui| {
             egui::Grid::new("exec_grid")
-                .num_columns(8)
+                .num_columns(9)
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -285,6 +407,7 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
                     head(ui, 220.0, t("col_task"));
                     head(ui, 150.0, t("col_status"));
                     head(ui, 150.0, t("col_responsible"));
+                    head(ui, 70.0, "");
                     head(ui, 24.0, "");
                     ui.end_row();
 
@@ -325,6 +448,20 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
                                 egui::TextEdit::singleline(&mut d.responsible),
                             )
                             .changed();
+                        // Blankani faqat yashirin ishlar hujjati uchun
+                        // chiqaramiz: qolgan turlarning shakli boshqacha.
+                        let hidden = d.kind == ExecDocKind::Hidden;
+                        if ui
+                            .add_enabled(
+                                hidden,
+                                egui::Button::new(RichText::new(t("doc_blank")).size(11.0)),
+                            )
+                            .on_hover_text(t("doc_aosr_hint"))
+                            .on_disabled_hover_text(t("doc_only_hidden"))
+                            .clicked()
+                        {
+                            make_aosr = Some(d.id);
+                        }
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -340,6 +477,9 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
                 });
         });
 
+    if let Some(id) = make_aosr {
+        write_aosr(app, id);
+    }
     if let Some(d) = edited {
         app.db.update_exec_doc(&d);
         if let Some(slot) = app.exec_docs.iter_mut().find(|x| x.id == d.id) {

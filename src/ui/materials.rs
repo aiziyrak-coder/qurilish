@@ -521,6 +521,7 @@ fn norms_tab(ui: &mut egui::Ui, app: &mut App) {
 /// Normativ va haqiqiy sarf taqqoslanadi (TZ XI.14, XII.22, III.28).
 fn usage_tab(ui: &mut egui::Ui, app: &mut App) {
     use super::warehouse::{cell_l, cell_r};
+    let mut make_m29 = false;
     let lines = app.consumption();
     if lines.is_empty() {
         empty_screen(ui, t("usage_empty"));
@@ -561,11 +562,21 @@ fn usage_tab(ui: &mut egui::Ui, app: &mut App) {
         ],
     );
     ui.add_space(10.0);
-    ui.label(
-        RichText::new(t("usage_hint"))
-            .size(11.0)
-            .color(theme::muted()),
-    );
+    ui.horizontal_wrapped(|ui| {
+        // M-29 — material sarfi hisoboti, shu jadvaldan chiqadi (TZ IV.6).
+        if ui
+            .button(t("doc_m29_short"))
+            .on_hover_text(t("doc_m29_hint"))
+            .clicked()
+        {
+            make_m29 = true;
+        }
+        ui.label(
+            RichText::new(t("usage_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
     ui.add_space(6.0);
 
     egui::ScrollArea::both()
@@ -667,6 +678,39 @@ fn usage_tab(ui: &mut egui::Ui, app: &mut App) {
                     }
                 });
         });
+
+    if make_m29 {
+        write_m29(app, &lines);
+    }
+}
+
+/// M-29 hisobotini faylga yozadi (TZ IV.6).
+fn write_m29(app: &mut App, lines: &[crate::checks::ConsumptionLine]) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let file = format!("M-29-{}.xlsx", to.format("%Y-%m"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    match crate::docgen::write_m29(&path, &inp, lines, &app.materials, &app.material_norms) {
+        Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
+    }
 }
 
 fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {

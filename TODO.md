@@ -18,7 +18,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 19 | 8 | 7 | 4 | 0 |
 | III. AI smeta tekshiruvi | 34 | 8 | 8 | 18 | 2 |
-| IV. Ijro hujjatlari | 30 | 8 | 10 | 12 | 3 |
+| IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
 | V. Kunlik jurnal | 34 | 17 | 7 | 10 | 6 |
 | VI. Prorab (mobil) | 37 | 16 | 9 | 12 | 8 |
 | VII. Texnik nazorat | 38 | 13 | 10 | 15 | 3 |
@@ -33,7 +33,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 28 | 7 | 15 | 3 |
 | XVII. AI analitika | 51 | 22 | 12 | 17 | 0 |
 | XVIII. AI Copilot | 45 | 5 | 3 | 37 | 7 |
-| **Jami** | **683** | **269** | **154** | **260** | **52** |
+| **Jami** | **683** | **271** | **154** | **258** | **52** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
@@ -123,8 +123,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 2. Ijro hujjati kartochkasi — *tur, raqam, nom, sana, ish, holat, mas'ul*
 - [x] 3. Kerakli hujjatlar avtomatik ro'yxati — *bo'lim bo'yicha reyestr*
 - [~] 4. **AI Document Matrix** — *talablar jadvali bor; to'liq matritsa emas*
-- [ ] 5. Hujjatlarni avtomatik yaratish
-- [ ] 6. **AOSR** — *shakl bo'yicha to'ldirish va chiqarish*
+- [x] 5. Hujjatlarni avtomatik yaratish — *KS-2, KS-3, M-29, AOSR bazadan*
+- [x] 6. **AOSR** — *ish, ishlatilgan material, sertifikat, imzo joylari*
 - [ ] 7. Ijro sxemalari
 - [~] 8. Fotolar — *jurnalda foto bor; hujjatga biriktirish yo'q*
 - [ ] 🔒 9. Geolokatsiya va vaqt
@@ -807,8 +807,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 **Bir necha obyekt bo'yicha konsolidatsiya** — *hozir bitta obyekt kesimida*
 - [ ] 🔒 **Server va jonli sinxronizatsiya**
 - [ ] 🔒 **Mobil klient**
-- [ ] **Hujjat generatsiyasi** (AOSR, KS-2, KS-3, jurnallar — shakl bo'yicha)
-- [ ] **Excel/PDF ga eksport** — *hozir faqat matn hisoboti*
+- [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
+- [~] **Excel eksporti** — *15 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
 - [ ] **Bildirishnomalar tizimi**
 - [ ] **Amallar tarixi (audit log)** — *kim nima o'zgartirgani*
 - [ ] **Izoh va muhokama** (yozuvlarga sharh)
@@ -834,9 +834,11 @@ Eng ko'p foyda beradigan va tashqi narsa talab qilmaydigan ishlar:
 
 Birinchi to'qqiz band bajarildi. Endi eng ko'p foyda beradigan qolgan ishlar:
 
-1. **Hujjat generatsiyasi**: KS-2, KS-3, M-29, yashirin ishlar dalolatnomasi,
-   inventarizatsiya ro'yxati, naryad-dopusk blankasi (IV.5–7, XI.25, XV.11)
-2. **Excel eksporti**: har bir jadval uchun (umumiy talab)
+1. ~~Hujjat generatsiyasi: KS-2, KS-3, M-29, yashirin ishlar dalolatnomasi~~
+   (IV.5–6) — **bajarildi**. Qoldi: inventarizatsiya ro'yxati va
+   naryad-dopusk blankasi (XI.25, XV.11), ijro sxemasi (IV.7)
+2. ~~Excel eksporti: har bir jadval uchun~~ — **bajarildi** (15 ekran, Ctrl+E).
+   Qoldi: PDF ga chiqarish
 3. **Bir nechta obyekt kesimida analitika** (XVII.4, X.33, XV.34)
 4. **Smeta ↔ material ↔ ish bog'lanishi**: pozitsiya darajasida (III.28, XII.5–7)
 5. **Debitorlik va to'lov intizomi** (XVII.32–33, XX)

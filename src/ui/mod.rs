@@ -9,6 +9,7 @@ mod deals;
 mod documents;
 mod estimate;
 mod execdocs;
+pub mod export;
 mod foreman;
 mod gantt;
 mod issues;
@@ -167,6 +168,45 @@ pub fn draw(ctx: &Context, app: &mut App) {
     toast(ctx, app);
 }
 
+/// Joriy ekran jadvalini `.xlsx` ga saqlaydi (umumiy talab).
+///
+/// Fayl nomi ekran nomi va sanadan tuziladi — bir necha eksport bir-birining
+/// ustiga yozilmasin.
+pub fn export_current(app: &mut App) {
+    let Some(table) = export::table_of(app, app.screen) else {
+        app.notify(t("export_none").to_string());
+        return;
+    };
+    let rows = table.rows.len();
+    let name = export::file_name(app, app.screen);
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("export"))
+        .set_file_name(&name)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    match crate::docgen::write_table(&path, &table) {
+        Ok(()) => app.notify(format!("{} {rows} · {}", t("export_done"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
+    }
+}
+
+/// Hujjat davri: joriy oyning boshidan bugungacha.
+///
+/// KS-2 va KS-3 odatda oylik topshiriladi, shuning uchun sukut bo'yicha shu
+/// davr olinadi. Boshqa davr kerak bo'lsa hujjatda tahrirlanadi.
+pub fn doc_period(app: &App) -> (chrono::NaiveDate, chrono::NaiveDate) {
+    let start = chrono::NaiveDate::from_ymd_opt(
+        chrono::Datelike::year(&app.today),
+        chrono::Datelike::month(&app.today),
+        1,
+    )
+    .unwrap_or(app.today);
+    (start, app.today)
+}
+
 fn top_bar(ctx: &Context, app: &mut App) {
     egui::TopBottomPanel::top("top")
         .exact_height(52.0)
@@ -241,6 +281,23 @@ fn top_bar(ctx: &Context, app: &mut App) {
                     app.search_open = true;
                     app.search_query.clear();
                     app.search_focus = true;
+                }
+
+                // Eksport joriy ekran jadvalini chiqaradi. Jadval yo'q ekranda
+                // tugma o'chiq turadi — bosib, keyin «hech narsa yo'q» degan
+                // xabar olishdan ko'ra shunisi tushunarli.
+                ui.add_space(6.0);
+                let has = export::table_of(app, app.screen).is_some();
+                if ui
+                    .add_enabled(
+                        has,
+                        egui::Button::new(RichText::new(t("export")).size(13.0)),
+                    )
+                    .on_hover_text(t("export_hint"))
+                    .on_disabled_hover_text(t("export_none"))
+                    .clicked()
+                {
+                    export_current(app);
                 }
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

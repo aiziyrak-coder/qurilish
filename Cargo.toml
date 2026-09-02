@@ -20,6 +20,8 @@ egui_extras = { version = "0.31", features = ["image"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
 # Faqat `llm` xususiyati bilan yig'iladi.
 ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
+# Excel yozish: KS-2, KS-3, M-29 va jadval eksporti uchun.
+rust_xlsxwriter = { version = "0.99.0", default-features = false }
 
 [features]
 # Til modeliga ulanish sukut bo'yicha yig'ilishga kirmaydi: `llm` xususiyati

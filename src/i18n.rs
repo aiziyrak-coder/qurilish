@@ -1727,6 +1727,19 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cash_gap_title" => ("Kassa uzilishi kutilmoqda", "Ожидается кассовый разрыв"),
         "cash_gap_amount" => ("yetishmaydi:", "не хватает:"),
         "cash_gap_months" => ("oydan keyin", "мес. вперёд"),
+
+        // ---------- Excel eksporti va hujjatlar ----------
+        "export" => ("Excel", "Excel"),
+        "export_hint" => (
+            "Joriy ekran jadvalini .xlsx ga saqlash (Ctrl+E). Sonlar son bo'lib chiqadi — Excel da darrov yig'indi olish mumkin.",
+            "Сохранить таблицу текущего экрана в .xlsx (Ctrl+E). Числа остаются числами — в Excel сразу можно посчитать итог.",
+        ),
+        "export_none" => (
+            "Bu ekranda eksport qilinadigan jadval yo'q",
+            "На этом экране нет таблицы для выгрузки",
+        ),
+        "export_done" => ("Saqlandi, qator:", "Сохранено, строк:"),
+        "export_failed" => ("Saqlab bo'lmadi", "Не удалось сохранить"),
         "cp_q_cash" => ("Pul oqimi qanday?", "Как с денежным потоком?"),
         "cp_l_this_month_in" => ("Shu oy kirim", "Поступления за месяц"),
         "cp_l_this_month_out" => ("Shu oy chiqim", "Расход за месяц"),
@@ -2627,6 +2640,125 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_overuse_hint" => ("ruxsatdan oshgan", "сверх допуска"),
         "kpi_overuse_cost" => ("Ortiqcha summa", "Сумма перерасхода"),
         "kpi_overuse_cost_hint" => ("ortiqcha sarf qiymati", "стоимость перерасхода"),
+
+        // ---------- Rasmiy hujjatlar: KS-2, KS-3, M-29, AOSR ----------
+        "doc_number" => ("Hujjat raqami", "Номер документа"),
+        "doc_date" => ("Sana", "Дата"),
+        "doc_object" => ("Obyekt", "Объект"),
+        "doc_address" => ("Manzil", "Адрес"),
+        "doc_client" => ("Buyurtmachi", "Заказчик"),
+        "doc_contractor" => ("Pudratchi", "Подрядчик"),
+        "doc_period" => ("Hisobot davri", "Отчётный период"),
+        "doc_signatures" => ("Imzolar", "Подписи"),
+        "doc_sign_line" => ("imzo _______________", "подпись _______________"),
+        "doc_made_by" => (
+            "Hujjat QURAi da bazadagi ma'lumotdan tuzildi. Imzolash va tasdiqlash — qog'ozda.",
+            "Документ сформирован в QURAi по данным базы. Подписание и утверждение — на бумаге.",
+        ),
+        "doc_pos" => ("№", "№"),
+        "doc_save" => ("Hujjatni saqlash", "Сохранить документ"),
+        "doc_saved" => ("Hujjat saqlandi:", "Документ сохранён:"),
+        "doc_failed" => ("Hujjatni saqlab bo'lmadi", "Не удалось сохранить документ"),
+        "doc_blank" => ("Blanka", "Бланк"),
+        "doc_no_work" => (
+            "Bu davrda bajarilgan ish yo'q — dalolatnoma tuzilmadi",
+            "За этот период нет выполненных работ — акт не сформирован",
+        ),
+        "doc_ks2_hint" => (
+            "Joriy oy uchun bajarilgan ishlar dalolatnomasi. Hajm ijro foizidan, narx smetadan olinadi.",
+            "Акт выполненных работ за текущий месяц. Объём — из процента выполнения, цена — из сметы.",
+        ),
+        "doc_ks3_hint" => (
+            "Bajarilgan ish qiymati haqida ma'lumotnoma: shartnoma, bajarilgan va to'langan summalar.",
+            "Справка о стоимости выполненных работ: договор, выполнено и оплачено.",
+        ),
+        "doc_m29_hint" => (
+            "Material sarfi hisoboti: normativ va haqiqiy sarf, ortiqcha sarf summasi.",
+            "Отчёт о расходе материалов: норматив и факт, сумма перерасхода.",
+        ),
+        "doc_aosr_hint" => (
+            "Yashirin ishlar dalolatnomasi: ish, ishlatilgan materiallar va sertifikatlari.",
+            "Акт освидетельствования скрытых работ: работа, применённые материалы и их сертификаты.",
+        ),
+        "doc_only_hidden" => (
+            "Blanka faqat yashirin ishlar hujjati uchun",
+            "Бланк только для акта скрытых работ",
+        ),
+        "doc_code" => ("Rasenka", "Расценка"),
+        "doc_work" => ("Ish nomi", "Наименование работ"),
+        "doc_total" => ("Jami", "Итого"),
+        "doc_kind" => ("Ko'rsatkich", "Показатель"),
+
+        "doc_ks2" => (
+            "Bajarilgan ishlarni qabul qilish dalolatnomasi (KS-2)",
+            "Акт о приёмке выполненных работ (КС-2)",
+        ),
+        "doc_ks2_short" => ("KS-2", "КС-2"),
+        "doc_plan_qty" => ("Shartnoma bo'yicha", "По договору"),
+        "doc_done_qty" => ("Bajarilgan", "Выполнено"),
+        "doc_no_price" => (
+            "Smetada narxi topilmagan qatorlar bor:",
+            "Есть строки, для которых цена в смете не найдена:",
+        ),
+
+        "doc_ks3" => (
+            "Bajarilgan ish qiymati haqida ma'lumotnoma (KS-3)",
+            "Справка о стоимости выполненных работ (КС-3)",
+        ),
+        "doc_ks3_short" => ("KS-3", "КС-3"),
+        "doc_since_contract" => ("Shartnoma boshidan", "С начала договора"),
+        "doc_since_year" => ("Yil boshidan", "С начала года"),
+        "doc_period_col" => ("Shu davrda", "За период"),
+        "doc_row_contract" => ("Shartnoma summasi", "Сумма договора"),
+        "doc_row_done" => ("Bajarilgan ish qiymati", "Стоимость выполненных работ"),
+        "doc_row_paid" => ("To'langan", "Оплачено"),
+        "doc_row_unpaid" => ("To'lanmagan qoldiq", "Неоплаченный остаток"),
+        "doc_estimate_check" => ("Smeta bilan solishtirish", "Сверка со сметой"),
+        "doc_over_contract" => (
+            "Diqqat: smeta summasi shartnoma summasidan oshgan.",
+            "Внимание: сумма сметы превышает сумму договора.",
+        ),
+
+        "doc_m29" => (
+            "Material sarfi hisoboti (M-29)",
+            "Отчёт о расходе материалов (М-29)",
+        ),
+        "doc_m29_short" => ("M-29", "М-29"),
+
+        "doc_aosr" => (
+            "Yashirin ishlarni ko'zdan kechirish dalolatnomasi",
+            "Акт освидетельствования скрытых работ",
+        ),
+        "doc_aosr_short" => ("AOSR", "АОСР"),
+        "doc_materials_used" => (
+            "Ishda ishlatilgan materiallar",
+            "Материалы, применённые в работе",
+        ),
+        "doc_no_materials" => (
+            "Ombordan bu ishga material berilmagan",
+            "Материалы на эту работу со склада не выдавались",
+        ),
+        "doc_verdict" => ("Xulosa", "Заключение"),
+        "doc_verdict_text" => (
+            "Ishlar loyiha va normativ talablariga muvofiq bajarilgan, keyingi ishlarni bajarishga ruxsat beriladi.",
+            "Работы выполнены в соответствии с проектом и нормативными требованиями, разрешается производство последующих работ.",
+        ),
+
+        // Eksport ustunlari
+        "col_start" => ("Boshlanish", "Начало"),
+        "col_fact_start" => ("Fakt boshlanish", "Факт начала"),
+        "col_fact_end" => ("Fakt tugash", "Факт окончания"),
+        "col_critical" => ("Kritik yo'l", "Критический путь"),
+        "col_declared" => ("Hujjatda", "В документе"),
+        "col_text" => ("Matn", "Текст"),
+        "col_odo_start" => ("Spidometr chiqish", "Спидометр выезд"),
+        "col_odo_end" => ("Spidometr qaytish", "Спидометр возврат"),
+        "col_trips" => ("Reys", "Рейсы"),
+        "col_cargo" => ("Yuk", "Груз"),
+        "col_contract" => ("Shartnoma", "Договор"),
+        "col_fact_short" => ("Fakt", "Факт"),
+        "col_evidence" => ("Hisob", "Расчёт"),
+        "col_action" => ("Tavsiya", "Рекомендация"),
 
         // ---------- XIII. Tabel ----------
         "add_worker" => ("+ Ishchi", "+ Рабочий"),
