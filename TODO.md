@@ -13,27 +13,27 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 
 ## Umumiy hisob
 
-| Modul | Talab | ✅ | 🟡 | ⬜ |
-|---|---:|---:|---:|---:|
-| I. Loyihani boshqarish | 3 | 3 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 19 | 7 | 6 | 6 |
-| III. AI smeta tekshiruvi | 33 | 9 | 7 | 17 |
-| IV. Ijro hujjatlari | 30 | 6 | 6 | 18 |
-| V. Kunlik jurnal | 34 | 12 | 7 | 15 |
-| VI. Prorab (mobil) | 37 | 8 | 7 | 22 |
-| VII. Texnik nazorat | 38 | 8 | 7 | 23 |
-| VIII. Buyurtmachi | 37 | 9 | 6 | 22 |
-| IX. Arizalar | 42 | 19 | 8 | 15 |
-| X. Xaridlar | 48 | 16 | 15 | 17 |
-| XI. Ombor | 48 | 25 | 6 | 17 |
-| XII. Materiallar | 41 | 12 | 6 | 23 |
-| XIII. Tabel | 44 | 15 | 10 | 19 |
-| XIV. Sifat | 41 | 18 | 12 | 11 |
-| XV. Xavfsizlik | 41 | 19 | 8 | 14 |
-| XVI. Mashinalar | 50 | 26 | 6 | 18 |
-| XVII. AI analitika | 51 | 18 | 8 | 25 |
-| XVIII. AI Copilot | 45 | 6 | 5 | 34 |
-| **Jami** | **682** | **236** | **130** | **316** |
+| Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
+|---|---:|---:|---:|---:|---:|
+| I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
+| II. AI loyiha tekshiruvi | 19 | 8 | 7 | 4 | 0 |
+| III. AI smeta tekshiruvi | 34 | 8 | 8 | 18 | 2 |
+| IV. Ijro hujjatlari | 30 | 8 | 10 | 12 | 3 |
+| V. Kunlik jurnal | 34 | 17 | 7 | 10 | 6 |
+| VI. Prorab (mobil) | 37 | 16 | 9 | 12 | 8 |
+| VII. Texnik nazorat | 38 | 13 | 10 | 15 | 3 |
+| VIII. Buyurtmachi | 37 | 10 | 13 | 14 | 3 |
+| IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
+| X. Xaridlar | 48 | 16 | 16 | 16 | 2 |
+| XI. Ombor | 48 | 26 | 9 | 13 | 1 |
+| XII. Materiallar | 41 | 10 | 7 | 24 | 2 |
+| XIII. Tabel | 44 | 18 | 11 | 15 | 6 |
+| XIV. Sifat | 41 | 19 | 9 | 13 | 2 |
+| XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
+| XVI. Mashinalar | 50 | 28 | 7 | 15 | 3 |
+| XVII. AI analitika | 51 | 22 | 12 | 17 | 0 |
+| XVIII. AI Copilot | 45 | 5 | 3 | 37 | 7 |
+| **Jami** | **683** | **269** | **154** | **260** | **52** |
 
 Ya'ni **~23 % to'liq**, **~16 % qisman**, **~61 % hali yo'q**.
 
