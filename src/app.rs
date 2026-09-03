@@ -545,6 +545,11 @@ pub struct App {
     pub llm: crate::llm::Config,
     /// Modul ekranidan yordamchiga uzatilgan savol (TZ VI.30 va h.k.).
     pub copilot_intent: Option<crate::copilot::Intent>,
+    /// Qidiruvdan kelingan jurnal yozuvining sanasi (TZ V.30).
+    ///
+    /// Jurnal yozuvi alohida tanlanmaydi — u kunlik yozuv, shuning uchun
+    /// ajratish ham kun bo'yicha bo'ladi.
+    pub journal_focus: Option<NaiveDate>,
     /// Ish grafigi: qaysi kunlar ish kuni (TZ XIII.12).
     pub work_schedule: checks::WorkSchedule,
     /// Texnikaning kunlik ko'rigi (TZ XVI.28, XV.18).
@@ -725,6 +730,7 @@ impl App {
             timesheet_week: None,
             llm: crate::llm::Config::default(),
             copilot_intent: None,
+            journal_focus: None,
             work_schedule: checks::WorkSchedule::default(),
             machine_checks: Vec::new(),
             notes: Vec::new(),

@@ -21,8 +21,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 31 | 1 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 26 | 1 | 3 | 3 |
-| V. Kunlik ishlar jurnali | 34 | 26 | 2 | 6 | 6 |
+| IV. Ijro hujjatlari | 30 | 27 | 0 | 3 | 3 |
+| V. Kunlik ishlar jurnali | 34 | 27 | 1 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 25 | 5 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **634** | **20** | **46** | **46** |
+| **Jami** | **700** | **636** | **18** | **46** | **46** |
 
 Ya'ni **~91 % to'liq**, **~3 % qisman**, **~7 % hali yo'q**.
 
@@ -150,7 +150,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 25. Buyurtmachi kabineti
 - [x] 26. To'liqlikni AI nazorati — *matritsada kechikkan ishlar*
 - [x] 27. Obyekt arxivi — *hujjatlar reyestri `.xlsx`*
-- [~] 28. AI orqali qidiruv — *umumiy qidiruv (Ctrl+K)*
+- [x] 28. AI orqali qidiruv — *so'z va sana bo'yicha (Ctrl+K): hujjat, jurnal, ariza, xarid, material, ishchi, texnika; savolga o'xshash so'rov yordamchiga ulanadi*
 - [x] 29. Boshqa modullar bilan bog'lanish
 - [x] 30. Modulning bosh funksiyasi
 
@@ -187,7 +187,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 27. Geolokatsiya nazorati
 - [ ] 🔒 28. Hisobotni imzolash
 - [x] 29. Tarix
-- [~] 30. AI qidiruv
+- [x] 30. AI qidiruv — *«aprelda beton quyish» kabi so'rov: oy va yil davrga aylanadi, topilgan kun jurnalda ajratiladi*
 - [x] 31. Boshqa modullar bilan bog'lanish
 - [x] 32. Soxta hisobotlardan himoya — *ichki ziddiyatlar*
 - [x] 33. Kunning yakuniy holati — *prorab ekrani va kunlik xulosa*

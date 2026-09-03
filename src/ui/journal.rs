@@ -773,9 +773,18 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                 let mut e = entry.clone();
                 let mut changed = false;
 
-                egui::Frame::new()
+                // Qidiruvdan kelingan kun ajratiladi va ko'rinishga suriladi.
+                let focused = app.journal_focus == Some(e.date);
+                let frame = egui::Frame::new()
                     .fill(theme::card())
-                    .stroke(Stroke::new(1.0_f32, theme::line()))
+                    .stroke(Stroke::new(
+                        if focused { 2.0_f32 } else { 1.0_f32 },
+                        if focused {
+                            theme::accent()
+                        } else {
+                            theme::line()
+                        },
+                    ))
                     .corner_radius(8)
                     .inner_margin(egui::Margin::symmetric(14, 12))
                     .show(ui, |ui| {
@@ -971,6 +980,9 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                             }
                         }
                     });
+                if focused {
+                    frame.response.scroll_to_me(Some(egui::Align::Center));
+                }
                 ui.add_space(8.0);
 
                 if changed {
