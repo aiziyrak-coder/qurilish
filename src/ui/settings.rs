@@ -334,6 +334,38 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     {
                         llm_changed = true;
                     }
+                    // Tayyor nomlar — ro'yxat yopiq emas, chunki xizmat
+                    // modellari yangilanib turadi va dastur ularning
+                    // ro'yxatini bilishi shart emas.
+                    egui::ComboBox::from_id_salt("llm_model_preset")
+                        .selected_text(t("set_llm_preset"))
+                        .width(140.0)
+                        .show_ui(ui, |ui| {
+                            for m in crate::llm::MODELS {
+                                if ui.selectable_label(app.llm.model == *m, *m).clicked() {
+                                    app.llm.model = (*m).to_string();
+                                    llm_changed = true;
+                                }
+                            }
+                        });
+                });
+                field(ui, t("set_llm_timeout"), |ui| {
+                    if ui
+                        .add_sized(
+                            [80.0, 22.0],
+                            egui::DragValue::new(&mut app.llm.timeout_secs)
+                                .speed(1.0)
+                                .range(5..=180),
+                        )
+                        .changed()
+                    {
+                        llm_changed = true;
+                    }
+                    ui.label(
+                        RichText::new(t("set_llm_timeout_hint"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
                 });
                 field(ui, t("set_llm_key"), |ui| {
                     // Kalit ekranda ochiq turmasin.
@@ -355,15 +387,29 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
             ui.add_space(6.0);
             let ready = app.llm.is_ready();
-            ui.label(
-                RichText::new(if ready {
-                    t("set_llm_ready")
-                } else {
-                    t("set_llm_off")
-                })
-                .size(11.5)
-                .color(if ready { theme::ok() } else { theme::muted() }),
-            );
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(if ready {
+                        t("set_llm_ready")
+                    } else {
+                        t("set_llm_off")
+                    })
+                    .size(11.5)
+                    .color(if ready { theme::ok() } else { theme::muted() }),
+                );
+                // Sinov so'rovi: kalit va model to'g'riligini oldindan
+                // bilish kerak — birinchi haqiqiy savolda bilib olish kech.
+                if ready
+                    && app.llm_pending.is_none()
+                    && ui
+                        .button(t("set_llm_test"))
+                        .on_hover_text(t("set_llm_test_hint"))
+                        .clicked()
+                {
+                    app.ask_llm(t("set_llm_test_question").to_string());
+                    app.screen = Screen::Copilot;
+                }
+            });
         });
 
         ui.add_space(10.0);

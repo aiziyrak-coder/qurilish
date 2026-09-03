@@ -1,8 +1,13 @@
 //! «Yordamchi» ekrani (TZ XVIII).
 //!
-//! Savol beriladi — javob shu bazadagi ma'lumotdan hisoblanadi. Til modeli
-//! ishlatilmaydi va bu ekranda ochiq aytiladi: har javob orqasida aniq son va
-//! uni tekshirish mumkin bo'lgan ekran turadi.
+//! Ekranda ikki xil javob bor va ular ataylab **ajratilgan**:
+//!
+//! 1. «Savol-javob» — javob shu bazadagi ma'lumotdan hisoblanadi. Har javob
+//!    orqasida aniq son va uni tekshirish mumkin bo'lgan ekran turadi.
+//! 2. «AI suhbat» — OpenAI modeli. U son hisoblamaydi: so'rovga ilova
+//!    hisoblab bergan sonlar biriktiriladi va model faqat shularni
+//!    tushuntiradi. Modeldan kelgan javob boshqa ramkada turadi, chunki u
+//!    ilovaning hisobi emas.
 
 use super::*;
 use crate::copilot::{self, Answer, Intent};
@@ -56,6 +61,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     t("cp_tab_actions").to_string()
                 },
             ),
+            (2, t("cp_tab_chat").to_string()),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -67,6 +73,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     if tab == 1 {
         actions_tab(ui, app);
+        return;
+    }
+    if tab == 2 {
+        chat_tab(ui, app);
         return;
     }
 
@@ -163,35 +173,245 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut ask_model = false;
     answer_card(ui, &a, &mut go, app.llm.is_ready(), &mut ask_model);
 
-    // Modeldan olingan javob shu ekranda saqlanadi.
-    let reply_key = egui::Id::new("cp_reply");
+    // «Modeldan so'rash» savolni suhbatga o'tkazadi: javob shu yerda emas,
+    // alohida tabda paydo bo'ladi — ilova hisobi bilan model javobi
+    // aralashib ketmasin.
     if ask_model {
-        // Modelga savol va ilova hisoblab bergan sonlar birga boradi.
-        let context = a
-            .lines
-            .iter()
-            .map(|l| format!("{}: {}", l.label, l.value))
-            .collect::<Vec<_>>()
-            .join("\n");
         let question = if text.trim().is_empty() {
             a.title.clone()
         } else {
             text.clone()
         };
-        let out = match crate::llm::ask(&app.llm, &question, &context) {
-            Ok(v) => v,
-            Err(e) => format!("{}: {e}", t("cp_llm_failed")),
-        };
-        ui.data_mut(|d| d.insert_temp(reply_key, out));
-    }
-    if let Some(reply) = ui.data(|d| d.get_temp::<String>(reply_key)) {
-        ui.add_space(8.0);
-        llm_card(ui, &reply);
+        app.ask_llm(question);
+        ui.data_mut(|d| d.insert_temp(tab_key, 2u8));
     }
 
     if let Some(s) = go {
         app.screen = s;
     }
+}
+
+// ================================================================ AI suhbat
+
+/// OpenAI modeli bilan suhbat (TZ XVIII).
+///
+/// Model son hisoblamaydi: har so'rovga ilova hisoblab bergan sonlar
+/// biriktiriladi va modeldan faqat shularga tayanish so'raladi. Shuning
+/// uchun javobni tegishli ekranda tekshirib ko'rish mumkin.
+fn chat_tab(ui: &mut egui::Ui, app: &mut App) {
+    // Fon so'rovi tugagan bo'lsa javobni olamiz.
+    if app.poll_llm() {
+        ui.ctx().request_repaint();
+    }
+
+    if !app.llm.is_ready() {
+        let mut go_settings = false;
+        egui::Frame::new()
+            .fill(theme::card())
+            .stroke(Stroke::new(1.0_f32, theme::warn()))
+            .corner_radius(10)
+            .inner_margin(egui::Margin::symmetric(16, 14))
+            .show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label(
+                        RichText::new(t("cp_chat_off"))
+                            .size(13.5)
+                            .strong()
+                            .color(theme::warn()),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(t("cp_chat_off_hint"))
+                            .size(12.0)
+                            .color(theme::muted()),
+                    );
+                    ui.add_space(8.0);
+                    if ui.button(t("cp_chat_open_settings")).clicked() {
+                        go_settings = true;
+                    }
+                });
+            });
+        if go_settings {
+            app.screen = Screen::Settings;
+        }
+        return;
+    }
+
+    // Suhbat oynasi.
+    let busy = app.llm_pending.is_some();
+    let mut retry = false;
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .max_height(ui.available_height() - 96.0)
+        .stick_to_bottom(true)
+        .show(ui, |ui| {
+            if app.llm_chat.is_empty() {
+                ui.add_space(24.0);
+                ui.vertical_centered(|ui| {
+                    ui.label(
+                        RichText::new(t("cp_chat_empty"))
+                            .size(13.5)
+                            .color(theme::muted()),
+                    );
+                });
+            }
+            for turn in &app.llm_chat {
+                bubble(ui, turn);
+                ui.add_space(6.0);
+            }
+            if busy {
+                ui.horizontal(|ui| {
+                    ui.add(egui::Spinner::new().size(14.0));
+                    ui.label(
+                        RichText::new(t("cp_chat_waiting"))
+                            .size(12.0)
+                            .color(theme::muted()),
+                    );
+                });
+                // Javob kelganini sezish uchun ekran yangilanib tursin.
+                ui.ctx()
+                    .request_repaint_after(std::time::Duration::from_millis(200));
+            }
+            if let Some((key, detail, can_retry)) = app.llm_error.clone() {
+                ui.add_space(6.0);
+                if error_card(ui, key, &detail, can_retry) {
+                    retry = true;
+                }
+            }
+        });
+
+    ui.add_space(8.0);
+    ui.separator();
+    ui.add_space(6.0);
+
+    // Savol yozish qatori.
+    let key = egui::Id::new("cp_chat_text");
+    let mut text = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
+    let mut send = false;
+    let mut clear = false;
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - 210.0).max(200.0);
+        let edit = ui.add_sized(
+            [width, 28.0],
+            egui::TextEdit::singleline(&mut text).hint_text(t("cp_chat_placeholder")),
+        );
+        let enter = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        if ui
+            .add_enabled(
+                !busy && !text.trim().is_empty(),
+                egui::Button::new(t("cp_ask")),
+            )
+            .clicked()
+            || (enter && !busy)
+        {
+            send = true;
+        }
+        if !app.llm_chat.is_empty() && ui.button(t("cp_chat_clear")).clicked() {
+            clear = true;
+        }
+    });
+
+    // Sarflangan tokenlar — xarajat ko'rinib tursin.
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(format!("{} · {}", app.llm.model, t("cp_chat_note")))
+                .size(10.5)
+                .color(theme::muted()),
+        );
+        if app.llm_tokens > 0 {
+            ui.label(
+                RichText::new(format!("{} {}", app.llm_tokens, t("cp_chat_tokens")))
+                    .size(10.5)
+                    .color(theme::muted()),
+            );
+        }
+    });
+
+    if send {
+        app.ask_llm(text.clone());
+        text.clear();
+    }
+    if clear {
+        app.clear_llm_chat();
+    }
+    // Qayta urinish: oxirgi savol tarixda turibdi, uni qaytadan yozish shart emas.
+    if retry {
+        if let Some(last) = app
+            .llm_chat
+            .iter()
+            .rev()
+            .find(|x| x.from_user)
+            .map(|x| x.text.clone())
+        {
+            // Javobsiz qolgan savol ikki marta tarixga tushmasin.
+            if app.llm_chat.last().map(|x| x.from_user).unwrap_or(false) {
+                app.llm_chat.pop();
+            }
+            app.ask_llm(last);
+        }
+    }
+    ui.data_mut(|d| d.insert_temp(key, text));
+}
+
+/// Suhbatdagi bitta gap.
+fn bubble(ui: &mut egui::Ui, turn: &crate::llm::Turn) {
+    let (title, colour) = if turn.from_user {
+        (t("cp_chat_you"), theme::muted())
+    } else {
+        (t("cp_llm_answer"), theme::accent())
+    };
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(
+            1.0_f32,
+            if turn.from_user {
+                theme::line()
+            } else {
+                theme::accent()
+            },
+        ))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.label(RichText::new(title).size(11.5).strong().color(colour));
+                ui.add_space(3.0);
+                ui.label(RichText::new(&turn.text).size(13.0));
+            });
+        });
+}
+
+/// Xatoni sababi bilan ko'rsatadi — nima bo'lgani yashirilmaydi.
+///
+/// Qaytadan urinish ma'noli bo'lgan xatolarda (limit, tarmoq, xizmat) tugma
+/// chiqadi; kalit noto'g'ri bo'lsa qaytadan urinishdan foyda yo'q.
+fn error_card(ui: &mut egui::Ui, key: &str, detail: &str, can_retry: bool) -> bool {
+    let mut retry = false;
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::danger()))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(t(key))
+                        .size(12.5)
+                        .strong()
+                        .color(theme::danger()),
+                );
+                if !detail.trim().is_empty() {
+                    ui.label(RichText::new(detail).size(11.0).color(theme::muted()));
+                }
+                if can_retry {
+                    ui.add_space(4.0);
+                    if ui.small_button(t("cp_chat_retry")).clicked() {
+                        retry = true;
+                    }
+                }
+            });
+        });
+    retry
 }
 
 // ================================================================ Takliflar
@@ -318,33 +538,6 @@ fn actions_tab(ui: &mut egui::Ui, app: &mut App) {
     if let Some(screen) = goto {
         app.screen = screen;
     }
-}
-
-/// Modeldan kelgan javob. Alohida ramkada — bu ilova hisobi emas.
-fn llm_card(ui: &mut egui::Ui, text: &str) {
-    egui::Frame::new()
-        .fill(theme::card())
-        .stroke(Stroke::new(1.0_f32, theme::accent()))
-        .corner_radius(10)
-        .inner_margin(egui::Margin::symmetric(16, 14))
-        .show(ui, |ui| {
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(t("cp_llm_answer"))
-                        .size(12.5)
-                        .strong()
-                        .color(theme::accent()),
-                );
-                ui.add_space(4.0);
-                ui.label(RichText::new(text).size(13.0));
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new(t("cp_llm_note"))
-                        .size(10.5)
-                        .color(theme::muted()),
-                );
-            });
-        });
 }
 
 fn answer_card(

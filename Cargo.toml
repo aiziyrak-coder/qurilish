@@ -24,9 +24,11 @@ ureq = { version = "2", optional = true, default-features = false, features = ["
 rust_xlsxwriter = { version = "0.99.0", default-features = false }
 
 [features]
-# Til modeliga ulanish sukut bo'yicha yig'ilishga kirmaydi: `llm` xususiyati
-# yoqilmasa ilovada tarmoq kutubxonasi umuman bo'lmaydi.
-default = []
+# OpenAI integratsiyasi yig'ilishga kiradi, lekin **ishlamaydi**: u sozlamada
+# yoqilib, kalit kiritilmaguncha ilova hech qayerga ulanmaydi. Tarmoq
+# kutubxonasi umuman kerak bo'lmasa — `--no-default-features` bilan yig'ing,
+# shunda `llm` kodi kompilyatsiyaga ham kirmaydi.
+default = ["llm"]
 llm = ["dep:ureq"]
 
 [profile.release]

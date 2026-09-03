@@ -7314,6 +7314,131 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// TZ XVIII: modelga jo'natiladigan kontekst ilova hisoblab bergan
+    /// sonlardan iborat — model son o'ylab topmasligi kerak.
+    #[test]
+    fn llm_context_is_built_from_the_app_numbers() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let ctx = app.llm_context();
+        assert!(!ctx.is_empty(), "kontekst bo'sh");
+        // Obyekt nomi va sanasi bosh qismda.
+        let project = app.project().expect("obyekt").clone();
+        assert!(ctx.contains(&project.name));
+        assert!(ctx.contains(&app.today.format("%d.%m.%Y").to_string()));
+
+        // Yordamchining har bo'limi kontekstga tushadi va qatorlar aynan
+        // ekranda ko'rinadigan sonlar bo'ladi.
+        let supply = app.supply();
+        let stock = app.stock();
+        let cost = app.cost_summary();
+        let sales = app.sales();
+        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+        let overview = crate::copilot::answer(crate::copilot::Intent::Overview, &inp);
+        for l in &overview.lines {
+            assert!(
+                ctx.contains(&format!("{}: {}", l.label, l.value)),
+                "kontekstda yo'q: {}",
+                l.label
+            );
+        }
+
+        // Kontekst chegaradan oshmaydi.
+        assert!(ctx.chars().count() <= crate::llm::MAX_CONTEXT + 2);
+    }
+
+    /// Sozlama o'chiq bo'lsa savol jo'natilmaydi va sabab aytiladi.
+    #[test]
+    fn asking_with_the_model_off_reports_why() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        assert!(!app.llm.is_ready(), "namunada model yoqilgan turibdi");
+        app.ask_llm("Nima kechikkan?".into());
+
+        assert!(app.llm_pending.is_none(), "o'chiq sozlamada so'rov ketdi");
+        assert!(app.llm_chat.is_empty(), "javobsiz savol tarixga yozildi");
+        let (key, _, retry) = app.llm_error.clone().expect("xato ko'rsatilmadi");
+        assert_eq!(key, "llm_err_not_configured");
+        assert!(!retry, "sozlamasiz qayta urinishdan foyda yo'q");
+    }
+
+    /// Yoqilgan sozlamada savol tarixga tushadi, so'rov fonda ketadi va
+    /// javob kelgach suhbat to'ldiriladi.
+    #[test]
+    fn chat_keeps_the_question_and_collects_the_answer() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Manzil ataylab mavjud emas: haqiqiy tarmoqqa chiqmaymiz, lekin
+        // butun yo'l — savolni yozish, fon oqimi, xatoni ko'rsatish —
+        // ishlashini tekshiramiz.
+        app.llm = crate::llm::Config {
+            enabled: true,
+            endpoint: "http://127.0.0.1:1/v1/chat/completions".into(),
+            model: "test-model".into(),
+            api_key: "sk-test".into(),
+            timeout_secs: 5,
+        };
+
+        app.ask_llm("Nima kechikkan?".into());
+        assert_eq!(app.llm_chat.len(), 1);
+        assert!(app.llm_chat[0].from_user);
+        assert_eq!(app.llm_chat[0].text, "Nima kechikkan?");
+
+        // Ikkinchi savol birinchisi tugamaguncha jo'natilmaydi.
+        app.ask_llm("Yana bir savol".into());
+        assert_eq!(app.llm_chat.len(), 1, "ikkita so'rov birga ketdi");
+
+        // Javobni kutamiz: `llm` xususiyatisiz yig'ilishda darhol
+        // «sozlanmagan» xatosi keladi, aks holda tarmoq xatosi.
+        let mut waited = 0;
+        while !app.poll_llm() && waited < 200 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            waited += 1;
+        }
+        assert!(app.llm_pending.is_none(), "so'rov tugamadi");
+        assert!(app.llm_error.is_some(), "xato ko'rsatilmadi");
+
+        // Tozalash suhbatni ham, xatoni ham olib tashlaydi.
+        app.clear_llm_chat();
+        assert!(app.llm_chat.is_empty());
+        assert!(app.llm_error.is_none());
+        assert_eq!(app.llm_tokens, 0);
+    }
+
+    /// Kalit bazada saqlanadi, lekin so'rov tanasiga hech qachon tushmaydi.
+    #[test]
+    fn api_key_never_leaves_the_header() {
+        let t = TempDb::new();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.llm = crate::llm::Config {
+            enabled: true,
+            endpoint: crate::llm::DEFAULT_ENDPOINT.into(),
+            model: crate::llm::DEFAULT_MODEL.into(),
+            api_key: "sk-secret-value-9911".into(),
+            timeout_secs: 30,
+        };
+        app.save_llm();
+
+        let body = crate::llm::build_request(&app.llm, &[], "savol", "kontekst").unwrap();
+        assert!(!body.contains("sk-secret-value-9911"));
+        assert!(!app.llm.masked_key().contains("secret"));
+
+        // Sozlama qayta o'qilganda tiklanadi.
+        let again = crate::app::App::new(Db::open(&t.path).unwrap());
+        assert_eq!(again.llm.api_key, "sk-secret-value-9911");
+        assert_eq!(again.llm.timeout_secs, 30);
+        assert_eq!(again.llm.model, crate::llm::DEFAULT_MODEL);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

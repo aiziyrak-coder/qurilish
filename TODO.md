@@ -35,11 +35,11 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XV. Xavfsizlik | 41 | 33 | 4 | 4 | 3 |
 | XVI. Mashinalar | 50 | 35 | 9 | 6 | 2 |
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
-| XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
+| XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **438** | **156** | **106** | **53** |
+| **Jami** | **700** | **440** | **161** | **99** | **46** |
 
-Ya'ni **~63 % to'liq**, **~22 % qisman**, **~15 % hali yo'q**.
+Ya'ni **~63 % to'liq**, **~23 % qisman**, **~14 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -779,15 +779,23 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 ## XVIII. AI Copilot
 
-> 🔒 TZ ga ko'ra Copilot — **butun platformaning operatsion qatlami**: tabiiy
+> TZ ga ko'ra Copilot — **butun platformaning operatsion qatlami**: tabiiy
 > tilni tushunadi, ma'lumot topadi, tahlil qiladi, tushuntiradi, yechim taklif
-> qiladi va **tasdiqlangandan keyin amalni bajaradi**. Hozir qurilgani —
-> qoidalarga asoslangan savol-javob va ixtiyoriy LLM ulanish nuqtasi.
+> qiladi va **tasdiqlangandan keyin amalni bajaradi**.
+>
+> Qurilgani: qoidalarga asoslangan savol-javob (son har doim baza hisobidan)
+> va **OpenAI bilan to'liq integratsiya** — ko'p bosqichli suhbat, fon
+> so'rovi, xatolarni aniq ko'rsatish, token hisobi. Model **son hisoblamaydi**:
+> har so'rovga ilova hisoblab bergan sonlar biriktiriladi.
+>
+> Integratsiya yig'ilishga kiradi, lekin **sukut bo'yicha o'chiq**: sozlamada
+> yoqilib API kalit kiritilmaguncha ilova hech qayerga ulanmaydi. Tarmoq kodi
+> umuman kerak bo'lmasa — `cargo build --no-default-features`.
 
 - [x] 1. Asosiy vazifa — *qisman: savol-javob*
 - [x] 2. Bosh ekran
-- [~] 3. Tabiiy nutqni tushunish — *kalit so'zlar; LLM ixtiyoriy*
-- [ ] 🔒 4–10. Ovoz, kontekst, ko'p bosqichli suhbat
+- [x] 3. Tabiiy nutqni tushunish — *OpenAI modeli; kalit so'zlar zaxira sifatida*
+- [~] 4–10. Ovoz, kontekst, ko'p bosqichli suhbat — *suhbat va kontekst bor; ovoz 🔒*
 - [x] 11. Rol bo'yicha kirish chegarasi
 - [~] 12–20. Qoralamalar — *ariza, xarid, ijro hujjati, kelishuv marshruti*
 - [x] 21–30. Amalni bajarish — *tasdiqdan keyin, rol huquqi bilan*
@@ -795,7 +803,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 41. Ma'lumot manbasini ko'rsatish — *«Tekshirish» tugmasi*
 - [x] 42. Sonni o'ylab topmaslik
 - [~] 43. Modullar bo'ylab kirish — *13 mavzu*
-- [~] 44. Copilot — operatsion qatlam — *yetti xil amal; til modeli yo'q*
+- [x] 44. Copilot — operatsion qatlam — *yetti xil amal va til modeli*
 - [x] 45. TZ uchun asosiy ta'rif — *chegara ochiq yozilgan*
 
 ---

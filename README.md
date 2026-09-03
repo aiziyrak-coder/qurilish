@@ -391,21 +391,58 @@ kesimidagi bajarilish, moliya (shartnoma, smeta, bajarilgan ish qiymati,
 to'langan va to'lanmagan qism), oxirgi ish kunlari va sotuv holati.
 
 ### Yordamchi (TZ XVIII)
-Savol beriladi — javob shu bazadagi ma'lumotdan hisoblanadi. **Til modeli sukut
-bo'yicha ishlatilmaydi va bu ekranda ochiq aytiladi.** 13 ta tayyor savol bor; erkin
+Ekranda ikki xil javob bor va ular ataylab **ajratilgan**: «Savol-javob» tabida
+javob shu bazadagi ma'lumotdan hisoblanadi, «AI suhbat» tabida esa OpenAI
+modeli javob beradi (quyida). 13 ta tayyor savol bor; erkin
 yozilgan savol kalit so'zlar bo'yicha shulardan biriga bog'lanadi. Aniq mavzuli
 savol umumiy so'zlardan ustun turadi — «ombor holati qanday?» ombor haqidagi
 savol deb tushuniladi. Savol tanilmasa javob **o'ylab topilmaydi**: ekran buni
 ochiq aytadi. Har javobda «Tekshirish» tugmasi manba ekranini ochadi.
 
-**Til modeli — ixtiyoriy va o'chiq.** Tarmoq qismi yig'ilishga umuman kirmaydi:
-u `cargo build --features llm` bilan qo'shiladi. Yoqilganda savol va unga
-biriktirilgan **hisoblangan sonlar** tashqi xizmatga jo'natiladi — sozlamalarda
-bu ochiq ogohlantirish bilan yozilgan. Modelga beriladigan ko'rsatma qat'iy:
-ma'lumotda yo'q sonni yoki normativni o'ylab topmaslik, bilmagan narsani ochiq
-aytish, aybdorni belgilamaslik. Model javobi alohida ramkada chiqadi — u ilova
-hisobi emasligi ko'rinib tursin. API kaliti bazada saqlanadi, ekranda yopiq
-ko'rsatiladi va so'rov tanasiga tushmaydi.
+### OpenAI integratsiyasi (TZ XVIII)
+
+Yordamchidagi **«AI suhbat»** tabi OpenAI modeliga ulanadi. Suhbat ko'p
+bosqichli: oldingi savol-javoblardan oxirgi sakkiztasi so'rovga qo'shiladi,
+shuning uchun «unda nima qilay?» degan savol ham tushuniladi.
+
+**Sukut bo'yicha o'chiq.** Sozlamada yoqilib API kalit kiritilmaguncha ilova
+hech qayerga ulanmaydi. Yoqilganda savol va unga biriktirilgan **hisoblangan
+sonlar** tashqi xizmatga jo'natiladi — sozlamalarda bu ochiq ogohlantirish
+bilan yozilgan. Tarmoq kodi umuman kerak bo'lmasa:
+
+```
+cargo build --release --no-default-features
+```
+
+shunda `llm` moduli kompilyatsiyaga ham kirmaydi va sozlamada buning sababi
+yozib qo'yiladi.
+
+**Model son hisoblamaydi.** Har so'rovga obyekt bo'yicha tayyor sonlar —
+yordamchining o'z javoblari — biriktiriladi va modeldan faqat shularga tayanish
+so'raladi. Ko'rsatma qat'iy: ma'lumotda yo'q sonni yoki normativni o'ylab
+topmaslik, bilmagan narsani ochiq aytish, aybdorni belgilamaslik. Model javobi
+alohida ramkada chiqadi — u ilovaning hisobi emasligi ko'rinib tursin.
+
+**Kalit hech qayerga chiqmaydi.** U bazada saqlanadi, ekranda yopiq
+ko'rsatiladi (`••••abcd`) va faqat `Authorization` sarlavhasida boradi: so'rov
+tanasiga ham, xato matniga ham tushmaydi. Zaxira nusxada esa u ham bo'ladi —
+bu sozlamalarda ochiq yozilgan.
+
+**So'rov interfeysni to'xtatmaydi.** U alohida oqimda ketadi, ekranda kutish
+belgisi turadi, javob esa qaysi bo'limda bo'lishingizdan qat'i nazar olinadi.
+Xato bo'lsa sababi aniq aytiladi — kalit qabul qilinmadimi, limit tugadimi,
+tarmoq yo'qmi — va qaytadan urinish ma'noli bo'lgan holatlarda tugma chiqadi.
+
+| Sozlama | Sukut qiymati |
+|---|---|
+| Manzil | `https://api.openai.com/v1/chat/completions` |
+| Model | `gpt-4o-mini` (ro'yxatdan tanlanadi yoki qo'lda yoziladi) |
+| Kutish muddati | 45 soniya (5–180) |
+| Kontekst chegarasi | 12 000 belgi |
+| Suhbat tarixi | oxirgi 8 gap |
+
+Sozlamada **«Ulanishni sinash»** tugmasi bitta qisqa savol jo'natadi: kalit va
+model to'g'riligi birinchi haqiqiy savoldan oldin ma'lum bo'ladi.
 
 ### Umumiy ko'rinish
 Obyekt bo'yicha xulosa, muddati o'tgan ishlar mas'ullari va kechikish miqdori bilan
@@ -446,7 +483,7 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ifc.rs` | IFC (ISO 10303-21) o'qish va bilimlar grafiga o'girish |
 | `src/roles.rs` | Rollar va ekran bo'yicha yozish huquqi |
 | `src/package.rs` | Qurilmalar orasida almashish paketi |
-| `src/llm.rs` | Til modeli nuqtasi (ixtiyoriy, sukut bo'yicha o'chiq) |
+| `src/llm.rs` | OpenAI integratsiyasi (sukut bo'yicha o'chiq) |
 | `src/analytics.rs` | Kesishgan tahlil: 24 qoida, sog'lomlik indeksi, hisobot |
 | `src/copilot.rs` | Savol-javob: niyatni tanish va javob hisobi |
 | `src/backup.rs` | Bazaning izchil zaxira nusxasi |
@@ -495,5 +532,5 @@ Uchta arxitektura qarori alohida hal qilinishi kerak:
    qiladi. Desktop klient native holicha qoladi va serverga API orqali murojaat qiladi.
 2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
    kutubxona yoki xizmatni talab qiladi. Hozir loyiha elementlari qo'lda kiritiladi.
-3. **LLM integratsiyasi.** TZ da «AI javob beradi» deb yozilgan joylar (I.2
-   tavsiyalari, XVIII Copilot) qoidalar dvigateli bilan yopilmaydi.
+3. **Ovozli kiritish va ovozli rejim (TZ V.26, VI.7).** Mikrofon va nutqni
+   tanish tashqi xizmatga bog'liq. Yozma suhbat OpenAI orqali ishlaydi.

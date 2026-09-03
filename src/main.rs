@@ -82,6 +82,11 @@ struct Root {
 
 impl eframe::App for Root {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Model javobi qaysi ekranda turgandan qat'i nazar olinadi: so'rov
+        // berib boshqa bo'limga o'tilsa ham javob yo'qolmasin.
+        if self.app.poll_llm() {
+            ctx.request_repaint();
+        }
         ui::draw(ctx, &mut self.app);
     }
 }

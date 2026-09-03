@@ -461,16 +461,16 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "При включении вопрос и приложенные к нему данные объекта отправляются во внешний сервис. Данные покидают компьютер, и вернуть их нельзя. В выключенном состоянии программа никуда не подключается.",
         ),
         "set_llm_not_built" => (
-            "Bu yig'ilishda tarmoq qismi yo'q: ilova `llm` xususiyatisiz yig'ilgan, shuning uchun ulanish umuman mumkin emas.",
-            "В этой сборке нет сетевой части: программа собрана без функции `llm`, поэтому подключение невозможно в принципе.",
+            "Bu yig'ilishda tarmoq qismi yo'q: ilova `--no-default-features` bilan yig'ilgan, shuning uchun ulanish umuman mumkin emas.",
+            "В этой сборке нет сетевой части: программа собрана с `--no-default-features`, поэтому подключение невозможно в принципе.",
         ),
         "set_llm_enabled" => ("Yoqilgan", "Включено"),
         "set_llm_endpoint" => ("Xizmat manzili", "Адрес сервиса"),
         "set_llm_model" => ("Model nomi", "Название модели"),
         "set_llm_key" => ("API kaliti", "API-ключ"),
         "set_llm_ready" => (
-            "Yoqilgan: yordamchida «Modeldan so'rash» tugmasi chiqadi.",
-            "Включено: в помощнике появится кнопка «Спросить модель».",
+            "Yoqilgan: yordamchidagi «AI suhbat» tabi ishlaydi.",
+            "Включено: вкладка «AI-диалог» в помощнике работает.",
         ),
         "set_llm_off" => (
             "O'chiq: yordamchi faqat o'z bazasidan javob beradi.",
@@ -487,6 +487,70 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Этот ответ написан внешней моделью. Числа взяты из расчета выше — сверяйте ответ с ним.",
         ),
         "cp_llm_failed" => ("Model javob bermadi", "Модель не ответила"),
+        "set_llm_preset" => ("Tayyor nomlar", "Готовые названия"),
+        "set_llm_timeout" => ("Kutish muddati", "Время ожидания"),
+        "set_llm_timeout_hint" => ("soniya", "секунд"),
+        "set_llm_test" => ("Ulanishni sinash", "Проверить подключение"),
+        "set_llm_test_hint" => (
+            "Bitta qisqa savol jo'natiladi: kalit va model to'g'riligi shu yerda ma'lum bo'ladi.",
+            "Отправится один короткий вопрос: сразу станет видно, верны ли ключ и модель.",
+        ),
+        "set_llm_test_question" => (
+            "Ulanish ishlayaptimi? Qisqa javob bering.",
+            "Подключение работает? Ответьте коротко.",
+        ),
+        "cp_tab_chat" => ("AI suhbat", "AI-диалог"),
+        "cp_chat_off" => ("AI suhbat o'chiq", "AI-диалог выключен"),
+        "cp_chat_off_hint" => (
+            "Sozlamalarda til modelini yoqing va API kalitini kiriting. Yoqilmaguncha ilova hech qayerga ulanmaydi.",
+            "Включите языковую модель в настройках и введите API-ключ. Пока не включено, программа никуда не подключается.",
+        ),
+        "cp_chat_open_settings" => ("Sozlamalarni ochish", "Открыть настройки"),
+        "cp_chat_empty" => (
+            "Savol yozing — javobga obyekt bo'yicha tayyor sonlar biriktiriladi.",
+            "Напишите вопрос — к ответу будут приложены готовые числа по объекту.",
+        ),
+        "cp_chat_placeholder" => (
+            "Masalan: qaysi ishlar kechikkan va nima qilish kerak?",
+            "Например: какие работы отстают и что делать?",
+        ),
+        "cp_chat_waiting" => ("Model javob yozyapti…", "Модель пишет ответ…"),
+        "cp_chat_you" => ("Siz", "Вы"),
+        "cp_chat_clear" => ("Suhbatni tozalash", "Очистить диалог"),
+        "cp_chat_retry" => ("Qaytadan urinish", "Повторить"),
+        "cp_chat_tokens" => ("token sarflandi", "токенов израсходовано"),
+        "cp_chat_note" => (
+            "model son hisoblamaydi — sonlar dastur bazasidan biriktiriladi",
+            "модель не считает числа — они приложены из базы программы",
+        ),
+        "llm_err_not_configured" => (
+            "Til modeli yoqilmagan yoki sozlama to'liq emas.",
+            "Языковая модель не включена или настройка неполная.",
+        ),
+        "llm_err_auth" => (
+            "API kaliti qabul qilinmadi. Kalitni sozlamada tekshiring.",
+            "API-ключ не принят. Проверьте ключ в настройках.",
+        ),
+        "llm_err_rate" => (
+            "So'rovlar chegarasi yoki hisobdagi mablag' tugadi. Birozdan keyin urinib ko'ring.",
+            "Исчерпан лимит запросов или средства на счёте. Попробуйте чуть позже.",
+        ),
+        "llm_err_service" => (
+            "Xizmat tomonida xato. Bu vaqtinchalik — qaytadan urinib ko'ring.",
+            "Ошибка на стороне сервиса. Это временно — попробуйте ещё раз.",
+        ),
+        "llm_err_request" => (
+            "So'rov qabul qilinmadi. Model nomi to'g'ri ekanini tekshiring.",
+            "Запрос не принят. Проверьте, верно ли указано название модели.",
+        ),
+        "llm_err_transport" => (
+            "Xizmatga ulanib bo'lmadi: internet yoki manzilni tekshiring.",
+            "Не удалось подключиться к сервису: проверьте интернет или адрес.",
+        ),
+        "llm_err_reply" => (
+            "Javob tushunarsiz ko'rinishda keldi.",
+            "Ответ пришёл в непонятном виде.",
+        ),
 
         "set_group_roles" => ("Foydalanuvchilar va rollar", "Пользователи и роли"),
         "set_roles_note" => (

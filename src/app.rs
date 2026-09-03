@@ -517,6 +517,20 @@ pub struct App {
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
     /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
     pub llm: crate::llm::Config,
+    /// Model bilan suhbat: savol va javoblar ketma-ketligi.
+    ///
+    /// Suhbat **bazaga yozilmaydi**: unda obyekt ma'lumoti bo'lishi mumkin va
+    /// u tashqi xizmatga jo'natilgan — nusxasini saqlab qo'yish keraksiz xavf.
+    pub llm_chat: Vec<crate::llm::Turn>,
+    /// Fonda ketayotgan so'rov. Bo'lsa — ekranda kutish ko'rsatiladi.
+    pub llm_pending:
+        Option<std::sync::mpsc::Receiver<Result<crate::llm::Answer, crate::llm::Error>>>,
+    /// Oxirgi xato: tarjima kaliti, tafsiloti va qaytadan urinish
+    /// ma'nolimi. Uchinchi qiymat `llm::Error` ning o'zidan olinadi —
+    /// interfeys xatolar ro'yxatini takrorlamasin.
+    pub llm_error: Option<(&'static str, String, bool)>,
+    /// Suhbatda sarflangan tokenlar — xarajat ko'rinib tursin.
+    pub llm_tokens: u32,
     pub users: Vec<crate::roles::User>,
     pub current_user: Option<i64>,
     pub sales_block: Option<i64>,
@@ -673,6 +687,10 @@ impl App {
             geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
+            llm_chat: Vec::new(),
+            llm_pending: None,
+            llm_error: None,
+            llm_tokens: 0,
             users: Vec::new(),
             current_user: None,
             sales_block: None,
@@ -718,12 +736,27 @@ impl App {
             }
         }
         // Til modeli sozlamasi. Yig'ilishda tarmoq qismi bo'lmasa — doim o'chiq.
+        // Bo'sh sozlama bazadan kelsa — tayyor qiymat ishlatiladi: manzil va
+        // model oldindan to'g'ri turgani ma'qul, foydalanuvchi faqat kalitni
+        // kiritsin.
+        let or_default = |key: &str, fallback: &str| -> String {
+            app.db
+                .get_setting(key)
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+                .unwrap_or_else(|| fallback.to_string())
+        };
         app.llm = crate::llm::Config {
             enabled: cfg!(feature = "llm")
                 && app.db.get_setting("llm_enabled").as_deref() == Some("1"),
-            endpoint: app.db.get_setting("llm_endpoint").unwrap_or_default(),
-            model: app.db.get_setting("llm_model").unwrap_or_default(),
+            endpoint: or_default("llm_endpoint", crate::llm::DEFAULT_ENDPOINT),
+            model: or_default("llm_model", crate::llm::DEFAULT_MODEL),
             api_key: app.db.get_setting("llm_key").unwrap_or_default(),
+            timeout_secs: app
+                .db
+                .get_setting("llm_timeout")
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(crate::llm::DEFAULT_TIMEOUT),
         };
 
         // Rollar: oxirgi tanlangan foydalanuvchi tiklanadi.
@@ -1072,6 +1105,7 @@ impl App {
         let _ = db.set_setting("llm_endpoint", &self.llm.endpoint);
         let _ = db.set_setting("llm_model", &self.llm.model);
         let _ = db.set_setting("llm_key", &self.llm.api_key);
+        let _ = db.set_setting("llm_timeout", &self.llm.timeout_secs.to_string());
     }
 
     pub fn reload_users(&mut self) {
@@ -1767,6 +1801,115 @@ impl App {
     /// Yopilishga yaqin ishlarning sifat to'siqlari (TZ XIV.10, 35).
     pub fn task_blocks(&self) -> Vec<checks::TaskBlock> {
         checks::task_blocks(&self.tasks, &self.quality, &self.check_points, self.today)
+    }
+
+    // ---------- Til modeli bilan suhbat (TZ XVIII) ----------
+
+    /// Modelga jo'natiladigan kontekst: obyekt bo'yicha **tayyor sonlar**.
+    ///
+    /// Model sonni o'zi hisoblamaydi va o'ylab topmaydi — u faqat shu yerdagi
+    /// raqamlarni tushuntiradi. Shuning uchun javobni har doim tegishli ekranda
+    /// tekshirib ko'rish mumkin.
+    pub fn llm_context(&self) -> String {
+        let Some(project) = self.project() else {
+            return String::new();
+        };
+        let supply = self.supply();
+        let stock = self.stock();
+        let cost = self.cost_summary();
+        let sales = self.sales();
+        let inp = self.analytics_input(&supply, &stock, &cost, &sales);
+
+        let mut out = String::new();
+        out.push_str(&format!(
+            "Obyekt: {} ({})\nSana: {}\n\n",
+            project.name,
+            project.code,
+            self.today.format("%d.%m.%Y")
+        ));
+
+        // Har bo'lim bo'yicha yordamchining o'z javobi — ya'ni ekranlarda
+        // ko'rinadigan aynan o'sha sonlar.
+        for intent in crate::copilot::Intent::ALL {
+            let a = crate::copilot::answer(*intent, &inp);
+            if a.lines.is_empty() {
+                continue;
+            }
+            out.push_str(&format!("## {}\n", a.title));
+            for l in &a.lines {
+                out.push_str(&format!("{}: {}\n", l.label, l.value));
+            }
+            out.push('\n');
+        }
+        crate::llm::trim_context(&out)
+    }
+
+    /// Savolni fonda modelga jo'natadi.
+    ///
+    /// Interfeys javob kutib qotib qolmaydi: so'rov alohida oqimda ketadi,
+    /// natija esa keyingi kadrlarda [`App::poll_llm`] orqali olinadi.
+    pub fn ask_llm(&mut self, question: String) {
+        if self.llm_pending.is_some() {
+            return;
+        }
+        if !self.llm.is_ready() {
+            let e = crate::llm::Error::NotConfigured;
+            self.llm_error = Some((e.key(), String::new(), e.retryable()));
+            return;
+        }
+        if question.trim().is_empty() {
+            return;
+        }
+        self.llm_error = None;
+        let context = self.llm_context();
+        let history = self.llm_chat.clone();
+        self.llm_chat.push(crate::llm::Turn::user(question.clone()));
+        self.llm_pending = Some(crate::llm::spawn(
+            self.llm.clone(),
+            history,
+            question,
+            context,
+        ));
+    }
+
+    /// Fon so'rovi tugagan bo'lsa javobni oladi.
+    ///
+    /// Har kadrda chaqiriladi va bloklanmaydi: javob hali kelmagan bo'lsa
+    /// funksiya darhol qaytadi.
+    pub fn poll_llm(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.llm_pending else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(Ok(answer)) => {
+                self.llm_tokens += answer.usage.total;
+                self.llm_chat.push(crate::llm::Turn::model(answer.text));
+                self.llm_pending = None;
+                true
+            }
+            Ok(Err(e)) => {
+                // Savol tarixda qoladi: foydalanuvchi uni qayta yozmasin.
+                self.llm_error = Some((e.key(), e.to_string(), e.retryable()));
+                self.llm_pending = None;
+                true
+            }
+            Err(TryRecvError::Empty) => false,
+            // Oqim to'xtab qolgan — bu ham xato, yashirmaymiz.
+            Err(TryRecvError::Disconnected) => {
+                let e = crate::llm::Error::Transport(String::new());
+                self.llm_error = Some((e.key(), String::new(), e.retryable()));
+                self.llm_pending = None;
+                true
+            }
+        }
+    }
+
+    /// Suhbatni tozalaydi.
+    pub fn clear_llm_chat(&mut self) {
+        self.llm_chat.clear();
+        self.llm_error = None;
+        self.llm_tokens = 0;
     }
 
     /// Obyektning yakuniy qabulga tayyorligi (TZ VII.35-36).
