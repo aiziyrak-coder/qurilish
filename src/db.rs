@@ -6472,6 +6472,173 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(after.len() < before.len());
     }
 
+    /// TZ XII.8, 15, 32: moslik e'tirozlari kartochkadagi yozuvdan chiqadi
+    /// va ishlatilgan material oldinda turadi.
+    #[test]
+    fn material_fit_reads_the_card() {
+        use crate::checks::{FitProblem as P, CERT_WARN_DAYS};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let fits = app.material_fit();
+        for f in &fits {
+            let m = app
+                .materials
+                .iter()
+                .find(|m| m.id == f.material_id)
+                .expect("e'tiroz mavjud bo'lmagan materialga");
+            assert!(!f.problems.is_empty());
+            for p in &f.problems {
+                match p {
+                    P::NoSpec => assert!(m.spec.trim().is_empty()),
+                    P::NoSpecRef => assert!(m.spec_ref.trim().is_empty()),
+                    P::NoEstimateCode => assert!(m.estimate_code.trim().is_empty()),
+                    P::NoCertificate => assert!(m.cert_no.trim().is_empty()),
+                    P::CertExpired { days } => {
+                        let until = m.cert_until.expect("muddat yo'q");
+                        assert_eq!((app.today - until).num_days(), *days);
+                    }
+                    P::CertExpiring { days } => {
+                        let until = m.cert_until.expect("muddat yo'q");
+                        assert_eq!((until - app.today).num_days(), *days);
+                        assert!(*days <= CERT_WARN_DAYS);
+                    }
+                    P::BanWithoutReason => {
+                        assert!(m.banned && m.ban_reason.trim().is_empty());
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Tartib: jiddiylari, keyin ishlatilganlari.
+        let mut seen_non_critical = false;
+        for f in &fits {
+            if f.critical() {
+                assert!(!seen_non_critical, "jiddiy e'tiroz pastga tushib qolgan");
+            } else {
+                seen_non_critical = true;
+            }
+        }
+    }
+
+    /// Sertifikatsiz va tavsifsiz material — ishlatilgan bo'lsa jiddiy.
+    #[test]
+    fn missing_certificate_is_severe() {
+        use crate::checks::{material_fit, FitProblem};
+        use crate::domain::{Material, MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let mut m = Material {
+            id: 7,
+            project_id: 1,
+            code: "M-7".into(),
+            name: "Sement".into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: "PC 400 GOST 10178".into(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock: 0.0,
+            price: 100.0,
+            estimate_code: "E-1".into(),
+            spec_ref: "S-1".into(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+
+        // Ishlatilmagan: e'tiroz bor, lekin kritik emas.
+        let quiet = material_fit(std::slice::from_ref(&m), &[], today);
+        assert_eq!(quiet.len(), 1);
+        assert!(quiet[0].problems.contains(&FitProblem::NoCertificate));
+        assert!(!quiet[0].used);
+        assert!(!quiet[0].critical());
+
+        // Ishga berilgan: endi bu jiddiy.
+        let mv = StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 7,
+            kind: MoveKind::Out,
+            qty: 3.0,
+            price: 100.0,
+            date: today,
+            task_id: None,
+            warehouse_id: None,
+            batch_id: None,
+            document: String::new(),
+            counterparty: String::new(),
+            note: String::new(),
+        };
+        let loud = material_fit(std::slice::from_ref(&m), std::slice::from_ref(&mv), today);
+        assert!(loud[0].used);
+        assert!(loud[0].critical());
+
+        // Sertifikat berilsa — e'tiroz yo'qoladi.
+        m.cert_no = "SS-2211".into();
+        let fixed = material_fit(std::slice::from_ref(&m), std::slice::from_ref(&mv), today);
+        assert!(fixed.is_empty() || !fixed[0].problems.contains(&FitProblem::NoCertificate));
+    }
+
+    /// TZ XII.33: komplekt tayyorligi «Tayyorlik» jadvalidagi yetishmovchilik
+    /// bilan bir xil manbadan chiqadi — ikki ekran ziddiyatga tushmaydi.
+    #[test]
+    fn material_kit_matches_readiness() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let ready = app.readiness();
+        let kits = app.material_kits();
+        assert!(!kits.is_empty(), "komplekt topilmadi");
+
+        for k in &kits {
+            let missing = ready.iter().filter(|r| r.task_id == k.task_id).count();
+            assert_eq!(k.missing, missing);
+            assert!(k.total >= 1);
+            let expected = (k.total - k.missing.min(k.total)) as f64 * 100.0 / k.total as f64;
+            assert!((k.ready_pct - expected).abs() < 0.001);
+            assert_eq!(k.complete(), k.missing == 0);
+            if k.missing > 0 {
+                assert!(k.worst.is_some());
+            }
+        }
+
+        // Eng kam tayyor komplekt oldinda.
+        for w in kits.windows(2) {
+            assert!(w[0].ready_pct <= w[1].ready_pct + 0.001);
+        }
+    }
+
+    /// TZ XII.34: solishtiruv faqat ikki va undan ortiq taklifi bor
+    /// materiallar bo'yicha ko'rsatiladi; eng arzoni birinchi qatorda.
+    #[test]
+    fn maker_comparison_needs_two_offers() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        for c in app.maker_comparison() {
+            assert!(c.offers.len() >= 2, "bitta taklif solishtiruv emas");
+            // Narx bo'yicha o'sish tartibida.
+            for w in c.offers.windows(2) {
+                assert!(w[0].price <= w[1].price);
+            }
+            // Birinchisi — eng arzoni.
+            assert!(c.offers[0].over_pct.abs() < 0.001);
+            let max = c.offers.last().unwrap().price;
+            let min = c.offers[0].price;
+            assert!((c.spread_pct - (max - min) * 100.0 / min).abs() < 0.001);
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

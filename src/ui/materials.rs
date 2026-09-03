@@ -54,6 +54,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (3, t("mat_tab_alts")),
                 (4, t("mat_tab_trace")),
                 (5, t("mat_tab_ready")),
+                (6, t("mat_tab_fit")),
+                (7, t("mat_tab_kits")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -72,6 +74,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             }
             4 => trace_tab(ui, app),
             5 => ready_tab(ui, app),
+            6 => fit_tab(ui, app),
+            7 => kits_tab(ui, app),
             _ => table(ui, app),
         }
     }
@@ -1328,6 +1332,349 @@ fn ready_tab(ui: &mut egui::Ui, app: &mut App) {
                         ui.end_row();
                     }
                 });
+        });
+}
+
+// ================================================================ Loyihaga moslik
+
+/// Material kartochkasi loyiha talabiga javob beradimi (TZ XII.8, 15, 32).
+///
+/// Ishlatilgan material oldinda turadi: qog'ozdagi kamchilik bilan
+/// devordagi kamchilik bir xil og'irlikda emas.
+fn fit_tab(ui: &mut egui::Ui, app: &mut App) {
+    let fits = app.material_fit();
+    let critical = fits.iter().filter(|f| f.critical()).count();
+    let used = fits.iter().filter(|f| f.used).count();
+
+    ui.label(
+        RichText::new(t("mat_fit_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("mat_fit_critical"),
+                critical.to_string(),
+                t("mat_fit_critical_hint"),
+                if critical == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("mat_fit_used"),
+                used.to_string(),
+                t("mat_fit_used_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("mat_fit_total"),
+                fits.len().to_string(),
+                t("mat_fit_total_hint"),
+                theme::text(),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if fits.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(t("mat_fit_ok")).color(theme::ok()).size(15.0));
+        });
+        return;
+    }
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for f in &fits {
+                let colour = if f.critical() {
+                    theme::danger()
+                } else if f.used {
+                    theme::warn()
+                } else {
+                    theme::muted()
+                };
+                egui::Frame::new()
+                    .fill(theme::card())
+                    .inner_margin(10.0)
+                    .corner_radius(6.0)
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(super::issues::truncate(&f.name, 44))
+                                    .size(12.5)
+                                    .strong()
+                                    .color(colour),
+                            );
+                            if f.used {
+                                ui.label(
+                                    RichText::new(t("mat_fit_in_use"))
+                                        .size(11.0)
+                                        .color(theme::warn()),
+                                );
+                            }
+                        });
+                        for p in &f.problems {
+                            ui.label(
+                                RichText::new(format!("· {}", fit_text(p)))
+                                    .size(12.0)
+                                    .color(if p.severe() {
+                                        theme::danger()
+                                    } else {
+                                        theme::muted()
+                                    }),
+                            );
+                        }
+                    });
+                ui.add_space(6.0);
+            }
+        });
+}
+
+/// Moslik e'tirozini odam o'qiydigan gapga aylantiradi.
+fn fit_text(p: &crate::checks::FitProblem) -> String {
+    use crate::checks::FitProblem as P;
+    match p {
+        P::NoSpecRef => t("fp_no_spec_ref").to_string(),
+        P::NoEstimateCode => t("fp_no_estimate_code").to_string(),
+        P::NoSpec => t("fp_no_spec").to_string(),
+        P::SpecialNotInSpec { special } => format!("{} — {}", t("fp_special"), special),
+        P::NoCertificate => t("fp_no_cert").to_string(),
+        P::CertExpired { days } => format!("{} ({})", t("fp_cert_expired"), days),
+        P::CertExpiring { days } => format!("{} ({})", t("fp_cert_expiring"), days),
+        P::BanWithoutReason => t("fp_ban_no_reason").to_string(),
+        P::NoSection => t("fp_no_section").to_string(),
+    }
+}
+
+// ================================================================ Komplekt
+
+/// Ish uchun material komplekti va yetkazib beruvchilarni solishtirish
+/// (TZ XII.33-34).
+fn kits_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let kits = app.material_kits();
+    let makers = app.maker_comparison();
+    let incomplete = kits.iter().filter(|k| !k.complete()).count();
+
+    ui.label(
+        RichText::new(t("mat_kit_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("mat_kit_incomplete"),
+                incomplete.to_string(),
+                t("mat_kit_incomplete_hint"),
+                if incomplete == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("mat_kit_total"),
+                kits.len().to_string(),
+                t("mat_kit_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("mat_kit_makers"),
+                makers.len().to_string(),
+                t("mat_kit_makers_hint"),
+                theme::text(),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            if kits.is_empty() {
+                ui.label(
+                    RichText::new(t("mat_kit_empty"))
+                        .color(theme::muted())
+                        .size(12.5),
+                );
+            } else {
+                egui::Grid::new("mat_kits")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 280.0, t("col_task"));
+                        head_r(ui, 90.0, t("col_days_left"));
+                        head_r(ui, 110.0, t("mat_kit_ready"));
+                        head_r(ui, 90.0, t("mat_kit_count"));
+                        head_r(ui, 90.0, t("mat_kit_missing"));
+                        head_l(ui, 220.0, t("mat_kit_worst"));
+                        ui.end_row();
+
+                        for k in &kits {
+                            let name = app
+                                .task(k.task_id)
+                                .map(|x| format!("{} {}", x.wbs, x.name))
+                                .unwrap_or_default();
+                            cell_l(
+                                ui,
+                                280.0,
+                                RichText::new(super::issues::truncate(&name, 38)).size(12.5),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(k.days_left.to_string()).size(12.0).color(
+                                    if k.days_left < 0 {
+                                        theme::danger()
+                                    } else {
+                                        theme::muted()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(format!("{:.0}%", k.ready_pct))
+                                    .size(12.5)
+                                    .strong()
+                                    .color(if k.complete() {
+                                        theme::ok()
+                                    } else {
+                                        theme::warn()
+                                    }),
+                            );
+                            cell_r(ui, 90.0, RichText::new(k.total.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(k.missing.to_string()).size(12.0).color(
+                                    if k.missing == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_l(
+                                ui,
+                                220.0,
+                                RichText::new(
+                                    k.worst
+                                        .map(|id| material_label(app, id))
+                                        .unwrap_or_else(|| t("dash").to_string()),
+                                )
+                                .size(12.0)
+                                .color(theme::muted()),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("mat_kit_makers")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("mat_maker_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if makers.is_empty() {
+                ui.label(
+                    RichText::new(t("mat_maker_empty"))
+                        .color(theme::muted())
+                        .size(12.5),
+                );
+            }
+            for c in &makers {
+                egui::Frame::new()
+                    .fill(theme::card())
+                    .inner_margin(10.0)
+                    .corner_radius(6.0)
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "{}, {} · {} {:.0}%",
+                                super::issues::truncate(&c.title, 40),
+                                c.unit,
+                                t("mat_maker_spread"),
+                                c.spread_pct
+                            ))
+                            .size(12.5)
+                            .strong(),
+                        );
+                        ui.add_space(4.0);
+                        egui::Grid::new(format!("mk_{}", c.title))
+                            .num_columns(5)
+                            .spacing([10.0, 4.0])
+                            .show(ui, |ui| {
+                                for o in &c.offers {
+                                    cell_l(
+                                        ui,
+                                        200.0,
+                                        RichText::new(super::issues::truncate(&o.supplier, 26))
+                                            .size(12.0)
+                                            .color(if o.chosen {
+                                                theme::ok()
+                                            } else {
+                                                theme::text()
+                                            }),
+                                    );
+                                    cell_r(ui, 130.0, RichText::new(money(o.price)).size(12.0));
+                                    cell_r(
+                                        ui,
+                                        90.0,
+                                        RichText::new(if o.over_pct < 0.01 {
+                                            t("mat_maker_best").to_string()
+                                        } else {
+                                            format!("+{:.0}%", o.over_pct)
+                                        })
+                                        .size(12.0)
+                                        .color(
+                                            if o.over_pct < 0.01 {
+                                                theme::ok()
+                                            } else {
+                                                theme::muted()
+                                            },
+                                        ),
+                                    );
+                                    cell_r(
+                                        ui,
+                                        90.0,
+                                        RichText::new(format!("{} {}", o.delivery_days, t("days")))
+                                            .size(12.0)
+                                            .color(theme::muted()),
+                                    );
+                                    cell_r(
+                                        ui,
+                                        110.0,
+                                        RichText::new(format!(
+                                            "{} {}",
+                                            o.purchases,
+                                            t("mat_maker_deals")
+                                        ))
+                                        .size(11.5)
+                                        .color(theme::muted()),
+                                    );
+                                    ui.end_row();
+                                }
+                            });
+                    });
+                ui.add_space(6.0);
+            }
         });
 }
 

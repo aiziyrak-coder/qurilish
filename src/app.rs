@@ -1764,6 +1764,27 @@ impl App {
         checks::tool_status(&self.tools, &self.tool_issues, self.today)
     }
 
+    /// Materialning loyihaga mosligi (TZ XII.8, 15, 32).
+    pub fn material_fit(&self) -> Vec<checks::MaterialFit> {
+        checks::material_fit(&self.materials, &self.stock_moves, self.today)
+    }
+
+    /// Ishlar bo'yicha material komplekti (TZ XII.33).
+    pub fn material_kits(&self) -> Vec<checks::MaterialKit> {
+        checks::material_kits(
+            &self.material_norms,
+            &self.tasks,
+            &self.readiness(),
+            self.today,
+            READINESS_DAYS,
+        )
+    }
+
+    /// Yetkazib beruvchilarni material kesimida solishtirish (TZ XII.34).
+    pub fn maker_comparison(&self) -> Vec<checks::MakerComparison> {
+        checks::maker_comparison(&self.quotes, &self.purchases)
+    }
+
     /// Hujjatlarni imzolashdan oldingi tekshiruv (TZ IV.20).
     pub fn doc_readiness(&self) -> Vec<checks::DocCheck> {
         checks::doc_readiness(&checks::DocCtx {

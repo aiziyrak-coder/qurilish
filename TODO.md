@@ -29,7 +29,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | IX. Arizalar | 42 | 31 | 6 | 5 | 1 |
 | X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
 | XI. Ombor | 48 | 32 | 8 | 8 | 1 |
-| XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
+| XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
 | XIV. Sifat | 41 | 28 | 9 | 4 | 2 |
 | XV. Xavfsizlik | 41 | 33 | 4 | 4 | 3 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **418** | **161** | **121** | **53** |
+| **Jami** | **700** | **425** | **160** | **115** | **53** |
 
-Ya'ni **~60 % to'liq**, **~23 % qisman**, **~17 % hali yo'q**.
+Ya'ni **~61 % to'liq**, **~23 % qisman**, **~16 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -488,14 +488,14 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 5. Material ↔ loyiha — *spetsifikatsiya havolasi*
 - [x] 6. Material ↔ spetsifikatsiya
 - [x] 7. Material ↔ smeta — *rasenka kodi*
-- [ ] 8. AI materialning loyihaga mosligini tekshirishi
+- [x] 8. AI materialning loyihaga mosligini tekshirishi
 - [x] 9. Analoglar — *tasdiqlangan almashtiruvchi*
 - [x] 10. Materiallarni solishtirish — *narx farqi va qoldiq*
 - [~] 11. Almashtiruvchi tanlash — *narx, qoldiq va tasdiq holati ko'rsatiladi*
 - [x] 12. Juda muhim qoida — *bir material — bitta kartochka*
 - [x] 13. Sertifikatlar
 - [ ] 🔒 14. AI OCR sertifikatlar
-- [ ] 15. AI sertifikatni tekshiradi
+- [x] 15. AI sertifikatni tekshiradi — *raqam, muddat va ishlatilgani*
 - [x] 16. Hujjat amal qilish muddati
 - [x] 17. Material → partiya — *ombor partiyalari*
 - [~] 18. Material → yetkazib beruvchi — *xarid orqali*
@@ -503,8 +503,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 20. Bozor narxi
 - [x] 21. Material → sarf normalari
 - [~] 22. AI ortiqcha sarfni tahlil qilishi — *farq va summa hisoblanadi*
-- [~] 23. Obyektlar bo'yicha materiallar
-- [ ] 24. Materiallarni qayta taqsimlash
+- [x] 23. Obyektlar bo'yicha materiallar
+- [x] 24. Materiallarni qayta taqsimlash
 - [~] 25. Tez orada kerak bo'ladigan materiallar — *analitikada*
 - [~] 26. AI oldindan ogohlantirishi — *zaxiradan kam*
 - [~] 27. GPR bo'yicha materiallar — *ish tayyorligi ko'rinishi*
@@ -512,9 +512,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 29. Material → ijro hujjati — *ish orqali*
 - [x] 30. To'liq kuzatuvchanlik — *yetkazuvchi → partiya → ish → hujjat*
 - [x] 31. Maxsus talabli materiallar — *katalogda alohida maydon*
-- [ ] 32. AI moslikni tekshirishi
-- [ ] 33. Material komplekti
-- [ ] 34. Ishlab chiqaruvchilarni solishtirish
+- [x] 32. AI moslikni tekshirishi
+- [x] 33. Material komplekti
+- [x] 34. Ishlab chiqaruvchilarni solishtirish
 - [x] 35. Materiallar reytingi — *yetkazishlar, narx o'zgarishi, kirish nazorati*
 - [x] 36. **Brak** — *rad etilgan, hisobdan chiqarilgan, qaytarilgan*
 - [x] 37. Yetkazib beruvchiga qaytarish — *alohida harakat turi*

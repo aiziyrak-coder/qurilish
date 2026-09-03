@@ -6765,3 +6765,294 @@ pub fn hidden_blocks(
     out.sort_by_key(|b| (!b.already_started, b.task_id));
     out
 }
+
+// ================= XII.8, 15, 32-34. Material moslik, sertifikat va komplekt =================
+
+/// Materialning loyihaga mosligi bo'yicha bitta e'tiroz (TZ XII.8, 32).
+#[derive(Debug, Clone, PartialEq)]
+pub enum FitProblem {
+    /// Loyiha spetsifikatsiyasiga havola yo'q — nimaga asoslangani noma'lum.
+    NoSpecRef,
+    /// Smeta rasenkasi ko'rsatilmagan — pul bilan bog'lanmagan.
+    NoEstimateCode,
+    /// Texnik tavsif bo'sh: marka va GOST yozilmagan.
+    NoSpec,
+    /// Maxsus talab qo'yilgan, lekin tavsifda aks etmagan.
+    SpecialNotInSpec { special: String },
+    /// Sertifikat raqami yo'q.
+    NoCertificate,
+    /// Sertifikat muddati o'tgan.
+    CertExpired { days: i64 },
+    /// Sertifikat muddati tugayapti.
+    CertExpiring { days: i64 },
+    /// Taqiqlangan material, lekin sabab yozilmagan.
+    BanWithoutReason,
+    /// Bo'limi ko'rsatilmagan — qaysi loyiha qismiga tegishli ekani noma'lum.
+    NoSection,
+}
+
+impl FitProblem {
+    /// Material ishlatilgan bo'lsa, bu e'tiroz jiddiymi.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            FitProblem::NoSpec
+                | FitProblem::SpecialNotInSpec { .. }
+                | FitProblem::NoCertificate
+                | FitProblem::CertExpired { .. }
+                | FitProblem::BanWithoutReason
+        )
+    }
+}
+
+/// Bitta material bo'yicha moslik xulosasi.
+#[derive(Debug, Clone)]
+pub struct MaterialFit {
+    pub material_id: i64,
+    pub name: String,
+    /// Obyektda haqiqatan ishlatilganmi — ishlatilgani birinchi navbatda muhim.
+    pub used: bool,
+    pub problems: Vec<FitProblem>,
+}
+
+impl MaterialFit {
+    /// Ishlatilgan materialda jiddiy e'tiroz bormi.
+    pub fn critical(&self) -> bool {
+        self.used && self.problems.iter().any(|p| p.severe())
+    }
+}
+
+/// Sertifikat muddati tugashiga shuncha kun qolganda ogohlantiriladi.
+pub const CERT_WARN_DAYS: i64 = 30;
+
+/// TZ XII.8, 15, 32: material kartochkasi loyiha talabiga javob beradimi.
+///
+/// Tekshiruv kartochkadagi yozuvlarga qaraydi — spetsifikatsiya havolasi,
+/// smeta rasenkasi, texnik tavsif va sertifikat. Ishlatilgan material
+/// oldinda turadi: qog'ozdagi kamchilik bilan devordagi kamchilik bir xil
+/// og'irlikda emas.
+pub fn material_fit(
+    materials: &[Material],
+    moves: &[StockMove],
+    today: NaiveDate,
+) -> Vec<MaterialFit> {
+    let mut out = Vec::new();
+    for m in materials {
+        let used = moves
+            .iter()
+            .any(|x| x.material_id == m.id && matches!(x.kind, MoveKind::Out));
+        let mut problems = Vec::new();
+
+        if m.spec_ref.trim().is_empty() {
+            problems.push(FitProblem::NoSpecRef);
+        }
+        if m.estimate_code.trim().is_empty() {
+            problems.push(FitProblem::NoEstimateCode);
+        }
+        if m.spec.trim().is_empty() {
+            problems.push(FitProblem::NoSpec);
+        } else if !m.special.trim().is_empty() {
+            // Maxsus talab tavsifda aks etganmi: eng uzun so'z bo'yicha
+            // qaraymiz, chunki qisqa so'zlar tasodifan mos kelib qoladi.
+            let spec = m.spec.to_lowercase();
+            let key = m
+                .special
+                .to_lowercase()
+                .split_whitespace()
+                .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+                .filter(|w| w.chars().count() >= 4)
+                .max_by_key(|w| w.chars().count());
+            if let Some(key) = key {
+                if !spec.contains(&key) {
+                    problems.push(FitProblem::SpecialNotInSpec {
+                        special: m.special.clone(),
+                    });
+                }
+            }
+        }
+        if m.section == Section::None {
+            problems.push(FitProblem::NoSection);
+        }
+        if m.cert_no.trim().is_empty() {
+            problems.push(FitProblem::NoCertificate);
+        }
+        if let Some(until) = m.cert_until {
+            let days = (until - today).num_days();
+            if days < 0 {
+                problems.push(FitProblem::CertExpired { days: -days });
+            } else if days <= CERT_WARN_DAYS {
+                problems.push(FitProblem::CertExpiring { days });
+            }
+        }
+        if m.banned && m.ban_reason.trim().is_empty() {
+            problems.push(FitProblem::BanWithoutReason);
+        }
+
+        if !problems.is_empty() {
+            out.push(MaterialFit {
+                material_id: m.id,
+                name: m.name.clone(),
+                used,
+                problems,
+            });
+        }
+    }
+    // Ishlatilgan va jiddiy e'tirozlilar oldinda.
+    out.sort_by_key(|f| (!f.critical(), !f.used, f.material_id));
+    out
+}
+
+/// Ish uchun material komplekti (TZ XII.33).
+#[derive(Debug, Clone)]
+pub struct MaterialKit {
+    pub task_id: i64,
+    /// Komplektdagi material turlari soni.
+    pub total: usize,
+    /// Yetishmayotgan turlar soni.
+    pub missing: usize,
+    /// Komplekt tayyorligi, foizda.
+    pub ready_pct: f64,
+    /// Ish shuncha kundan keyin boshlanadi. Manfiy — boshlangan.
+    pub days_left: i64,
+    /// Eng katta yetishmovchilik qaysi materialda.
+    pub worst: Option<i64>,
+}
+
+impl MaterialKit {
+    /// Komplekt to'liq yig'ilganmi.
+    pub fn complete(&self) -> bool {
+        self.missing == 0
+    }
+}
+
+/// TZ XII.33: ish uchun material bittalab emas, komplekt bo'lib kerak.
+///
+/// Bitta material yetishmasa ham ish boshlanmaydi, shuning uchun tayyorlik
+/// komplekt darajasida o'lchanadi. Yetishmovchilik [`readiness`] natijasidan
+/// olinadi — shu sababli bu yerdagi son «Tayyorlik» jadvalidagi bilan
+/// hech qachon ziddiyatga tushmaydi.
+pub fn material_kits(
+    norms: &[MaterialNorm],
+    tasks: &[Task],
+    ready: &[Readiness],
+    today: NaiveDate,
+    within_days: i64,
+) -> Vec<MaterialKit> {
+    let mut out = Vec::new();
+    for task in tasks {
+        if task.progress >= 100.0 {
+            continue;
+        }
+        let start = task.fact_start.unwrap_or(task.plan_start);
+        let days_left = (start - today).num_days();
+        if days_left > within_days {
+            continue;
+        }
+        let total = norms.iter().filter(|n| n.task_id == task.id).count();
+        if total == 0 {
+            continue;
+        }
+        let short: Vec<&Readiness> = ready.iter().filter(|r| r.task_id == task.id).collect();
+        let missing = short.len();
+        let worst = short
+            .iter()
+            .max_by(|a, b| a.short.total_cmp(&b.short))
+            .map(|r| r.material_id);
+        out.push(MaterialKit {
+            task_id: task.id,
+            total,
+            missing,
+            ready_pct: (total - missing.min(total)) as f64 * 100.0 / total as f64,
+            days_left,
+            worst,
+        });
+    }
+    // Eng yaqin boshlanadigan va eng kam tayyor komplekt oldinda.
+    out.sort_by(|a, b| {
+        a.ready_pct
+            .total_cmp(&b.ready_pct)
+            .then(a.days_left.cmp(&b.days_left))
+    });
+    out
+}
+
+/// Bitta yetkazib beruvchi bo'yicha material taklifi (TZ XII.34).
+#[derive(Debug, Clone)]
+pub struct MakerOffer {
+    pub supplier: String,
+    pub price: f64,
+    pub delivery_days: i64,
+    /// Shu yetkazib beruvchidan olingan xaridlar soni.
+    pub purchases: usize,
+    /// Taklif tanlanganmi.
+    pub chosen: bool,
+    /// Eng arzon takliftan qancha qimmat, foizda.
+    pub over_pct: f64,
+}
+
+/// Bitta material bo'yicha takliflar solishtiruvi.
+#[derive(Debug, Clone)]
+pub struct MakerComparison {
+    pub title: String,
+    pub unit: String,
+    pub offers: Vec<MakerOffer>,
+    /// Eng arzon va eng qimmat orasidagi farq, foizda.
+    pub spread_pct: f64,
+}
+
+/// TZ XII.34: bir xil material bo'yicha yetkazib beruvchilarni solishtirish.
+///
+/// Narx yolg'iz o'zi yetarli emas: muddat va shu yetkazib beruvchi bilan
+/// oldingi tajriba ham ustunda turadi. Solishtirish faqat **ikki va undan
+/// ortiq** taklifi bor materiallar bo'yicha ko'rsatiladi — bitta taklif
+/// solishtiruv emas.
+pub fn maker_comparison(quotes: &[Quote], purchases: &[Purchase]) -> Vec<MakerComparison> {
+    let key = |s: &str| s.trim().to_lowercase();
+    let mut titles: Vec<String> = Vec::new();
+    for q in quotes {
+        if !titles.iter().any(|t| key(t) == key(&q.title)) {
+            titles.push(q.title.clone());
+        }
+    }
+
+    let mut out = Vec::new();
+    for title in titles {
+        let group: Vec<&Quote> = quotes
+            .iter()
+            .filter(|q| key(&q.title) == key(&title))
+            .collect();
+        if group.len() < 2 {
+            continue;
+        }
+        let min = group.iter().map(|q| q.price).fold(f64::INFINITY, f64::min);
+        let max = group.iter().map(|q| q.price).fold(0.0_f64, f64::max);
+        if min <= 0.0 {
+            continue;
+        }
+        let mut offers: Vec<MakerOffer> = group
+            .iter()
+            .map(|q| MakerOffer {
+                supplier: q.supplier.clone(),
+                price: q.price,
+                delivery_days: q.delivery_days,
+                purchases: purchases
+                    .iter()
+                    .filter(|p| key(&p.supplier) == key(&q.supplier))
+                    .count(),
+                chosen: q.chosen,
+                over_pct: (q.price - min) * 100.0 / min,
+            })
+            .collect();
+        offers.sort_by(|a, b| a.price.total_cmp(&b.price));
+        out.push(MakerComparison {
+            title,
+            unit: group[0].unit.clone(),
+            offers,
+            spread_pct: (max - min) * 100.0 / min,
+        });
+    }
+    // Narx tarqoqligi katta materiallar oldinda — tanlov shu yerda ko'proq
+    // pul tejaydi.
+    out.sort_by(|a, b| b.spread_pct.total_cmp(&a.spread_pct));
+    out
+}
