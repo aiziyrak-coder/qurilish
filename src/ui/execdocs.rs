@@ -29,6 +29,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (1, t("ed_tab_review")),
             (2, t("ed_tab_schemes")),
             (3, t("ed_tab_author")),
+            (4, t("ed_tab_matrix")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -47,6 +48,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
     if tab == 3 {
         author_tab(ui, app);
+        return;
+    }
+    if tab == 4 {
+        matrix_tab(ui, app);
         return;
     }
 
@@ -199,6 +204,126 @@ fn save_archive(app: &mut App) {
         Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
         Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
     }
+}
+
+// ================================================================ Matritsa
+
+/// Hujjat matritsasi: ishlar × hujjat turlari (TZ IV.4).
+///
+/// Matritsa yangi talab o'ylab topmaydi — qaysi hujjat kerakligini
+/// bo'lim belgilaydi. Qiymati ko'rinishda: bitta jadvalda qaysi ish
+/// bo'yicha nima yetishmayotgani darhol ko'zga tashlanadi.
+fn matrix_tab(ui: &mut egui::Ui, app: &mut App) {
+    use crate::checks::MatrixCell;
+    use crate::domain::ExecDocKind;
+
+    let rows = app.document_matrix();
+    let late = rows.iter().filter(|r| r.done && r.gaps() > 0).count();
+    let gaps: usize = rows.iter().map(|r| r.gaps()).sum();
+
+    ui.label(
+        RichText::new(t("ed_matrix_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ed_matrix_late"),
+                late.to_string(),
+                t("ed_matrix_late_hint"),
+                if late == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("ed_matrix_gaps"),
+                gaps.to_string(),
+                t("ed_matrix_gaps_hint"),
+                if gaps == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if rows.is_empty() {
+        ui.vertical_centered(|ui| {
+            ui.add_space(30.0);
+            ui.label(
+                RichText::new(t("ed_matrix_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("ed_matrix")
+                .num_columns(ExecDocKind::ALL.len() + 2)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 280.0, t("col_task"));
+                    for kind in ExecDocKind::ALL {
+                        head_l(ui, 110.0, kind.label());
+                    }
+                    head_l(ui, 90.0, t("col_status"));
+                    ui.end_row();
+
+                    for r in &rows {
+                        let name = app
+                            .task(r.task_id)
+                            .map(|x| format!("{} {}", x.wbs, x.name))
+                            .unwrap_or_default();
+                        super::warehouse::cell_l(
+                            ui,
+                            280.0,
+                            RichText::new(super::issues::truncate(&name, 38)).size(12.5),
+                        );
+                        for cell in &r.cells {
+                            let (text, colour) = match cell {
+                                MatrixCell::NotRequired => (t("mx_na"), theme::line()),
+                                MatrixCell::Missing => (t("mx_missing"), theme::danger()),
+                                MatrixCell::Draft => (t("mx_draft"), theme::warn()),
+                                MatrixCell::Signed => (t("mx_signed"), theme::ok()),
+                            };
+                            super::warehouse::cell_l(
+                                ui,
+                                110.0,
+                                RichText::new(text).size(11.5).color(colour),
+                            );
+                        }
+                        super::warehouse::cell_l(
+                            ui,
+                            90.0,
+                            RichText::new(if r.done {
+                                t("mx_done")
+                            } else {
+                                t("mx_running")
+                            })
+                            .size(11.0)
+                            .color(if r.done && r.gaps() > 0 {
+                                theme::danger()
+                            } else {
+                                theme::muted()
+                            }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 // ================================================================ Ijro sxemalari

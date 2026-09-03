@@ -12361,3 +12361,157 @@ pub fn material_card(ctx: &CardCtx, material_id: i64) -> Option<MaterialCard> {
             .min(),
     })
 }
+
+// ================= IV.4, 26, VII.17, XI.23. Matritsa va tasnif =================
+
+/// Hujjat matritsasining bitta katagi (TZ IV.4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatrixCell {
+    /// Bu bo'lim uchun bunday hujjat talab qilinmaydi.
+    NotRequired,
+    /// Talab qilinadi, lekin yaratilmagan.
+    Missing,
+    /// Yaratilgan, imzolanmagan.
+    Draft,
+    /// Imzolangan.
+    Signed,
+}
+
+impl MatrixCell {
+    /// Katak e'tibor talab qiladimi.
+    pub fn gap(self) -> bool {
+        matches!(self, MatrixCell::Missing | MatrixCell::Draft)
+    }
+}
+
+/// Ish bo'yicha matritsa qatori (TZ IV.4).
+#[derive(Debug, Clone)]
+pub struct MatrixRow {
+    pub task_id: i64,
+    /// Ish tugallanganmi — tugallangan ishda bo'sh katak kechikish.
+    pub done: bool,
+    /// Hujjat turlari bo'yicha holat, [`ExecDocKind::ALL`] tartibida.
+    pub cells: Vec<MatrixCell>,
+}
+
+impl MatrixRow {
+    /// Shu ish bo'yicha yopilmagan kataklar soni.
+    pub fn gaps(&self) -> usize {
+        self.cells.iter().filter(|c| c.gap()).count()
+    }
+}
+
+/// TZ IV.4: hujjat matritsasi — ishlar × hujjat turlari.
+///
+/// Matritsa **yangi talab o'ylab topmaydi**: qaysi hujjat kerakligini
+/// [`required_docs`] belgilaydi. Bu yerdagi qiymat ko'rinishda: bitta
+/// jadvalda qaysi ish bo'yicha nima yetishmayotgani darhol ko'zga
+/// tashlanadi.
+pub fn document_matrix(tasks: &[Task], docs: &[ExecDoc]) -> Vec<MatrixRow> {
+    let required = required_docs(tasks, docs, false);
+    let mut out = Vec::new();
+
+    for task in tasks {
+        let mine: Vec<&RequiredDoc> = required.iter().filter(|r| r.task_id == task.id).collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let cells = ExecDocKind::ALL
+            .iter()
+            .map(|kind| match mine.iter().find(|r| r.kind == *kind) {
+                None => MatrixCell::NotRequired,
+                Some(r) if r.signed => MatrixCell::Signed,
+                Some(r) if r.exists => MatrixCell::Draft,
+                Some(_) => MatrixCell::Missing,
+            })
+            .collect();
+        out.push(MatrixRow {
+            task_id: task.id,
+            done: task.progress >= 99.999 || task.fact_end.is_some(),
+            cells,
+        });
+    }
+    // Tugallangan, lekin hujjatsiz ishlar oldinda: ular kechikish.
+    out.sort_by_key(|r| (!(r.done && r.gaps() > 0), std::cmp::Reverse(r.gaps())));
+    out
+}
+
+/// Izohning muhimlik darajasi (TZ VII.17).
+///
+/// Tasnif **yozuvdan** chiqadi: og'irlik, muddat va ish holati. Matn
+/// mazmuni o'qilmaydi — dastur so'zlarga qarab hukm chiqarmaydi.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RemarkClass {
+    /// Ishni to'xtatadi: kritik va muddati o'tgan.
+    Stopper,
+    /// Muddatida bartaraf etilishi kerak.
+    Urgent,
+    /// Kuzatuvda.
+    Watch,
+}
+
+/// Izohlarni tasniflaydi (TZ VII.17).
+pub fn classify_remarks(issues: &[Issue], today: NaiveDate) -> Vec<(i64, RemarkClass)> {
+    issues
+        .iter()
+        .filter(|i| matches!(i.status, IssueStatus::Open | IssueStatus::InWork))
+        .map(|i| {
+            let overdue = i.deadline.is_some_and(|d| d < today);
+            let class = match (i.severity, overdue) {
+                (Severity::Critical, _) if overdue => RemarkClass::Stopper,
+                (Severity::Critical, _) => RemarkClass::Urgent,
+                (Severity::Warning, true) => RemarkClass::Urgent,
+                _ => RemarkClass::Watch,
+            };
+            (i.id, class)
+        })
+        .collect()
+}
+
+/// Nazoratsiz hisobdan chiqarish (TZ XI.23).
+#[derive(Debug, Clone)]
+pub struct WriteOff {
+    pub move_id: i64,
+    pub material_id: i64,
+    pub qty: f64,
+    pub date: NaiveDate,
+    /// Sababi yozilganmi.
+    pub has_reason: bool,
+    /// Ishga bog'langanmi.
+    pub has_task: bool,
+    /// Hujjati bormi.
+    pub has_document: bool,
+}
+
+impl WriteOff {
+    /// Uchala shart ham bajarilganmi.
+    pub fn controlled(&self) -> bool {
+        self.has_reason && self.has_task && self.has_document
+    }
+}
+
+/// TZ XI.23: nazoratsiz hisobdan chiqarishlarni topadi.
+///
+/// Uch shart: sabab yozilgan, ish ko'rsatilgan va hujjat bor. Uchtasidan
+/// biri yetishmasa material qayerga ketgani noma'lum qoladi — bu taqiq
+/// emas, lekin ko'rinib turishi kerak.
+pub fn write_offs(moves: &[StockMove], today: NaiveDate, days: i64) -> Vec<WriteOff> {
+    let from = today - chrono::Duration::days(days.max(1));
+    let mut out: Vec<WriteOff> = moves
+        .iter()
+        .filter(|m| matches!(m.kind, MoveKind::Out) && m.date >= from && m.date <= today)
+        .map(|m| WriteOff {
+            move_id: m.id,
+            material_id: m.material_id,
+            qty: m.qty,
+            date: m.date,
+            has_reason: !m.note.trim().is_empty(),
+            has_task: m.task_id.is_some(),
+            has_document: !m.document.trim().is_empty(),
+        })
+        .filter(|w| !w.controlled())
+        .collect();
+    // Eng katta miqdor oldinda.
+    out.sort_by(|a, b| b.qty.total_cmp(&a.qty));
+    out
+}

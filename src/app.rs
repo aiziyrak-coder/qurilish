@@ -2383,6 +2383,16 @@ impl App {
         )
     }
 
+    /// Hujjat matritsasi: ishlar × hujjat turlari (TZ IV.4).
+    pub fn document_matrix(&self) -> Vec<checks::MatrixRow> {
+        checks::document_matrix(&self.tasks, &self.exec_docs)
+    }
+
+    /// Nazoratsiz hisobdan chiqarishlar (TZ XI.23).
+    pub fn write_offs(&self) -> Vec<checks::WriteOff> {
+        checks::write_offs(&self.stock_moves, self.today, SCHEDULE_DAYS)
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

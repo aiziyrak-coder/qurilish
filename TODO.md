@@ -21,14 +21,14 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 19 | 1 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 20 | 7 | 3 | 3 |
+| IV. Ijro hujjatlari | 30 | 23 | 4 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 32 | 3 | 3 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 33 | 2 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
 | X. Xaridlar | 48 | 44 | 2 | 2 | 2 |
-| XI. Ombor | 48 | 46 | 1 | 1 | 1 |
+| XI. Ombor | 48 | 47 | 0 | 1 | 1 |
 | XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
 | XIII. Tabel | 44 | 37 | 1 | 6 | 6 |
 | XIV. Sifat | 41 | 38 | 1 | 2 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **592** | **62** | **46** | **46** |
+| **Jami** | **700** | **597** | **57** | **46** | **46** |
 
-Ya'ni **~85 % to'liq**, **~9 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~85 % to'liq**, **~8 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -126,13 +126,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Modul maqsadi
 - [x] 2. Ijro hujjati kartochkasi — *tur, raqam, nom, sana, ish, holat, mas'ul*
 - [x] 3. Kerakli hujjatlar avtomatik ro'yxati — *bo'lim bo'yicha reyestr*
-- [~] 4. **AI Document Matrix** — *talablar jadvali bor; to'liq matritsa emas*
+- [x] 4. **AI Document Matrix** — *ishlar × hujjat turlari*
 - [x] 5. Hujjatlarni avtomatik yaratish — *KS-2, KS-3, M-29, AOSR bazadan*
 - [x] 6. **AOSR** — *ish, ishlatilgan material, sertifikat, imzo joylari*
 - [x] 7. Ijro sxemalari — *geodezik o'lchovga tayanadi*
 - [x] 8. Fotolar — *hujjatga biriktiriladi*
 - [ ] 🔒 9. Geolokatsiya va vaqt
-- [~] 10. Material sertifikatlari — *katalogda sertifikat va muddati*
+- [x] 10. Material sertifikatlari — *muddat nazorati va kirim tekshiruvi*
 - [ ] 🔒 11. AI sertifikat tekshiruvi (OCR)
 - [x] 12. Beton pasporti
 - [x] 13. Laboratoriya sinovlari
@@ -148,7 +148,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 23. Texnik nazorat kabineti
 - [x] 24. Mualliflik nazorati kabineti
 - [x] 25. Buyurtmachi kabineti
-- [~] 26. To'liqlikni AI nazorati — *rasmiylashtirilmagan ishlar topiladi*
+- [x] 26. To'liqlikni AI nazorati — *matritsada kechikkan ishlar*
 - [x] 27. Obyekt arxivi — *hujjatlar reyestri `.xlsx`*
 - [~] 28. AI orqali qidiruv — *umumiy qidiruv (Ctrl+K)*
 - [x] 29. Boshqa modullar bilan bog'lanish
@@ -259,7 +259,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 14. Geodeziyani tekshirish — *loyiha/fakt/dopusk, chetlanish hisoblanadi*
 - [x] 15. Izohlar — *nomuvofiqliklar*
 - [x] 16. Izoh toifalari
-- [~] 17. AI izohni tasniflashi — *muhimlik darajasi*
+- [x] 17. AI izohni tasniflashi — *og'irlik va muddat bo'yicha*
 - [x] 18. Chizmadagi izoh — *hujjatga izoh va foto*
 - [x] 19. Bartaraf etishni nazorat qilish
 - [x] 20. «Oldin/keyin» fotosi
@@ -450,7 +450,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 20. Omborlar orasida ko'chirish — *bitta hujjat, ikki yozuv*
 - [x] 21. **Qaytarish** — *MoveKind::Return, qoldiqni oshiradi*
 - [x] 22. Hisobdan chiqarish
-- [~] 23. Nazoratsiz hisobdan chiqarishni taqiqlash — *sababsizlari ogohlantiriladi*
+- [x] 23. Nazoratsiz hisobdan chiqarishni taqiqlash — *sabab, ish va hujjat*
 - [x] 24. **Inventarizatsiya** — *hisob/fakt, yopilgach o'zgarmas*
 - [x] 25. Farqlar — *tuzatuvchi harakatga aylanadi*
 - [x] 26. Kamomad sababini izlash — *takrorlangan farq tizimli sabab degani; puldagi zarar bo'yicha tartib*

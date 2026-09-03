@@ -182,6 +182,48 @@ fn control_tab(ui: &mut egui::Ui, app: &mut App) {
                 );
             }
 
+            // ---------- Nazoratsiz hisobdan chiqarish (TZ XI.23) ----------
+            let offs = app.write_offs();
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("wh_writeoff")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("wh_writeoff_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if offs.is_empty() {
+                ui.label(
+                    RichText::new(t("wh_writeoff_ok"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for w in offs.iter().take(12) {
+                let mut missing: Vec<&str> = Vec::new();
+                if !w.has_reason {
+                    missing.push(t("wh_wo_reason"));
+                }
+                if !w.has_task {
+                    missing.push(t("wh_wo_task"));
+                }
+                if !w.has_document {
+                    missing.push(t("wh_wo_doc"));
+                }
+                ui.label(
+                    RichText::new(format!(
+                        "· {} — {} {} ({}): {}",
+                        w.date.format("%d.%m.%Y"),
+                        super::materials::trim_num(w.qty),
+                        super::materials::material_label(app, w.material_id),
+                        w.move_id,
+                        missing.join(", ")
+                    ))
+                    .size(12.0)
+                    .color(theme::warn()),
+                );
+            }
+
             // ---------- Ish kiyimi va SIZ (TZ XI.35) ----------
             ui.add_space(16.0);
             ui.label(RichText::new(t("wh_ppe")).size(13.5).strong());

@@ -4634,6 +4634,43 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Fayllar ko'chirilmaydi: ular pudratchi kompyuterida turadi, bu yerda faqat soni ko'rsatiladi.",
             "Файлы не копируются: они хранятся на компьютере подрядчика, здесь показано только их количество.",
         ),
+        // IV.4, XI.23. Matritsa va hisobdan chiqarish
+        "kpi_issues_stopper" => ("To'xtatuvchi", "Останавливающих"),
+        "kpi_issues_stopper_hint" => (
+            "kritik va muddati o'tgan — ish to'xtaydi",
+            "критичные и просроченные — работа останавливается",
+        ),
+        "ed_tab_matrix" => ("Matritsa", "Матрица"),
+        "ed_matrix_hint" => (
+            "Matritsa yangi talab o'ylab topmaydi: qaysi hujjat kerakligini ish bo'limi belgilaydi. Bu yerda ular bitta jadvalda.",
+            "Матрица не придумывает новых требований: какой документ нужен, определяет раздел работы. Здесь они в одной таблице.",
+        ),
+        "ed_matrix_late" => ("Kechikkan", "Просрочено"),
+        "ed_matrix_late_hint" => ("ish tugagan, hujjat yo'q", "работа завершена, документа нет"),
+        "ed_matrix_gaps" => ("Yopilmagan katak", "Незакрытых ячеек"),
+        "ed_matrix_gaps_hint" => ("hujjat yo'q yoki imzolanmagan", "документа нет или не подписан"),
+        "ed_matrix_empty" => (
+            "Hujjat talab qilinadigan ish topilmadi.",
+            "Работ, требующих документов, не найдено.",
+        ),
+        "mx_na" => ("—", "—"),
+        "mx_missing" => ("yo'q", "нет"),
+        "mx_draft" => ("imzosiz", "без подписи"),
+        "mx_signed" => ("imzolangan", "подписан"),
+        "mx_done" => ("tugagan", "завершена"),
+        "mx_running" => ("ketyapti", "идёт"),
+        "wh_writeoff" => ("Nazoratsiz hisobdan chiqarish", "Списание без контроля"),
+        "wh_writeoff_hint" => (
+            "Uch shart: sabab yozilgan, ish ko'rsatilgan va hujjat bor. Biri yetishmasa material qayerga ketgani noma'lum qoladi.",
+            "Три условия: указана причина, указана работа и есть документ. Без одного из них неясно, куда ушёл материал.",
+        ),
+        "wh_writeoff_ok" => (
+            "Barcha chiqimlar hujjatlangan.",
+            "Все списания оформлены.",
+        ),
+        "wh_wo_reason" => ("sabab yo'q", "нет причины"),
+        "wh_wo_task" => ("ish ko'rsatilmagan", "не указана работа"),
+        "wh_wo_doc" => ("hujjat yo'q", "нет документа"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

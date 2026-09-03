@@ -75,6 +75,25 @@ pub fn issue_kpis(ui: &mut egui::Ui, list: &[&Issue], extra: Option<(&str, Strin
             },
         ),
     ];
+    // Izohlar tasnifi (TZ VII.17): og'irlik va muddat bo'yicha. Matn
+    // mazmuni o'qilmaydi — dastur so'zlarga qarab hukm chiqarmaydi.
+    let owned: Vec<Issue> = list.iter().map(|i| (*i).clone()).collect();
+    let classes = crate::checks::classify_remarks(&owned, chrono::Local::now().date_naive());
+    let count = |c: crate::checks::RemarkClass| classes.iter().filter(|(_, x)| *x == c).count();
+    let stoppers = count(crate::checks::RemarkClass::Stopper);
+    if !classes.is_empty() {
+        cards.push(stat(
+            t("kpi_issues_stopper"),
+            stoppers.to_string(),
+            t("kpi_issues_stopper_hint"),
+            if stoppers == 0 {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
+        ));
+    }
+
     // Modulga xos qo'shimcha ko'rsatkich (masalan smeta summasi).
     if let Some((title, value, hint)) = extra {
         cards.push(stat(title, value, hint, theme::text()));

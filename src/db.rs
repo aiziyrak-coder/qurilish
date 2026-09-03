@@ -10512,6 +10512,99 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(checked > 0, "kartochka umuman ochilmadi");
     }
 
+    /// TZ IV.4: matritsa yangi talab o'ylab topmaydi — required_docs ga
+    /// tayanadi va tugallangan, lekin hujjatsiz ishlarni oldinga chiqaradi.
+    #[test]
+    fn document_matrix_follows_requirements() {
+        use crate::checks::MatrixCell;
+        use crate::domain::ExecDocKind;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.document_matrix();
+        let required = crate::checks::required_docs(&app.tasks, &app.exec_docs, false);
+        assert!(!rows.is_empty(), "matritsa bo'sh");
+
+        for r in &rows {
+            assert_eq!(r.cells.len(), ExecDocKind::ALL.len());
+            for (i, kind) in ExecDocKind::ALL.iter().enumerate() {
+                let req = required
+                    .iter()
+                    .find(|x| x.task_id == r.task_id && x.kind == *kind);
+                match (req, r.cells[i]) {
+                    (None, c) => assert_eq!(c, MatrixCell::NotRequired),
+                    (Some(x), MatrixCell::Signed) => assert!(x.signed),
+                    (Some(x), MatrixCell::Draft) => assert!(x.exists && !x.signed),
+                    (Some(x), MatrixCell::Missing) => assert!(!x.exists),
+                    (Some(_), MatrixCell::NotRequired) => panic!("talab bor, katak bo'sh"),
+                }
+            }
+        }
+
+        // Tugallangan, lekin hujjatsiz ishlar oldinda.
+        let mut seen_other = false;
+        for r in &rows {
+            if r.done && r.gaps() > 0 {
+                assert!(!seen_other, "kechikkan ish pastga tushib qolgan");
+            } else {
+                seen_other = true;
+            }
+        }
+    }
+
+    /// TZ XI.23: uch shartdan biri yetishmasa chiqim nazoratsiz deb
+    /// belgilanadi; uchalasi bo'lsa ro'yxatga tushmaydi.
+    #[test]
+    fn write_off_needs_reason_task_and_document() {
+        use crate::checks::write_offs;
+        use crate::domain::{MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let mv = |note: &str, task: Option<i64>, doc: &str| StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 3,
+            warehouse_id: None,
+            batch_id: None,
+            date: today,
+            kind: MoveKind::Out,
+            qty: 5.0,
+            price: 10.0,
+            document: doc.into(),
+            counterparty: String::new(),
+            task_id: task,
+            note: note.into(),
+        };
+
+        // Uchalasi bor — ro'yxatda yo'q.
+        assert!(write_offs(&[mv("sarf", Some(1), "TN-1")], today, 30).is_empty());
+
+        // Har bir yetishmovchilik alohida ko'rinadi.
+        let no_reason = write_offs(&[mv("", Some(1), "TN-1")], today, 30);
+        assert_eq!(no_reason.len(), 1);
+        assert!(!no_reason[0].has_reason && no_reason[0].has_task);
+        assert!(!no_reason[0].controlled());
+
+        let no_task = write_offs(&[mv("sarf", None, "TN-1")], today, 30);
+        assert!(!no_task[0].has_task);
+
+        let no_doc = write_offs(&[mv("sarf", Some(1), "")], today, 30);
+        assert!(!no_doc[0].has_document);
+
+        // Kirim bu qoidaga tushmaydi.
+        let mut incoming = mv("", None, "");
+        incoming.kind = MoveKind::In;
+        assert!(write_offs(&[incoming], today, 30).is_empty());
+
+        // Davrdan tashqaridagi chiqim ham.
+        let mut old = mv("", None, "");
+        old.date = today - chrono::Duration::days(60);
+        assert!(write_offs(&[old], today, 30).is_empty());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
