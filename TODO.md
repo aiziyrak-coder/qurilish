@@ -85,7 +85,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 ## III. AI smeta tekshiruvi
 
 - [x] 1. Modul maqsadi
-- [~] 2. Hujjat yuklash — *XLSX/XLS/ODS/CSV; PDF va skan yo'q*
+- [~] 2. Hujjat yuklash — *XLSX/XLS/ODS/CSV to'liq; PDF va skan 🔒 — matnni tanish (OCR) tashqi xizmat talab qiladi*
 - [x] 3. Smeta tuzilmasini tanish — *ustunlarni nom bo'yicha aniqlash, ikki tilda*
 - [x] 4. Arifmetikani tekshirish
 - [x] 5. O'lchov birliklarini tekshirish
@@ -202,10 +202,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 > loyiha va server qismini talab qiladi.
 
 - [x] 1. Ilova maqsadi — *desktop varianti*
-- [~] 2. Avtorizatsiya — *rol tanlash; parol yo'q*
+- [~] 2. Avtorizatsiya — *rol tanlash; parol ataylab yo'q 🔒 — baza fayli ochiq, parol himoya emas, ko'rinish bo'lardi; haqiqiy avtorizatsiya server bilan keladi*
 - [x] 3. Bosh ekran
 - [x] 4. Mening vazifalarim — *bugungi ishlar*
-- [~] 5. Mobil GPR — *desktop GPR bor*
+- [~] 5. Mobil GPR — *desktop GPR to'liq; mobil ko'rinish 🔒 — mobil klientga bog'liq*
 - [x] 6. Kunlik hisobot
 - [ ] 🔒 7. Ovozli kiritish
 - [x] 8. Foto — *jurnal va yozuvlarga biriktirish*
@@ -213,7 +213,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 10. Video
 - [ ] 🔒 11. QR-kod
 - [x] 12. Chizmalar bilan ishlash — *topshirilgan versiya prorab ekranida*
-- [~] 13. BIM bilan ishlash — *IFC o'qiladi; 3D ko'rinish yo'q*
+- [~] 13. BIM bilan ishlash — *IFC o'qiladi, elementlar va kolliziyalar ro'yxati bor; 3D ko'rinish 🔒 — geometriya yadrosi talab qiladi*
 - [x] 14. Bajarilgan ishlar
 - [x] 15. Materiallar
 - [x] 16. Materialga ariza
@@ -533,7 +533,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 4. Kirish/chiqishni hisobga olish
 - [ ] 🔒 5. Obyekt geozonasi
 - [ ] 🔒 6. QR-kirish
-- [~] 7. Prorabning mobil tabeli — *desktop ekranida*
+- [~] 7. Prorabning mobil tabeli — *desktopda to'liq (tabel, smena, bo'sh turish); mobil 🔒 — mobil klientga bog'liq*
 - [x] 8. **Brigadalar** — *brigadir, ish, ishchilar tarkibi*
 - [x] 9. Ishchilarni obyektlar bo'yicha taqsimlash
 - [x] 10. Ish vaqtini ishlar bo'yicha taqsimlash — *katakda «Ish» rejimi*
