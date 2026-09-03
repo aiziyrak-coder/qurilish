@@ -64,6 +64,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (2, t("mch_tab_usage")),
                 (3, t("mch_tab_plan")),
                 (4, t("mch_tab_repairs")),
+                (5, t("mch_tab_mech")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -78,6 +79,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             2 => usage_tab(ui, app),
             3 => plan_tab(ui, app),
             4 => repairs_tab(ui, app),
+            5 => mech_tab(ui, app),
             _ => park_tab(ui, app),
         }
     }
@@ -233,6 +235,324 @@ fn status_color(s: MachineStatus) -> Color32 {
 }
 
 // ================================================================ Park
+
+// ================================================================ Mexanik
+
+/// Mexanik kabineti: kunlik ko'rik, e'tirozlar va park holati
+/// (TZ XVI.28, 31, 39, 46, XV.18).
+///
+/// Ko'rik smena boshida o'tkaziladi va **yozib qoldiriladi**: og'zaki
+/// «hammasi joyida» hodisadan keyin hech narsani isbotlamaydi.
+fn mech_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let issues = app.mech_issues();
+    let (park, advice) = app.park_review();
+    let stops = issues.iter().filter(|i| i.stop()).count();
+    let today = app.today;
+
+    ui.label(
+        RichText::new(t("mch_mech_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("mch_mech_stop"),
+                stops.to_string(),
+                t("mch_mech_stop_hint"),
+                if stops == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("mch_mech_issues"),
+                issues.len().to_string(),
+                t("mch_mech_issues_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("mch_mech_checked"),
+                app.machine_checks
+                    .iter()
+                    .filter(|c| c.date == today)
+                    .count()
+                    .to_string(),
+                t("mch_mech_checked_hint"),
+                theme::text(),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    let mut check_now: Option<i64> = None;
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- E'tirozlar ----------
+            ui.label(RichText::new(t("mch_mech_title")).size(13.5).strong());
+            ui.add_space(6.0);
+            if issues.is_empty() {
+                ui.label(
+                    RichText::new(t("mch_mech_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for i in &issues {
+                ui.label(
+                    RichText::new(format!("· {}", mech_text(i)))
+                        .size(12.0)
+                        .color(if i.stop() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        }),
+                );
+            }
+
+            // ---------- Bugungi ko'rik ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("mch_check_today")).size(13.5).strong());
+            ui.add_space(6.0);
+            egui::Grid::new("mch_checks")
+                .num_columns(5)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 220.0, t("col_machine"));
+                    head_l(ui, 130.0, t("mch_check_state"));
+                    head_l(ui, 160.0, t("mch_check_by"));
+                    head_l(ui, 220.0, t("mch_check_fault"));
+                    head_l(ui, 120.0, "");
+                    ui.end_row();
+
+                    for m in &app.machines {
+                        let c = app
+                            .machine_checks
+                            .iter()
+                            .find(|c| c.machine_id == m.id && c.date == today);
+                        cell_l(ui, 220.0, RichText::new(&m.name).size(12.5));
+                        cell_l(
+                            ui,
+                            130.0,
+                            match c {
+                                None => RichText::new(t("mch_check_missing"))
+                                    .size(11.5)
+                                    .color(theme::muted()),
+                                Some(c) if !c.allowed => RichText::new(t("mch_check_blocked"))
+                                    .size(11.5)
+                                    .color(theme::danger()),
+                                Some(c) if c.complete() => RichText::new(t("mch_check_ok"))
+                                    .size(11.5)
+                                    .color(theme::ok()),
+                                Some(_) => RichText::new(t("mch_check_partial"))
+                                    .size(11.5)
+                                    .color(theme::warn()),
+                            },
+                        );
+                        cell_l(
+                            ui,
+                            160.0,
+                            RichText::new(c.map(|c| c.by.clone()).unwrap_or_default())
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            220.0,
+                            RichText::new(
+                                c.map(|c| super::issues::truncate(&c.fault, 28))
+                                    .unwrap_or_default(),
+                            )
+                            .size(12.0)
+                            .color(theme::warn()),
+                        );
+                        if c.is_none() {
+                            if ui.small_button(t("mch_check_add")).clicked() {
+                                check_now = Some(m.id);
+                            }
+                        } else {
+                            cell_l(ui, 120.0, RichText::new(""));
+                        }
+                        ui.end_row();
+                    }
+                });
+
+            // ---------- Park (TZ XVI.39) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("mch_park_review")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("mch_park_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            for a in &advice {
+                ui.label(
+                    RichText::new(format!("· {}", advice_text(a)))
+                        .size(12.0)
+                        .color(theme::warn()),
+                );
+            }
+            ui.add_space(6.0);
+            egui::Grid::new("mch_park")
+                .num_columns(7)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 220.0, t("col_machine"));
+                    head_l(ui, 100.0, t("mch_park_own"));
+                    head_l(ui, 110.0, t("col_status"));
+                    head_r(ui, 120.0, t("mch_park_usage"));
+                    head_r(ui, 130.0, t("mch_park_hours"));
+                    head_r(ui, 110.0, t("mch_park_idle"));
+                    head_r(ui, 140.0, t("mch_park_cost"));
+                    ui.end_row();
+
+                    for l in &park {
+                        cell_l(
+                            ui,
+                            220.0,
+                            RichText::new(super::issues::truncate(&l.name, 28)).size(12.5),
+                        );
+                        cell_l(
+                            ui,
+                            100.0,
+                            RichText::new(if l.rented {
+                                t("mch_park_rented")
+                            } else {
+                                t("mch_park_owned")
+                            })
+                            .size(11.5)
+                            .color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            110.0,
+                            RichText::new(
+                                app.machines
+                                    .iter()
+                                    .find(|m| m.id == l.machine_id)
+                                    .map(|m| m.status.label())
+                                    .unwrap_or_default(),
+                            )
+                            .size(11.5)
+                            .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(format!("{:.0}%", l.usage_pct))
+                                .size(12.5)
+                                .color(if l.usage_pct < crate::checks::PARK_IDLE_PCT {
+                                    theme::warn()
+                                } else {
+                                    theme::ok()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            130.0,
+                            RichText::new(format!("{:.1}", l.hours_per_day))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(l.idle_days.to_string())
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(ui, 140.0, RichText::new(money(l.period_cost)).size(12.0));
+                        ui.end_row();
+                    }
+                });
+            ui.add_space(20.0);
+        });
+
+    // Ko'rik yozuvini ochamiz: bandlar soni oldindan to'ldiriladi, mexanik
+    // esa nechtasi joyida ekanini belgilaydi.
+    if let Some(machine_id) = check_now {
+        if let Some(pid) = app.current {
+            app.db.insert_machine_check(&crate::domain::MachineCheck {
+                id: 0,
+                project_id: pid,
+                machine_id,
+                date: today,
+                by: app.current_user_name(),
+                items_ok: CHECK_ITEMS,
+                items_total: CHECK_ITEMS,
+                fault: String::new(),
+                allowed: true,
+                note: String::new(),
+            });
+            app.reload_modules();
+        }
+    }
+}
+
+/// Kunlik ko'rik bandlari: tormoz, rul, chiroq, tovush signali,
+/// gidravlika, tros va biriktirmalar.
+const CHECK_ITEMS: i64 = 6;
+
+/// Mexanik e'tirozini odam o'qiydigan gapga aylantiradi.
+fn mech_text(i: &crate::checks::MechIssue) -> String {
+    use crate::checks::MechIssue as M;
+    match i {
+        M::NoDailyCheck { machine } => format!("{} — {}", t("mi_no_check"), machine),
+        M::FaultButWorking { machine, fault } => {
+            format!("{} — {} ({})", t("mi_fault"), machine, fault)
+        }
+        M::NotAllowedButUsed { machine } => format!("{} — {}", t("mi_not_allowed"), machine),
+        M::InspectionExpired { machine, days } => {
+            format!(
+                "{} — {} ({} {})",
+                t("mi_inspection"),
+                machine,
+                days,
+                t("days")
+            )
+        }
+        M::ServiceOverdue {
+            machine,
+            over_hours,
+        } => format!(
+            "{} — {} (+{:.0} {})",
+            t("mi_service"),
+            machine,
+            over_hours,
+            t("col_hours")
+        ),
+        M::NoOperator { machine } => format!("{} — {}", t("mi_no_operator"), machine),
+        M::OperatorNoPermit { machine, operator } => {
+            format!("{} — {} ({})", t("mi_no_permit"), machine, operator)
+        }
+    }
+}
+
+/// Park tavsiyasini gapga aylantiradi.
+fn advice_text(a: &crate::checks::ParkAdvice) -> String {
+    use crate::checks::ParkAdvice as A;
+    match a {
+        A::OwnIdle { name, usage_pct } => {
+            format!("{} — {} ({:.0}%)", t("pa_own_idle"), name, usage_pct)
+        }
+        A::RentedIdle { name, usage_pct } => {
+            format!("{} — {} ({:.0}%)", t("pa_rented_idle"), name, usage_pct)
+        }
+        A::RentedBusy { name, usage_pct } => {
+            format!("{} — {} ({:.0}%)", t("pa_rented_busy"), name, usage_pct)
+        }
+    }
+}
 
 fn park_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<Machine> = None;

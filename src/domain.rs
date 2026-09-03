@@ -2045,6 +2045,36 @@ enum_kind!(RootCause {
     Organisation => "organisation", "rc_organisation";
 });
 
+/// Texnikaning kunlik ko'rigi (TZ XVI.28, XV.18).
+///
+/// Ko'rik smena boshida o'tkaziladi va **yozib qoldiriladi**: og'zaki
+/// «hammasi joyida» hodisadan keyin hech narsani isbotlamaydi.
+#[derive(Debug, Clone)]
+pub struct MachineCheck {
+    pub id: i64,
+    pub project_id: i64,
+    pub machine_id: i64,
+    pub date: NaiveDate,
+    /// Kim ko'rikdan o'tkazdi.
+    pub by: String,
+    /// Tormoz, rul, chiroq, tovush signali, gidravlika, tросlar —
+    /// bandlar soni va nechtasi joyida ekani.
+    pub items_ok: i64,
+    pub items_total: i64,
+    /// Aniqlangan nosozlik. Bo'sh — nosozlik yo'q.
+    pub fault: String,
+    /// Texnika ishlashga ruxsat etildimi.
+    pub allowed: bool,
+    pub note: String,
+}
+
+impl MachineCheck {
+    /// Ko'rik to'liq o'tkazilganmi.
+    pub fn complete(&self) -> bool {
+        self.items_total > 0 && self.items_ok == self.items_total
+    }
+}
+
 // ---------- Umumiy: izoh va biriktirma ----------
 
 enum_kind!(NoteTarget {

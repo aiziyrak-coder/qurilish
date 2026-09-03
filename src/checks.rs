@@ -9016,3 +9016,247 @@ pub fn stock_control(ctx: &StockCtx) -> Vec<StockIssue> {
     out.sort_by_key(|i| !i.severe());
     out
 }
+
+// ================= XVI.28, 31, 39, 46. Kunlik ko'rik, operator, park =================
+
+/// Texnika bo'yicha mexanik e'tirozi (TZ XVI.28, 31, 46, XV.18).
+#[derive(Debug, Clone, PartialEq)]
+pub enum MechIssue {
+    /// Bugun ishlagan texnika ko'rikdan o'tmagan.
+    NoDailyCheck { machine: String },
+    /// Ko'rikda nosozlik topilgan, texnika esa ishlashda.
+    FaultButWorking { machine: String, fault: String },
+    /// Ko'rikda ruxsat berilmagan, texnika esa ishlagan.
+    NotAllowedButUsed { machine: String },
+    /// Texnik ko'rik muddati o'tgan.
+    InspectionExpired { machine: String, days: i64 },
+    /// Rejali texnik xizmat muddati o'tgan (motosoat bo'yicha).
+    ServiceOverdue { machine: String, over_hours: f64 },
+    /// Operator ko'rsatilmagan — kim boshqargani noma'lum.
+    NoOperator { machine: String },
+    /// Operatorning ko'targich ishlariga ruxsati yo'q yoki muddati o'tgan.
+    OperatorNoPermit { machine: String, operator: String },
+}
+
+impl MechIssue {
+    /// Texnikani to'xtatishga arziydigan darajadagi e'tirozmi.
+    pub fn stop(&self) -> bool {
+        matches!(
+            self,
+            MechIssue::FaultButWorking { .. }
+                | MechIssue::NotAllowedButUsed { .. }
+                | MechIssue::InspectionExpired { .. }
+                | MechIssue::OperatorNoPermit { .. }
+        )
+    }
+}
+
+/// Mexanik kabineti uchun manba.
+pub struct MechCtx<'a> {
+    pub machines: &'a [Machine],
+    pub logs: &'a [MachineLog],
+    pub checks: &'a [MachineCheck],
+    pub workers: &'a [Worker],
+    pub permits: &'a [WorkerPermit],
+    pub today: NaiveDate,
+}
+
+/// TZ XVI.28, 31, 46: mexanik kabineti — bugungi holat bo'yicha e'tirozlar.
+///
+/// Ko'rik **yozib qoldirilishi** kerak: og'zaki «hammasi joyida» hodisadan
+/// keyin hech narsani isbotlamaydi. Shuning uchun bugun ishlagan, lekin
+/// ko'rik yozuvi yo'q texnika alohida ko'rsatiladi.
+pub fn mech_issues(ctx: &MechCtx) -> Vec<MechIssue> {
+    let key = |s: &str| s.trim().to_lowercase();
+    let mut out = Vec::new();
+
+    for m in ctx.machines {
+        let worked_today = ctx
+            .logs
+            .iter()
+            .any(|l| l.machine_id == m.id && l.date == ctx.today && l.hours > 0.0);
+        let today_check = ctx
+            .checks
+            .iter()
+            .find(|c| c.machine_id == m.id && c.date == ctx.today);
+
+        if worked_today {
+            match today_check {
+                None => out.push(MechIssue::NoDailyCheck {
+                    machine: m.name.clone(),
+                }),
+                Some(c) => {
+                    if !c.allowed {
+                        out.push(MechIssue::NotAllowedButUsed {
+                            machine: m.name.clone(),
+                        });
+                    } else if !c.fault.trim().is_empty() {
+                        out.push(MechIssue::FaultButWorking {
+                            machine: m.name.clone(),
+                            fault: c.fault.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Texnik ko'rik muddati.
+        if let Some(until) = m.inspection_until {
+            if until < ctx.today {
+                out.push(MechIssue::InspectionExpired {
+                    machine: m.name.clone(),
+                    days: (ctx.today - until).num_days(),
+                });
+            }
+        }
+
+        // Rejali TX: umumiy motosoat oxirgi TX dan oralig'idan oshdimi.
+        if m.service_hours > 0.0 {
+            let total: f64 = ctx
+                .logs
+                .iter()
+                .filter(|l| l.machine_id == m.id)
+                .map(|l| l.hours)
+                .sum();
+            let since = total - m.service_done;
+            if since > m.service_hours {
+                out.push(MechIssue::ServiceOverdue {
+                    machine: m.name.clone(),
+                    over_hours: since - m.service_hours,
+                });
+            }
+        }
+
+        // Operator (TZ XVI.31): ko'targich texnikasi ruxsat talab qiladi.
+        if m.operator.trim().is_empty() {
+            if worked_today {
+                out.push(MechIssue::NoOperator {
+                    machine: m.name.clone(),
+                });
+            }
+        } else if matches!(m.kind, MachineKind::Crane | MachineKind::Lift) {
+            let worker = ctx
+                .workers
+                .iter()
+                .find(|w| key(&w.name) == key(&m.operator));
+            let ok = worker.is_some_and(|w| {
+                ctx.permits.iter().any(|p| {
+                    p.worker_id == w.id && p.kind == PermitKind::Lifting && !p.expired(ctx.today)
+                })
+            });
+            if !ok {
+                out.push(MechIssue::OperatorNoPermit {
+                    machine: m.name.clone(),
+                    operator: m.operator.clone(),
+                });
+            }
+        }
+    }
+
+    // To'xtatishga arziydiganlari oldinda.
+    out.sort_by_key(|i| !i.stop());
+    out
+}
+
+/// Park bo'yicha bitta texnika holati (TZ XVI.39).
+#[derive(Debug, Clone)]
+pub struct ParkLine {
+    pub machine_id: i64,
+    pub name: String,
+    pub rented: bool,
+    /// Kunlik o'rtacha ishlangan soat (oxirgi davr bo'yicha).
+    pub hours_per_day: f64,
+    /// Foydalanish koeffitsiyenti, foizda: soat / (kunlar × smena).
+    pub usage_pct: f64,
+    /// Bo'sh turgan kunlar.
+    pub idle_days: i64,
+    /// Davr ichida texnikaga ketgan pul: ishlangan soat × soat narxi.
+    pub period_cost: f64,
+}
+
+/// Park bo'yicha tavsiya.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParkAdvice {
+    /// O'z texnikasi kam ishlatilyapti — ijaraga berish yoki sotish.
+    OwnIdle { name: String, usage_pct: f64 },
+    /// Ijara texnikasi kam ishlatilyapti — qaytarish.
+    RentedIdle { name: String, usage_pct: f64 },
+    /// Ijara texnikasi doim ishlayapti — o'zini olish arzonroq bo'lishi
+    /// mumkin.
+    RentedBusy { name: String, usage_pct: f64 },
+}
+
+/// Foydalanish koeffitsiyenti shu foizdan past bo'lsa — kam ishlatilgan.
+pub const PARK_IDLE_PCT: f64 = 35.0;
+
+/// Foydalanish koeffitsiyenti shu foizdan yuqori bo'lsa — doim ishda.
+pub const PARK_BUSY_PCT: f64 = 80.0;
+
+/// TZ XVI.39: parkni ko'rib chiqish.
+///
+/// Tavsiya **qaror emas**: ijaraga olishmi yoki sotib olishmi — bu pul va
+/// muddat bo'yicha qaror, dastur esa faqat koeffitsiyentni ko'rsatadi.
+/// Shuning uchun tavsiya bitta gapdan oshmaydi.
+pub fn park_review(
+    machines: &[Machine],
+    logs: &[MachineLog],
+    today: NaiveDate,
+    days: i64,
+) -> (Vec<ParkLine>, Vec<ParkAdvice>) {
+    let from = today - chrono::Duration::days(days.max(1));
+    let mut lines = Vec::new();
+
+    for m in machines {
+        let mine: Vec<&MachineLog> = logs
+            .iter()
+            .filter(|l| l.machine_id == m.id && l.date > from && l.date <= today)
+            .collect();
+        let hours: f64 = mine.iter().map(|l| l.hours).sum();
+        let worked_days = {
+            let mut d: Vec<NaiveDate> = mine
+                .iter()
+                .filter(|l| l.hours > 0.0)
+                .map(|l| l.date)
+                .collect();
+            d.sort_unstable();
+            d.dedup();
+            d.len() as i64
+        };
+        let period = days.max(1);
+        lines.push(ParkLine {
+            machine_id: m.id,
+            name: m.name.clone(),
+            rented: m.rented,
+            hours_per_day: hours / period as f64,
+            usage_pct: (hours / (period as f64 * SHIFT_HOURS) * 100.0).clamp(0.0, 100.0),
+            idle_days: period - worked_days,
+            period_cost: hours * m.hour_rate,
+        });
+    }
+
+    let mut advice = Vec::new();
+    for l in &lines {
+        if l.usage_pct < PARK_IDLE_PCT {
+            advice.push(if l.rented {
+                ParkAdvice::RentedIdle {
+                    name: l.name.clone(),
+                    usage_pct: l.usage_pct,
+                }
+            } else {
+                ParkAdvice::OwnIdle {
+                    name: l.name.clone(),
+                    usage_pct: l.usage_pct,
+                }
+            });
+        } else if l.rented && l.usage_pct > PARK_BUSY_PCT {
+            advice.push(ParkAdvice::RentedBusy {
+                name: l.name.clone(),
+                usage_pct: l.usage_pct,
+            });
+        }
+    }
+
+    // Eng kam ishlatilgani oldinda.
+    lines.sort_by(|a, b| a.usage_pct.total_cmp(&b.usage_pct));
+    (lines, advice)
+}

@@ -738,6 +738,20 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_repair_pid ON machine_repair(project_id);
 
+            CREATE TABLE IF NOT EXISTS machine_check (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                machine_id INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                by_whom TEXT NOT NULL DEFAULT '',
+                items_ok INTEGER NOT NULL DEFAULT 0,
+                items_total INTEGER NOT NULL DEFAULT 0,
+                fault TEXT NOT NULL DEFAULT '',
+                allowed INTEGER NOT NULL DEFAULT 1,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_mcheck_pid ON machine_check(project_id,date);
+
             CREATE TABLE IF NOT EXISTS note (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -2625,6 +2639,67 @@ impl Db {
                 i.cost,
                 i.task_id,
                 i.note
+            ],
+        )
+    }
+
+    // ---------- XVI.28. Texnikaning kunlik ko'rigi ----------
+
+    pub fn machine_checks(&self, pid: i64) -> Vec<MachineCheck> {
+        self.list(
+            "SELECT id,project_id,machine_id,date,by_whom,items_ok,items_total,fault,allowed,note
+             FROM machine_check WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(MachineCheck {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    machine_id: r.get(2)?,
+                    date: date(&r.get::<_, String>(3)?),
+                    by: r.get(4)?,
+                    items_ok: r.get(5)?,
+                    items_total: r.get(6)?,
+                    fault: r.get(7)?,
+                    allowed: r.get::<_, i64>(8)? != 0,
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_machine_check(&self, c: &MachineCheck) -> i64 {
+        self.ins(
+            "INSERT INTO machine_check (project_id,machine_id,date,by_whom,items_ok,items_total,
+                                        fault,allowed,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                c.project_id,
+                c.machine_id,
+                c.date.to_string(),
+                c.by,
+                c.items_ok,
+                c.items_total,
+                c.fault,
+                c.allowed as i64,
+                c.note
+            ],
+        )
+    }
+
+    pub fn update_machine_check(&self, c: &MachineCheck) -> bool {
+        self.upd(
+            "UPDATE machine_check SET machine_id=?2,date=?3,by_whom=?4,items_ok=?5,
+                    items_total=?6,fault=?7,allowed=?8,note=?9 WHERE id=?1",
+            params![
+                c.id,
+                c.machine_id,
+                c.date.to_string(),
+                c.by,
+                c.items_ok,
+                c.items_total,
+                c.fault,
+                c.allowed as i64,
+                c.note
             ],
         )
     }
@@ -5116,6 +5191,7 @@ impl Db {
         self.seed_demo_machine_plan(pid, ru);
         self.seed_demo_zones(pid, ru);
         self.seed_demo_notes(pid, ru);
+        self.seed_demo_machine_checks(pid, ru);
         self.seed_demo_estimate_alt(pid, ru);
     }
 
@@ -7823,6 +7899,49 @@ impl Db {
     }
 
     /// Xavfli zonalar va xavfsizlik inventari namunasi (TZ XV.15, 22-24).
+    /// Kunlik ko'rik namunasi (TZ XVI.28).
+    ///
+    /// Bugungi kun ataylab to'liq to'ldirilmaydi: bitta texnika ko'rikdan
+    /// o'tmagan holda qoladi — mexanik kabineti bo'sh ko'rinmasin va
+    /// e'tiroz qanday ishlashi ko'rinib tursin.
+    pub fn seed_demo_machine_checks(&self, pid: i64, ru: bool) {
+        if !self.machine_checks(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let machines = self.machines(pid);
+        let by = if ru { "Ким В.С." } else { "Kim V.S." };
+
+        for (i, m) in machines.iter().enumerate() {
+            // Oxirgi texnikani ataylab ko'riksiz qoldiramiz.
+            if i + 1 == machines.len() && machines.len() > 1 {
+                continue;
+            }
+            // Ikkinchisida nosozlik topilgan, lekin bartaraf etilgan.
+            let fault = if i == 1 {
+                if ru {
+                    "Габаритный фонарь не горел — заменён"
+                } else {
+                    "Gabarit chirog'i yonmadi — almashtirildi"
+                }
+            } else {
+                ""
+            };
+            self.insert_machine_check(&MachineCheck {
+                id: 0,
+                project_id: pid,
+                machine_id: m.id,
+                date: today,
+                by: by.into(),
+                items_ok: if fault.is_empty() { 6 } else { 5 },
+                items_total: 6,
+                fault: fault.into(),
+                allowed: true,
+                note: String::new(),
+            });
+        }
+    }
+
     /// Namunaviy izohlar (umumiy «izoh va muhokama» mexanizmi).
     ///
     /// Fayl biriktirmalari namunaga qo'shilmaydi: yo'llar bu kompyuterda

@@ -32,14 +32,14 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
 | XIV. Sifat | 41 | 30 | 8 | 3 | 2 |
-| XV. Xavfsizlik | 41 | 33 | 4 | 4 | 3 |
-| XVI. Mashinalar | 50 | 35 | 9 | 6 | 2 |
+| XV. Xavfsizlik | 41 | 35 | 3 | 3 | 3 |
+| XVI. Mashinalar | 50 | 41 | 7 | 2 | 2 |
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **473** | **154** | **73** | **46** |
+| **Jami** | **700** | **481** | **151** | **68** | **46** |
 
-Ya'ni **~68 % to'liq**, **~22 % qisman**, **~10 % hali yo'q**.
+Ya'ni **~69 % to'liq**, **~22 % qisman**, **~10 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -638,8 +638,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 14. AI foto-nazorat
 - [x] 15. Xavfli zonalarni nazorat qilish — *zona, chora, mas'ul va tekshiruv muddati*
 - [x] 16. Yuk ko'tarish ishlari — *ruxsat turi va xavfli zona*
-- [~] 17. Texnika — *texnik ko'rik muddati*
-- [ ] 18. Texnikaning kunlik ko'rigi
+- [x] 17. Texnika — *texnik ko'rik muddati va kunlik ko'rik*
+- [x] 18. Texnikaning kunlik ko'rigi
 - [x] 19. Elektr xavfsizligi — *ruxsat turi va xavfli zona*
 - [x] 20. O't ishlari — *ruxsat turi va naryad*
 - [x] 21. Yer ishlari — *ruxsat turi va xavfli zona*
@@ -695,25 +695,25 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 25. Rejali TX — *motosoat oralig'i, qolgani*
 - [~] 26. Ta'mir prognozi — *nosozliklar soni va xarajati ko'rinadi; prognoz formulasi yo'q*
 - [x] 27. Ekspluatatsiyani taqiqlash — *ko'rik, TX, ta'mir*
-- [ ] 28. Kunlik ko'rik
+- [x] 28. Kunlik ko'rik
 - [x] 29. Xavfsizlik bilan bog'lanish — *AN-R1 qoidasi*
 - [x] 30. **Operator**
-- [ ] 31. AI operatorni tekshirishi
+- [x] 31. AI operatorni tekshirishi — *ko'targich ishlariga ruxsat*
 - [x] 32. Ijaraga olingan texnika — *belgisi bor*
-- [~] 33. Ijara va o'z texnikasini solishtirish — *soatning qiymati*
+- [x] 33. Ijara va o'z texnikasini solishtirish — *foydalanish va davr xarajati*
 - [x] 34. **Mashina-soat qiymati**
 - [x] 35. Ishning tannarxi — *tabel tannarxiga kiradi*
 - [x] 36. Texnika unumdorligi — *soat, masofa, reys*
 - [x] 37. Texnika bo'sh turishi — *bo'sh kunlar soni*
 - [x] 38. Foydalanish koeffitsiyenti — *ish kunlariga nisbatan*
-- [ ] 39. AI parkni optimallashtirishi
+- [x] 39. AI parkni optimallashtirishi — *foydalanish koeffitsiyenti va tavsiya*
 - [ ] 🔒 40. Texnika xaritasi
 - [x] 41. Mashina tarixi — *yo'l varaqalari*
 - [~] 42. Samaradorlik tahlili — *bo'sh turish, ta'mir xarajati va foydalanish koeffitsiyenti; umumiy ball yo'q*
 - [x] 43. «Ta'mirlash yoki almashtirish» — *ta'mir qiymati balansning 40 % idan oshsa belgilanadi*
-- [~] 44. Mashina hujjatlari — *texnik ko'rik*
+- [x] 44. Mashina hujjatlari — *texnik ko'rik va kunlik ko'rik yozuvlari*
 - [~] 45. Bildirishnomalar — *TX muddati markazga chiqadi; push tashqi omil*
-- [ ] 46. Mexanik kabineti
+- [x] 46. Mexanik kabineti
 - [~] 47. Direktor kabineti
 - [~] 48. XVI ning bosh zanjiri
 - [x] 49. Boshqa modullar bilan bog'lanish

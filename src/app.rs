@@ -395,6 +395,12 @@ const AUDIT_KEEP: i64 = 50_000;
 /// muddat; undan kechroq bilish foydasiz bo'lib qoladi.
 const READINESS_DAYS: i64 = 14;
 
+/// Park bo'yicha foydalanish shuncha kun ortga qarab hisoblanadi (TZ XVI.39).
+///
+/// Bir hafta juda qisqa: bitta bo'sh kun koeffitsiyentni buzib ko'rsatardi.
+/// Bir chorak esa juda uzun: mavsum o'zgarishi yo'qolib ketardi.
+const PARK_DAYS: i64 = 30;
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -517,6 +523,8 @@ pub struct App {
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
     /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
     pub llm: crate::llm::Config,
+    /// Texnikaning kunlik ko'rigi (TZ XVI.28, XV.18).
+    pub machine_checks: Vec<crate::domain::MachineCheck>,
     /// Yozuvlarga qoldirilgan izohlar (umumiy mexanizm).
     pub notes: Vec<crate::domain::Note>,
     /// Yozuvlarga biriktirilgan fayllar (umumiy mexanizm).
@@ -691,6 +699,7 @@ impl App {
             geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
+            machine_checks: Vec::new(),
             notes: Vec::new(),
             attachments: Vec::new(),
             llm_chat: Vec::new(),
@@ -846,6 +855,7 @@ impl App {
 
     pub fn clear_modules(&mut self) {
         self.issues.clear();
+        self.machine_checks.clear();
         self.notes.clear();
         self.attachments.clear();
         self.documents.clear();
@@ -918,6 +928,7 @@ impl App {
             return;
         };
         self.issues = self.db.issues(id);
+        self.machine_checks = self.db.machine_checks(id);
         self.notes = self.db.notes(id);
         self.attachments = self.db.attachments(id);
         self.documents = self.db.documents(id);
@@ -2026,6 +2037,23 @@ impl App {
             &self.timesheet,
             &self.journal,
         )
+    }
+
+    /// Mexanik kabineti: kunlik ko'rik, TX va operator (TZ XVI.28, 31, 46).
+    pub fn mech_issues(&self) -> Vec<checks::MechIssue> {
+        checks::mech_issues(&checks::MechCtx {
+            machines: &self.machines,
+            logs: &self.machine_logs,
+            checks: &self.machine_checks,
+            workers: &self.workers,
+            permits: &self.worker_permits,
+            today: self.today,
+        })
+    }
+
+    /// Park bo'yicha foydalanish va tavsiyalar (TZ XVI.39).
+    pub fn park_review(&self) -> (Vec<checks::ParkLine>, Vec<checks::ParkAdvice>) {
+        checks::park_review(&self.machines, &self.machine_logs, self.today, PARK_DAYS)
     }
 
     /// Ombor nazorati: kirim, smeta bog'lanishi, harorat, yoqilg'i

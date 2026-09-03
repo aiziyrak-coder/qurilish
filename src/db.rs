@@ -8379,6 +8379,241 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|i| matches!(i, S::TemperatureRisk { .. })));
     }
 
+    /// TZ XVI.28: bugun ishlagan, lekin ko'rikdan o'tmagan texnika
+    /// ko'rsatiladi; ishlamagani esa so'ralmaydi.
+    #[test]
+    fn daily_check_is_asked_only_for_working_machines() {
+        use crate::checks::{mech_issues, MechCtx, MechIssue as M};
+        use crate::domain::{MachineCheck, MachineLog};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let machines = t.db.machines(pid);
+        let m = machines.first().expect("texnika").clone();
+
+        let log = MachineLog {
+            id: 1,
+            project_id: pid,
+            machine_id: m.id,
+            date: today,
+            hours: 8.0,
+            fuel: 0.0,
+            task_id: None,
+            number: String::new(),
+            driver: String::new(),
+            route: String::new(),
+            odo_start: 0.0,
+            odo_end: 0.0,
+            trips: 0,
+            cargo: 0.0,
+            note: String::new(),
+        };
+        let mut clean = m.clone();
+        clean.inspection_until = Some(today + chrono::Duration::days(90));
+        clean.service_hours = 0.0;
+        clean.operator = String::new();
+        clean.kind = crate::domain::MachineKind::Truck;
+
+        let run = |logs: &[MachineLog], checks: &[MachineCheck]| {
+            mech_issues(&MechCtx {
+                machines: std::slice::from_ref(&clean),
+                logs,
+                checks,
+                workers: &[],
+                permits: &[],
+                today,
+            })
+        };
+
+        // Ishlagan, ko'rik yo'q — e'tiroz (va operator ko'rsatilmagani).
+        let out = run(std::slice::from_ref(&log), &[]);
+        assert!(out.iter().any(|i| matches!(i, M::NoDailyCheck { .. })));
+        assert!(out.iter().any(|i| matches!(i, M::NoOperator { .. })));
+
+        // Ishlamagan — ko'rik ham so'ralmaydi.
+        let idle = run(&[], &[]);
+        assert!(!idle.iter().any(|i| matches!(i, M::NoDailyCheck { .. })));
+        assert!(!idle.iter().any(|i| matches!(i, M::NoOperator { .. })));
+
+        // Ko'rik yozilgan — e'tiroz yo'q.
+        let check = MachineCheck {
+            id: 1,
+            project_id: pid,
+            machine_id: clean.id,
+            date: today,
+            by: "Test".into(),
+            items_ok: 6,
+            items_total: 6,
+            fault: String::new(),
+            allowed: true,
+            note: String::new(),
+        };
+        let ok = run(std::slice::from_ref(&log), std::slice::from_ref(&check));
+        assert!(!ok.iter().any(|i| matches!(i, M::NoDailyCheck { .. })));
+
+        // Nosozlik topilgan, texnika esa ishlashda — to'xtatish kerak.
+        let mut faulty = check.clone();
+        faulty.fault = "tormoz".into();
+        let bad = run(std::slice::from_ref(&log), std::slice::from_ref(&faulty));
+        let found = bad
+            .iter()
+            .find(|i| matches!(i, M::FaultButWorking { .. }))
+            .expect("nosozlik e'tirozi yo'q");
+        assert!(found.stop());
+
+        // Ruxsat berilmagan, lekin ishlatilgan — bu ham to'xtatish.
+        let mut blocked = check.clone();
+        blocked.allowed = false;
+        let used = run(std::slice::from_ref(&log), std::slice::from_ref(&blocked));
+        assert!(used
+            .iter()
+            .any(|i| matches!(i, M::NotAllowedButUsed { .. })));
+    }
+
+    /// TZ XVI.31: ko'targich texnikasi operatoriga amaldagi ruxsat kerak.
+    #[test]
+    fn crane_operator_needs_a_valid_permit() {
+        use crate::checks::{mech_issues, MechCtx, MechIssue as M};
+        use crate::domain::{MachineKind, PermitKind, WorkerPermit};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let worker = t.db.workers(pid).into_iter().next().expect("ishchi");
+
+        let mut crane = t.db.machines(pid).into_iter().next().expect("texnika");
+        crane.kind = MachineKind::Crane;
+        crane.operator = worker.name.clone();
+        crane.inspection_until = Some(today + chrono::Duration::days(60));
+        crane.service_hours = 0.0;
+
+        let permit = |until: chrono::NaiveDate| WorkerPermit {
+            id: 1,
+            project_id: pid,
+            worker_id: worker.id,
+            kind: PermitKind::Lifting,
+            number: "L-1".into(),
+            issued: today - chrono::Duration::days(300),
+            valid_until: until,
+            note: String::new(),
+        };
+        let run = |permits: &[WorkerPermit]| {
+            mech_issues(&MechCtx {
+                machines: std::slice::from_ref(&crane),
+                logs: &[],
+                checks: &[],
+                workers: &t.db.workers(pid),
+                permits,
+                today,
+            })
+        };
+
+        // Ruxsat yo'q — e'tiroz va u to'xtatish darajasida.
+        let none = run(&[]);
+        let found = none
+            .iter()
+            .find(|i| matches!(i, M::OperatorNoPermit { .. }))
+            .expect("ruxsat e'tirozi yo'q");
+        assert!(found.stop());
+
+        // Muddati o'tgan ruxsat ham hisoblanmaydi.
+        let expired = permit(today - chrono::Duration::days(1));
+        assert!(run(std::slice::from_ref(&expired))
+            .iter()
+            .any(|i| matches!(i, M::OperatorNoPermit { .. })));
+
+        // Amaldagi ruxsat — e'tiroz yo'q.
+        let valid = permit(today + chrono::Duration::days(100));
+        assert!(!run(std::slice::from_ref(&valid))
+            .iter()
+            .any(|i| matches!(i, M::OperatorNoPermit { .. })));
+    }
+
+    /// TZ XVI.39: park tavsiyalari foydalanish koeffitsiyentiga qarab
+    /// beriladi va o'z texnikasi bilan ijara texnikasi bir xil emas.
+    #[test]
+    fn park_advice_depends_on_usage_and_ownership() {
+        use crate::checks::{park_review, ParkAdvice as A, PARK_BUSY_PCT, PARK_IDLE_PCT};
+        use crate::domain::MachineLog;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let mut own = t.db.machines(pid).into_iter().next().expect("texnika");
+        own.rented = false;
+        own.hour_rate = 100.0;
+        let mut rented = own.clone();
+        rented.id = own.id + 1000;
+        rented.rented = true;
+
+        let logs = |machine_id: i64, hours_per_day: f64, days: i64| -> Vec<MachineLog> {
+            (0..days)
+                .map(|i| MachineLog {
+                    id: i + 1,
+                    project_id: pid,
+                    machine_id,
+                    date: today - chrono::Duration::days(i),
+                    hours: hours_per_day,
+                    fuel: 0.0,
+                    task_id: None,
+                    number: String::new(),
+                    driver: String::new(),
+                    route: String::new(),
+                    odo_start: 0.0,
+                    odo_end: 0.0,
+                    trips: 0,
+                    cargo: 0.0,
+                    note: String::new(),
+                })
+                .collect()
+        };
+
+        // O'z texnikasi kam ishlatilgan.
+        let idle = logs(own.id, 1.0, 30);
+        let (lines, advice) = park_review(std::slice::from_ref(&own), &idle, today, 30);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].usage_pct < PARK_IDLE_PCT);
+        // Xarajat: 30 kun × 1 soat × 100.
+        assert!((lines[0].period_cost - 3_000.0).abs() < 1e-6);
+        assert!(advice.iter().any(|a| matches!(a, A::OwnIdle { .. })));
+
+        // Ijara texnikasi doim ishda.
+        let busy = logs(rented.id, 8.0, 30);
+        let (_, advice) = park_review(std::slice::from_ref(&rented), &busy, today, 30);
+        assert!(advice.iter().any(|a| matches!(a, A::RentedBusy { .. })));
+
+        // Ijara texnikasi kam ishlatilgan — tavsiya boshqacha.
+        let rented_idle = logs(rented.id, 1.0, 30);
+        let (_, advice) = park_review(std::slice::from_ref(&rented), &rented_idle, today, 30);
+        assert!(advice.iter().any(|a| matches!(a, A::RentedIdle { .. })));
+
+        // O'rtacha foydalanish — tavsiya berilmaydi.
+        let normal = logs(own.id, 5.0, 30);
+        let (lines, advice) = park_review(std::slice::from_ref(&own), &normal, today, 30);
+        assert!(lines[0].usage_pct > PARK_IDLE_PCT && lines[0].usage_pct < PARK_BUSY_PCT);
+        assert!(advice.is_empty());
+    }
+
+    /// Namunada bitta texnika ataylab ko'riksiz qoladi — mexanik kabineti
+    /// bo'sh ko'rinmasin.
+    #[test]
+    fn demo_leaves_one_machine_unchecked() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let checks = t.db.machine_checks(pid);
+        let machines = t.db.machines(pid);
+
+        assert!(!checks.is_empty(), "namunada ko'rik yozuvi yo'q");
+        assert!(
+            checks.len() < machines.len(),
+            "hamma texnika ko'rikdan o'tgan — e'tiroz ko'rinmaydi"
+        );
+        // Nosozlik topilgan, lekin bartaraf etilgan yozuv ham bor.
+        assert!(checks.iter().any(|c| !c.fault.trim().is_empty()));
+        assert!(checks.iter().any(|c| c.complete()));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
