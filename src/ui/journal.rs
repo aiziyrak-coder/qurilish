@@ -33,18 +33,29 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let mut add = false;
     let mut apply = false;
+    // Rol jurnalga qaysi savol bilan kelishi (TZ V.2).
+    let view = app.role().journal_role();
+    let writes = view == crate::roles::JournalRole::Writes && app.can_edit(Screen::Journal);
 
     ui.horizontal(|ui| {
-        if ui.button(t("add_journal_entry")).clicked() {
-            add = true;
+        if writes {
+            if ui.button(t("add_journal_entry")).clicked() {
+                add = true;
+            }
+            if ui
+                .button(RichText::new(t("apply_to_gantt")).strong())
+                .on_hover_text(t("apply_to_gantt_hint"))
+                .clicked()
+            {
+                apply = true;
+            }
+            ui.separator();
         }
-        if ui
-            .button(RichText::new(t("apply_to_gantt")).strong())
-            .on_hover_text(t("apply_to_gantt_hint"))
-            .clicked()
-        {
-            apply = true;
-        }
+        ui.label(
+            RichText::new(format!("{} · {}", app.role().label(), t(view.hint())))
+                .size(11.5)
+                .color(theme::muted()),
+        );
         ui.separator();
         ui.label(
             RichText::new(format!("{} {}", app.journal.len(), t("journal_entries")))
@@ -73,7 +84,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         });
     } else {
         let tab_key = egui::Id::new("jr_tab");
-        let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+        // Birinchi ochilishda rolga mos tab: tekshiruvchi rol uchun kun
+        // tahlili, yozuvchi rol uchun yozuvlar.
+        let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(view.tab());
         ui.horizontal_wrapped(|ui| {
             for (i, label) in [
                 (0u8, t("jr_tab_entries")),

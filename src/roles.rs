@@ -56,6 +56,37 @@ pub enum Role {
     Client,
 }
 
+/// Rolning jurnaldagi vazifasi (TZ V.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JournalRole {
+    /// Kunlik yozuvni kiritadi.
+    Writes,
+    /// Yozilganini tekshiradi: shubhalar va kun tahlili.
+    Checks,
+    /// Faqat ko'radi.
+    Reads,
+}
+
+impl JournalRole {
+    /// Ekran qaysi tabdan ochiladi.
+    pub fn tab(self) -> u8 {
+        match self {
+            JournalRole::Writes => 0,
+            JournalRole::Checks => 1,
+            JournalRole::Reads => 0,
+        }
+    }
+
+    /// Ko'rinish nima uchun shunday ekanini tushuntiruvchi kalit.
+    pub fn hint(self) -> &'static str {
+        match self {
+            JournalRole::Writes => "jr_role_writes",
+            JournalRole::Checks => "jr_role_checks",
+            JournalRole::Reads => "jr_role_reads",
+        }
+    }
+}
+
 impl Role {
     pub const ALL: &'static [Role] = &[
         Role::Admin,
@@ -178,6 +209,21 @@ impl Role {
     }
 
     /// Shu rol uchun ekranni **o'zgartirish** mumkinmi.
+    /// Rolning kunlik jurnaldagi vazifasi (TZ V.2).
+    ///
+    /// Jurnal bitta, ko'rinish esa uch xil: kimdir **yozadi** (prorab,
+    /// brigadir), kimdir **tekshiradi** (texnik nazorat, mualliflik),
+    /// qolganlar **ko'radi**. Bu huquq emas — huquqni `can_edit` beradi;
+    /// bu shunchaki ekran qaysi tabdan ochilishini belgilaydi, chunki
+    /// har rol jurnalga boshqa savol bilan keladi.
+    pub fn journal_role(self) -> JournalRole {
+        match self {
+            Role::Foreman | Role::Brigadier | Role::Admin => JournalRole::Writes,
+            Role::Supervisor | Role::Designer | Role::ProjectManager => JournalRole::Checks,
+            _ => JournalRole::Reads,
+        }
+    }
+
     pub fn can_edit(self, screen: Screen) -> bool {
         use Screen as S;
         match self {
@@ -246,6 +292,29 @@ pub struct User {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// TZ V.2: jurnalga yozadigan rol uni o'zgartira ham oladi —
+    /// ko'rinish huquqdan ajralib ketmasin.
+    #[test]
+    fn journal_writer_can_actually_write() {
+        for r in Role::ALL {
+            if r.journal_role() == JournalRole::Writes {
+                assert!(
+                    r.can_edit(Screen::Journal),
+                    "{:?} yozuvchi ko'rinishda, lekin huquqi yo'q",
+                    r
+                );
+            }
+            // Har rolning tushuntirish kaliti bor.
+            assert!(!r.journal_role().hint().is_empty());
+        }
+        // Ko'ruvchi rollar jurnalni o'zgartirmaydi.
+        assert_eq!(Role::Client.journal_role(), JournalRole::Reads);
+        assert!(!Role::Client.can_edit(Screen::Journal));
+        // Texnik nazorat tekshiradi: ekran kun tahlilidan ochiladi.
+        assert_eq!(Role::Supervisor.journal_role(), JournalRole::Checks);
+        assert_eq!(Role::Supervisor.journal_role().tab(), 1);
+    }
 
     #[test]
     fn codes_are_unique_and_round_trip() {

@@ -22,7 +22,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 31 | 1 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 27 | 0 | 3 | 3 |
-| V. Kunlik ishlar jurnali | 34 | 27 | 1 | 6 | 6 |
+| V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 25 | 5 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **636** | **18** | **46** | **46** |
+| **Jami** | **700** | **637** | **17** | **46** | **46** |
 
-Ya'ni **~91 % to'liq**, **~3 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~91 % to'liq**, **~2 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -159,7 +159,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 ## V. Kunlik ishlar jurnali
 
 - [x] 1. Modul maqsadi
-- [~] 2. Kim ishlaydi — *rollar bor; har rol uchun alohida ko'rinish yo'q*
+- [x] 2. Kim ishlaydi — *rol jurnalga o'z savoli bilan keladi: yozadi / tekshiradi / ko'radi; ekran shunga qarab ochiladi*
 - [x] 3. Kunlik hisobot kartochkasi
 - [x] 4. Ob-havo sharoiti — *qo'lda kiritiladi*
 - [x] 5. Odamlar

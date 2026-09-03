@@ -1750,6 +1750,15 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "search_kind_issue" => ("Nomuvofiqlik", "Несоответствие"),
         "search_kind_element" => ("Element", "Элемент"),
         "search_kind_estimate" => ("Smeta", "Смета"),
+        "jr_role_writes" => (
+            "kunlik yozuvni siz kiritasiz",
+            "ежедневную запись вносите вы",
+        ),
+        "jr_role_checks" => (
+            "yozilganini tekshirasiz: kun tahlili birinchi ochiladi",
+            "вы проверяете записанное: анализ дня открывается первым",
+        ),
+        "jr_role_reads" => ("jurnalni ko'rasiz", "вы просматриваете журнал"),
         "search_kind_ai" => ("Yordamchi", "Помощник"),
         "search_kind_doc" => ("Ijro hujjati", "Исп. документ"),
         "search_kind_journal" => ("Jurnal", "Журнал"),
