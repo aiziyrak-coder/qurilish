@@ -6514,3 +6514,254 @@ pub fn chain_totals(lines: &[ChainLine]) -> ChainTotals {
         gaps: lines.iter().filter(|l| l.has_gap()).count(),
     }
 }
+
+// ================= IV.16, 19-20, 26. Hujjatni imzolashdan oldingi nazorat =================
+
+/// Imzolashdan oldin topilgan bitta kamchilik (TZ IV.20).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DocProblem {
+    /// Ish hali tugallanmagan, hujjat esa imzoga qo'yilgan.
+    WorkUnfinished { progress: f64 },
+    /// Hujjat GPR ishiga bog'lanmagan — nimaga tegishli ekani noma'lum.
+    NoTask,
+    /// Yashirin ishlar dalolatnomasi, lekin texnik nazorat tekshiruvi yo'q.
+    NoInspection,
+    /// Tekshiruv o'tkazilgan, natijasi salbiy va bartaraf etilmagan.
+    InspectionFailed { number: String },
+    /// Sinov bayonnomasi, lekin laboratoriya sinovi yo'q.
+    NoLabTest,
+    /// Laboratoriya sinovi salbiy.
+    LabFailed { number: String },
+    /// Beton pasporti, lekin namuna natijasi yo'q yoki talabdan past.
+    ConcreteWeak { sample: String },
+    /// Hujjat sanasi ishning haqiqiy tugash sanasidan oldin.
+    DatedBeforeWork { days: i64 },
+    /// Shu turdagi imzolangan hujjat allaqachon bor.
+    Duplicate { number: String },
+    /// Raqam yoki mas'ul ko'rsatilmagan.
+    Incomplete,
+}
+
+impl DocProblem {
+    /// Kamchilik imzolashni to'sadimi. To'smaydiganlari — ogohlantirish.
+    pub fn blocking(&self) -> bool {
+        matches!(
+            self,
+            DocProblem::WorkUnfinished { .. }
+                | DocProblem::InspectionFailed { .. }
+                | DocProblem::LabFailed { .. }
+                | DocProblem::ConcreteWeak { .. }
+                | DocProblem::Incomplete
+        )
+    }
+}
+
+/// Bitta hujjat bo'yicha imzolashdan oldingi xulosa.
+#[derive(Debug, Clone)]
+pub struct DocCheck {
+    pub doc_id: i64,
+    pub number: String,
+    pub problems: Vec<DocProblem>,
+}
+
+impl DocCheck {
+    /// Imzolashga tayyormi — to'sadigan kamchilik yo'qmi.
+    pub fn ready(&self) -> bool {
+        !self.problems.iter().any(|p| p.blocking())
+    }
+}
+
+/// Hujjatni imzolashdan oldingi tekshiruv uchun manba.
+pub struct DocCtx<'a> {
+    pub docs: &'a [ExecDoc],
+    pub tasks: &'a [Task],
+    pub inspections: &'a [Inspection],
+    pub lab_tests: &'a [LabTest],
+    pub concrete: &'a [ConcreteTest],
+}
+
+/// TZ IV.20: «hujjat imzolanishidan oldin AI uni tekshiradi».
+///
+/// Tekshiruv yangi hisob-kitob qilmaydi — mavjud modullardagi yozuvlarga
+/// qaraydi: ish bajarilganmi (GPR), tekshiruv o'tganmi (texnik nazorat),
+/// sinov natijasi bormi (laboratoriya). Shuning uchun bu yerdagi xulosa
+/// tegishli modul ekranidagi bilan hech qachon ziddiyatga tushmaydi.
+pub fn doc_readiness(ctx: &DocCtx) -> Vec<DocCheck> {
+    let mut out = Vec::new();
+    for d in ctx.docs {
+        // Imzolangan va rad etilganlar tekshirilmaydi — qaror chiqib bo'lgan.
+        if matches!(d.status, ExecDocStatus::Signed | ExecDocStatus::Rejected) {
+            continue;
+        }
+        let mut problems = Vec::new();
+
+        if d.number.trim().is_empty() || d.responsible.trim().is_empty() {
+            problems.push(DocProblem::Incomplete);
+        }
+
+        match d
+            .task_id
+            .and_then(|id| ctx.tasks.iter().find(|t| t.id == id))
+        {
+            None => problems.push(DocProblem::NoTask),
+            Some(task) => {
+                if task.progress < 99.999 && task.fact_end.is_none() {
+                    problems.push(DocProblem::WorkUnfinished {
+                        progress: task.progress,
+                    });
+                }
+                if let Some(end) = task.fact_end {
+                    if d.date < end {
+                        problems.push(DocProblem::DatedBeforeWork {
+                            days: (end - d.date).num_days(),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Tur bo'yicha maxsus talablar.
+        let task_id = d.task_id;
+        match d.kind {
+            ExecDocKind::Hidden => {
+                let insp: Vec<&Inspection> = ctx
+                    .inspections
+                    .iter()
+                    .filter(|i| i.task_id == task_id && task_id.is_some() && i.done.is_some())
+                    .collect();
+                if insp.is_empty() {
+                    problems.push(DocProblem::NoInspection);
+                } else if let Some(bad) = insp
+                    .iter()
+                    .find(|i| i.result == InspectionResult::Fail && i.fixed_at.is_none())
+                {
+                    problems.push(DocProblem::InspectionFailed {
+                        number: bad.number.clone(),
+                    });
+                }
+            }
+            ExecDocKind::Test => {
+                let tests: Vec<&LabTest> = ctx
+                    .lab_tests
+                    .iter()
+                    .filter(|l| l.task_id == task_id && task_id.is_some())
+                    .collect();
+                if tests.is_empty() {
+                    problems.push(DocProblem::NoLabTest);
+                } else if let Some(bad) = tests.iter().find(|l| l.result == LabTestResult::Fail) {
+                    problems.push(DocProblem::LabFailed {
+                        number: bad.number.clone(),
+                    });
+                }
+            }
+            ExecDocKind::Passport => {
+                let samples: Vec<&ConcreteTest> = ctx
+                    .concrete
+                    .iter()
+                    .filter(|c| c.task_id == task_id && task_id.is_some())
+                    .collect();
+                if let Some(bad) = samples
+                    .iter()
+                    .find(|c| c.actual.map(|a| a < c.required).unwrap_or(true))
+                {
+                    problems.push(DocProblem::ConcreteWeak {
+                        sample: bad.sample.clone(),
+                    });
+                }
+            }
+            _ => {}
+        }
+
+        // Shu ish uchun shu turdagi imzolangan hujjat bormi.
+        if let Some(dup) = ctx.docs.iter().find(|o| {
+            o.id != d.id
+                && o.kind == d.kind
+                && o.task_id == d.task_id
+                && d.task_id.is_some()
+                && o.status == ExecDocStatus::Signed
+                && o.id != d.replaces.unwrap_or(-1)
+        }) {
+            problems.push(DocProblem::Duplicate {
+                number: dup.number.clone(),
+            });
+        }
+
+        if !problems.is_empty() {
+            out.push(DocCheck {
+                doc_id: d.id,
+                number: d.number.clone(),
+                problems,
+            });
+        }
+    }
+    // To'sadiganlar oldinda.
+    out.sort_by_key(|c| (c.ready(), c.doc_id));
+    out
+}
+
+/// Yashirin ish yopilmagani uchun to'silgan ish (TZ IV.16).
+#[derive(Debug, Clone)]
+pub struct HiddenBlock {
+    /// Boshlanmasligi kerak bo'lgan ish.
+    pub task_id: i64,
+    pub task_name: String,
+    /// Yashirin ishi yopilmagan oldingi ish.
+    pub pred_id: i64,
+    pub pred_name: String,
+    /// Dalolatnoma umuman yo'qmi (`false` — bor, lekin imzolanmagan).
+    pub missing: bool,
+    /// Keyingi ish allaqachon boshlanib ketganmi — shunda bu buzilish.
+    pub already_started: bool,
+}
+
+/// TZ IV.16: yashirin ishlar dalolatnomasi imzolanmaguncha keyingi ish
+/// boshlanmasligi kerak — beton quyilsa, armatura endi ko'rinmaydi.
+///
+/// Talab faqat yashirin ish hujjati kerak bo'lgan bo'limlarga qo'llanadi;
+/// talab ro'yxatini [`required_docs`] belgilaydi, shu yerda qayta yozilmaydi.
+pub fn hidden_blocks(
+    tasks: &[Task],
+    links: &[crate::model::Link],
+    docs: &[ExecDoc],
+) -> Vec<HiddenBlock> {
+    let required = required_docs(tasks, docs, false);
+    let needs_hidden = |id: i64| {
+        required
+            .iter()
+            .any(|r| r.task_id == id && r.kind == ExecDocKind::Hidden)
+    };
+
+    let mut out = Vec::new();
+    for l in links {
+        let (Some(pred), Some(succ)) = (
+            tasks.iter().find(|t| t.id == l.pred),
+            tasks.iter().find(|t| t.id == l.succ),
+        ) else {
+            continue;
+        };
+        if !needs_hidden(pred.id) {
+            continue;
+        }
+        let act = docs
+            .iter()
+            .filter(|d| d.task_id == Some(pred.id) && d.kind == ExecDocKind::Hidden)
+            .max_by_key(|d| d.version);
+        let signed = act
+            .map(|d| d.status == ExecDocStatus::Signed)
+            .unwrap_or(false);
+        if signed {
+            continue;
+        }
+        out.push(HiddenBlock {
+            task_id: succ.id,
+            task_name: succ.name.clone(),
+            pred_id: pred.id,
+            pred_name: pred.name.clone(),
+            missing: act.is_none(),
+            already_started: succ.progress > 0.0 || succ.fact_start.is_some(),
+        });
+    }
+    // Buzilgan holatlar oldinda: ish boshlanib ketgan bo'lsa gap qattiqroq.
+    out.sort_by_key(|b| (!b.already_started, b.task_id));
+    out
+}

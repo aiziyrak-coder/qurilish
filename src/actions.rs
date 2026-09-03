@@ -480,6 +480,8 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
                 task_id: Some(task.id),
                 status: ExecDocStatus::Draft,
                 responsible: app.user_name(),
+                version: 1,
+                replaces: None,
                 note: t("ac_from_copilot").to_string(),
             });
             format!("{} {number}", t("ac_done_doc"))

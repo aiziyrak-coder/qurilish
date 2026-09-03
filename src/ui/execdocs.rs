@@ -20,6 +20,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
+    let tab_key = egui::Id::new("ed_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in [(0u8, t("ed_tab_docs")), (1, t("ed_tab_review"))] {
+            if ui.selectable_label(tab == i, label).clicked() {
+                tab = i;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(8.0);
+    if tab == 1 {
+        review_tab(ui, app);
+        return;
+    }
+
     let mut add_for: Option<(Option<i64>, ExecDocKind)> = None;
 
     let mut make_ks2 = false;
@@ -107,11 +123,218 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 task_id,
                 status: ExecDocStatus::Draft,
                 responsible: String::new(),
+                version: 1,
+                replaces: None,
                 note: String::new(),
             });
             app.reload_modules();
         }
     }
+}
+
+// ================================================================ Tekshiruv
+
+/// Imzolashdan oldingi tekshiruv va yashirin ishlar to'sig'i (TZ IV.16, 20).
+///
+/// Bu yerda yangi hisob-kitob yo'q: har bir e'tiroz boshqa modulda yozilgan
+/// yozuvga tayanadi — GPR bajarilishi, texnik nazorat natijasi, laboratoriya
+/// sinovi. Shuning uchun bu ekran boshqa ekran bilan ziddiyatga tushmaydi.
+fn review_tab(ui: &mut egui::Ui, app: &mut App) {
+    let checks = app.doc_readiness();
+    let blocks = app.hidden_blocks();
+    let blocking = checks.iter().filter(|c| !c.ready()).count();
+
+    ui.label(
+        RichText::new(t("ed_review_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ed_review_blocked"),
+                blocking.to_string(),
+                t("ed_review_blocked_hint"),
+                if blocking == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("ed_review_warn"),
+                (checks.len() - blocking).to_string(),
+                t("ed_review_warn_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("ed_review_hidden"),
+                blocks.len().to_string(),
+                t("ed_review_hidden_hint"),
+                if blocks.iter().any(|b| b.already_started) {
+                    theme::danger()
+                } else {
+                    theme::text()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    let mut new_version: Option<i64> = None;
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.label(RichText::new(t("ed_review_docs")).size(13.5).strong());
+            ui.add_space(6.0);
+            if checks.is_empty() {
+                ui.label(
+                    RichText::new(t("ed_review_clean"))
+                        .color(theme::ok())
+                        .size(12.5),
+                );
+            }
+            for c in &checks {
+                let Some(doc) = app.exec_docs.iter().find(|d| d.id == c.doc_id) else {
+                    continue;
+                };
+                let colour = if c.ready() {
+                    theme::warn()
+                } else {
+                    theme::danger()
+                };
+                egui::Frame::new()
+                    .fill(theme::card())
+                    .inner_margin(10.0)
+                    .corner_radius(6.0)
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} {} · {}",
+                                    doc.kind.label(),
+                                    if c.number.is_empty() {
+                                        t("dash").to_string()
+                                    } else {
+                                        c.number.clone()
+                                    },
+                                    doc.status.label()
+                                ))
+                                .size(12.5)
+                                .strong()
+                                .color(colour),
+                            );
+                            if doc.version > 1 {
+                                ui.label(
+                                    RichText::new(format!("v{}", doc.version))
+                                        .size(11.0)
+                                        .color(theme::muted()),
+                                );
+                            }
+                            if ui.small_button(t("ed_new_version")).clicked() {
+                                new_version = Some(doc.id);
+                            }
+                        });
+                        for p in &c.problems {
+                            ui.label(
+                                RichText::new(format!("· {}", problem_text(p)))
+                                    .size(12.0)
+                                    .color(if p.blocking() {
+                                        theme::danger()
+                                    } else {
+                                        theme::muted()
+                                    }),
+                            );
+                        }
+                    });
+                ui.add_space(6.0);
+            }
+
+            ui.add_space(14.0);
+            ui.label(RichText::new(t("ed_review_hidden")).size(13.5).strong());
+            ui.add_space(6.0);
+            if blocks.is_empty() {
+                ui.label(
+                    RichText::new(t("ed_hidden_clean"))
+                        .color(theme::ok())
+                        .size(12.5),
+                );
+            }
+            for b in &blocks {
+                let text = if b.already_started {
+                    t("ed_hidden_violated")
+                } else {
+                    t("ed_hidden_waiting")
+                };
+                let pred_wbs = app
+                    .task(b.pred_id)
+                    .map(|t| t.wbs.clone())
+                    .unwrap_or_default();
+                ui.label(
+                    RichText::new(format!(
+                        "{} — {} ← {} {} ({})",
+                        text,
+                        super::issues::truncate(&b.task_name, 34),
+                        pred_wbs,
+                        super::issues::truncate(&b.pred_name, 30),
+                        if b.missing {
+                            t("ed_hidden_missing")
+                        } else {
+                            t("ed_hidden_unsigned")
+                        }
+                    ))
+                    .size(12.0)
+                    .color(if b.already_started {
+                        theme::danger()
+                    } else {
+                        theme::warn()
+                    }),
+                );
+            }
+        });
+
+    if let Some(id) = new_version {
+        make_new_version(app, id);
+    }
+}
+
+/// Kamchilikni odam o'qiydigan gapga aylantiradi.
+fn problem_text(p: &crate::checks::DocProblem) -> String {
+    use crate::checks::DocProblem as P;
+    match p {
+        P::WorkUnfinished { progress } => format!("{} ({:.0}%)", t("dp_unfinished"), progress),
+        P::NoTask => t("dp_no_task").to_string(),
+        P::NoInspection => t("dp_no_inspection").to_string(),
+        P::InspectionFailed { number } => format!("{} — {}", t("dp_inspection_failed"), number),
+        P::NoLabTest => t("dp_no_lab").to_string(),
+        P::LabFailed { number } => format!("{} — {}", t("dp_lab_failed"), number),
+        P::ConcreteWeak { sample } => format!("{} — {}", t("dp_concrete_weak"), sample),
+        P::DatedBeforeWork { days } => format!("{} ({})", t("dp_dated_before"), days),
+        P::Duplicate { number } => format!("{} — {}", t("dp_duplicate"), number),
+        P::Incomplete => t("dp_incomplete").to_string(),
+    }
+}
+
+/// Hujjatning yangi versiyasini yaratadi (TZ IV.19).
+///
+/// Eskisi o'chirilmaydi — u arxivda qoladi, chunki nima sababdan qayta
+/// ishlanganini keyin ko'rsatish kerak bo'ladi.
+fn make_new_version(app: &mut App, id: i64) {
+    let Some(old) = app.exec_docs.iter().find(|d| d.id == id).cloned() else {
+        return;
+    };
+    let mut fresh = old.clone();
+    fresh.id = 0;
+    fresh.version = old.version + 1;
+    fresh.replaces = Some(old.id);
+    fresh.status = ExecDocStatus::Draft;
+    fresh.date = app.today;
+    app.db.insert_exec_doc(&fresh);
+    app.reload_modules();
 }
 
 /// KS-2 yoki KS-3 ni yig'ib faylga yozadi (TZ IV.5–7).

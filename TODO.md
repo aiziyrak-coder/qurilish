@@ -21,7 +21,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 9 | 7 | 6 | 2 |
 | III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
-| IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
+| IV. Ijro hujjatlari | 30 | 15 | 9 | 6 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
 | VI. Prorab ilovasi | 37 | 16 | 10 | 11 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **413** | **162** | **125** | **53** |
+| **Jami** | **700** | **418** | **161** | **121** | **53** |
 
-Ya'ni **~59 % to'liq**, **~23 % qisman**, **~18 % hali yo'q**.
+Ya'ni **~60 % to'liq**, **~23 % qisman**, **~17 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -134,15 +134,15 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 9. Geolokatsiya va vaqt
 - [~] 10. Material sertifikatlari — *katalogda sertifikat va muddati*
 - [ ] 🔒 11. AI sertifikat tekshiruvi (OCR)
-- [ ] 12. Beton pasporti
-- [ ] 13. Laboratoriya sinovlari
+- [x] 12. Beton pasporti
+- [x] 13. Laboratoriya sinovlari
 - [~] 14. Jurnallar — *umumiy ishlar jurnali bor; maxsus jurnallar yo'q*
 - [x] 15. Prorabning kunlik hisoboti
-- [~] 16. Yashirin ishlar nazorati — *tur sifatida bor; bloklash yo'q*
+- [x] 16. Yashirin ishlar nazorati
 - [~] 17. Kelishuv workflow — *holatlar bor; marshrut yo'q*
 - [ ] 🔒 18. Elektron imzo
-- [ ] 19. Versiyalilik
-- [ ] 20. Imzolashdan oldin AI tekshiruvi
+- [x] 19. Versiyalilik
+- [x] 20. Imzolashdan oldin AI tekshiruvi
 - [~] 21. Loyiha bilan solishtirish
 - [~] 22. Haqiqiy qurilish bilan solishtirish — *AN-D1 qoidasi*
 - [x] 23. Texnik nazorat kabineti

@@ -1764,6 +1764,22 @@ impl App {
         checks::tool_status(&self.tools, &self.tool_issues, self.today)
     }
 
+    /// Hujjatlarni imzolashdan oldingi tekshiruv (TZ IV.20).
+    pub fn doc_readiness(&self) -> Vec<checks::DocCheck> {
+        checks::doc_readiness(&checks::DocCtx {
+            docs: &self.exec_docs,
+            tasks: &self.tasks,
+            inspections: &self.inspections,
+            lab_tests: &self.lab_tests,
+            concrete: &self.concrete_tests,
+        })
+    }
+
+    /// Yashirin ish yopilmagani uchun to'silgan ishlar (TZ IV.16).
+    pub fn hidden_blocks(&self) -> Vec<checks::HiddenBlock> {
+        checks::hidden_blocks(&self.tasks, &self.links, &self.exec_docs)
+    }
+
     /// Smetadan faktgacha bo'lgan zanjir (TZ III.33).
     pub fn estimate_chain(&self) -> Vec<checks::ChainLine> {
         checks::estimate_chain(

@@ -337,7 +337,19 @@ pub struct ExecDoc {
     pub task_id: Option<i64>,
     pub status: ExecDocStatus,
     pub responsible: String,
+    /// Versiya raqami (TZ IV.19). Rad etilgan hujjat qayta ishlanganda
+    /// yangi versiya paydo bo'ladi, eskisi arxivda qoladi.
+    pub version: i64,
+    /// Qaysi hujjatning o'rniga kelgani.
+    pub replaces: Option<i64>,
     pub note: String,
+}
+
+impl ExecDoc {
+    /// Bu hujjat o'rniga yangi versiya chiqarilganmi.
+    pub fn superseded(&self, all: &[ExecDoc]) -> bool {
+        all.iter().any(|d| d.replaces == Some(self.id))
+    }
 }
 
 // ---------- V. Kundalik ish jurnali ----------

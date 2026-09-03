@@ -159,6 +159,8 @@ impl Db {
                 task_id INTEGER,
                 status TEXT NOT NULL DEFAULT 'draft',
                 responsible TEXT NOT NULL DEFAULT '',
+                version INTEGER NOT NULL DEFAULT 1,
+                replaces INTEGER,
                 note TEXT NOT NULL DEFAULT ''
             );
 
@@ -846,6 +848,8 @@ impl Db {
             "ALTER TABLE machine ADD COLUMN rented INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN price REAL NOT NULL DEFAULT 0",
             "ALTER TABLE safety_event ADD COLUMN root_cause TEXT NOT NULL DEFAULT 'unknown'",
+            "ALTER TABLE exec_doc ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE exec_doc ADD COLUMN replaces INTEGER",
             "ALTER TABLE machine_log ADD COLUMN number TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine_log ADD COLUMN driver TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine_log ADD COLUMN route TEXT NOT NULL DEFAULT ''",
@@ -2599,7 +2603,8 @@ impl Db {
 
     pub fn exec_docs(&self, pid: i64) -> Vec<ExecDoc> {
         self.list(
-            "SELECT id,project_id,kind,number,name,date,task_id,status,responsible,note
+            "SELECT id,project_id,kind,number,name,date,task_id,status,responsible,
+                    version,replaces,note
              FROM exec_doc WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -2613,7 +2618,9 @@ impl Db {
                     task_id: r.get(6)?,
                     status: ExecDocStatus::parse(&r.get::<_, String>(7)?),
                     responsible: r.get(8)?,
-                    note: r.get(9)?,
+                    version: r.get(9)?,
+                    replaces: r.get(10)?,
+                    note: r.get(11)?,
                 })
             },
         )
@@ -2621,11 +2628,21 @@ impl Db {
 
     pub fn insert_exec_doc(&self, d: &ExecDoc) -> i64 {
         self.ins(
-            "INSERT INTO exec_doc (project_id,kind,number,name,date,task_id,status,responsible,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            "INSERT INTO exec_doc (project_id,kind,number,name,date,task_id,status,responsible,
+                                   version,replaces,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
-                d.project_id, d.kind.code(), d.number, d.name, d.date.to_string(), d.task_id,
-                d.status.code(), d.responsible, d.note
+                d.project_id,
+                d.kind.code(),
+                d.number,
+                d.name,
+                d.date.to_string(),
+                d.task_id,
+                d.status.code(),
+                d.responsible,
+                d.version,
+                d.replaces,
+                d.note
             ],
         )
     }
@@ -2633,7 +2650,7 @@ impl Db {
     pub fn update_exec_doc(&self, d: &ExecDoc) -> bool {
         self.upd(
             "UPDATE exec_doc SET kind=?2,number=?3,name=?4,date=?5,task_id=?6,status=?7,
-                    responsible=?8,note=?9 WHERE id=?1",
+                    responsible=?8,version=?9,replaces=?10,note=?11 WHERE id=?1",
             params![
                 d.id,
                 d.kind.code(),
@@ -2643,6 +2660,8 @@ impl Db {
                 d.task_id,
                 d.status.code(),
                 d.responsible,
+                d.version,
+                d.replaces,
                 d.note
             ],
         )
@@ -6282,6 +6301,8 @@ impl Db {
                     "Sobirov R.X."
                 }
                 .into(),
+                version: 1,
+                replaces: None,
                 note: String::new(),
             });
         }
@@ -10104,6 +10125,8 @@ impl Db {
                 } else {
                     "Rahimov Sh.A.".to_string()
                 },
+                version: 1,
+                replaces: None,
                 note: String::new(),
             });
         };
@@ -10129,6 +10152,58 @@ impl Db {
             by_wbs("3").map(|t| t.id),
             ExecDocStatus::OnReview,
         );
+
+        // Rad etilgan hujjat va uning ikkinchi versiyasi (TZ IV.19).
+        // Eskisi arxivda qoladi — nima sababdan qayta ishlangani ko'rinishi
+        // kerak, shuning uchun o'chirilmaydi.
+        let rejected = self.insert_exec_doc(&ExecDoc {
+            id: 0,
+            project_id: pid,
+            kind: ExecDocKind::Scheme,
+            number: "IS-007".into(),
+            name: if ru {
+                "Исполнительная схема плиты 3 этажа".into()
+            } else {
+                "3-qavat plitasi ijro sxemasi".to_string()
+            },
+            date: today - chrono::Duration::days(24),
+            task_id: by_wbs("3").map(|t| t.id),
+            status: ExecDocStatus::Rejected,
+            responsible: if ru {
+                "Рахимов Ш.А.".into()
+            } else {
+                "Rahimov Sh.A.".to_string()
+            },
+            version: 1,
+            replaces: None,
+            note: if ru {
+                "Отметки не совпадают с проектом".into()
+            } else {
+                "Belgilar loyihaga mos kelmadi".to_string()
+            },
+        });
+        self.insert_exec_doc(&ExecDoc {
+            id: 0,
+            project_id: pid,
+            kind: ExecDocKind::Scheme,
+            number: "IS-007/2".into(),
+            name: if ru {
+                "Исполнительная схема плиты 3 этажа".into()
+            } else {
+                "3-qavat plitasi ijro sxemasi".to_string()
+            },
+            date: today - chrono::Duration::days(12),
+            task_id: by_wbs("3").map(|t| t.id),
+            status: ExecDocStatus::OnReview,
+            responsible: if ru {
+                "Рахимов Ш.А.".into()
+            } else {
+                "Rahimov Sh.A.".to_string()
+            },
+            version: 2,
+            replaces: Some(rejected),
+            note: String::new(),
+        });
     }
 
     /// Smeta namunasi. Pozitsiyalar nomi GPR ishlari nomiga mos qilib olinadi —

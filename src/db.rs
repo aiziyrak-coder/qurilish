@@ -6339,6 +6339,139 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(!line(90.0, 90.0, 80.0, 80.0).has_gap());
     }
 
+    /// TZ IV.19: rad etilgan hujjat o'chirilmaydi — yangi versiya paydo
+    /// bo'ladi, eskisi arxivda qoladi va «o'rniga chiqilgan» deb belgilanadi.
+    #[test]
+    fn document_versions_are_kept() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let docs = t.db.exec_docs(pid);
+
+        let v2 = docs
+            .iter()
+            .find(|d| d.version == 2)
+            .expect("namunada ikkinchi versiya yo'q");
+        let old_id = v2.replaces.expect("yangi versiya eskisiga bog'lanmagan");
+        let v1 = docs
+            .iter()
+            .find(|d| d.id == old_id)
+            .expect("eski versiya o'chib ketgan");
+
+        assert_eq!(v1.version, 1);
+        assert_eq!(v1.status, crate::domain::ExecDocStatus::Rejected);
+        assert!(v1.superseded(&docs), "eskisi o'rniga chiqilgan emas");
+        assert!(!v2.superseded(&docs), "oxirgi versiya o'rniga chiqilgan");
+        // Ikkalasi ham bitta ishga tegishli.
+        assert_eq!(v1.task_id, v2.task_id);
+    }
+
+    /// TZ IV.20: imzolashdan oldingi tekshiruv boshqa modullardagi yozuvga
+    /// tayanadi — o'zi yangi hisob-kitob qilmaydi.
+    #[test]
+    fn doc_readiness_reads_other_modules() {
+        use crate::checks::DocProblem as P;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let checks = app.doc_readiness();
+        assert!(!checks.is_empty(), "namunada e'tiroz yo'q");
+
+        for c in &checks {
+            let doc = app
+                .exec_docs
+                .iter()
+                .find(|d| d.id == c.doc_id)
+                .expect("e'tiroz mavjud bo'lmagan hujjatga");
+            // Qaror chiqib bo'lgan hujjat tekshirilmaydi.
+            assert!(!matches!(
+                doc.status,
+                crate::domain::ExecDocStatus::Signed | crate::domain::ExecDocStatus::Rejected
+            ));
+            assert!(!c.problems.is_empty());
+
+            for p in &c.problems {
+                match p {
+                    // Ish tugallanmagani — GPR dagi bajarilishdan olinadi.
+                    P::WorkUnfinished { progress } => {
+                        let task = app.task(doc.task_id.unwrap()).unwrap();
+                        assert!((task.progress - progress).abs() < 0.001);
+                        assert!(task.fact_end.is_none());
+                    }
+                    // Salbiy tekshiruv — texnik nazorat yozuvidan.
+                    P::InspectionFailed { number } => {
+                        assert!(app.inspections.iter().any(|i| &i.number == number
+                            && i.result == crate::domain::InspectionResult::Fail));
+                    }
+                    // Salbiy sinov — laboratoriya yozuvidan.
+                    P::LabFailed { number } => {
+                        assert!(app.lab_tests.iter().any(|l| &l.number == number
+                            && l.result == crate::domain::LabTestResult::Fail));
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // To'sadiganlar oldinda turadi.
+        let mut seen_ready = false;
+        for c in &checks {
+            if c.ready() {
+                seen_ready = true;
+            } else {
+                assert!(!seen_ready, "to'sadigan e'tiroz tayyorlaridan keyin qolgan");
+            }
+        }
+    }
+
+    /// Yashirin ish dalolatnomasi imzolangach — keyingi ish to'siqdan chiqadi.
+    #[test]
+    fn signed_hidden_act_lifts_the_block() {
+        use crate::domain::ExecDocStatus;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let before = app.hidden_blocks();
+        assert!(!before.is_empty(), "namunada yashirin ish to'sig'i yo'q");
+        let block = before[0].clone();
+
+        // O'sha ishning dalolatnomasini imzolaymiz.
+        let mut doc = app
+            .exec_docs
+            .iter()
+            .filter(|d| {
+                d.task_id == Some(block.pred_id) && d.kind == crate::domain::ExecDocKind::Hidden
+            })
+            .max_by_key(|d| d.version)
+            .cloned()
+            .unwrap_or_else(|| {
+                let mut fresh = app.exec_docs[0].clone();
+                fresh.id = 0;
+                fresh.kind = crate::domain::ExecDocKind::Hidden;
+                fresh.task_id = Some(block.pred_id);
+                fresh.version = 1;
+                fresh.replaces = None;
+                let id = app.db.insert_exec_doc(&fresh);
+                fresh.id = id;
+                fresh
+            });
+        doc.status = ExecDocStatus::Signed;
+        assert!(app.db.update_exec_doc(&doc));
+        app.reload_modules();
+
+        let after = app.hidden_blocks();
+        assert!(
+            !after.iter().any(|b| b.pred_id == block.pred_id),
+            "imzolangandan keyin ham to'siq qolyapti"
+        );
+        assert!(after.len() < before.len());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
