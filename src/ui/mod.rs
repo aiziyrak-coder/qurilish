@@ -18,6 +18,7 @@ mod issues;
 mod journal;
 mod machines;
 pub mod materials;
+mod notes;
 mod notices;
 mod passport;
 mod portfolio;

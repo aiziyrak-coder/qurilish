@@ -8,6 +8,7 @@ use super::materials::{material_label, trim_num};
 use super::warehouse::cell_l;
 use super::*;
 use crate::checks::SupplyLine;
+use crate::domain::NoteTarget;
 use crate::domain::{Priority, Request, RequestKind, RequestStatus};
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
@@ -243,6 +244,8 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
     let mut edited: Option<Request> = None;
     let mut removed: Option<i64> = None;
     let mut open_route: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
+
     let today = app.today;
     // Tor ekranda ish ustuni yashiriladi: u bir marta to'ldiriladi,
     // kunlik ish esa holat va miqdor ustunlarida.
@@ -476,6 +479,10 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                                 });
                         }
 
+                        // Arizaga foto va hujjat biriktirish (TZ IX.28).
+                        if super::notes::badge(ui, app, NoteTarget::Request, q.id) {
+                            open_notes = Some(q.id);
+                        }
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -505,6 +512,7 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
         // Qayta bosilsa panel yopiladi.
         app.request_open = (app.request_open != Some(id)).then_some(id);
     }
+    super::notes::below_table(ui, app, NoteTarget::Request, open_notes);
 }
 
 // ================================================================ Kelishuv

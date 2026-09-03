@@ -7439,6 +7439,165 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(again.llm.model, crate::llm::DEFAULT_MODEL);
     }
 
+    /// Umumiy izoh mexanizmi: bitta jadval har xil turdagi yozuvga xizmat
+    /// qiladi va yozuvlar bir-biriga aralashib ketmaydi.
+    #[test]
+    fn notes_stay_with_their_record() {
+        use crate::domain::{Note, NoteTarget};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+
+        let add = |target: NoteTarget, target_id: i64, text: &str| {
+            t.db.insert_note(&Note {
+                id: 0,
+                project_id: pid,
+                target,
+                target_id,
+                author: "Test".into(),
+                at: "2026-06-20 10:00".into(),
+                text: text.into(),
+                parent: None,
+                resolved: false,
+            })
+        };
+
+        add(NoteTarget::Quality, 7, "sifat izohi");
+        add(NoteTarget::Purchase, 7, "xarid izohi");
+        let root = add(NoteTarget::Quality, 7, "ikkinchi sifat izohi");
+
+        let all = t.db.notes(pid);
+        let quality: Vec<_> = all
+            .iter()
+            .filter(|n| n.target == NoteTarget::Quality && n.target_id == 7)
+            .collect();
+        // Bir xil raqam, boshqa tur — aralashmaydi.
+        assert_eq!(quality.len(), 2);
+        assert!(all
+            .iter()
+            .any(|n| n.target == NoteTarget::Purchase && n.target_id == 7));
+
+        // Javob ildizga bog'lanadi.
+        t.db.insert_note(&Note {
+            id: 0,
+            project_id: pid,
+            target: NoteTarget::Quality,
+            target_id: 7,
+            author: "Test".into(),
+            at: "2026-06-20 11:00".into(),
+            text: "javob".into(),
+            parent: Some(root),
+            resolved: false,
+        });
+        let all = t.db.notes(pid);
+        let parent = all.iter().find(|n| n.id == root).expect("ildiz izoh");
+        assert!(parent.has_replies(&all));
+
+        // Izoh matni o'zgarmaydi — faqat holati.
+        assert!(t.db.set_note_resolved(root, true));
+        let all = t.db.notes(pid);
+        let parent = all.iter().find(|n| n.id == root).unwrap();
+        assert!(parent.resolved);
+        assert_eq!(parent.text, "ikkinchi sifat izohi");
+    }
+
+    /// «Oldin» va «keyin» fotolari biriktirma sifatida saqlanadi va fayl
+    /// joyida yo'qligi ochiq ko'rinadi (TZ VII.20, XIV.21).
+    #[test]
+    fn attachments_mark_before_and_after() {
+        use crate::domain::{Attachment, NoteTarget, PhotoStage};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+
+        let add = |stage: PhotoStage, path: &str| {
+            t.db.insert_attachment(&Attachment {
+                id: 0,
+                project_id: pid,
+                target: NoteTarget::Quality,
+                target_id: 3,
+                path: path.into(),
+                stage,
+                caption: String::new(),
+                author: "Test".into(),
+                at: "2026-06-20 10:00".into(),
+            })
+        };
+
+        add(PhotoStage::Before, "C:/foto/oldin.jpg");
+        let after = add(PhotoStage::After, "C:/foto/keyin.png");
+        add(PhotoStage::Plain, "C:/hujjat/akt.pdf");
+
+        let rows = t.db.attachments(pid);
+        assert_eq!(rows.len(), 3);
+
+        let before = rows
+            .iter()
+            .find(|a| a.stage == PhotoStage::Before)
+            .expect("«oldin» fotosi");
+        assert_eq!(before.file_name(), "oldin.jpg");
+        assert!(before.is_photo());
+        // Mavjud bo'lmagan fayl ochiq ko'rsatiladi — soxta ishonch bermaymiz.
+        assert!(!before.exists());
+
+        let doc = rows
+            .iter()
+            .find(|a| a.path.ends_with(".pdf"))
+            .expect("hujjat");
+        assert!(!doc.is_photo());
+
+        // Bosqichni o'zgartirish mumkin.
+        let mut a = rows.into_iter().find(|a| a.id == after).unwrap();
+        a.stage = PhotoStage::Plain;
+        a.caption = "umumiy ko'rinish".into();
+        assert!(t.db.update_attachment(&a));
+        let back =
+            t.db.attachments(pid)
+                .into_iter()
+                .find(|x| x.id == after)
+                .unwrap();
+        assert_eq!(back.stage, PhotoStage::Plain);
+        assert_eq!(back.caption, "umumiy ko'rinish");
+
+        // Ro'yxatdan olib tashlash ishlaydi.
+        assert!(t.db.delete_attachment(after));
+        assert_eq!(t.db.attachments(pid).len(), 2);
+    }
+
+    /// Namunada muhokama bor: ochiq savol ham, hal qilingani ham.
+    #[test]
+    fn demo_has_a_discussion() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let notes = t.db.notes(pid);
+
+        assert!(notes.len() >= 4, "namunada izoh yetarli emas");
+        assert!(notes.iter().any(|n| !n.resolved), "ochiq izoh yo'q");
+        assert!(notes.iter().any(|n| n.resolved), "hal qilingan izoh yo'q");
+        assert!(notes.iter().any(|n| n.parent.is_some()), "javob yo'q");
+
+        // Har izoh mavjud yozuvga tegishli.
+        for n in &notes {
+            let exists = match n.target {
+                crate::domain::NoteTarget::Quality => {
+                    t.db.quality_checks(pid).iter().any(|q| q.id == n.target_id)
+                }
+                crate::domain::NoteTarget::Inspection => {
+                    t.db.inspections(pid).iter().any(|i| i.id == n.target_id)
+                }
+                crate::domain::NoteTarget::Purchase => {
+                    t.db.purchases(pid).iter().any(|p| p.id == n.target_id)
+                }
+                _ => true,
+            };
+            assert!(exists, "izoh mavjud bo'lmagan yozuvga: {:?}", n.target);
+        }
+
+        // Obyekt o'chirilsa izohlar ham ketadi.
+        t.db.delete_project(pid).expect("obyekt o'chirilmadi");
+        assert!(t.db.notes(pid).is_empty());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

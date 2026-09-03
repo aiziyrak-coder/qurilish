@@ -738,6 +738,32 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_repair_pid ON machine_repair(project_id);
 
+            CREATE TABLE IF NOT EXISTS note (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                target TEXT NOT NULL DEFAULT 'other',
+                target_id INTEGER NOT NULL DEFAULT 0,
+                author TEXT NOT NULL DEFAULT '',
+                at TEXT NOT NULL DEFAULT '',
+                text TEXT NOT NULL DEFAULT '',
+                parent INTEGER,
+                resolved INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_note_target ON note(project_id,target,target_id);
+
+            CREATE TABLE IF NOT EXISTS attachment (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                target TEXT NOT NULL DEFAULT 'other',
+                target_id INTEGER NOT NULL DEFAULT 0,
+                path TEXT NOT NULL DEFAULT '',
+                stage TEXT NOT NULL DEFAULT 'plain',
+                caption TEXT NOT NULL DEFAULT '',
+                author TEXT NOT NULL DEFAULT '',
+                at TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_att_target ON attachment(project_id,target,target_id);
+
             CREATE TABLE IF NOT EXISTS safety_zone (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -2597,6 +2623,108 @@ impl Db {
                 i.note
             ],
         )
+    }
+
+    // ---------- Umumiy: izoh va biriktirma ----------
+
+    /// Obyektning barcha izohlari. Filtrlash ekranda qilinadi — izohlar
+    /// kam bo'ladi va bir marta o'qilgani tezroq.
+    pub fn notes(&self, pid: i64) -> Vec<Note> {
+        self.list(
+            "SELECT id,project_id,target,target_id,author,at,text,parent,resolved
+             FROM note WHERE project_id=?1 ORDER BY at,id",
+            pid,
+            |r| {
+                Ok(Note {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    target: NoteTarget::parse(&r.get::<_, String>(2)?),
+                    target_id: r.get(3)?,
+                    author: r.get(4)?,
+                    at: r.get(5)?,
+                    text: r.get(6)?,
+                    parent: r.get(7)?,
+                    resolved: r.get::<_, i64>(8)? != 0,
+                })
+            },
+        )
+    }
+
+    pub fn insert_note(&self, n: &Note) -> i64 {
+        self.ins(
+            "INSERT INTO note (project_id,target,target_id,author,at,text,parent,resolved)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![
+                n.project_id,
+                n.target.code(),
+                n.target_id,
+                n.author,
+                n.at,
+                n.text,
+                n.parent,
+                n.resolved as i64
+            ],
+        )
+    }
+
+    /// Izohning **faqat holati** o'zgaradi: matn tahrirlanmaydi, chunki
+    /// muhokama tarixi o'zgarsa uning ma'nosi qolmaydi.
+    pub fn set_note_resolved(&self, id: i64, resolved: bool) -> bool {
+        self.upd(
+            "UPDATE note SET resolved=?2 WHERE id=?1",
+            params![id, resolved as i64],
+        )
+    }
+
+    pub fn attachments(&self, pid: i64) -> Vec<Attachment> {
+        self.list(
+            "SELECT id,project_id,target,target_id,path,stage,caption,author,at
+             FROM attachment WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(Attachment {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    target: NoteTarget::parse(&r.get::<_, String>(2)?),
+                    target_id: r.get(3)?,
+                    path: r.get(4)?,
+                    stage: PhotoStage::parse(&r.get::<_, String>(5)?),
+                    caption: r.get(6)?,
+                    author: r.get(7)?,
+                    at: r.get(8)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_attachment(&self, a: &Attachment) -> i64 {
+        self.ins(
+            "INSERT INTO attachment (project_id,target,target_id,path,stage,caption,author,at)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8)",
+            params![
+                a.project_id,
+                a.target.code(),
+                a.target_id,
+                a.path,
+                a.stage.code(),
+                a.caption,
+                a.author,
+                a.at
+            ],
+        )
+    }
+
+    pub fn update_attachment(&self, a: &Attachment) -> bool {
+        self.upd(
+            "UPDATE attachment SET stage=?2,caption=?3 WHERE id=?1",
+            params![a.id, a.stage.code(), a.caption],
+        )
+    }
+
+    /// Biriktirmani ro'yxatdan olib tashlaydi. **Fayl o'chirilmaydi** —
+    /// dastur o'zi joylashtirmagan faylni o'chirishi noto'g'ri bo'lardi.
+    pub fn delete_attachment(&self, id: i64) -> bool {
+        self.del("attachment", id)
     }
 
     // ---------- IV. Ijro hujjatlari ----------
@@ -4967,6 +5095,7 @@ impl Db {
         self.seed_demo_lab(pid, ru);
         self.seed_demo_machine_plan(pid, ru);
         self.seed_demo_zones(pid, ru);
+        self.seed_demo_notes(pid, ru);
         self.seed_demo_estimate_alt(pid, ru);
     }
 
@@ -7661,6 +7790,141 @@ impl Db {
     }
 
     /// Xavfli zonalar va xavfsizlik inventari namunasi (TZ XV.15, 22-24).
+    /// Namunaviy izohlar (umumiy «izoh va muhokama» mexanizmi).
+    ///
+    /// Fayl biriktirmalari namunaga qo'shilmaydi: yo'llar bu kompyuterda
+    /// mavjud bo'lmaydi va ekranda «fayl topilmadi» bo'lib qizarardi —
+    /// mijozga buzuq narsa ko'rsatishdan ko'ra bo'sh ro'yxat halolroq.
+    pub fn seed_demo_notes(&self, pid: i64, ru: bool) {
+        if !self.notes(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let at = |back: i64| format!("{} 10:20", today - chrono::Duration::days(back));
+
+        let add = |target: NoteTarget,
+                   target_id: i64,
+                   author: &str,
+                   back: i64,
+                   text: &str,
+                   parent: Option<i64>,
+                   resolved: bool|
+         -> i64 {
+            self.insert_note(&Note {
+                id: 0,
+                project_id: pid,
+                target,
+                target_id,
+                author: author.into(),
+                at: at(back),
+                text: text.into(),
+                parent,
+                resolved,
+            })
+        };
+
+        // Sifat tekshiruvi bo'yicha muhokama: savol va unga javob.
+        if let Some(q) = self
+            .quality_checks(pid)
+            .into_iter()
+            .find(|q| !q.defect.trim().is_empty())
+        {
+            let root = add(
+                NoteTarget::Quality,
+                q.id,
+                if ru {
+                    "Собиров Р.Х."
+                } else {
+                    "Sobirov R.X."
+                },
+                6,
+                if ru {
+                    "Дефект устранён? Нужно фото после исправления."
+                } else {
+                    "Nuqson bartaraf etildimi? Tuzatishdan keyingi foto kerak."
+                },
+                None,
+                false,
+            );
+            add(
+                NoteTarget::Quality,
+                q.id,
+                if ru {
+                    "Рахимов Ш.А."
+                } else {
+                    "Rahimov Sh.A."
+                },
+                4,
+                if ru {
+                    "Работы переделаны, фото приложу завтра."
+                } else {
+                    "Ish qayta bajarildi, fotoni ertaga biriktiraman."
+                },
+                Some(root),
+                false,
+            );
+        }
+
+        // Texnik nazorat izohi — hal qilingan holat.
+        if let Some(i) = self.inspections(pid).into_iter().next() {
+            let root = add(
+                NoteTarget::Inspection,
+                i.id,
+                if ru {
+                    "Юсупов Б.Р."
+                } else {
+                    "Yusupov B.R."
+                },
+                9,
+                if ru {
+                    "Отметки по осям 3-4 не совпадают с проектом."
+                } else {
+                    "3-4 o'qlar bo'yicha belgilar loyihaga mos kelmadi."
+                },
+                None,
+                true,
+            );
+            add(
+                NoteTarget::Inspection,
+                i.id,
+                if ru {
+                    "Проектный институт"
+                } else {
+                    "Loyiha instituti"
+                },
+                7,
+                if ru {
+                    "Выпущено изменение, отметки уточнены."
+                } else {
+                    "O'zgartirish chiqarildi, belgilar aniqlashtirildi."
+                },
+                Some(root),
+                true,
+            );
+        }
+
+        // Xarid bo'yicha ochiq savol.
+        if let Some(pu) = self.purchases(pid).into_iter().next() {
+            add(
+                NoteTarget::Purchase,
+                pu.id,
+                if ru {
+                    "Каримов А.А."
+                } else {
+                    "Karimov A.A."
+                },
+                3,
+                if ru {
+                    "При приёмке приложите фото накладной и партии."
+                } else {
+                    "Qabulda hujjat va partiya fotosini biriktiring."
+                },
+                None,
+                false,
+            );
+        }
+    }
+
     pub fn seed_demo_zones(&self, pid: i64, ru: bool) {
         if !self.safety_zones(pid).is_empty() {
             return;

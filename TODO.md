@@ -21,25 +21,25 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 11 | 7 | 4 | 2 |
 | III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
-| IV. Ijro hujjatlari | 30 | 15 | 9 | 6 | 3 |
-| V. Kunlik ishlar jurnali | 34 | 21 | 5 | 8 | 6 |
-| VI. Prorab ilovasi | 37 | 20 | 10 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 24 | 7 | 7 | 3 |
+| IV. Ijro hujjatlari | 30 | 16 | 8 | 6 | 3 |
+| V. Kunlik ishlar jurnali | 34 | 22 | 4 | 8 | 6 |
+| VI. Prorab ilovasi | 37 | 21 | 9 | 7 | 7 |
+| VII. Texnik nazorat kabineti | 38 | 26 | 6 | 6 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
-| IX. Arizalar | 42 | 31 | 6 | 5 | 1 |
-| X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
+| IX. Arizalar | 42 | 32 | 6 | 4 | 1 |
+| X. Xaridlar | 48 | 25 | 13 | 10 | 2 |
 | XI. Ombor | 48 | 32 | 8 | 8 | 1 |
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
-| XIV. Sifat | 41 | 28 | 9 | 4 | 2 |
+| XIV. Sifat | 41 | 30 | 8 | 3 | 2 |
 | XV. Xavfsizlik | 41 | 33 | 4 | 4 | 3 |
 | XVI. Mashinalar | 50 | 35 | 9 | 6 | 2 |
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
-| Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **440** | **161** | **99** | **46** |
+| Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
+| **Jami** | **700** | **450** | **156** | **94** | **46** |
 
-Ya'ni **~63 % to'liq**, **~23 % qisman**, **~14 % hali yo'q**.
+Ya'ni **~64 % to'liq**, **~22 % qisman**, **~13 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -130,7 +130,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 5. Hujjatlarni avtomatik yaratish — *KS-2, KS-3, M-29, AOSR bazadan*
 - [x] 6. **AOSR** — *ish, ishlatilgan material, sertifikat, imzo joylari*
 - [ ] 7. Ijro sxemalari
-- [~] 8. Fotolar — *jurnalda foto bor; hujjatga biriktirish yo'q*
+- [x] 8. Fotolar — *hujjatga biriktiriladi*
 - [ ] 🔒 9. Geolokatsiya va vaqt
 - [~] 10. Material sertifikatlari — *katalogda sertifikat va muddati*
 - [ ] 🔒 11. AI sertifikat tekshiruvi (OCR)
@@ -175,7 +175,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 15. Kechikish tahlili — *AN-S2, AN-S3, AN-S4*
 - [x] 16. Ertangi kunga reja
 - [ ] 17. Avtomatik arizalar — *zaxira bo'yicha ariza bor, jurnaldan emas*
-- [~] 18. Muammolar — *xavfsizlik va sifat modullarida*
+- [x] 18. Muammolar — *xavfsizlik, sifat va yozuvlarga izoh*
 - [x] 19. Kritik muammolarni AI aniqlashi — *analitika topilmalari*
 - [x] 20. Texnik nazorat izohlari
 - [~] 21. Yashirin ishlar nazorati
@@ -222,7 +222,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 19. Geolokatsiya
 - [x] 20. Texnika
 - [x] 21. Texnika buzilishi
-- [~] 22. Izohlar — *xavfsizlik va sifat orqali*
+- [x] 22. Izohlar — *har qanday yozuvga izoh va javob*
 - [x] 23. Texnik nazorat izohlari
 - [x] 24. Ijro hujjatlari
 - [x] 25. Ishni yopishdan oldin ogohlantirish
@@ -262,9 +262,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 17. AI izohni tasniflashi — *muhimlik darajasi*
 - [ ] 18. Chizmadagi izoh
 - [x] 19. Bartaraf etishni nazorat qilish
-- [ ] 20. «Oldin/keyin» fotosi
+- [x] 20. «Oldin/keyin» fotosi
 - [x] 21. Muddatlarni nazorat qilish
-- [~] 22. Izohlar jurnali
+- [x] 22. Izohlar jurnali — *tekshiruv bo'yicha muhokama*
 - [x] 23. Ijro hujjatlari
 - [x] 24. AOSR ni tekshirish — *imzolash/rad etish*
 - [x] 25. Sifat nazorati
@@ -355,7 +355,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 25. Pulga ariza — *ariza turi*
 - [x] 26. Xizmatga ariza — *ariza turi*
 - [ ] 27. Xodimga ariza
-- [ ] 28. Foto va hujjatlar
+- [x] 28. Foto va hujjatlar
 - [ ] 🔒 29. Ovozli arizalar
 - [x] 30. Ijroni nazorat qilish — *qoplanish*
 - [x] 31. Ariza tarixi — *kim, qachon, qanday qaror qildi*
@@ -402,7 +402,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 25. Obyektda qabul qilish
 - [~] 26. Kirish nazorati — *sifat moduli orqali*
 - [ ] 🔒 27. AI sertifikatni tekshiradi
-- [ ] 28. Qabulda foto
+- [x] 28. Qabulda foto
 - [x] 29. Ombor bilan bog'lanish — *bir bosishda kirim*
 - [x] 30. Qisman yetkazish — *kelgan miqdor, qoldiq, kirim*
 - [x] 31. Kechikishlarni nazorat qilish
@@ -586,7 +586,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. Chek-listlar — *namuna, normativ havolasi, tekshiruvga ko'chiriladi*
 - [x] 9. Yashirin ishlar nazorati — *chek-list bandi sifatida*
 - [x] 10. Keyingi bosqichni bloklash — *ochiq nuqson ishni yopishga qo'ymaydi*
-- [~] 11. Sifat fotofiksatsiyasi
+- [x] 11. Sifat fotofiksatsiyasi
 - [ ] 🔒 12. Fotolarni AI tahlili
 - [x] 13. Geometriya nazorati — *geodeziya: loyiha/fakt/dopusk (VII)*
 - [ ] 🔒 14. BIM Quality Control
@@ -596,7 +596,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 18. Izohlar tasnifi
 - [~] 19. AI ustuvorlikni aniqlashi
 - [x] 20. Izohni bartaraf etish
-- [ ] 21. Oldin / keyin fotosi
+- [x] 21. Oldin / keyin fotosi
 - [x] 22. Laboratoriya sinovlari — *«Sinovlar» tabi: payvand, bosim, izolyatsiya, grunt, ishga tushirish*
 - [x] 23. Beton nazorati — *7 va 28 kunlik namunalar (VII)*
 - [x] 24. Payvand nazorati — *sinov turi, talab bilan solishtiriladi*
@@ -823,7 +823,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] **Excel eksporti** — *20 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
 - [x] **Bildirishnomalar tizimi** — *ilova ichida: 9 modul signali, yon panelda son; SMS/Telegram tashqi omil*
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
-- [ ] **Izoh va muhokama** (yozuvlarga sharh)
+- [x] **Izoh va muhokama** — *har qanday yozuvga izoh, javob va «hal qilindi»; fayl va «oldin/keyin» fotosi*
 
 ---
 

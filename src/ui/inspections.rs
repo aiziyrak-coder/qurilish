@@ -11,6 +11,7 @@
 use super::warehouse::{cell_l, cell_r};
 use super::*;
 use crate::checks;
+use crate::domain::NoteTarget;
 use crate::domain::{
     ConcreteTest, GeodesyPoint, Inspection, InspectionKind, InspectionResult, QualityResult,
 };
@@ -325,6 +326,7 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
     let wide = ui.available_width() > 1400.0;
     let mut edited: Option<Inspection> = None;
     let mut removed: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
@@ -500,6 +502,10 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                         {
                             removed = Some(x.id);
                         }
+                        // «Oldin» va «keyin» fotosi hamda izohlar jurnali (TZ VII.20, VII.22).
+                        if super::notes::badge(ui, app, NoteTarget::Inspection, x.id) {
+                            open_notes = Some(x.id);
+                        }
                         // Chek-list tekshiruvga chiqishdan oldin kerak —
                         // shuning uchun u qatorning o'zida turadi (TZ VII.26).
                         ui.label(RichText::new(t("in_checklist_short")).size(11.0))
@@ -524,6 +530,7 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
         app.db.delete_inspection(id);
         app.reload_modules();
     }
+    super::notes::below_table(ui, app, NoteTarget::Inspection, open_notes);
 }
 
 // ================================================================ Kalendar

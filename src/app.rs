@@ -517,6 +517,10 @@ pub struct App {
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
     /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
     pub llm: crate::llm::Config,
+    /// Yozuvlarga qoldirilgan izohlar (umumiy mexanizm).
+    pub notes: Vec<crate::domain::Note>,
+    /// Yozuvlarga biriktirilgan fayllar (umumiy mexanizm).
+    pub attachments: Vec<crate::domain::Attachment>,
     /// Model bilan suhbat: savol va javoblar ketma-ketligi.
     ///
     /// Suhbat **bazaga yozilmaydi**: unda obyekt ma'lumoti bo'lishi mumkin va
@@ -687,6 +691,8 @@ impl App {
             geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
+            notes: Vec::new(),
+            attachments: Vec::new(),
             llm_chat: Vec::new(),
             llm_pending: None,
             llm_error: None,
@@ -840,6 +846,8 @@ impl App {
 
     pub fn clear_modules(&mut self) {
         self.issues.clear();
+        self.notes.clear();
+        self.attachments.clear();
         self.documents.clear();
         self.ppr_docs.clear();
         self.exec_docs.clear();
@@ -910,6 +918,8 @@ impl App {
             return;
         };
         self.issues = self.db.issues(id);
+        self.notes = self.db.notes(id);
+        self.attachments = self.db.attachments(id);
         self.documents = self.db.documents(id);
         self.ppr_docs = self.db.ppr_docs(id);
         self.exec_docs = self.db.exec_docs(id);
@@ -1073,6 +1083,14 @@ impl App {
 
     /// Joriy foydalanuvchi ismi. Tanlanmagan bo'lsa — bo'sh satr:
     /// kimdir deb o'ylab topmaymiz.
+    /// Hozirgi vaqt yozuvi — izoh va biriktirmalar uchun.
+    ///
+    /// Sana emas, **vaqt** ham kerak: bir kunda bir necha izoh bo'lishi
+    /// mumkin va ular tartibi ko'rinib turishi lozim.
+    pub fn stamp(&self) -> String {
+        chrono::Local::now().format("%Y-%m-%d %H:%M").to_string()
+    }
+
     pub fn current_user_name(&self) -> String {
         self.current_user
             .and_then(|id| self.users.iter().find(|u| u.id == id))

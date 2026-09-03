@@ -2033,3 +2033,98 @@ enum_kind!(RootCause {
     Weather    => "weather",    "rc_weather";
     Organisation => "organisation", "rc_organisation";
 });
+
+// ---------- Umumiy: izoh va biriktirma ----------
+
+enum_kind!(NoteTarget {
+    Task       => "task",       "nt_task";
+    Issue      => "issue",      "nt_issue";
+    Request    => "request",    "nt_request";
+    Purchase   => "purchase",   "nt_purchase";
+    ExecDoc    => "exec_doc",   "nt_exec_doc";
+    Quality    => "quality",    "nt_quality";
+    Safety     => "safety",     "nt_safety";
+    Inspection => "inspection", "nt_inspection";
+    Machine    => "machine",    "nt_machine";
+    Material   => "material",   "nt_material";
+    Worker     => "worker",     "nt_worker";
+    Other      => "other",      "nt_other";
+});
+
+/// Yozuvga qoldirilgan izoh (TZ V.18, VI.22, VII.22, umumiy «izoh va muhokama»).
+///
+/// Izoh **hech qachon o'chirilmaydi va tahrirlanmaydi**: muhokama tarixi
+/// o'zgarsa, uning ma'nosi qolmaydi. Hal qilingan izoh yopiq deb belgilanadi
+/// va ro'yxat oxiriga tushadi.
+#[derive(Debug, Clone)]
+pub struct Note {
+    pub id: i64,
+    pub project_id: i64,
+    /// Qaysi turdagi yozuvga tegishli.
+    pub target: NoteTarget,
+    pub target_id: i64,
+    pub author: String,
+    /// Yozilgan vaqti — `YYYY-MM-DD HH:MM` ko'rinishida.
+    pub at: String,
+    pub text: String,
+    /// Javob bo'lsa — qaysi izohga.
+    pub parent: Option<i64>,
+    /// Hal qilingan deb belgilangan.
+    pub resolved: bool,
+}
+
+impl Note {
+    /// Izohga javob berilganmi.
+    pub fn has_replies(&self, all: &[Note]) -> bool {
+        all.iter().any(|n| n.parent == Some(self.id))
+    }
+}
+
+enum_kind!(PhotoStage {
+    Plain  => "plain",  "ps_plain";
+    Before => "before", "ps_before";
+    After  => "after",  "ps_after";
+});
+
+/// Yozuvga biriktirilgan fayl: foto yoki hujjat.
+///
+/// Fayl **ko'chirilmaydi** — faqat yo'li saqlanadi. Shuning uchun fayl
+/// ko'chirilsa yoki o'chirilsa havola uziladi va ekranda buni ochiq
+/// ko'rsatamiz: soxta ishonch bermaslik kerak.
+#[derive(Debug, Clone)]
+pub struct Attachment {
+    pub id: i64,
+    pub project_id: i64,
+    pub target: NoteTarget,
+    pub target_id: i64,
+    pub path: String,
+    /// «Oldin» va «keyin» fotolari (TZ VII.20, XIV.21).
+    pub stage: PhotoStage,
+    pub caption: String,
+    pub author: String,
+    pub at: String,
+}
+
+impl Attachment {
+    /// Fayl nomi — to'liq yo'l ekranda o'qilmaydi.
+    pub fn file_name(&self) -> String {
+        self.path
+            .rsplit(['/', '\\'])
+            .next()
+            .unwrap_or(&self.path)
+            .to_string()
+    }
+
+    /// Fayl hali joyidami.
+    pub fn exists(&self) -> bool {
+        !self.path.trim().is_empty() && std::path::Path::new(&self.path).exists()
+    }
+
+    /// Rasm ko'rinishidagi fayl.
+    pub fn is_photo(&self) -> bool {
+        let p = self.path.to_lowercase();
+        [".jpg", ".jpeg", ".png", ".bmp", ".webp"]
+            .iter()
+            .any(|e| p.ends_with(e))
+    }
+}

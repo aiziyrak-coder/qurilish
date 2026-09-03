@@ -7,6 +7,7 @@
 use super::materials::material_label;
 use super::warehouse::{cell_l, cell_r};
 use super::*;
+use crate::domain::NoteTarget;
 use crate::domain::{QualityCheck, QualityKind, QualityResult};
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
@@ -223,6 +224,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<QualityCheck> = None;
     let mut removed: Option<i64> = None;
     let mut open_points: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
     let today = app.today;
 
     egui::ScrollArea::both()
@@ -382,6 +384,12 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             open_points = Some(q.id);
                         }
 
+                        // Foto va izoh (TZ XIV.11, XIV.21): «oldin» va «keyin»
+                        // suratlari shu yerda belgilanadi.
+                        if super::notes::badge(ui, app, NoteTarget::Quality, q.id) {
+                            open_notes = Some(q.id);
+                        }
+
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -410,6 +418,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     if let Some(id) = open_points {
         app.quality_open = (app.quality_open != Some(id)).then_some(id);
     }
+    super::notes::below_table(ui, app, NoteTarget::Quality, open_notes);
 }
 
 // ================================================== Nazorat nuqtalari

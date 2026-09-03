@@ -5,6 +5,7 @@
 //! uchun ro'yxat yonida «tugallangan, lekin hujjatsiz ishlar» paneli turadi.
 
 use super::*;
+use crate::domain::NoteTarget;
 use crate::domain::{ExecDoc, ExecDocKind, ExecDocStatus};
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
@@ -607,6 +608,7 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
     let mut edited: Option<ExecDoc> = None;
     let mut removed: Option<i64> = None;
     let mut make_aosr: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
 
     egui::ScrollArea::both()
         .auto_shrink([false, !fill])
@@ -685,6 +687,10 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
                         {
                             make_aosr = Some(d.id);
                         }
+                        // Hujjatga foto va izoh biriktirish (TZ IV.8).
+                        if super::notes::badge(ui, app, NoteTarget::ExecDoc, d.id) {
+                            open_notes = Some(d.id);
+                        }
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -713,4 +719,5 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
         app.db.del("exec_doc", id);
         app.reload_modules();
     }
+    super::notes::below_table(ui, app, NoteTarget::ExecDoc, open_notes);
 }

@@ -8,6 +8,7 @@ use super::materials::{material_label, trim_num};
 use super::requests::request_label;
 use super::warehouse::{cell_l, cell_r};
 use super::*;
+use crate::domain::NoteTarget;
 use crate::domain::{
     MoveKind, Purchase, PurchaseBudget, PurchaseStatus, Quote, RequestStatus, StockMove, Supplier,
 };
@@ -339,6 +340,8 @@ fn status_color(s: PurchaseStatus) -> Color32 {
 fn table(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<Purchase> = None;
     let mut removed: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
+
     let today = app.today;
     let waiting: Vec<i64> = unposted(app).iter().map(|p| p.id).collect();
     // Tor ekranda mas'ul va ish ustunlari yashiriladi: kunlik ish miqdor,
@@ -560,6 +563,10 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                                 });
                         }
 
+                        // Qabulda foto va izoh (TZ X.28).
+                        if super::notes::badge(ui, app, NoteTarget::Purchase, p.id) {
+                            open_notes = Some(p.id);
+                        }
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -609,6 +616,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         app.db.del("purchase", id);
         app.reload_modules();
     }
+    super::notes::below_table(ui, app, NoteTarget::Purchase, open_notes);
 }
 
 /// Xaridning katalogdagi narxi — narx anomaliyasini shunga solishtiramiz.
