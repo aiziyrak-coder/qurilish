@@ -3603,6 +3603,50 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Ochiq ta'mir yopiladi va texnika ishga qaytadi.",
             "Открытый ремонт закрывается, техника возвращается в работу."
         ),
+        // V. Kunlik jurnal — kun tahlili va ertangi reja
+        "jr_tab_entries" => ("Yozuvlar", "Записи"),
+        "jr_tab_day" => ("Kun tahlili", "Разбор дня"),
+        "jr_tab_tomorrow" => ("Ertangi reja", "План на завтра"),
+        "jr_day_hint" => (
+            "Kun ichida solishtirish muhim: oy oxirida jami bo'yicha qaraganda ortiqcha sarf o'rtachada yo'qoladi.",
+            "Сравнивать важно внутри дня: в итогах за месяц перерасход растворяется в среднем."
+        ),
+        "jr_day_material" => ("Bugungi hajm va material", "Объём и материал за сегодня"),
+        "jr_day_no_material" => (
+            "Bugungi yozuvlar bo'yicha sarf normasi topilmadi.",
+            "По сегодняшним записям нормы расхода не найдены."
+        ),
+        "jr_day_volume" => ("Hajm", "Объём"),
+        "jr_day_norm" => ("Norma bo'yicha", "По норме"),
+        "jr_day_issued" => ("Berilgan", "Выдано"),
+        "jr_day_diff" => ("Farq", "Разница"),
+        "jr_doubts" => ("Yozuvlardagi ziddiyat", "Противоречия в записях"),
+        "jr_doubts_hint" => (
+            "Bu ayblov emas — savol: dastur faqat ichki ziddiyatni ko'rsatadi, oxirgi so'z odamniki.",
+            "Это не обвинение, а вопрос: программа показывает лишь внутреннее противоречие, последнее слово за человеком."
+        ),
+        "jr_doubts_none" => ("Yozuvlarda ziddiyat topilmadi.", "Противоречий в записях не найдено."),
+        "jd_over_plan" => ("Hajm ishda qolganidan katta", "Объём больше остатка по работе"),
+        "jd_no_timesheet" => ("Jurnalda ishchi bor, tabelda yo'q", "В журнале рабочие есть, в табеле нет"),
+        "jd_repeated" => ("Bir xil hajm ketma-ket kunlarda", "Одинаковый объём подряд"),
+        "jd_future" => ("Yozuv kelajak sanaga kiritilgan", "Запись внесена будущей датой"),
+        "jd_rate" => ("Bir ishchiga hajm o'rtachadan keskin katta", "Объём на рабочего резко выше среднего"),
+        "jr_tomorrow_hint" => (
+            "Ertaga nima ketadi, material yetadimi va kim bor — bugun ko'rinib tursin.",
+            "Что идёт завтра, хватает ли материала и кто есть — видно уже сегодня."
+        ),
+        "jr_tm_tasks" => ("Ertangi ishlar", "Работ завтра"),
+        "jr_tm_tasks_hint" => ("grafik bo'yicha", "по графику"),
+        "jr_tm_starts" => ("Yangi boshlanadi", "Начинается"),
+        "jr_tm_starts_hint" => ("bugun ketmayotgan ishlar", "работ, не идущих сегодня"),
+        "jr_tm_blocked" => ("To'siqli", "С препятствием"),
+        "jr_tm_blocked_hint" => ("material yoki odam yetishmaydi", "не хватает материала или людей"),
+        "jr_tm_empty" => ("Ertaga grafik bo'yicha ish yo'q.", "Завтра работ по графику нет."),
+        "jr_tm_state" => ("Holat", "Состояние"),
+        "jr_tm_left" => ("Qolgan hajm", "Остаток объёма"),
+        "jr_tm_crew" => ("Bugungi brigada", "Бригада сегодня"),
+        "jr_tm_new" => ("boshlanadi", "начинается"),
+        "jr_tm_going" => ("davom etadi", "продолжается"),
         "ct_tab_contracts" => ("Shartnomalar", "Договоры"),
         "ct_tab_changes" => ("O'zgarishlar", "Изменения"),
         "ct_tab_stages" => ("To'lov jadvali", "График платежей"),

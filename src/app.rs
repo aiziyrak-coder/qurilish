@@ -1776,6 +1776,11 @@ impl App {
     /// tekshiruvi ham shundan oladi, shuning uchun ular bir xil ishni
     /// ko'rsatadi.
     pub fn running_today(&self) -> Vec<i64> {
+        self.running_on(self.today)
+    }
+
+    /// Berilgan kunda grafik bo'yicha ketayotgan ishlar.
+    pub fn running_on(&self, day: chrono::NaiveDate) -> Vec<i64> {
         let origin = self.origin();
         self.tasks
             .iter()
@@ -1786,10 +1791,33 @@ impl App {
                 };
                 let start = origin + chrono::Duration::days(c.es);
                 let end = origin + chrono::Duration::days(c.ef);
-                start <= self.today && self.today <= end
+                start <= day && day <= end
             })
             .map(|t| t.id)
             .collect()
+    }
+
+    /// Kunlik hajmga sarflangan material (TZ V.10-11).
+    pub fn day_material(&self, day: chrono::NaiveDate) -> Vec<checks::DayMaterial> {
+        checks::day_material(&self.journal, &self.material_norms, &self.stock_moves, day)
+    }
+
+    /// Ertangi kunga reja (TZ V.16).
+    pub fn tomorrow_plan(&self) -> Vec<checks::TomorrowTask> {
+        let tomorrow = self.today + chrono::Duration::days(1);
+        checks::tomorrow_plan(
+            &self.tasks,
+            &self.running_on(tomorrow),
+            &self.running_today(),
+            &self.material_kits(),
+            &self.timesheet,
+            self.today,
+        )
+    }
+
+    /// Jurnal yozuvlaridagi ichki ziddiyatlar (TZ V.32).
+    pub fn journal_doubts(&self) -> Vec<checks::JournalCheck> {
+        checks::journal_doubts(&self.journal, &self.tasks, &self.timesheet, self.today)
     }
 
     /// Kunni yakunlash va hisobotni yuborishdan oldingi tekshiruv (TZ VI.33-34).

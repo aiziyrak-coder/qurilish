@@ -72,7 +72,26 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             );
         });
     } else {
-        entries(ui, app);
+        let tab_key = egui::Id::new("jr_tab");
+        let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+        ui.horizontal_wrapped(|ui| {
+            for (i, label) in [
+                (0u8, t("jr_tab_entries")),
+                (1, t("jr_tab_day")),
+                (2, t("jr_tab_tomorrow")),
+            ] {
+                if ui.selectable_label(tab == i, label).clicked() {
+                    tab = i;
+                }
+            }
+        });
+        ui.data_mut(|d| d.insert_temp(tab_key, tab));
+        ui.add_space(8.0);
+        match tab {
+            1 => day_tab(ui, app),
+            2 => tomorrow_tab(ui, app),
+            _ => entries(ui, app),
+        }
     }
 
     if add {
@@ -100,6 +119,336 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if apply {
         app.apply_journal_to_tasks();
     }
+}
+
+// ================================================================ Kun tahlili
+
+/// Kunlik hajm bilan sarflangan material va yozuvlardagi ichki ziddiyatlar
+/// (TZ V.10-11, 32).
+fn day_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let day = app.today;
+    let rows = app.day_material(day);
+    let doubts = app.journal_doubts();
+
+    ui.label(
+        RichText::new(t("jr_day_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.label(RichText::new(t("jr_day_material")).size(13.5).strong());
+            ui.add_space(6.0);
+            if rows.is_empty() {
+                ui.label(
+                    RichText::new(t("jr_day_no_material"))
+                        .size(12.5)
+                        .color(theme::muted()),
+                );
+            } else {
+                egui::Grid::new("jr_day_mat")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 240.0, t("col_task"));
+                        head_l(ui, 220.0, t("col_material"));
+                        head_r(ui, 110.0, t("jr_day_volume"));
+                        head_r(ui, 120.0, t("jr_day_norm"));
+                        head_r(ui, 120.0, t("jr_day_issued"));
+                        head_r(ui, 120.0, t("jr_day_diff"));
+                        ui.end_row();
+
+                        for r in &rows {
+                            let name = app
+                                .task(r.task_id)
+                                .map(|x| format!("{} {}", x.wbs, x.name))
+                                .unwrap_or_default();
+                            cell_l(
+                                ui,
+                                240.0,
+                                RichText::new(super::issues::truncate(&name, 32)).size(12.5),
+                            );
+                            cell_l(
+                                ui,
+                                220.0,
+                                RichText::new(super::issues::truncate(
+                                    &super::materials::material_label(app, r.material_id),
+                                    28,
+                                ))
+                                .size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(super::materials::trim_num(r.volume)).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                120.0,
+                                RichText::new(super::materials::trim_num(r.by_norm)).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                120.0,
+                                RichText::new(super::materials::trim_num(r.issued)).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                120.0,
+                                RichText::new(super::materials::trim_num(r.diff))
+                                    .size(12.5)
+                                    .color(if r.over() {
+                                        theme::danger()
+                                    } else {
+                                        theme::muted()
+                                    }),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("jr_doubts")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("jr_doubts_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if doubts.is_empty() {
+                ui.label(
+                    RichText::new(t("jr_doubts_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for c in &doubts {
+                egui::Frame::new()
+                    .fill(theme::card())
+                    .inner_margin(10.0)
+                    .corner_radius(6.0)
+                    .show(ui, |ui| {
+                        // Sana yonida qaysi ish ekani turishi kerak:
+                        // shubha «qaysi yozuvda» degan savolsiz o'qilsin.
+                        let task = app
+                            .journal
+                            .iter()
+                            .find(|j| j.id == c.entry_id)
+                            .and_then(|j| j.task_id)
+                            .and_then(|id| app.task(id))
+                            .map(|x| format!(" · {} {}", x.wbs, x.name))
+                            .unwrap_or_default();
+                        ui.label(
+                            RichText::new(format!(
+                                "{}{}",
+                                c.date.format("%d.%m.%Y"),
+                                super::issues::truncate(&task, 40)
+                            ))
+                            .size(12.5)
+                            .strong(),
+                        );
+                        for d in &c.doubts {
+                            ui.label(
+                                RichText::new(format!("· {}", doubt_text(d)))
+                                    .size(12.0)
+                                    .color(if d.severe() {
+                                        theme::danger()
+                                    } else {
+                                        theme::warn()
+                                    }),
+                            );
+                        }
+                    });
+                ui.add_space(6.0);
+            }
+        });
+}
+
+/// Shubhani odam o'qiydigan gapga aylantiradi.
+fn doubt_text(d: &crate::checks::JournalDoubt) -> String {
+    use crate::checks::JournalDoubt as D;
+    match d {
+        D::VolumeOverPlan { entered, left } => format!(
+            "{}: {} > {}",
+            t("jd_over_plan"),
+            super::materials::trim_num(*entered),
+            super::materials::trim_num(*left)
+        ),
+        D::CrewWithoutTimesheet { workers } => {
+            format!("{} ({})", t("jd_no_timesheet"), workers)
+        }
+        D::RepeatedVolume { days, volume } => format!(
+            "{}: {} × {}",
+            t("jd_repeated"),
+            days,
+            super::materials::trim_num(*volume)
+        ),
+        D::FutureDate => t("jd_future").to_string(),
+        D::ImplausibleRate {
+            per_worker,
+            average,
+        } => format!(
+            "{}: {} / {}",
+            t("jd_rate"),
+            super::materials::trim_num(*per_worker),
+            super::materials::trim_num(*average)
+        ),
+    }
+}
+
+// ================================================================ Ertangi reja
+
+/// Ertaga nima ketadi, material yetadimi, kim bor (TZ V.16).
+fn tomorrow_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let plan = app.tomorrow_plan();
+    let blocked = plan.iter().filter(|p| !p.ready()).count();
+
+    ui.label(
+        RichText::new(t("jr_tomorrow_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("jr_tm_tasks"),
+                plan.len().to_string(),
+                t("jr_tm_tasks_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("jr_tm_starts"),
+                plan.iter().filter(|p| p.starts).count().to_string(),
+                t("jr_tm_starts_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("jr_tm_blocked"),
+                blocked.to_string(),
+                t("jr_tm_blocked_hint"),
+                if blocked == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if plan.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("jr_tm_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("jr_tomorrow")
+                .num_columns(6)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 280.0, t("col_task"));
+                    head_l(ui, 110.0, t("jr_tm_state"));
+                    head_r(ui, 120.0, t("jr_tm_left"));
+                    head_r(ui, 110.0, t("mat_kit_ready"));
+                    head_r(ui, 100.0, t("mat_kit_missing"));
+                    head_r(ui, 100.0, t("jr_tm_crew"));
+                    ui.end_row();
+
+                    for p in &plan {
+                        let name = app
+                            .task(p.task_id)
+                            .map(|x| format!("{} {}", x.wbs, x.name))
+                            .unwrap_or_default();
+                        cell_l(
+                            ui,
+                            280.0,
+                            RichText::new(super::issues::truncate(&name, 38)).size(12.5),
+                        );
+                        cell_l(
+                            ui,
+                            110.0,
+                            RichText::new(if p.starts {
+                                t("jr_tm_new")
+                            } else {
+                                t("jr_tm_going")
+                            })
+                            .size(11.5)
+                            .color(if p.starts {
+                                theme::accent()
+                            } else {
+                                theme::muted()
+                            }),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(super::materials::trim_num(p.volume_left)).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(format!("{:.0}%", p.kit_ready))
+                                .size(12.5)
+                                .color(if p.missing == 0 {
+                                    theme::ok()
+                                } else {
+                                    theme::warn()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(p.missing.to_string()).size(12.0).color(
+                                if p.missing == 0 {
+                                    theme::muted()
+                                } else {
+                                    theme::danger()
+                                },
+                            ),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(p.crew_today.to_string()).size(12.0).color(
+                                if p.crew_today == 0 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                },
+                            ),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+}
+
+fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_l(ui, w, RichText::new(s).size(11.0).color(theme::muted()));
+}
+
+fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_r(ui, w, RichText::new(s).size(11.0).color(theme::muted()));
 }
 
 /// Jurnal bo'yicha xulosa: oxirgi yozuv, oy davomidagi hajm va resurs.

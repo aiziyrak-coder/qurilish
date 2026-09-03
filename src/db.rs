@@ -3092,6 +3092,27 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|s| matches!(s, RouteState::Waiting { .. })));
     }
 
+    /// Yordamchi: sinov uchun GPR ishi.
+    #[cfg(test)]
+    fn test_task(id: i64, volume: f64, progress: f64) -> crate::model::Task {
+        crate::model::Task {
+            id,
+            project_id: 1,
+            wbs: "1".into(),
+            name: "sinov ishi".into(),
+            section: crate::model::Section::Kj,
+            responsible: String::new(),
+            duration: 10,
+            plan_start: chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            fact_start: None,
+            fact_end: None,
+            progress,
+            pinned: false,
+            volume,
+            unit: "m3".into(),
+        }
+    }
+
     /// Yordamchi: sinov uchun sifat tekshiruvi.
     #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
@@ -6796,6 +6817,229 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             }
         }
         assert!(checked > 0, "namunada ogohlantirish umuman yo'q");
+    }
+
+    /// TZ V.10-11: kunlik hajm normaga ko'paytiriladi va o'sha kuni
+    /// berilgan material bilan solishtiriladi.
+    #[test]
+    fn day_material_compares_norm_with_issue() {
+        use crate::checks::day_material;
+        use crate::domain::{JournalEntry, MaterialNorm, MoveKind, StockMove};
+
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let entry = JournalEntry {
+            id: 1,
+            project_id: 1,
+            date: day,
+            author: String::new(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers: 4,
+            machines: 0,
+            task_id: Some(10),
+            volume: 20.0,
+            unit: "m3".into(),
+            text: String::new(),
+            remarks: String::new(),
+            photos: String::new(),
+        };
+        let norm = MaterialNorm {
+            id: 1,
+            project_id: 1,
+            task_id: 10,
+            material_id: 5,
+            per_unit: 0.1,
+            tolerance: 5.0,
+            note: String::new(),
+        };
+        let out = |qty: f64| StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 5,
+            kind: MoveKind::Out,
+            qty,
+            price: 0.0,
+            date: day,
+            task_id: Some(10),
+            warehouse_id: None,
+            batch_id: None,
+            document: String::new(),
+            counterparty: String::new(),
+            note: String::new(),
+        };
+
+        // 20 m3 × 0.1 = 2.0 kerak. 2.05 — chegara ichida (5%).
+        let ok = day_material(
+            std::slice::from_ref(&entry),
+            std::slice::from_ref(&norm),
+            &[out(2.05)],
+            day,
+        );
+        assert_eq!(ok.len(), 1);
+        assert!((ok[0].by_norm - 2.0).abs() < 1e-9);
+        assert!((ok[0].diff - 0.05).abs() < 1e-9);
+        assert!(!ok[0].over());
+
+        // 2.3 — chegaradan chiqadi.
+        let over = day_material(
+            std::slice::from_ref(&entry),
+            std::slice::from_ref(&norm),
+            &[out(2.3)],
+            day,
+        );
+        assert!(over[0].over());
+
+        // Boshqa kunning chiqimi bugungi hisobga kirmaydi.
+        let mut other = out(2.3);
+        other.date = day - chrono::Duration::days(1);
+        let clean = day_material(&[entry], &[norm], &[other], day);
+        assert_eq!(clean[0].issued, 0.0);
+    }
+
+    /// TZ V.32: dastur ichki ziddiyatni ko'rsatadi — rejadan katta hajm,
+    /// tabelsiz brigada, kelajak sana.
+    #[test]
+    fn journal_doubts_find_internal_conflicts() {
+        use crate::checks::{journal_doubts, JournalDoubt as D};
+        use crate::domain::JournalEntry;
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let task = test_task(10, 100.0, 90.0);
+        let entry = |volume: f64, workers: i64, date: chrono::NaiveDate| JournalEntry {
+            id: 1,
+            project_id: 1,
+            date,
+            author: String::new(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers,
+            machines: 0,
+            task_id: Some(10),
+            volume,
+            unit: "m3".into(),
+            text: String::new(),
+            remarks: String::new(),
+            photos: String::new(),
+        };
+
+        // Qolgan hajm 10; 25 yozilgan — ziddiyat.
+        let over = journal_doubts(
+            &[entry(25.0, 0, today)],
+            std::slice::from_ref(&task),
+            &[],
+            today,
+        );
+        assert!(over[0]
+            .doubts
+            .iter()
+            .any(|d| matches!(d, D::VolumeOverPlan { .. })));
+
+        // Brigada bor, tabel bo'sh.
+        let crew = journal_doubts(
+            &[entry(5.0, 6, today)],
+            std::slice::from_ref(&task),
+            &[],
+            today,
+        );
+        assert!(crew[0]
+            .doubts
+            .iter()
+            .any(|d| matches!(d, D::CrewWithoutTimesheet { .. })));
+
+        // Kelajak sana.
+        let future = journal_doubts(
+            &[entry(5.0, 0, today + chrono::Duration::days(2))],
+            std::slice::from_ref(&task),
+            &[],
+            today,
+        );
+        assert!(future[0].doubts.contains(&D::FutureDate));
+
+        // Toza yozuv — ziddiyat yo'q.
+        let clean = journal_doubts(&[entry(5.0, 0, today)], &[task], &[], today);
+        assert!(clean.is_empty());
+    }
+
+    /// Bir xil hajm ketma-ket kunlarda takrorlansa — savol tug'iladi.
+    #[test]
+    fn repeated_volume_raises_a_question() {
+        use crate::checks::{journal_doubts, JournalDoubt as D, REPEAT_DAYS};
+        use crate::domain::JournalEntry;
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let task = test_task(10, 1000.0, 10.0);
+        let rows: Vec<JournalEntry> = (0..REPEAT_DAYS as i64)
+            .map(|i| JournalEntry {
+                id: i + 1,
+                project_id: 1,
+                date: today - chrono::Duration::days(i),
+                author: String::new(),
+                weather: String::new(),
+                temperature: 0.0,
+                workers: 0,
+                machines: 0,
+                task_id: Some(10),
+                volume: 12.0,
+                unit: "m3".into(),
+                text: String::new(),
+                remarks: String::new(),
+                photos: String::new(),
+            })
+            .collect();
+
+        let found = journal_doubts(&rows, std::slice::from_ref(&task), &[], today);
+        let newest = found.first().expect("shubha topilmadi");
+        assert!(newest
+            .doubts
+            .iter()
+            .any(|d| matches!(d, D::RepeatedVolume { days, .. } if *days >= REPEAT_DAYS)));
+
+        // Bitta kun boshqacha bo'lsa — takror emas.
+        let mut mixed = rows.clone();
+        mixed[1].volume = 9.0;
+        let mild = journal_doubts(&mixed, &[task], &[], today);
+        assert!(!mild.iter().any(|c| c
+            .doubts
+            .iter()
+            .any(|d| matches!(d, D::RepeatedVolume { .. }))));
+    }
+
+    /// TZ V.16: ertangi reja komplekt tayyorligini «Komplekt» jadvalidan
+    /// oladi va to'siqli ishlarni oldinga chiqaradi.
+    #[test]
+    fn tomorrow_plan_uses_the_kit_readiness() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let kits = app.material_kits();
+        let plan = app.tomorrow_plan();
+        let tomorrow = app.today + chrono::Duration::days(1);
+        let running = app.running_on(tomorrow);
+
+        assert_eq!(plan.len(), running.len());
+        for p in &plan {
+            assert!(running.contains(&p.task_id));
+            if let Some(k) = kits.iter().find(|k| k.task_id == p.task_id) {
+                assert!((p.kit_ready - k.ready_pct).abs() < 0.001);
+                assert_eq!(p.missing, k.missing);
+            } else {
+                // Norma kiritilmagan ish — to'siq sifatida ko'rsatilmaydi.
+                assert_eq!(p.missing, 0);
+            }
+            assert_eq!(p.starts, !app.running_today().contains(&p.task_id));
+        }
+
+        // To'siqlilar oldinda.
+        let mut seen_ready = false;
+        for p in &plan {
+            if p.ready() {
+                seen_ready = true;
+            } else {
+                assert!(!seen_ready, "to'siqli ish pastga tushib qolgan");
+            }
+        }
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

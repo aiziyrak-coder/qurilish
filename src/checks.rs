@@ -7243,3 +7243,271 @@ pub fn close_warnings(
     out.sort_by_key(|w| !w.severe());
     out
 }
+
+// ================= V.10-11, 16, 24, 32. Kunlik jurnal tahlili =================
+
+/// Bir kunlik hajmga sarflangan material (TZ V.10-11).
+#[derive(Debug, Clone)]
+pub struct DayMaterial {
+    pub task_id: i64,
+    pub material_id: i64,
+    /// Jurnalga yozilgan hajm.
+    pub volume: f64,
+    /// Shu hajmga norma bo'yicha kerak bo'lgan miqdor.
+    pub by_norm: f64,
+    /// Shu kuni ishga haqiqatda berilgan miqdor.
+    pub issued: f64,
+    /// Farq: fakt minus norma. Musbat — ortiqcha sarf.
+    pub diff: f64,
+    /// Ruxsat etilgan chetlanish, foizda.
+    pub tolerance: f64,
+}
+
+impl DayMaterial {
+    /// Chetlanish ruxsat etilgan chegaradan chiqdimi.
+    pub fn over(&self) -> bool {
+        self.by_norm > 0.0 && self.diff * 100.0 / self.by_norm > self.tolerance
+    }
+}
+
+/// TZ V.10-11: kunlik jurnaldagi hajm bilan o'sha kuni berilgan materialni
+/// solishtiradi.
+///
+/// Solishtirish **kun ichida** bo'lishi muhim: oy oxirida jami bo'yicha
+/// qaraganda ortiqcha sarf o'rtachada yo'qoladi va sababini topib bo'lmaydi.
+pub fn day_material(
+    journal: &[JournalEntry],
+    norms: &[MaterialNorm],
+    moves: &[StockMove],
+    day: NaiveDate,
+) -> Vec<DayMaterial> {
+    let mut out = Vec::new();
+    for j in journal.iter().filter(|j| j.date == day && j.volume > 0.0) {
+        let Some(task_id) = j.task_id else { continue };
+        for n in norms.iter().filter(|n| n.task_id == task_id) {
+            let by_norm = n.per_unit * j.volume;
+            let issued: f64 = moves
+                .iter()
+                .filter(|m| {
+                    m.date == day
+                        && m.task_id == Some(task_id)
+                        && m.material_id == n.material_id
+                        && matches!(m.kind, MoveKind::Out)
+                })
+                .map(|m| m.qty)
+                .sum();
+            // Na norma, na fakt bo'lmasa — qator ham kerak emas.
+            if by_norm <= 0.0 && issued <= 0.0 {
+                continue;
+            }
+            out.push(DayMaterial {
+                task_id,
+                material_id: n.material_id,
+                volume: j.volume,
+                by_norm,
+                issued,
+                diff: issued - by_norm,
+                tolerance: n.tolerance,
+            });
+        }
+    }
+    // Ortiqcha sarf kattalari oldinda.
+    out.sort_by(|a, b| b.diff.total_cmp(&a.diff));
+    out
+}
+
+/// Ertangi kunga reja bo'yicha bitta ish (TZ V.16).
+#[derive(Debug, Clone)]
+pub struct TomorrowTask {
+    pub task_id: i64,
+    /// Ish ertaga boshlanadimi (`false` — davom etadi).
+    pub starts: bool,
+    /// Rejadan qolgan hajm.
+    pub volume_left: f64,
+    /// Material komplekti tayyorligi, foizda.
+    pub kit_ready: f64,
+    /// Yetishmayotgan material turlari.
+    pub missing: usize,
+    /// Bugun shu ishda ishlagan odamlar soni.
+    pub crew_today: usize,
+}
+
+impl TomorrowTask {
+    /// Ertaga to'siqsiz boshlash mumkinmi.
+    pub fn ready(&self) -> bool {
+        self.missing == 0 && self.crew_today > 0
+    }
+}
+
+/// TZ V.16: ertangi kunga reja — nima ketadi, material yetadimi, kim bor.
+///
+/// Komplekt tayyorligi [`material_kits`] dan olinadi: ertangi rejadagi son
+/// «Komplekt» jadvalidagi bilan bir xil bo'lishi kerak.
+pub fn tomorrow_plan(
+    tasks: &[Task],
+    running_tomorrow: &[i64],
+    running_today: &[i64],
+    kits: &[MaterialKit],
+    timesheet: &[TimesheetEntry],
+    today: NaiveDate,
+) -> Vec<TomorrowTask> {
+    let mut out = Vec::new();
+    for id in running_tomorrow {
+        let Some(task) = tasks.iter().find(|t| t.id == *id) else {
+            continue;
+        };
+        let kit = kits.iter().find(|k| k.task_id == *id);
+        out.push(TomorrowTask {
+            task_id: *id,
+            starts: !running_today.contains(id),
+            volume_left: task.volume * (100.0 - task.progress.clamp(0.0, 100.0)) / 100.0,
+            kit_ready: kit.map(|k| k.ready_pct).unwrap_or(100.0),
+            missing: kit.map(|k| k.missing).unwrap_or(0),
+            crew_today: timesheet
+                .iter()
+                .filter(|e| e.date == today && e.task_id == Some(*id) && e.hours > 0.0)
+                .count(),
+        });
+    }
+    // Ertaga boshlanadigan va tayyor bo'lmaganlari oldinda: e'tibor shularga.
+    out.sort_by(|a, b| {
+        a.ready()
+            .cmp(&b.ready())
+            .then(b.starts.cmp(&a.starts))
+            .then(a.kit_ready.total_cmp(&b.kit_ready))
+    });
+    out
+}
+
+/// Jurnal yozuvidagi shubhali holat (TZ V.32).
+#[derive(Debug, Clone, PartialEq)]
+pub enum JournalDoubt {
+    /// Yozilgan hajm ishda qolgan hajmdan katta.
+    VolumeOverPlan { entered: f64, left: f64 },
+    /// Ishchi soni ko'rsatilgan, tabelda esa o'sha kuni hech kim yo'q.
+    CrewWithoutTimesheet { workers: i64 },
+    /// Bir xil hajm ketma-ket kunlarda takrorlangan.
+    RepeatedVolume { days: usize, volume: f64 },
+    /// Yozuv kelajak sanaga kiritilgan.
+    FutureDate,
+    /// Bir ishchiga to'g'ri keladigan hajm shu ish bo'yicha o'rtachadan
+    /// keskin katta.
+    ImplausibleRate { per_worker: f64, average: f64 },
+}
+
+impl JournalDoubt {
+    /// Jiddiy: hajm yoki odam soni haqiqatga to'g'ri kelmaydi.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            JournalDoubt::VolumeOverPlan { .. }
+                | JournalDoubt::CrewWithoutTimesheet { .. }
+                | JournalDoubt::FutureDate
+        )
+    }
+}
+
+/// Bitta jurnal yozuvi bo'yicha shubhalar.
+#[derive(Debug, Clone)]
+pub struct JournalCheck {
+    pub entry_id: i64,
+    pub date: NaiveDate,
+    pub doubts: Vec<JournalDoubt>,
+}
+
+/// Bir xil hajm shuncha kun ketma-ket takrorlansa — shubha.
+pub const REPEAT_DAYS: usize = 3;
+
+/// Bir ishchiga to'g'ri keladigan hajm o'rtachadan shuncha barobar oshsa —
+/// shubha.
+pub const RATE_FACTOR: f64 = 2.5;
+
+/// TZ V.32: soxta hisobotlardan himoya.
+///
+/// Bu ayblov emas — savol: dastur faqat **ichki ziddiyatni** ko'rsatadi
+/// (yozilgan hajm rejadan katta, tabelda odam yo'q, bir xil raqam
+/// takrorlanadi). Har qanday holatda oxirgi so'z odamniki.
+pub fn journal_doubts(
+    journal: &[JournalEntry],
+    tasks: &[Task],
+    timesheet: &[TimesheetEntry],
+    today: NaiveDate,
+) -> Vec<JournalCheck> {
+    // Ish bo'yicha bir ishchiga to'g'ri keladigan o'rtacha hajm.
+    let average = |task_id: i64| -> f64 {
+        let rows: Vec<&JournalEntry> = journal
+            .iter()
+            .filter(|j| j.task_id == Some(task_id) && j.volume > 0.0 && j.workers > 0)
+            .collect();
+        if rows.is_empty() {
+            return 0.0;
+        }
+        rows.iter()
+            .map(|j| j.volume / j.workers as f64)
+            .sum::<f64>()
+            / rows.len() as f64
+    };
+
+    let mut out = Vec::new();
+    for j in journal {
+        let mut doubts = Vec::new();
+
+        if j.date > today {
+            doubts.push(JournalDoubt::FutureDate);
+        }
+
+        if let Some(task) = j.task_id.and_then(|id| tasks.iter().find(|t| t.id == id)) {
+            let left = task.volume * (100.0 - task.progress.clamp(0.0, 100.0)) / 100.0;
+            // Tugallangan ishga yozilgan hajm ham shu qoidaga tushadi.
+            if j.volume > left + task.volume * 0.001 && task.volume > 0.0 {
+                doubts.push(JournalDoubt::VolumeOverPlan {
+                    entered: j.volume,
+                    left,
+                });
+            }
+
+            if j.workers > 0 {
+                let avg = average(task.id);
+                let rate = j.volume / j.workers as f64;
+                if avg > 0.0 && rate > avg * RATE_FACTOR {
+                    doubts.push(JournalDoubt::ImplausibleRate {
+                        per_worker: rate,
+                        average: avg,
+                    });
+                }
+            }
+
+            // Bir xil hajm ketma-ket kunlarda.
+            let mut streak = 1;
+            let mut day = j.date - chrono::Duration::days(1);
+            while journal.iter().any(|o| {
+                o.task_id == j.task_id && o.date == day && (o.volume - j.volume).abs() < 0.0001
+            }) {
+                streak += 1;
+                day -= chrono::Duration::days(1);
+            }
+            if streak >= REPEAT_DAYS && j.volume > 0.0 {
+                doubts.push(JournalDoubt::RepeatedVolume {
+                    days: streak,
+                    volume: j.volume,
+                });
+            }
+        }
+
+        if j.workers > 0 && !timesheet.iter().any(|e| e.date == j.date && e.hours > 0.0) {
+            doubts.push(JournalDoubt::CrewWithoutTimesheet { workers: j.workers });
+        }
+
+        if !doubts.is_empty() {
+            doubts.sort_by_key(|d| !d.severe());
+            out.push(JournalCheck {
+                entry_id: j.id,
+                date: j.date,
+                doubts,
+            });
+        }
+    }
+    // Yangi yozuvlar oldinda: savol tez berilsa, javob ham aniq bo'ladi.
+    out.sort_by_key(|c| std::cmp::Reverse(c.date));
+    out
+}

@@ -22,7 +22,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | II. AI loyiha tekshiruvi | 22 | 9 | 7 | 6 | 2 |
 | III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
 | IV. Ijro hujjatlari | 30 | 15 | 9 | 6 | 3 |
-| V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
+| V. Kunlik ishlar jurnali | 34 | 21 | 5 | 8 | 6 |
 | VI. Prorab ilovasi | 37 | 20 | 10 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **429** | **160** | **111** | **53** |
+| **Jami** | **700** | **433** | **158** | **109** | **53** |
 
-Ya'ni **~61 % to'liq**, **~23 % qisman**, **~16 % hali yo'q**.
+Ya'ni **~62 % to'liq**, **~23 % qisman**, **~16 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -167,13 +167,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 7. Bajarilgan ishlar
 - [x] 8. Fotofiksatsiya
 - [ ] 🔒 9. Fotolarni AI tahlili
-- [~] 10. Materiallar — *ombor orqali; jurnalda to'g'ridan-to'g'ri emas*
-- [~] 11. Material sarfini nazorat — *ombor chiqimi bor; norma bilan solishtirish yo'q*
+- [x] 10. Materiallar — *kunlik hajm bo'yicha sarf*
+- [x] 11. Material sarfini nazorat — *kun ichida norma bilan solishtiriladi*
 - [x] 12. Texnika
 - [ ] 🔒 13. GPS bilan avtomatik bog'lanish
 - [x] 14. GPR bajarilishi — *jurnal hajmi ishga o'tadi*
 - [x] 15. Kechikish tahlili — *AN-S2, AN-S3, AN-S4*
-- [ ] 16. Ertangi kunga reja
+- [x] 16. Ertangi kunga reja
 - [ ] 17. Avtomatik arizalar — *zaxira bo'yicha ariza bor, jurnaldan emas*
 - [~] 18. Muammolar — *xavfsizlik va sifat modullarida*
 - [x] 19. Kritik muammolarni AI aniqlashi — *analitika topilmalari*
@@ -189,7 +189,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 29. Tarix
 - [~] 30. AI qidiruv
 - [x] 31. Boshqa modullar bilan bog'lanish
-- [ ] 32. Soxta hisobotlardan himoya
+- [x] 32. Soxta hisobotlardan himoya — *ichki ziddiyatlar*
 - [~] 33. Kunning yakuniy holati — *prorab ekranida*
 - [x] 34. Asosiy g'oya
 
