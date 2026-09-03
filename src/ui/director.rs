@@ -87,11 +87,122 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     ui.add_space(14.0);
 
     let cards = cards(app);
+    let decisions = app.decisions();
+    let bench = crate::portfolio::benchmark(&app.db, app.today);
     let mut go: Option<Screen> = None;
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            // ---------- Qarorlar markazi (TZ XVII.42) ----------
+            ui.label(RichText::new(t("dr_decisions")).size(14.0).strong());
+            ui.label(
+                RichText::new(t("dr_decisions_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if decisions.is_empty() {
+                ui.label(
+                    RichText::new(t("dr_decisions_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for d in decisions.iter().take(10) {
+                ui.horizontal(|ui| {
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(52.0, 8.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 2.0, theme::line());
+                    ui.painter().rect_filled(
+                        egui::Rect::from_min_size(
+                            rect.min,
+                            egui::vec2(rect.width() * (d.weight() / 100.0) as f32, rect.height()),
+                        ),
+                        2.0,
+                        if d.weight() >= 60.0 {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        },
+                    );
+                    ui.label(RichText::new(decision_text(d)).size(12.0));
+                    if ui.small_button(t("an_open")).clicked() {
+                        go = Some(d.screen());
+                    }
+                });
+            }
+            ui.add_space(16.0);
+
+            // ---------- Obyektlar solishtiruvi (TZ XVII.27-28) ----------
+            if bench.len() > 1 {
+                ui.label(RichText::new(t("dr_bench")).size(14.0).strong());
+                ui.label(
+                    RichText::new(t("dr_bench_hint"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+                egui::Grid::new("dr_bench")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 220.0, t("col_object"));
+                        head_r(ui, 130.0, t("dr_bench_gap"));
+                        head_r(ui, 140.0, t("dr_bench_cost"));
+                        head_r(ui, 130.0, t("dr_bench_hours"));
+                        head_r(ui, 90.0, t("an_exec_quality"));
+                        head_r(ui, 90.0, t("an_exec_safety"));
+                        ui.end_row();
+
+                        for b in &bench {
+                            let name = app
+                                .projects
+                                .iter()
+                                .find(|p| p.id == b.project_id)
+                                .map(|p| p.name.clone())
+                                .unwrap_or_default();
+                            super::warehouse::cell_l(
+                                ui,
+                                220.0,
+                                RichText::new(super::issues::truncate(&name, 28)).size(12.5),
+                            );
+                            super::warehouse::cell_r(
+                                ui,
+                                130.0,
+                                RichText::new(format!("{:+.1}%", b.gap())).size(12.5).color(
+                                    if b.gap() >= 0.0 {
+                                        theme::ok()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            // Hajm noma'lum bo'lsa ustun bo'sh qoladi.
+                            let opt = |v: Option<f64>, money_fmt: bool| match v {
+                                None => RichText::new(t("dash")).color(theme::muted()),
+                                Some(x) if money_fmt => RichText::new(money(x)).size(12.0),
+                                Some(x) => RichText::new(format!("{x:.1}")).size(12.0),
+                            };
+                            super::warehouse::cell_r(ui, 140.0, opt(b.cost_per_volume, true));
+                            super::warehouse::cell_r(ui, 130.0, opt(b.hours_per_volume, false));
+                            super::warehouse::cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{:.0}", b.quality)).size(12.0),
+                            );
+                            super::warehouse::cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{:.0}", b.safety)).size(12.0),
+                            );
+                            ui.end_row();
+                        }
+                    });
+                ui.add_space(16.0);
+            }
+
             // Ustunlar soni oynaga qarab: tor oynada bitta ustun.
             let width = ui.available_width();
             let columns = ((width / 330.0).floor() as usize).clamp(1, 4);
@@ -115,6 +226,43 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if let Some(s) = go {
         app.screen = s;
     }
+}
+
+/// Qarorni odam o'qiydigan gapga aylantiradi.
+fn decision_text(d: &crate::checks::Decision) -> String {
+    use crate::checks::Decision as D;
+    match d {
+        D::Request { number, days } => {
+            format!("{} {number} ({days} {})", t("de_request"), t("days"))
+        }
+        D::Change {
+            number,
+            days,
+            amount,
+        } => format!(
+            "{} {number} — {} ({days} {})",
+            t("de_change"),
+            money(*amount),
+            t("days")
+        ),
+        D::Acceptance { number, days } => {
+            format!("{} {number} ({days} {})", t("de_acceptance"), t("days"))
+        }
+        D::TechApproval { number, amount } => {
+            format!("{} {number} — {}", t("de_tech"), money(*amount))
+        }
+        D::DefectDeadline { count } => format!("{} ({count})", t("de_deadline")),
+        D::DocSign { count } => format!("{} ({count})", t("de_doc")),
+        D::MachineStop { count } => format!("{} ({count})", t("de_machine")),
+    }
+}
+
+fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_l(ui, w, RichText::new(s).size(11.0).color(theme::muted()));
+}
+
+fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_r(ui, w, RichText::new(s).size(11.0).color(theme::muted()));
 }
 
 /// Bitta blokni chizadi; «Ochish» bosilsa `true` qaytadi.

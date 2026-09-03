@@ -4542,6 +4542,28 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "ql_sequence_none" => ("Ketma-ketlik buzilmagan.", "Последовательность не нарушена."),
         "ql_seq_checked" => ("tekshirilgan", "проверена"),
         "ql_seq_unchecked" => ("tekshirilmagan", "не проверена"),
+        // XVII.27-28, 42. Qarorlar markazi va benchmarking
+        "dr_decisions" => ("Qarorlar markazi", "Центр решений"),
+        "dr_decisions_hint" => (
+            "Markaz yangi hisob qilmaydi: har qator boshqa modulda ko'rinadi. Bu yerda ular bir ro'yxatda va kutish vaqti bo'yicha tartiblangan.",
+            "Центр ничего не считает заново: каждая строка видна и в своём модуле. Здесь они собраны в один список и упорядочены по времени ожидания.",
+        ),
+        "dr_decisions_none" => ("Qaror kutayotgan ish yo'q.", "Решений не ожидается."),
+        "de_request" => ("Ariza tasdiqlanmagan", "Заявка не утверждена"),
+        "de_change" => ("O'zgarish qaror kutmoqda", "Изменение ждёт решения"),
+        "de_acceptance" => ("Topshiriq qabul qilinmagan", "Предъявление не принято"),
+        "de_tech" => ("Texnik kelishuvsiz buyurtma", "Заказ без техсогласования"),
+        "de_deadline" => ("Muddatsiz nuqson: kim va qachongacha", "Дефект без срока: кто и до когда"),
+        "de_doc" => ("Imzoga qo'yilgan to'siqli hujjat", "Документ на подписи с препятствием"),
+        "de_machine" => ("To'xtatish kerak bo'lgan texnika", "Техника, требующая остановки"),
+        "dr_bench" => ("Obyektlar solishtiruvi", "Сравнение объектов"),
+        "dr_bench_hint" => (
+            "Solishtirish birlik hajmga keltiriladi: katta obyektning umumiy xarajati kichigidan har doim katta va bu hech narsani aytmaydi.",
+            "Сравнение приводится к единице объёма: общие затраты крупного объекта всегда больше, и это ни о чём не говорит.",
+        ),
+        "dr_bench_gap" => ("Rejadan farq", "Отклонение от плана"),
+        "dr_bench_cost" => ("Birlik hajmga xarajat", "Затраты на единицу"),
+        "dr_bench_hours" => ("Birlik hajmga soat", "Часов на единицу"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

@@ -26,7 +26,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 32 | 3 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
-| IX. Arizalar | 42 | 38 | 3 | 1 | 1 |
+| IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
 | X. Xaridlar | 48 | 43 | 3 | 2 | 2 |
 | XI. Ombor | 48 | 45 | 2 | 1 | 1 |
 | XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
@@ -34,12 +34,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 38 | 1 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
-| XVII. AI analitika | 51 | 47 | 4 | 0 | 0 |
+| XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **565** | **89** | **46** | **46** |
+| **Jami** | **700** | **572** | **82** | **46** | **46** |
 
-Ya'ni **~81 % to'liq**, **~13 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~82 % to'liq**, **~12 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -360,16 +360,16 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 30. Ijroni nazorat qilish — *qoplanish*
 - [x] 31. Ariza tarixi — *kim, qachon, qanday qaror qildi*
 - [x] 32. Rad etish sababi — *sababsiz rad ogohlantiriladi*
-- [~] 33. Arizalarni AI tahlili
+- [x] 33. Arizalarni AI tahlili — *tekshiruv, zanjir va qarorlar markazi*
 - [x] 34. Rahbar paneli — *«Rahbar» ekranida*
 - [x] 35. AI-panel — *modul ekranidan ochiladi*
 - [x] 36. GPR bilan bog'lanish — *ariza ishga bog'lanadi; bog'lanmagani tekshiruvda aytiladi*
 - [x] 37. Ombor bilan bog'lanish
 - [x] 38. Smeta bilan bog'lanish — *smetada yo'q material belgilanadi*
 - [x] 39. Buxgalteriya bilan bog'lanish — *to'lov reyestri `.xlsx`*
-- [~] 40. Yakuniy nazorat
+- [x] 40. Yakuniy nazorat — *ta'minot zanjiri*
 - [x] 41. Modulning bosh ekrani
-- [~] 42. Tizim prediktiv bo'lishi
+- [x] 42. Tizim prediktiv bo'lishi — *risk prognozi va ta'mir prognozi*
 
 ---
 
@@ -749,8 +749,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 24. Yetkazib beruvchilar tahlili
 - [x] 25. Korrelyatsion tahlil — *Pirson koeffitsiyenti, sabab emasligi ochiq aytiladi*
 - [x] 26. Unumdorlik tahlili — *bir birlik ish: soat va pul, o'rtacha bilan solishtirish*
-- [~] 27. Benchmarking — *ishlar o'rtacha bilan solishtiriladi; obyektlar orasida hali yo'q*
-- [~] 28. Loyihalar tahlili
+- [x] 27. Benchmarking — *obyektlar birlik hajmga keltirib solishtiriladi*
+- [x] 28. Loyihalar tahlili — *obyektlar solishtiruvi*
 - [x] 29. Smeta tahlili — *chuqur tekshiruv va zanjir*
 - [x] 30. **Pul oqimlari tahlili** — *oylar kesimida fakt va reja*
 - [x] 31. **Kassa uzilishini rejalashtirish** — *birinchi manfiy oy va summa*
@@ -764,7 +764,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 39. AI sonlarni tushuntirishi — *fakt / hisob / tavsiya va sabab*
 - [x] 40. Ogohlantirishlar tizimi
 - [x] 41. Imkoniyatlarni topish — *har biri pulda o'lchanadi va manba ekraniga bog'langan*
-- [~] 42. **Qarorlar markazi**
+- [x] 42. **Qarorlar markazi** — *«Rahbar» ekranida, kutish vaqti bo'yicha*
 - [x] 43. Ssenariy modellashtirish — *natija: tugash sanasi, tannarx va foyda*
 - [x] 44. Yashirin yo'qotishlar — *ortiqcha zaxira, bo'sh texnika, normadan sarf, tanlanmagan tejash*
 - [x] 45. Chetlanishlar tahlili
@@ -772,7 +772,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 47. Darajalar bo'yicha analitika — *ko'rsatkich → sabab → ekran*
 - [x] 48. **Drill-down** — *kartochka, topilma va oqim qatoridan bo'limga*
 - [x] 49. **AI Executive Score** — *olti ko'rsatkich, vaznlangan*
-- [~] 50. XVII ning bosh arxitekturasi
+- [x] 50. XVII ning bosh arxitekturasi — *ko'rsatkich → sabab → prognoz → qaror*
 - [x] 51. Eng muhim funksiya
 
 ---

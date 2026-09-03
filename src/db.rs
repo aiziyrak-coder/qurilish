@@ -10239,6 +10239,107 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// TZ XVII.42: qarorlar markazi yangi hisob qilmaydi — har qator
+    /// boshqa moduldagi holatdan keladi, tartib esa kutish vaqtiga qarab.
+    #[test]
+    fn decision_centre_only_collects() {
+        use crate::checks::Decision as D;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.decisions();
+        for d in &rows {
+            match d {
+                D::Request { number, days } => {
+                    let r = app
+                        .requests
+                        .iter()
+                        .find(|r| &r.number == number)
+                        .expect("ariza modulda yo'q");
+                    assert_eq!(r.status, crate::domain::RequestStatus::New);
+                    assert_eq!(*days, (app.today - r.date).num_days().max(0));
+                }
+                D::Change { number, .. } => {
+                    assert!(app.contract_changes.iter().any(|c| &c.number == number));
+                }
+                D::Acceptance { number, .. } => {
+                    assert!(app.acceptances.iter().any(|a| &a.number == number));
+                }
+                D::TechApproval { number, .. } => {
+                    assert!(app
+                        .purchases
+                        .iter()
+                        .any(|p| &p.number == number && !p.tech_ok));
+                }
+                D::DefectDeadline { count } => assert!(*count > 0),
+                D::DocSign { count } => assert!(*count > 0),
+                D::MachineStop { count } => assert!(*count > 0),
+            }
+            let _ = d.screen();
+        }
+
+        // Og'irlari oldinda.
+        for w in rows.windows(2) {
+            assert!(w[0].weight() >= w[1].weight());
+        }
+
+        // Uzoq kutgan ariza yaqinda kelganidan og'irroq.
+        let fresh = D::Request {
+            number: "A".into(),
+            days: 1,
+        };
+        let old = D::Request {
+            number: "B".into(),
+            days: 15,
+        };
+        assert!(old.weight() > fresh.weight());
+    }
+
+    /// TZ XVII.27-28: solishtirish birlik hajmga keltiriladi va hajm
+    /// noma'lum bo'lsa ustun bo'sh qoladi.
+    #[test]
+    fn benchmark_is_per_unit_volume() {
+        use crate::checks::{benchmark, BenchmarkInput};
+
+        let rows = vec![
+            BenchmarkInput {
+                project_id: 1,
+                fact_pct: 40.0,
+                plan_pct: 50.0,
+                volume: 100.0,
+                cost: 500.0,
+                hours: 200.0,
+                quality: 80.0,
+                safety: 90.0,
+            },
+            // Hajm yuritilmagan obyekt.
+            BenchmarkInput {
+                project_id: 2,
+                fact_pct: 60.0,
+                plan_pct: 50.0,
+                volume: 0.0,
+                cost: 900.0,
+                hours: 300.0,
+                quality: 70.0,
+                safety: 60.0,
+            },
+        ];
+        let out = benchmark(&rows);
+        assert_eq!(out.len(), 2);
+        // Rejadan orqada qolgani birinchi.
+        assert_eq!(out[0].project_id, 1);
+        assert!((out[0].gap() + 10.0).abs() < 0.001);
+        assert!((out[0].cost_per_volume.unwrap() - 5.0).abs() < 0.001);
+        assert!((out[0].hours_per_volume.unwrap() - 2.0).abs() < 0.001);
+        // Hajmsiz obyektda ustun bo'sh — nol yozilmaydi.
+        assert!(out[1].cost_per_volume.is_none());
+        assert!(out[1].hours_per_volume.is_none());
+        assert!(out[1].gap() > 0.0);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

@@ -2329,6 +2329,20 @@ impl App {
         checks::sequence_breaks(&self.tasks, &self.links, &self.quality)
     }
 
+    /// Qaror kutayotgan ishlar (TZ XVII.42).
+    pub fn decisions(&self) -> Vec<checks::Decision> {
+        checks::decisions(&checks::DecisionCtx {
+            requests: &self.requests,
+            changes: &self.contract_changes,
+            acceptances: &self.acceptances,
+            supply: &self.supply_control(),
+            quality: &self.quality,
+            docs: &self.doc_readiness(),
+            mech: &self.mech_issues(),
+            today: self.today,
+        })
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

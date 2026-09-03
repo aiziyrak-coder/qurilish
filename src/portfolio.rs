@@ -248,6 +248,50 @@ pub fn object_staff(db: &Db, from: NaiveDate, to: NaiveDate) -> Vec<checks::Obje
     checks::object_staff(&rows, from, to)
 }
 
+/// Obyektlarni bir xil o'lchovda solishtiradi (TZ XVII.27-28).
+pub fn benchmark(db: &Db, today: NaiveDate) -> Vec<checks::Benchmark> {
+    let rows: Vec<checks::BenchmarkInput> = db
+        .projects()
+        .unwrap_or_default()
+        .iter()
+        .map(|p| {
+            let tasks = db.tasks(p.id).unwrap_or_default();
+            let links = db.links(p.id).unwrap_or_default();
+            let schedule = crate::cpm::compute(&tasks, &links, p.start_date);
+            let progress = crate::cpm::progress(&tasks, &schedule, p.start_date, today);
+            let quality = db.quality_checks(p.id);
+            let safety = db.safety_events(p.id);
+            checks::BenchmarkInput {
+                project_id: p.id,
+                fact_pct: progress.fact_pct,
+                plan_pct: progress.plan_pct,
+                volume: tasks.iter().map(|t| t.volume).sum(),
+                cost: db
+                    .purchases(p.id)
+                    .iter()
+                    .filter(|x| x.status != crate::domain::PurchaseStatus::Draft)
+                    .map(|x| x.amount())
+                    .sum(),
+                hours: db.timesheet(p.id).iter().map(|e| e.hours).sum(),
+                quality: checks::quality_score(&quality, today).score,
+                safety: checks::safety_score(
+                    &safety,
+                    &checks::worker_safety(
+                        &db.workers(p.id),
+                        &db.worker_permits(p.id),
+                        &db.ppe_issues(p.id),
+                        today,
+                    ),
+                    &db.work_permits(p.id),
+                    today,
+                )
+                .score,
+            }
+        })
+        .collect();
+    checks::benchmark(&rows)
+}
+
 /// Qayta taqsimlash rejasi shuncha kun oldinga qaraydi.
 const PLAN_HORIZON: i64 = 45;
 

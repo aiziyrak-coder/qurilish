@@ -11754,3 +11754,207 @@ pub fn sequence_breaks(
     out.sort_by_key(|b| (b.pred_checked, b.task_id));
     out
 }
+
+// ================= XVII.27-28, 42. Qarorlar markazi va benchmarking =================
+
+/// Odam qaror qabul qilishi kerak bo'lgan ish (TZ XVII.42).
+#[derive(Debug, Clone, PartialEq)]
+pub enum Decision {
+    /// Tasdiqlashni kutayotgan ariza.
+    Request { number: String, days: i64 },
+    /// Qaror kutayotgan shartnoma o'zgarishi.
+    Change {
+        number: String,
+        days: i64,
+        amount: f64,
+    },
+    /// Qabul qilinmagan ish topshirig'i.
+    Acceptance { number: String, days: i64 },
+    /// Texnik kelishuvsiz buyurtma.
+    TechApproval { number: String, amount: f64 },
+    /// Bartaraf etish muddati belgilanmagan nuqson.
+    DefectDeadline { count: usize },
+    /// Imzoga qo'yilgan, lekin to'siqli hujjat.
+    DocSign { count: usize },
+    /// To'xtatish kerak bo'lgan texnika.
+    MachineStop { count: usize },
+}
+
+impl Decision {
+    /// Qaror qanchalik shoshilinch: 0-100.
+    ///
+    /// Kutish kunlari asosiy o'lchov — qaror qancha kutsa, shuncha
+    /// qimmatga tushadi. Pulga tegishlilari qo'shimcha vazn oladi.
+    pub fn weight(&self) -> f64 {
+        let by_days = |d: i64| (d as f64 * 5.0).clamp(0.0, 80.0);
+        match self {
+            Decision::Request { days, .. } | Decision::Acceptance { days, .. } => by_days(*days),
+            Decision::Change { days, .. } => by_days(*days) + 20.0,
+            Decision::TechApproval { .. } => 70.0,
+            Decision::DefectDeadline { .. } => 60.0,
+            Decision::DocSign { .. } => 50.0,
+            Decision::MachineStop { .. } => 90.0,
+        }
+        .clamp(0.0, 100.0)
+    }
+
+    /// Qaror qaysi ekranda qabul qilinadi.
+    pub fn screen(&self) -> crate::app::Screen {
+        use crate::app::Screen as S;
+        match self {
+            Decision::Request { .. } => S::Requests,
+            Decision::Change { .. } | Decision::Acceptance { .. } => S::Contracts,
+            Decision::TechApproval { .. } => S::Purchases,
+            Decision::DefectDeadline { .. } => S::Quality,
+            Decision::DocSign { .. } => S::ExecDocs,
+            Decision::MachineStop { .. } => S::Machines,
+        }
+    }
+}
+
+/// Qarorlar markazi uchun manba.
+pub struct DecisionCtx<'a> {
+    pub requests: &'a [Request],
+    pub changes: &'a [ContractChange],
+    pub acceptances: &'a [WorkAcceptance],
+    pub supply: &'a [SupplyIssue],
+    pub quality: &'a [QualityCheck],
+    pub docs: &'a [DocCheck],
+    pub mech: &'a [MechIssue],
+    pub today: NaiveDate,
+}
+
+/// TZ XVII.42: qaror kutayotgan ishlarni bir joyga yig'adi.
+///
+/// Markaz **yangi hisob qilmaydi**: har qator boshqa modulda allaqachon
+/// ko'rinadigan holat. Bu yerdagi qiymat boshqa: qarorlar bir ro'yxatda
+/// va kutish vaqti bo'yicha tartiblangan — chunki qaror qancha kutsa,
+/// shuncha qimmatga tushadi.
+pub fn decisions(ctx: &DecisionCtx) -> Vec<Decision> {
+    let mut out = Vec::new();
+
+    for r in ctx
+        .requests
+        .iter()
+        .filter(|r| r.status == RequestStatus::New)
+    {
+        out.push(Decision::Request {
+            number: r.number.clone(),
+            days: (ctx.today - r.date).num_days().max(0),
+        });
+    }
+
+    for c in ctx
+        .changes
+        .iter()
+        .filter(|c| matches!(c.status, ChangeStatus::Draft | ChangeStatus::Sent))
+    {
+        out.push(Decision::Change {
+            number: c.number.clone(),
+            days: (ctx.today - c.date).num_days().max(0),
+            amount: c.amount,
+        });
+    }
+
+    for a in ctx
+        .acceptances
+        .iter()
+        .filter(|a| a.state == AcceptState::Submitted)
+    {
+        out.push(Decision::Acceptance {
+            number: a.number.clone(),
+            days: (ctx.today - a.date).num_days().max(0),
+        });
+    }
+
+    for i in ctx.supply {
+        if let SupplyIssue::NoTechApproval { number, amount } = i {
+            out.push(Decision::TechApproval {
+                number: number.clone(),
+                amount: *amount,
+            });
+        }
+    }
+
+    // Muddatsiz nuqson: kim va qachongacha tuzatishi belgilanmagan.
+    let no_deadline = ctx
+        .quality
+        .iter()
+        .filter(|q| !q.defect.trim().is_empty() && q.fixed_at.is_none() && q.deadline.is_none())
+        .count();
+    if no_deadline > 0 {
+        out.push(Decision::DefectDeadline { count: no_deadline });
+    }
+
+    let blocked = ctx.docs.iter().filter(|d| !d.ready()).count();
+    if blocked > 0 {
+        out.push(Decision::DocSign { count: blocked });
+    }
+
+    let stops = ctx.mech.iter().filter(|i| i.stop()).count();
+    if stops > 0 {
+        out.push(Decision::MachineStop { count: stops });
+    }
+
+    out.sort_by(|a, b| b.weight().total_cmp(&a.weight()));
+    out
+}
+
+/// Obyektlar bo'yicha solishtirish (TZ XVII.27-28).
+#[derive(Debug, Clone)]
+pub struct Benchmark {
+    pub project_id: i64,
+    /// Bajarilish: fakt va reja.
+    pub fact_pct: f64,
+    pub plan_pct: f64,
+    /// Bir birlik hajmga tannarx. Hajm noma'lum bo'lsa `None`.
+    pub cost_per_volume: Option<f64>,
+    /// Bir birlik hajmga soat.
+    pub hours_per_volume: Option<f64>,
+    pub quality: f64,
+    pub safety: f64,
+}
+
+impl Benchmark {
+    /// Rejadan orqada qolish, foizda.
+    pub fn gap(&self) -> f64 {
+        self.fact_pct - self.plan_pct
+    }
+}
+
+/// Solishtirish uchun bitta obyektning kirish ma'lumoti.
+#[derive(Debug, Clone, Default)]
+pub struct BenchmarkInput {
+    pub project_id: i64,
+    pub fact_pct: f64,
+    pub plan_pct: f64,
+    /// Umumiy ish hajmi. Nol — hajm yuritilmagan.
+    pub volume: f64,
+    pub cost: f64,
+    pub hours: f64,
+    pub quality: f64,
+    pub safety: f64,
+}
+
+/// TZ XVII.27-28: obyektlarni bir xil o'lchovda solishtiradi.
+///
+/// Solishtirish **birlik hajmga** keltiriladi: katta obyektning umumiy
+/// xarajati kichigidan har doim katta bo'ladi va bu hech narsani
+/// aytmaydi. Hajm noma'lum bo'lsa ustun bo'sh qoladi — nol yozilmaydi.
+pub fn benchmark(rows: &[BenchmarkInput]) -> Vec<Benchmark> {
+    let mut out: Vec<Benchmark> = rows
+        .iter()
+        .map(|r| Benchmark {
+            project_id: r.project_id,
+            fact_pct: r.fact_pct,
+            plan_pct: r.plan_pct,
+            cost_per_volume: (r.volume > 0.0).then(|| r.cost / r.volume),
+            hours_per_volume: (r.volume > 0.0).then(|| r.hours / r.volume),
+            quality: r.quality,
+            safety: r.safety,
+        })
+        .collect();
+    // Rejadan eng ko'p orqada qolgani oldinda.
+    out.sort_by(|a, b| a.gap().total_cmp(&b.gap()));
+    out
+}
