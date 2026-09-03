@@ -10974,6 +10974,52 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// Umumiy talab: izoh mexanizmi asosiy yozuv turlarining hammasida
+    /// bir xil ishlaydi — bir joyda izoh bor, boshqasida yo'q bo'lmasin.
+    #[test]
+    fn notes_work_for_every_wired_target() {
+        use crate::domain::{Note, NoteTarget};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+
+        // Ekranlarga ulangan yozuv turlari.
+        let wired = [
+            NoteTarget::Task,
+            NoteTarget::Issue,
+            NoteTarget::Request,
+            NoteTarget::Purchase,
+            NoteTarget::ExecDoc,
+            NoteTarget::Quality,
+            NoteTarget::Safety,
+            NoteTarget::Inspection,
+            NoteTarget::Machine,
+            NoteTarget::Material,
+            NoteTarget::Document,
+        ];
+        for (i, target) in wired.iter().enumerate() {
+            let id = i as i64 + 1;
+            t.db.insert_note(&Note {
+                id: 0,
+                project_id: pid,
+                target: *target,
+                target_id: id,
+                author: "Sinov".into(),
+                at: "2026-04-10 09:00".into(),
+                text: format!("{} izohi", target.code()),
+                parent: None,
+                resolved: false,
+            });
+            let mine: Vec<Note> =
+                t.db.notes(pid)
+                    .into_iter()
+                    .filter(|n| n.target == *target && n.target_id == id)
+                    .collect();
+            assert_eq!(mine.len(), 1, "{target:?}: izoh saqlanmadi");
+            assert!(!mine[0].resolved);
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

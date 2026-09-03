@@ -757,6 +757,8 @@ fn advice_text(a: &crate::checks::ParkAdvice) -> String {
 fn park_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<Machine> = None;
     let mut removed: Option<i64> = None;
+    // Texnikaga izoh va foto: nosozlik ko'pincha rasm bilan tushuntiriladi.
+    let mut open_notes: Option<i64> = None;
     let today = app.today;
     // TX va to'siqlar butun tarix bo'yicha hisoblanadi.
     let lines = machine_lines(app, today - chrono::Duration::days(30), today);
@@ -768,7 +770,7 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("machines_grid")
-                .num_columns(if wide { 14 } else { 12 })
+                .num_columns(if wide { 15 } else { 13 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -789,6 +791,7 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
                     head_r(ui, 120.0, t("col_service_hours"));
                     head_r(ui, 130.0, t("col_service_left"));
                     head_l(ui, 80.0, t("col_rented"));
+                    head_l(ui, 60.0, t("nt_col"));
                     head_l(ui, 24.0, "");
                     ui.end_row();
 
@@ -948,6 +951,9 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
                             }
                         });
 
+                        if super::notes::badge(ui, app, crate::domain::NoteTarget::Machine, m.id) {
+                            open_notes = Some(m.id);
+                        }
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -962,6 +968,8 @@ fn park_tab(ui: &mut egui::Ui, app: &mut App) {
                     }
                 });
         });
+
+    super::notes::below_table(ui, app, crate::domain::NoteTarget::Machine, open_notes);
 
     if let Some(m) = edited {
         app.db.update_machine(&m);

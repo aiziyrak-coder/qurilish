@@ -1668,6 +1668,26 @@ fn inspector(ui: &mut egui::Ui, app: &mut App, id: i64) {
                             }
                         });
                 });
+                // To'rtinchi ustun — ish bo'yicha muhokama va fayllar.
+                // Izoh ishning yonida turishi kerak: alohida ekranga
+                // chiqarilsa, u yozilmay qoladi.
+                ui.separator();
+                ui.vertical(|ui| {
+                    ui.set_width(340.0);
+                    ui.label(
+                        RichText::new(t("nt_panel"))
+                            .size(13.0)
+                            .strong()
+                            .color(theme::accent()),
+                    );
+                    ui.add_space(4.0);
+                    egui::ScrollArea::vertical()
+                        .id_salt("gt_notes")
+                        .max_height(200.0)
+                        .show(ui, |ui| {
+                            super::notes::panel(ui, app, crate::domain::NoteTarget::Task, id);
+                        });
+                });
             });
         });
 

@@ -9,7 +9,7 @@
 
 use super::warehouse::{cell_l, cell_r};
 use super::*;
-use crate::domain::{IssueStatus, SafetyEvent, SafetyKind, Severity};
+use crate::domain::{IssueStatus, NoteTarget, SafetyEvent, SafetyKind, Severity};
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let Some(pid) = app.current else {
@@ -278,13 +278,15 @@ fn status_color(s: IssueStatus) -> Color32 {
 fn table(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<SafetyEvent> = None;
     let mut removed: Option<i64> = None;
+    // Hodisaga izoh va foto: nima bo'lgani ko'pincha rasmda ko'rinadi.
+    let mut open_notes: Option<i64> = None;
     let today = app.today;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("safety_grid")
-                .num_columns(10)
+                .num_columns(11)
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -297,6 +299,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                     head_l(ui, 220.0, t("col_measure"));
                     head_l(ui, 140.0, t("col_responsible"));
                     head_l(ui, 130.0, t("col_fix_deadline"));
+                    head_l(ui, 60.0, t("nt_col"));
                     head_l(ui, 24.0, "");
                     ui.end_row();
 
@@ -376,6 +379,9 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             }
                         });
 
+                        if super::notes::badge(ui, app, NoteTarget::Safety, s.id) {
+                            open_notes = Some(s.id);
+                        }
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -401,6 +407,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         app.db.del("safety_event", id);
         app.reload_modules();
     }
+    super::notes::below_table(ui, app, NoteTarget::Safety, open_notes);
 }
 
 // ================================================== Ruxsatlar matritsasi

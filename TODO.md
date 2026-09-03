@@ -823,7 +823,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] **Excel va PDF eksporti** — *20 ta ekran jadvali, Ctrl+E; kengaytmaga qarab `.xlsx` yoki `.pdf` (A4 albom, sahifalash, tizim shrifti bilan kirill/lotin)*
 - [x] **Bildirishnomalar tizimi** — *ilova ichida: 9 modul signali, yon panelda son; SMS/Telegram tashqi omil*
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
-- [x] **Izoh va muhokama** — *har qanday yozuvga izoh, javob va «hal qilindi»; fayl va «oldin/keyin» fotosi*
+- [x] **Izoh va muhokama** — *11 turdagi yozuvga izoh, javob va «hal qilindi»; fayl va «oldin/keyin» fotosi; qamrov sinov bilan qo'riqlanadi*
 
 ---
 

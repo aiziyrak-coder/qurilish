@@ -524,6 +524,13 @@ pub fn issue_detail(ui: &mut egui::Ui, app: &mut App, height: f32) {
                             .size(11.0)
                             .color(theme::muted()),
                     );
+
+                    // Nomuvofiqlik ustidagi muhokama shu yerda turadi:
+                    // qaror kartochkadan ajralmasin.
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(6.0);
+                    super::notes::panel(ui, app, crate::domain::NoteTarget::Issue, id);
                 });
         });
 
