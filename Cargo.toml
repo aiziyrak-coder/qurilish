@@ -22,6 +22,7 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
 # Excel yozish: KS-2, KS-3, M-29 va jadval eksporti uchun.
 rust_xlsxwriter = { version = "0.99.0", default-features = false }
+printpdf = { version = "0.7", default-features = false }
 
 [features]
 # OpenAI integratsiyasi yig'ilishga kiradi, lekin **ishlamaydi**: u sozlamada

@@ -221,11 +221,27 @@ pub fn export_current(app: &mut App) {
         .set_title(t("export"))
         .set_file_name(&name)
         .add_filter("Excel", &["xlsx"])
+        .add_filter("PDF", &["pdf"])
         .save_file()
     else {
         return;
     };
-    match crate::docgen::write_table(&path, &table) {
+    // Formatni kengaytma belgilaydi: Excel — ish uchun, PDF — topshirish
+    // uchun. Ikkalasi ham bitta jadvaldan chiqadi.
+    let pdf = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    let result = if pdf {
+        let subtitle = format!(
+            "{} · {}",
+            app.project().map(|p| p.name.clone()).unwrap_or_default(),
+            app.today.format("%d.%m.%Y")
+        );
+        crate::pdf::write_table(&path, &table, subtitle.trim_start_matches(" · "))
+    } else {
+        crate::docgen::write_table(&path, &table).map_err(|e| format!("{e}"))
+    };
+    match result {
         Ok(()) => app.notify(format!("{} {rows} · {}", t("export_done"), path.display())),
         Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
     }

@@ -18,6 +18,7 @@ mod llm;
 mod model;
 mod notify;
 mod package;
+mod pdf;
 mod portfolio;
 mod roles;
 mod sales;

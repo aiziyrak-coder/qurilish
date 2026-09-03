@@ -36,8 +36,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
-| Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **637** | **17** | **46** | **46** |
+| Umumiy (TZ dan tashqari) | 14 | 12 | 0 | 2 | 2 |
+| **Jami** | **700** | **638** | **16** | **46** | **46** |
 
 Ya'ni **~91 % to'liq**, **~2 % qisman**, **~7 % hali yo'q**.
 
@@ -820,7 +820,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 **Server va jonli sinxronizatsiya**
 - [ ] 🔒 **Mobil klient**
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
-- [~] **Excel eksporti** — *20 ta ekran jadvali, Ctrl+E; PDF hali yo'q*
+- [x] **Excel va PDF eksporti** — *20 ta ekran jadvali, Ctrl+E; kengaytmaga qarab `.xlsx` yoki `.pdf` (A4 albom, sahifalash, tizim shrifti bilan kirill/lotin)*
 - [x] **Bildirishnomalar tizimi** — *ilova ichida: 9 modul signali, yon panelda son; SMS/Telegram tashqi omil*
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*
 - [x] **Izoh va muhokama** — *har qanday yozuvga izoh, javob va «hal qilindi»; fayl va «oldin/keyin» fotosi*
