@@ -34,10 +34,10 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 33 | 6 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
 | XVI. Mashinalar | 50 | 42 | 6 | 2 | 2 |
-| XVII. AI analitika | 51 | 46 | 5 | 0 | 0 |
+| XVII. AI analitika | 51 | 47 | 4 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **541** | **113** | **46** | **46** |
+| **Jami** | **700** | **542** | **112** | **46** | **46** |
 
 Ya'ni **~77 % to'liq**, **~16 % qisman**, **~7 % hali yo'q**.
 
@@ -725,7 +725,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 - [x] 1. Asosiy vazifa
 - [x] 2. Direktorning bosh ekrani
-- [~] 3. **AI 5 ta savolga javob berishi** — *«nima bo'lyapti», «nima qilish kerak» bor; «nega», «qancha turadi», «keyin nima bo'ladi» qisman*
+- [x] 3. **AI 5 ta savolga javob berishi** — *besh savol ham: «Nega va keyin nima» tabi*
 - [x] 4. Obyektlar bo'yicha analitika — *«Obyektlar» ekrani: barcha obyektlar yonma-yon, e'tibor talab qiladiganlari oldinda*
 - [x] 5. Plan-fakt
 - [x] 6. GPR tahlili
