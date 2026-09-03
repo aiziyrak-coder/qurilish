@@ -4938,3 +4938,335 @@ pub fn buyer_stats(purchases: &[Purchase], quotes: &[Quote], today: NaiveDate) -
     out.sort_by(|a, b| b.amount.total_cmp(&a.amount));
     out
 }
+
+// ================= XVII.14, 32-34. Moliyaviy prognoz =================
+
+/// Obyekt bo'yicha moliyaviy prognoz (TZ XVII.13-14, 32-34).
+///
+/// Prognoz bitta oddiy taxminga tayanadi: bugungi bajarilish darajasidagi
+/// tannarx oxirigacha shu tezlikda o'sadi. Boshqa taxmin kiritilmaydi —
+/// aks holda son «qayerdan chiqdi» degan savolga javob bo'lmaydi.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct FinanceForecast {
+    /// Shartnoma summasi va tasdiqlangan o'zgarishlar bilan amaldagi summa.
+    pub contract: f64,
+    /// Bugungi kunga bajarilgan ish qiymati.
+    pub earned: f64,
+    /// Bugungi kunga to'plangan tannarx.
+    pub cost_now: f64,
+    /// Yakuniy tannarx prognozi.
+    pub cost_forecast: f64,
+    /// Yakuniy foyda prognozi.
+    pub profit_forecast: f64,
+    /// Foyda ulushi, foizda.
+    pub margin_pct: f64,
+    /// Buyurtmachidan olinishi kerak bo'lgan qarz (debitorlik).
+    pub receivable: f64,
+    /// Shundan muddati o'tgani.
+    pub overdue: f64,
+    /// Yaqin 90 kunda kutilayotgan tushum.
+    pub revenue_90: f64,
+    /// Bajarilish foizi — prognoz shundan chiqarilgan.
+    pub progress_pct: f64,
+}
+
+/// Moliyaviy prognozni yig'adi.
+pub fn finance_forecast(
+    contract: f64,
+    changes: &[ContractChange],
+    stages: &[PaymentStage],
+    cost_now: f64,
+    progress_pct: f64,
+    today: NaiveDate,
+) -> FinanceForecast {
+    let approved: f64 = changes
+        .iter()
+        .filter(|c| c.counts())
+        .map(|c| c.amount)
+        .sum();
+    let current = contract + approved;
+    let p = (progress_pct / 100.0).clamp(0.0, 1.0);
+
+    // Yakuniy tannarx: bugungi tannarxni bajarilish ulushiga bo'lamiz.
+    // Bajarilish juda kichik bo'lsa prognoz ishonchsiz — nol qoldiramiz.
+    let cost_forecast = if p >= 0.05 { cost_now / p } else { 0.0 };
+    let soon = today + chrono::Duration::days(90);
+
+    FinanceForecast {
+        contract: current,
+        earned: current * p,
+        cost_now,
+        cost_forecast,
+        profit_forecast: if cost_forecast > 0.0 {
+            current - cost_forecast
+        } else {
+            0.0
+        },
+        margin_pct: if current > 0.0 && cost_forecast > 0.0 {
+            (current - cost_forecast) / current * 100.0
+        } else {
+            0.0
+        },
+        receivable: stages.iter().map(|s| s.left()).sum(),
+        overdue: stages
+            .iter()
+            .filter(|s| s.overdue(today))
+            .map(|s| s.left())
+            .sum(),
+        revenue_90: stages
+            .iter()
+            .filter(|s| !s.closed() && s.due >= today && s.due <= soon)
+            .map(|s| s.left())
+            .sum(),
+        progress_pct,
+    }
+}
+
+// ================= XVII.26-27. Unumdorlik va benchmarking =================
+
+/// Bitta ish bo'yicha unumdorlik (TZ XVII.26).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Productivity {
+    pub task_id: i64,
+    /// Bajarilgan hajm.
+    pub done_volume: f64,
+    pub unit: String,
+    /// Shu ishga sarflangan soat.
+    pub hours: f64,
+    /// Bir birlik uchun soat.
+    pub hours_per_unit: f64,
+    /// Bir birlik uchun ish haqi.
+    pub cost_per_unit: f64,
+}
+
+/// Ishlar bo'yicha unumdorlikni hisoblaydi.
+///
+/// Faqat hajmi va sarflangan soati bor ishlar kiradi: qolganida
+/// «bir birlik qancha turadi» degan savolga javob yo'q.
+pub fn productivity(
+    tasks: &[Task],
+    timesheet: &[TimesheetEntry],
+    workers: &[Worker],
+) -> Vec<Productivity> {
+    let mut out = Vec::new();
+    for t in tasks {
+        if t.volume <= 0.0 || t.progress <= 0.0 {
+            continue;
+        }
+        let rows: Vec<&TimesheetEntry> = timesheet
+            .iter()
+            .filter(|e| e.task_id == Some(t.id))
+            .collect();
+        let hours: f64 = rows.iter().map(|e| e.hours).sum();
+        if hours <= 0.0 {
+            continue;
+        }
+        let cost: f64 = rows
+            .iter()
+            .map(|e| {
+                let rate = workers
+                    .iter()
+                    .find(|w| w.id == e.worker_id)
+                    .map(|w| w.hourly_rate)
+                    .unwrap_or(0.0);
+                e.hours * rate * e.shift.rate()
+            })
+            .sum();
+        let done = t.volume * (t.progress / 100.0);
+        if done <= 0.0 {
+            continue;
+        }
+        out.push(Productivity {
+            task_id: t.id,
+            done_volume: done,
+            unit: t.unit.clone(),
+            hours,
+            hours_per_unit: hours / done,
+            cost_per_unit: cost / done,
+        });
+    }
+    out.sort_by(|a, b| b.hours_per_unit.total_cmp(&a.hours_per_unit));
+    out
+}
+
+// ================= XVII.36, 43. Ssenariy =================
+
+/// «Nima bo'ladi, agar?» ssenariysi (TZ XVII.36, 43).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Scenario {
+    /// Muddat necha kunga suriladi.
+    pub delay_days: i64,
+    /// Material narxi necha foizga o'zgaradi.
+    pub price_pct: f64,
+    /// Ish haqi necha foizga o'zgaradi.
+    pub wage_pct: f64,
+}
+
+/// Ssenariy natijasi.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ScenarioResult {
+    /// Tugash sanasi ssenariysiz va ssenariy bilan.
+    pub finish: Option<NaiveDate>,
+    pub finish_after: Option<NaiveDate>,
+    /// Yakuniy tannarx ssenariysiz va ssenariy bilan.
+    pub cost: f64,
+    pub cost_after: f64,
+    /// Foyda ssenariysiz va ssenariy bilan.
+    pub profit: f64,
+    pub profit_after: f64,
+    /// Shartnoma muddatidan chiqib ketadimi.
+    pub over_deadline: bool,
+}
+
+/// Ssenariyni hisoblaydi (TZ XVII.36).
+///
+/// Bu bashorat emas, **arifmetika**: berilgan taxminlar bugungi sonlarga
+/// qo'llanadi. Shuning uchun natija tushunarli va tekshirib bo'ladigan.
+pub fn scenario(
+    base: &FinanceForecast,
+    costs: &[TaskCost],
+    forecast_end: Option<NaiveDate>,
+    planned_end: NaiveDate,
+    s: &Scenario,
+) -> ScenarioResult {
+    // Material va ish haqi ulushlari bugungi tannarx tarkibidan olinadi va
+    // yakuniy tannarxga ko'chiriladi.
+    let total: f64 = costs.iter().map(|c| c.total).sum();
+    let share = |part: f64| if total > 0.0 { part / total } else { 0.0 };
+    let mat_share = share(costs.iter().map(|c| c.material).sum());
+    let wage_share = share(costs.iter().map(|c| c.labour).sum());
+
+    let delta = base.cost_forecast * mat_share * (s.price_pct / 100.0)
+        + base.cost_forecast * wage_share * (s.wage_pct / 100.0);
+    let cost_after = base.cost_forecast + delta;
+    let finish_after = forecast_end.map(|d| d + chrono::Duration::days(s.delay_days));
+
+    ScenarioResult {
+        finish: forecast_end,
+        finish_after,
+        cost: base.cost_forecast,
+        cost_after,
+        profit: base.contract - base.cost_forecast,
+        profit_after: base.contract - cost_after,
+        over_deadline: finish_after.is_some_and(|d| d > planned_end),
+    }
+}
+
+// ================= XVII.41, 44. Yo'qotish va imkoniyatlar =================
+
+/// Topilgan yo'qotish yoki imkoniyat (TZ XVII.41, 44).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Opportunity {
+    pub code: &'static str,
+    /// Musbat — tejash imkoniyati, manfiy — yo'qotish.
+    pub amount: f64,
+    pub title: String,
+    pub detail: String,
+    pub screen: crate::app::Screen,
+}
+
+/// Ko'zga tashlanmaydigan yo'qotishlar va tejash imkoniyatlari.
+///
+/// Har biri **pulda** o'lchanadi: «diqqat qiling» degan xabar emas, aniq
+/// summa bo'lsa, unga qarab qaror qabul qilinadi.
+pub fn opportunities(
+    stock: &[StockLine],
+    materials: &[Material],
+    machines: &[MachineLine],
+    quotes: &[Quote],
+    purchases: &[Purchase],
+    usage: &[ConsumptionLine],
+) -> Vec<Opportunity> {
+    let mut out = Vec::new();
+
+    // 1. Harakatsiz zaxira: pul omborda turibdi.
+    let idle: f64 = stock
+        .iter()
+        .filter(|l| l.balance > 0.0)
+        .filter(|l| {
+            materials
+                .iter()
+                .find(|m| m.id == l.material_id)
+                .is_some_and(|m| l.balance > m.min_stock * 3.0 && m.min_stock > 0.0)
+        })
+        .map(|l| l.value)
+        .sum();
+    if idle > 0.0 {
+        out.push(Opportunity {
+            code: "OP-1",
+            amount: idle,
+            title: crate::i18n::t("op_idle_stock").to_string(),
+            detail: crate::i18n::t("op_idle_stock_hint").to_string(),
+            screen: crate::app::Screen::Warehouse,
+        });
+    }
+
+    // 2. Bo'sh turgan texnika: ijarasi to'lanadi, ishlamaydi.
+    let idle_machines: Vec<&MachineLine> = machines
+        .iter()
+        .filter(|m| m.work_days == 0 && m.cost > 0.0)
+        .collect();
+    if !idle_machines.is_empty() {
+        out.push(Opportunity {
+            code: "OP-2",
+            amount: idle_machines.iter().map(|m| m.cost).sum(),
+            title: format!(
+                "{} {}",
+                idle_machines.len(),
+                crate::i18n::t("op_idle_machines")
+            ),
+            detail: crate::i18n::t("op_idle_machines_hint").to_string(),
+            screen: crate::app::Screen::Machines,
+        });
+    }
+
+    // 3. Normadan ortiq sarf: material yo'qolgan yoki isrof bo'lgan.
+    let over: f64 = usage
+        .iter()
+        .filter(|u| u.over)
+        .map(|u| {
+            let price = materials
+                .iter()
+                .find(|m| m.id == u.material_id)
+                .map(|m| m.price)
+                .unwrap_or(0.0);
+            let _ = price;
+            u.over_cost
+        })
+        .sum();
+    if over > 0.0 {
+        out.push(Opportunity {
+            code: "OP-3",
+            amount: -over,
+            title: crate::i18n::t("op_over_usage").to_string(),
+            detail: crate::i18n::t("op_over_usage_hint").to_string(),
+            screen: crate::app::Screen::Materials,
+        });
+    }
+
+    // 4. Arzonroq taklif tanlanmagan: farq — yo'qotilgan tejash.
+    let mut missed = 0.0;
+    for p in purchases {
+        let Some(rid) = p.request_id else { continue };
+        let best = quotes
+            .iter()
+            .filter(|q| q.request_id == Some(rid))
+            .map(|q| q.price)
+            .fold(f64::INFINITY, f64::min);
+        if best.is_finite() && p.price > best {
+            missed += (p.price - best) * p.qty;
+        }
+    }
+    if missed > 0.0 {
+        out.push(Opportunity {
+            code: "OP-4",
+            amount: -missed,
+            title: crate::i18n::t("op_missed_quote").to_string(),
+            detail: crate::i18n::t("op_missed_quote_hint").to_string(),
+            screen: crate::app::Screen::Purchases,
+        });
+    }
+
+    out.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
+    out
+}

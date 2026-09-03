@@ -5169,6 +5169,150 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(back.urgent);
     }
 
+    /// TZ XVII.14: yakuniy tannarx bugungi tannarxdan bajarilish ulushiga
+    /// bo'linadi — boshqa taxmin yo'q.
+    #[test]
+    fn finance_forecast_scales_cost_by_progress() {
+        use crate::checks::finance_forecast;
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let f = finance_forecast(1_000.0, &[], &[], 200.0, 40.0, today);
+        assert_eq!(f.contract, 1_000.0);
+        assert!((f.cost_forecast - 500.0).abs() < 0.001, "200 / 0.4 = 500");
+        assert!((f.profit_forecast - 500.0).abs() < 0.001);
+        assert!((f.margin_pct - 50.0).abs() < 0.001);
+        assert!((f.earned - 400.0).abs() < 0.001);
+
+        // Bajarilish juda kichik — prognoz berilmaydi.
+        let early = finance_forecast(1_000.0, &[], &[], 10.0, 2.0, today);
+        assert_eq!(early.cost_forecast, 0.0);
+        assert_eq!(early.profit_forecast, 0.0);
+    }
+
+    /// Tasdiqlangan o'zgarish shartnoma summasini oshiradi, debitorlik esa
+    /// to'lov jadvalidan olinadi.
+    #[test]
+    fn forecast_uses_approved_changes_and_stages() {
+        use crate::checks::finance_forecast;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let project =
+            t.db.projects()
+                .unwrap()
+                .into_iter()
+                .find(|p| p.id == pid)
+                .unwrap();
+        let changes = t.db.contract_changes(pid);
+        let stages = t.db.payment_stages(pid);
+
+        let f = finance_forecast(
+            project.contract_sum,
+            &changes,
+            &stages,
+            5_000_000_000.0,
+            50.0,
+            today,
+        );
+        let approved: f64 = changes
+            .iter()
+            .filter(|c| c.counts())
+            .map(|c| c.amount)
+            .sum();
+        assert!((f.contract - (project.contract_sum + approved)).abs() < 0.01);
+        assert!(f.receivable > 0.0, "to'lanmagan qoldiq yo'q");
+        assert!(f.overdue > 0.0, "muddati o'tgan qarz yo'q");
+        assert!(f.receivable >= f.overdue);
+    }
+
+    /// TZ XVII.36: ssenariy — bashorat emas, arifmetika.
+    #[test]
+    fn scenario_applies_assumptions_to_todays_numbers() {
+        use crate::checks::{finance_forecast, scenario, Scenario, TaskCost};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let base = finance_forecast(1_000.0, &[], &[], 200.0, 40.0, today);
+        // Tannarx: yarmi material, yarmi ish haqi.
+        let costs = vec![TaskCost {
+            task_id: 1,
+            hours: 0.0,
+            labour: 100.0,
+            material: 100.0,
+            machine: 0.0,
+            total: 200.0,
+            per_unit: 0.0,
+        }];
+        let end = today + chrono::Duration::days(100);
+
+        // O'zgarishsiz ssenariy hech narsani siljitmaydi.
+        let zero = scenario(&base, &costs, Some(end), end, &Scenario::default());
+        assert!((zero.cost_after - zero.cost).abs() < 0.001);
+        assert_eq!(zero.finish_after, zero.finish);
+        assert!(!zero.over_deadline);
+
+        // Material 10 % qimmatlashsa, yarmi material bo'lgani uchun
+        // yakuniy tannarx 5 % ga oshadi.
+        let s = Scenario {
+            delay_days: 20,
+            price_pct: 10.0,
+            wage_pct: 0.0,
+        };
+        let r = scenario(&base, &costs, Some(end), end, &s);
+        assert!((r.cost_after - base.cost_forecast * 1.05).abs() < 0.001);
+        assert!(r.profit_after < r.profit);
+        assert_eq!(r.finish_after, Some(end + chrono::Duration::days(20)));
+        assert!(
+            r.over_deadline,
+            "muddat surildi, lekin chegara belgilanmadi"
+        );
+    }
+
+    /// TZ XVII.41, 44: yo'qotishlar pulda o'lchanadi.
+    #[test]
+    fn opportunities_are_measured_in_money() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let list = app.opportunities();
+        assert!(!list.is_empty(), "namunada topilma yo'q");
+        for o in &list {
+            assert!(o.amount != 0.0, "{}: summa nol", o.code);
+            assert!(!o.title.is_empty());
+            assert!(!o.detail.is_empty());
+        }
+        // Kodlar takrorlanmaydi.
+        let mut codes: Vec<&str> = list.iter().map(|o| o.code).collect();
+        codes.sort_unstable();
+        let before = codes.len();
+        codes.dedup();
+        assert_eq!(codes.len(), before);
+    }
+
+    /// TZ XVII.26: unumdorlik faqat hajmi va soati bor ishlarda hisoblanadi.
+    #[test]
+    fn productivity_needs_volume_and_hours() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.productivity();
+        assert!(!rows.is_empty(), "namunada unumdorlik hisoblanmadi");
+        for r in &rows {
+            assert!(r.done_volume > 0.0);
+            assert!(r.hours > 0.0);
+            assert!((r.hours_per_unit - r.hours / r.done_volume).abs() < 0.001);
+            assert!(r.cost_per_unit >= 0.0);
+        }
+        // Eng qimmati yuqorida.
+        for w in rows.windows(2) {
+            assert!(w[0].hours_per_unit >= w[1].hours_per_unit);
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

@@ -1666,6 +1666,68 @@ impl App {
         checks::supply_status(&self.requests, &self.purchases, self.today)
     }
 
+    /// Ishlar bo'yicha tannarx (TZ XVII.12).
+    pub fn task_costs(&self) -> Vec<checks::TaskCost> {
+        checks::task_costs(
+            &self.tasks,
+            &self.workers,
+            &self.timesheet,
+            &self.materials,
+            &self.stock_moves,
+            &self.machines,
+            &self.machine_logs,
+        )
+    }
+
+    /// Moliyaviy prognoz (TZ XVII.13-14, 32-34).
+    ///
+    /// Tannarx ishlar kesimidan yig'iladi — analitikadagi «tannarx tahlili»
+    /// bilan bir xil manbadan, shuning uchun sonlar zid kelmaydi.
+    pub fn finance_forecast(&self) -> checks::FinanceForecast {
+        let cost_now: f64 = self.task_costs().iter().map(|c| c.total).sum();
+        checks::finance_forecast(
+            self.project().map(|p| p.contract_sum).unwrap_or(0.0),
+            &self.contract_changes,
+            &self.payment_stages,
+            cost_now,
+            self.progress.fact_pct,
+            self.today,
+        )
+    }
+
+    /// Yashirin yo'qotishlar va tejash imkoniyatlari (TZ XVII.41, 44).
+    pub fn opportunities(&self) -> Vec<checks::Opportunity> {
+        // Texnika oxirgi 30 kun kesimida baholanadi: bo'sh turganini
+        // ko'rish uchun yaqin davr kerak.
+        let from = self.today - chrono::Duration::days(30);
+        let machines = checks::machine_lines(
+            &self.machines,
+            &self.machine_logs,
+            from,
+            self.today,
+            self.today,
+        );
+        let usage = checks::consumption(
+            &self.material_norms,
+            &self.tasks,
+            &self.materials,
+            &self.stock_moves,
+        );
+        checks::opportunities(
+            &self.stock(),
+            &self.materials,
+            &machines,
+            &self.quotes,
+            &self.purchases,
+            &usage,
+        )
+    }
+
+    /// Ishlar bo'yicha unumdorlik (TZ XVII.26).
+    pub fn productivity(&self) -> Vec<checks::Productivity> {
+        checks::productivity(&self.tasks, &self.timesheet, &self.workers)
+    }
+
     /// TZ XI: ombor qoldiqlari. Materiallar, harakatlar va rezervlardan hisoblanadi.
     pub fn stock(&self) -> Vec<checks::StockLine> {
         checks::stock_balances(

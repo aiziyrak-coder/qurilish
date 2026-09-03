@@ -2833,6 +2833,102 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cl_w_paid" => ("Haftada to'langan", "Оплачено за неделю"),
         "cl_w_waiting" => ("Sizni kutmoqda: o'zgarish · qabul", "Ждут вас: изменения · приёмка"),
 
+        // ---------- XVII. Prognoz, ssenariy va yo'qotishlar ----------
+        "an_tab_forecast" => ("Prognoz", "Прогноз"),
+        "an_tab_scenario" => ("Ssenariy", "Сценарий"),
+        "an_tab_losses" => ("Yo'qotishlar", "Потери"),
+
+        "an_fc_hint" => (
+            "Prognoz bitta taxminga tayanadi: bugungi tannarx darajasi oxirigacha saqlanadi. Boshqa taxmin kiritilmagan.",
+            "Прогноз опирается на одно допущение: сегодняшний уровень себестоимости сохранится до конца. Других допущений нет.",
+        ),
+        "an_fc_too_early" => ("Prognoz uchun hali erta", "Для прогноза ещё рано"),
+        "an_fc_too_early_hint" => (
+            "Bajarilish 5 % dan kam bo'lganda yakuniy tannarxni hisoblash ishonchsiz.",
+            "При выполнении менее 5 % расчёт итоговой себестоимости недостоверен.",
+        ),
+        "an_fc_contract" => ("Amaldagi summa", "Текущая сумма"),
+        "an_fc_contract_hint" => ("shartnoma va kelishilgan o'zgarishlar", "договор и согласованные изменения"),
+        "an_fc_cost" => ("Yakuniy tannarx", "Итоговая себестоимость"),
+        "an_fc_cost_now" => ("bugungi kunga", "на сегодня"),
+        "an_fc_profit" => ("Foyda prognozi", "Прогноз прибыли"),
+        "an_fc_margin" => ("summadan", "от суммы"),
+        "an_fc_receivable" => ("Debitorlik", "Дебиторская задолженность"),
+        "an_fc_overdue" => ("muddati o'tgan", "просрочено"),
+        "an_fc_revenue" => ("90 kunda tushum", "Поступления за 90 дней"),
+        "an_fc_revenue_hint" => ("to'lov jadvali bo'yicha", "по графику платежей"),
+        "an_fc_how" => ("Hisob qanday chiqdi", "Как получен расчёт"),
+        "an_fc_how_progress" => ("Bajarilish", "Выполнение"),
+        "an_fc_how_cost" => ("Bugungi tannarx", "Себестоимость на сегодня"),
+        "an_fc_how_earned" => ("Bajarilgan ish qiymati", "Стоимость выполненных работ"),
+        "an_fc_how_rule" => (
+            "Yakuniy tannarx = bugungi tannarx ÷ bajarilish ulushi.",
+            "Итоговая себестоимость = сегодняшняя ÷ доля выполнения.",
+        ),
+
+        "an_sc_hint" => (
+            "Bu bashorat emas, arifmetika: berilgan taxminlar bugungi sonlarga qo'llanadi.",
+            "Это не предсказание, а арифметика: заданные допущения применяются к сегодняшним числам.",
+        ),
+        "an_sc_delay" => ("Muddat suriladi, kun", "Срок сдвигается, дней"),
+        "an_sc_price" => ("Material narxi", "Цена материалов"),
+        "an_sc_wage" => ("Ish haqi", "Зарплата"),
+        "an_sc_now" => ("Hozir", "Сейчас"),
+        "an_sc_after" => ("Ssenariy bilan", "По сценарию"),
+        "an_sc_finish" => ("Tugash sanasi", "Дата окончания"),
+        "an_sc_cost" => ("Yakuniy tannarx", "Итоговая себестоимость"),
+        "an_sc_profit" => ("Foyda", "Прибыль"),
+        "an_sc_over" => (
+            "Bu ssenariyda obyekt shartnoma muddatidan chiqib ketadi.",
+            "При этом сценарии объект выходит за договорный срок.",
+        ),
+        "an_sc_note" => (
+            "Material va ish haqi ulushlari bugungi tannarx tarkibidan olingan.",
+            "Доли материалов и зарплаты взяты из состава сегодняшней себестоимости.",
+        ),
+
+        "an_op_hint" => (
+            "Har biri pulda o'lchanadi: aniq summa bo'lsa, unga qarab qaror qabul qilinadi.",
+            "Каждый пункт измерен в деньгах: по конкретной сумме проще принять решение.",
+        ),
+        "an_op_none" => ("Yashirin yo'qotish topilmadi", "Скрытых потерь не найдено"),
+        "an_op_losses" => ("Yo'qotilgan", "Потеряно"),
+        "an_op_losses_hint" => ("ortiqcha sarf va tanlanmagan tejash", "перерасход и упущенная экономия"),
+        "an_op_frozen" => ("Muzlatilgan", "Заморожено"),
+        "an_op_frozen_hint" => ("omborda va bo'sh texnikada", "на складе и в простаивающей технике"),
+
+        "op_idle_stock" => ("Ortiqcha zaxira", "Избыточный запас"),
+        "op_idle_stock_hint" => (
+            "Qoldiq minimal zaxiradan uch baravar ko'p — pul omborda turibdi.",
+            "Остаток втрое больше минимального запаса — деньги лежат на складе.",
+        ),
+        "op_idle_machines" => ("birlik texnika bo'sh turibdi", "ед. техники простаивает"),
+        "op_idle_machines_hint" => (
+            "Oxirgi 30 kunda ish kuni yo'q, lekin xarajati bor.",
+            "За последние 30 дней нет рабочих дней, но расходы есть.",
+        ),
+        "op_over_usage" => ("Normadan ortiq sarf", "Перерасход сверх нормы"),
+        "op_over_usage_hint" => (
+            "Material normadan ko'p ketgan: isrof yoki hisobda xato.",
+            "Материала израсходовано больше нормы: перерасход либо ошибка учёта.",
+        ),
+        "op_missed_quote" => ("Arzonroq taklif tanlanmagan", "Выбрано не самое дешёвое предложение"),
+        "op_missed_quote_hint" => (
+            "Xarid narxi eng past taklifdan yuqori — farq tejalmagan.",
+            "Цена закупки выше минимального предложения — разница не сэкономлена.",
+        ),
+
+        "an_pr_title" => ("Unumdorlik", "Производительность"),
+        "an_pr_hint" => (
+            "Bir birlik ish qancha soat va qancha pulga tushgani. Eng qimmatlari yuqorida.",
+            "Сколько часов и денег уходит на единицу работы. Самые дорогие — сверху.",
+        ),
+        "an_pr_done" => ("Bajarilgan", "Выполнено"),
+        "an_pr_hours" => ("Soat", "Часов"),
+        "an_pr_per_unit" => ("Soat/birlik", "Часов/ед."),
+        "an_pr_cost_unit" => ("Birlik tannarxi", "Себестоимость ед."),
+        "an_pr_vs_avg" => ("O'rtachadan", "От среднего"),
+
         // ---------- X. Xarid rejasi va risklar ----------
         "pu_tab_plan" => ("Xarid rejasi", "План закупок"),
         "pu_tab_risks" => ("Risklar", "Риски"),
