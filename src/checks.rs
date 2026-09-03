@@ -10,7 +10,7 @@ use crate::db::Db;
 use crate::domain::*;
 use crate::model::{Section, Task};
 use crate::roles::Role;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use rusqlite::params;
 use std::collections::HashMap;
 
@@ -5617,4 +5617,180 @@ pub fn request_issues(
     }
 
     out
+}
+
+// ================================================================ XIII.20-21. Tabel anomaliyalari
+
+/// Tabeldagi g'ayrioddiy holat (TZ XIII.20-21).
+#[derive(Debug, Clone, PartialEq)]
+pub enum TimesheetAnomaly {
+    /// Bir kunda haddan tashqari ko'p soat.
+    TooManyHours {
+        worker_id: i64,
+        day: NaiveDate,
+        hours: f64,
+    },
+    /// Dam olish kunida ish, naryadsiz.
+    WeekendWork { worker_id: i64, day: NaiveDate },
+    /// Dam olishsiz ketma-ket ishlangan kunlar.
+    NoRest { worker_id: i64, days: usize },
+    /// Butun davr davomida soat bir xil — tabel qo'lda «to'ldirilgan» bo'lishi mumkin.
+    Identical {
+        worker_id: i64,
+        hours: f64,
+        days: usize,
+    },
+}
+
+/// Kunda shundan ko'p soat — tekshirishga arziydi.
+pub const MAX_DAY_HOURS: f64 = 12.0;
+/// Dam olishsiz shuncha kun ketma-ket ishlash normadan chetga chiqish.
+pub const MAX_STREAK: usize = 7;
+/// Bir xil soat shuncha kundan ko'p takrorlansa — savol.
+pub const IDENTICAL_LIMIT: usize = 20;
+
+/// Tabeldagi g'ayrioddiy holatlarni topadi.
+///
+/// Bu **ayblov emas**: har bir belgi tekshirishga sabab. Ko'pincha ular
+/// haqiqiy — masalan avariya kuni yoki topshirish oldidan.
+pub fn timesheet_anomalies(entries: &[TimesheetEntry]) -> Vec<TimesheetAnomaly> {
+    let mut out = Vec::new();
+
+    // Ishchilar bo'yicha guruhlash.
+    let mut ids: Vec<i64> = entries.iter().map(|e| e.worker_id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+
+    for id in ids {
+        let mut mine: Vec<&TimesheetEntry> = entries
+            .iter()
+            .filter(|e| e.worker_id == id && e.hours > 0.0)
+            .collect();
+        mine.sort_by_key(|e| e.date);
+
+        // 1. Kunlik soat chegarasi.
+        for e in &mine {
+            if e.hours > MAX_DAY_HOURS {
+                out.push(TimesheetAnomaly::TooManyHours {
+                    worker_id: id,
+                    day: e.date,
+                    hours: e.hours,
+                });
+            }
+            // 2. Yakshanba ishi.
+            if e.date.weekday() == chrono::Weekday::Sun {
+                out.push(TimesheetAnomaly::WeekendWork {
+                    worker_id: id,
+                    day: e.date,
+                });
+            }
+        }
+
+        // 3. Dam olishsiz ketma-ket kunlar.
+        let mut streak = 0usize;
+        let mut best = 0usize;
+        let mut prev: Option<NaiveDate> = None;
+        for e in &mine {
+            streak = match prev {
+                Some(p) if (e.date - p).num_days() == 1 => streak + 1,
+                _ => 1,
+            };
+            best = best.max(streak);
+            prev = Some(e.date);
+        }
+        if best > MAX_STREAK {
+            out.push(TimesheetAnomaly::NoRest {
+                worker_id: id,
+                days: best,
+            });
+        }
+
+        // 4. Bir xil soat: tabel «bir xil qilib» to'ldirilgan bo'lishi mumkin.
+        if mine.len() >= IDENTICAL_LIMIT {
+            let first = mine[0].hours;
+            if mine.iter().all(|e| (e.hours - first).abs() < 0.001) {
+                out.push(TimesheetAnomaly::Identical {
+                    worker_id: id,
+                    hours: first,
+                    days: mine.len(),
+                });
+            }
+        }
+    }
+    out
+}
+
+// ================================================================ XIII.26-27. Xodim ehtiyoji
+
+/// Yaqin davr uchun xodim ehtiyoji (TZ XIII.26-27).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StaffForecast {
+    /// Hozir faol ishchilar soni.
+    pub have: usize,
+    /// Yaqin davrda kerak bo'ladigan soat.
+    pub needed_hours: f64,
+    /// Shu soatni bajarish uchun kerakli ishchi soni.
+    pub needed_workers: usize,
+    /// Yetishmayapti (manfiy — ortiqcha).
+    pub gap: i64,
+    /// Hisob qaysi ishlardan chiqqani.
+    pub tasks: usize,
+}
+
+/// Yaqin ishlar uchun necha ishchi kerakligini baholaydi.
+///
+/// Hisob bugungi unumdorlikka tayanadi: bajarilgan hajm qancha soatga
+/// tushgan bo'lsa, qolgan hajm ham shuncha talab qiladi. Unumdorligi
+/// noma'lum ish hisobga kirmaydi — taxmin qilib bo'lmaydi.
+pub fn staff_forecast(
+    tasks: &[Task],
+    productivity: &[Productivity],
+    workers: &[Worker],
+    today: NaiveDate,
+    horizon_days: i64,
+) -> StaffForecast {
+    let until = today + chrono::Duration::days(horizon_days);
+    let mut hours = 0.0;
+    let mut counted = 0usize;
+
+    for t in tasks {
+        if t.fact_end.is_some() || t.progress >= 99.999 {
+            continue;
+        }
+        // Faqat shu davrda boradigan ishlar.
+        if t.plan_start > until {
+            continue;
+        }
+        let Some(p) = productivity.iter().find(|p| p.task_id == t.id) else {
+            continue;
+        };
+        let left = t.volume * (1.0 - t.progress / 100.0).clamp(0.0, 1.0);
+        hours += left * p.hours_per_unit;
+        counted += 1;
+    }
+
+    // Davrdagi ish kunlari: yakshanbadan boshqasi.
+    let mut work_days = 0usize;
+    let mut d = today;
+    while d <= until {
+        if d.weekday() != chrono::Weekday::Sun {
+            work_days += 1;
+        }
+        d += chrono::Duration::days(1);
+    }
+    let capacity = work_days as f64 * SHIFT_HOURS;
+    let needed_workers = if capacity > 0.0 {
+        (hours / capacity).ceil().max(0.0) as usize
+    } else {
+        0
+    };
+    let have = workers.iter().filter(|w| w.active).count();
+
+    StaffForecast {
+        have,
+        needed_hours: hours,
+        needed_workers,
+        gap: needed_workers as i64 - have as i64,
+        tasks: counted,
+    }
 }

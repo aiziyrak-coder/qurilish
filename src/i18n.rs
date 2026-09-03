@@ -2843,6 +2843,48 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pf_move_to" => ("Qayerga", "Куда"),
         "pf_move_value" => ("Qiymati", "Стоимость"),
 
+        // ---------- XIII. Tabel davri, anomaliyalar va xodim ehtiyoji ----------
+        "ts_tab_periods" => ("Davrlar", "Периоды"),
+        "ts_tab_staff" => ("Xodimlar", "Персонал"),
+
+        "ts_periods_hint" => (
+            "Yopilgan oy tasodifan o'zgarmaydi. Tuzatish kerak bo'lsa davr qaytadan ochiladi va bu iz qoldiradi.",
+            "Закрытый месяц не изменится случайно. Если нужна правка — период открывается заново, и это оставляет след.",
+        ),
+        "ts_periods_empty" => ("Tabelda yozuv yo'q", "В табеле нет записей"),
+        "ts_period_month" => ("Oy", "Месяц"),
+        "ts_period_days" => ("Kun", "Дней"),
+        "ts_period_hours" => ("Soat", "Часов"),
+        "ts_period_wage" => ("Ish haqi", "Зарплата"),
+        "ts_period_open" => ("ochiq", "открыт"),
+        "ts_period_closed" => ("yopilgan", "закрыт"),
+        "ts_period_close" => ("Oyni yopish", "Закрыть месяц"),
+        "ts_period_reopen" => ("Qayta ochish", "Открыть заново"),
+        "ts_period_closed_msg" => ("Oy yopildi", "Месяц закрыт"),
+        "ts_period_reopened" => ("Davr qayta ochildi", "Период открыт заново"),
+        "ts_period_reopened_by" => ("Qayta ochdi:", "Открыл заново:"),
+
+        "ts_staff_hint" => (
+            "Anomaliya ayblov emas: har bir belgi tekshirishga sabab. Ko'pincha ular haqiqiy — avariya kuni yoki topshirish oldidan.",
+            "Аномалия — не обвинение: каждый признак повод проверить. Часто они реальны — аварийный день или сдача объекта.",
+        ),
+        "ts_staff_have" => ("Faol ishchi", "Активных рабочих"),
+        "ts_staff_have_hint" => ("ro'yxatda", "в списке"),
+        "ts_staff_need" => ("Kerak bo'ladi", "Потребуется"),
+        "ts_staff_hours" => ("soat", "часов"),
+        "ts_staff_gap" => ("Farq", "Разница"),
+        "ts_staff_gap_hint" => ("kelgusi 30 kun uchun", "на ближайшие 30 дней"),
+        "ts_staff_anomalies" => ("Anomaliya", "Аномалий"),
+        "ts_staff_anomalies_hint" => ("tekshirishga arziydi", "стоит проверить"),
+        "ts_staff_clean" => ("Tabelda g'ayrioddiy holat topilmadi", "В табеле аномалий не найдено"),
+        "ts_staff_list" => ("Nimalarga e'tibor berish kerak", "На что обратить внимание"),
+        "ts_a_hours" => ("soat", "ч"),
+        "ts_a_too_many" => ("kunlik chegaradan ko'p", "больше дневного предела"),
+        "ts_a_weekend" => ("dam olish kunida ish", "работа в выходной"),
+        "ts_a_no_rest" => ("kun ketma-ket, dam olishsiz", "дней подряд без выходного"),
+        "ts_a_days" => ("kun davomida", "дней подряд по"),
+        "ts_a_identical" => ("soat — bir xil yozilgan", "часов — записано одинаково"),
+
         // ---------- IX. Ariza turlari va tekshiruvi ----------
         "rk_transport" => ("Transport", "Транспорт"),
         "rk_repair" => ("Ta'mir", "Ремонт"),

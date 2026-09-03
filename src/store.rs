@@ -680,6 +680,18 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_toolissue_pid ON tool_issue(project_id);
 
+            CREATE TABLE IF NOT EXISTS timesheet_period (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                month TEXT NOT NULL,
+                closed INTEGER NOT NULL DEFAULT 0,
+                closed_at TEXT,
+                closed_by TEXT NOT NULL DEFAULT '',
+                reopen_reason TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_tsperiod_pid ON timesheet_period(project_id);
+
             CREATE TABLE IF NOT EXISTS contract (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -3641,6 +3653,61 @@ impl Db {
 
     pub fn delete_tool_issue(&self, id: i64) -> bool {
         self.del("tool_issue", id)
+    }
+
+    // ---------- XIII.35-36. Tabel davri ----------
+
+    pub fn timesheet_periods(&self, pid: i64) -> Vec<TimesheetPeriod> {
+        self.list(
+            "SELECT id,project_id,month,closed,closed_at,closed_by,reopen_reason,note
+             FROM timesheet_period WHERE project_id=?1 ORDER BY month DESC",
+            pid,
+            |r| {
+                Ok(TimesheetPeriod {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    month: date(&r.get::<_, String>(2)?),
+                    closed: r.get::<_, i64>(3)? != 0,
+                    closed_at: odate(r.get(4)?),
+                    closed_by: r.get(5)?,
+                    reopen_reason: r.get(6)?,
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_timesheet_period(&self, x: &TimesheetPeriod) -> i64 {
+        self.ins(
+            "INSERT INTO timesheet_period (project_id,month,closed,closed_at,closed_by,
+                                           reopen_reason,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                x.project_id,
+                x.month.to_string(),
+                x.closed as i64,
+                ods(x.closed_at),
+                x.closed_by,
+                x.reopen_reason,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_timesheet_period(&self, x: &TimesheetPeriod) -> bool {
+        self.upd(
+            "UPDATE timesheet_period SET month=?2,closed=?3,closed_at=?4,closed_by=?5,
+                    reopen_reason=?6,note=?7 WHERE id=?1",
+            params![
+                x.id,
+                x.month.to_string(),
+                x.closed as i64,
+                ods(x.closed_at),
+                x.closed_by,
+                x.reopen_reason,
+                x.note
+            ],
+        )
     }
 
     // ---------- VIII. Buyurtmachi: shartnomalar va to'lovlar ----------

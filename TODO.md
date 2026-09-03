@@ -30,16 +30,16 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
 | XI. Ombor | 48 | 32 | 8 | 8 | 1 |
 | XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
-| XIII. Tabel | 44 | 18 | 11 | 15 | 6 |
+| XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
 | XIV. Sifat | 41 | 19 | 9 | 13 | 2 |
 | XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
 | XVI. Mashinalar | 50 | 28 | 8 | 14 | 2 |
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **364** | **172** | **164** | **53** |
+| **Jami** | **700** | **372** | **170** | **158** | **53** |
 
-Ya'ni **~52 % to'liq**, **~25 % qisman**, **~23 % hali yo'q**.
+Ya'ni **~53 % to'liq**, **~24 % qisman**, **~23 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -546,23 +546,23 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 17. Ta'tillar
 - [x] 18. Kasallik varaqasi
 - [x] 19. Xizmat safari — *to'lanadi*
-- [ ] 20. AI anomaliyalarni nazorat qilishi
-- [ ] 21. Prorabning ish vaqtini nazorat qilish
+- [x] 20. Anomaliyalarni nazorat qilish — *kunlik chegara, dam olish kuni, dam olishsiz ketma-ketlik, bir xil yozuv*
+- [x] 21. Ish vaqtini nazorat qilish — *anomaliyalar ro'yxati ishchi kesimida*
 - [x] 22. **Bo'sh turishlar hisobi** — *to'lanadi, ishlangan soat emas*
 - [~] 23. Bo'sh turishlar tahlili — *brigada bo'yicha ulush*
-- [~] 24. **Unumdorlik** — *soatning tannarxi*
+- [x] 24. Unumdorlik — *bir birlik ish: soat va pul, o'rtacha bilan solishtirish*
 - [x] 25. Brigadalarni solishtirish
-- [ ] 26. Xodimlar sonini rejalashtirish
-- [ ] 27. AI xodim ehtiyoji prognozi
+- [x] 26. Xodimlar sonini rejalashtirish — *yaqin 30 kun uchun kerakli soat va ishchi soni*
+- [x] 27. Xodim ehtiyoji prognozi — *bugungi unumdorlikdan; unumdorligi noma'lum ish hisobga kirmaydi*
 - [ ] 28. Xodimlarni ko'chirish
 - [x] 29. Tabel → ish haqi
 - [x] 30. Tabel → tannarx
 - [x] 31. Aniq ishning tannarxi — *ish haqi + material, bir birlikka*
 - [~] 32. Ish haqi fondini nazorat qilish
 - [~] 33. Buxgalteriya uchun tabel — *soat, yo'qlik, ish haqi jadvali*
-- [~] 34. Tabelni tuzatish
-- [ ] 35. Oyni yopish
-- [ ] 36. Tasdiqlash
+- [x] 34. Tabelni tuzatish — *davrni qayta ochish orqali, sabab bilan*
+- [x] 35. Oyni yopish — *yopilgan oy tasodifan o'zgarmaydi*
+- [x] 36. Tasdiqlash — *kim va qachon yopgani yoziladi; qayta ochish iz qoldiradi*
 - [ ] 🔒 37. Elektron imzo
 - [ ] 🔒 38. Mobil ilova
 - [ ] 🔒 39. Ovozli kiritish

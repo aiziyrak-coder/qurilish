@@ -5614,6 +5614,139 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!((saving - (m.price - alt.price) * 10.0).abs() < 0.01);
     }
 
+    /// TZ XIII.20: tabeldagi g'ayrioddiy holatlar topiladi.
+    #[test]
+    fn timesheet_anomalies_are_found() {
+        use crate::checks::{timesheet_anomalies, TimesheetAnomaly, MAX_DAY_HOURS};
+        use crate::domain::{DayKind, Shift, TimesheetEntry};
+
+        let start = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let entry = |day: i64, hours: f64| TimesheetEntry {
+            id: 0,
+            project_id: 1,
+            worker_id: 7,
+            date: start + chrono::Duration::days(day),
+            hours,
+            kind: DayKind::Work,
+            shift: Shift::Day,
+            task_id: None,
+            note: String::new(),
+        };
+
+        // Kunlik chegaradan ko'p soat.
+        let long = vec![entry(0, MAX_DAY_HOURS + 2.0)];
+        assert!(timesheet_anomalies(&long)
+            .iter()
+            .any(|a| matches!(a, TimesheetAnomaly::TooManyHours { .. })));
+
+        // Odatdagi kun — savol yo'q.
+        let normal = vec![entry(0, 8.0)];
+        assert!(timesheet_anomalies(&normal).is_empty());
+
+        // Dam olishsiz sakkiz kun ketma-ket.
+        let streak: Vec<TimesheetEntry> = (0..8).map(|d| entry(d, 8.0)).collect();
+        let found = timesheet_anomalies(&streak);
+        assert!(found
+            .iter()
+            .any(|a| matches!(a, TimesheetAnomaly::NoRest { days, .. } if *days >= 8)));
+
+        // Yakshanba ishi belgilanadi: 2026-06-07 — yakshanba.
+        let sunday = vec![entry(6, 8.0)];
+        assert!(timesheet_anomalies(&sunday)
+            .iter()
+            .any(|a| matches!(a, TimesheetAnomaly::WeekendWork { .. })));
+    }
+
+    /// TZ XIII.27: xodim ehtiyoji bugungi unumdorlikdan hisoblanadi.
+    #[test]
+    fn staff_forecast_uses_todays_productivity() {
+        use crate::checks::{staff_forecast, Productivity};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let task = crate::model::Task {
+            id: 5,
+            project_id: 1,
+            wbs: "1".into(),
+            name: "Sinov".into(),
+            section: crate::model::Section::Kj,
+            responsible: String::new(),
+            duration: 30,
+            plan_start: today,
+            fact_start: None,
+            fact_end: None,
+            // Yarmi bajarilgan: qolgani 500 birlik.
+            progress: 50.0,
+            pinned: false,
+            volume: 1_000.0,
+            unit: "m3".into(),
+        };
+        // Har birlik 2 soat: 500 birlik = 1000 soat.
+        let prod = vec![Productivity {
+            task_id: 5,
+            done_volume: 500.0,
+            unit: "m3".into(),
+            hours: 1_000.0,
+            hours_per_unit: 2.0,
+            cost_per_unit: 0.0,
+        }];
+        let f = staff_forecast(std::slice::from_ref(&task), &prod, &[], today, 30);
+        assert!((f.needed_hours - 1_000.0).abs() < 0.001);
+        assert!(f.needed_workers > 0);
+        assert_eq!(f.tasks, 1);
+        // Ishchi yo'q — hammasi yetishmaydi.
+        assert_eq!(f.gap, f.needed_workers as i64);
+
+        // Unumdorligi noma'lum ish hisobga kirmaydi: taxmin qilib bo'lmaydi.
+        let empty = staff_forecast(std::slice::from_ref(&task), &[], &[], today, 30);
+        assert_eq!(empty.needed_hours, 0.0);
+        assert_eq!(empty.tasks, 0);
+    }
+
+    /// TZ XIII.35: yopilgan davr bazadan o'zgarishsiz qaytadi.
+    #[test]
+    fn timesheet_period_round_trips() {
+        use crate::domain::TimesheetPeriod;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let month = chrono::NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+
+        let id = t.db.insert_timesheet_period(&TimesheetPeriod {
+            id: 0,
+            project_id: pid,
+            month,
+            closed: true,
+            closed_at: Some(month + chrono::Duration::days(35)),
+            closed_by: "Sinov".into(),
+            reopen_reason: String::new(),
+            note: String::new(),
+        });
+        assert!(id > 0);
+
+        let back =
+            t.db.timesheet_periods(pid)
+                .into_iter()
+                .find(|p| p.id == id)
+                .expect("davr yo'qoldi");
+        assert_eq!(back.month, month);
+        assert!(back.closed);
+        assert_eq!(back.closed_by, "Sinov");
+
+        // Qayta ochilganda sabab saqlanadi.
+        let mut p = back;
+        p.closed = false;
+        p.closed_at = None;
+        p.reopen_reason = "Xato topildi".into();
+        assert!(t.db.update_timesheet_period(&p));
+        let again =
+            t.db.timesheet_periods(pid)
+                .into_iter()
+                .find(|x| x.id == id)
+                .unwrap();
+        assert!(!again.closed);
+        assert_eq!(again.reopen_reason, "Xato topildi");
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

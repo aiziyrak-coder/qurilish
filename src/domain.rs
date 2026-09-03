@@ -1808,3 +1808,23 @@ impl ToolIssue {
         (self.returned.unwrap_or(today) - self.issued).num_days()
     }
 }
+
+// ================================================================ XIII.35-36. Tabel davri
+
+/// Tabel davri (TZ XIII.35-36).
+///
+/// Yopilgan oy o'zgartirilmaydi: ish haqi hisoblab bo'lingandan keyin
+/// tabelni tuzatish — bu boshqa jarayon, izsiz o'zgarish emas.
+#[derive(Debug, Clone)]
+pub struct TimesheetPeriod {
+    pub id: i64,
+    pub project_id: i64,
+    /// Oyning birinchi kuni.
+    pub month: NaiveDate,
+    pub closed: bool,
+    pub closed_at: Option<NaiveDate>,
+    pub closed_by: String,
+    /// Yopilgandan keyin tuzatish uchun asos.
+    pub reopen_reason: String,
+    pub note: String,
+}

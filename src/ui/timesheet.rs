@@ -85,6 +85,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (0u8, t("ts_tab_sheet")),
             (1, t("ts_tab_brigades")),
             (2, t("ts_tab_cost")),
+            (3, t("ts_tab_periods")),
+            (4, t("ts_tab_staff")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -97,6 +99,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     match tab {
         1 => brigades_tab(ui, app, week),
         2 => cost_tab(ui, app),
+        3 => periods_tab(ui, app),
+        4 => staff_tab(ui, app),
         _ => {
             if app.workers.is_empty() {
                 ui.add_space(40.0);
@@ -917,6 +921,325 @@ fn weekday_key(d: NaiveDate) -> &'static str {
         4 => "wd_fri",
         5 => "wd_sat",
         _ => "wd_sun",
+    }
+}
+
+// ================================================================ Davrlar
+
+/// Tabel davrlari: oyni yopish va tuzatish (TZ XIII.35-36).
+///
+/// Yopilgan oy tasodifan o'zgarmaydi. Tuzatish kerak bo'lsa — davr
+/// qaytadan ochiladi va **sababi yoziladi**: ish haqi hisoblangandan
+/// keyingi o'zgarish izsiz qolmasligi kerak.
+fn periods_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(pid) = app.current else { return };
+    let can = app.can_edit(Screen::Timesheet);
+    let today = app.today;
+
+    ui.label(
+        RichText::new(t("ts_periods_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    // Tabelda uchraydigan oylar: davr yozuvi bo'lmasa ham ular ko'rinadi.
+    let mut months: Vec<chrono::NaiveDate> = app
+        .timesheet
+        .iter()
+        .map(|e| crate::analytics::month_of(e.date))
+        .collect();
+    months.sort_unstable();
+    months.dedup();
+    months.reverse();
+
+    if months.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("ts_periods_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    let periods = app.db.timesheet_periods(pid);
+    let mut close: Option<chrono::NaiveDate> = None;
+    let mut reopen: Option<i64> = None;
+
+    egui::Grid::new("ts_periods_grid")
+        .num_columns(6)
+        .spacing([12.0, 6.0])
+        .striped(true)
+        .show(ui, |ui| {
+            head_l(ui, 120.0, t("ts_period_month"));
+            head_r(ui, 90.0, t("ts_period_days"));
+            head_r(ui, 100.0, t("ts_period_hours"));
+            head_r(ui, 150.0, t("ts_period_wage"));
+            head_l(ui, 200.0, t("col_status"));
+            head_l(ui, 140.0, "");
+            ui.end_row();
+
+            for m in &months {
+                let next = crate::analytics::month_of(*m + chrono::Duration::days(32));
+                let rows: Vec<&crate::domain::TimesheetEntry> = app
+                    .timesheet
+                    .iter()
+                    .filter(|e| e.date >= *m && e.date < next)
+                    .collect();
+                let hours: f64 = rows.iter().map(|e| e.hours).sum();
+                let wage: f64 = rows
+                    .iter()
+                    .map(|e| {
+                        let rate = app
+                            .workers
+                            .iter()
+                            .find(|w| w.id == e.worker_id)
+                            .map(|w| w.hourly_rate)
+                            .unwrap_or(0.0);
+                        e.hours * rate * e.shift.rate()
+                    })
+                    .sum();
+                let mut days: Vec<chrono::NaiveDate> = rows.iter().map(|e| e.date).collect();
+                days.sort_unstable();
+                days.dedup();
+
+                let period = periods.iter().find(|p| p.month == *m);
+                let closed = period.is_some_and(|p| p.closed);
+
+                cell_l(
+                    ui,
+                    120.0,
+                    RichText::new(m.format("%m.%Y").to_string())
+                        .size(12.5)
+                        .strong(),
+                );
+                cell_r(ui, 90.0, RichText::new(days.len().to_string()).size(12.0));
+                cell_r(
+                    ui,
+                    100.0,
+                    RichText::new(super::materials::trim_num(hours)).size(12.0),
+                );
+                cell_r(ui, 150.0, RichText::new(money(wage)).size(12.0));
+                cell_l(
+                    ui,
+                    200.0,
+                    match period {
+                        Some(p) if p.closed => RichText::new(format!(
+                            "{} · {}",
+                            t("ts_period_closed"),
+                            p.closed_at
+                                .map(|d| d.format("%d.%m.%Y").to_string())
+                                .unwrap_or_default()
+                        ))
+                        .size(11.5)
+                        .color(theme::ok()),
+                        _ => RichText::new(t("ts_period_open"))
+                            .size(11.5)
+                            .color(theme::warn()),
+                    },
+                );
+                ui.horizontal(|ui| {
+                    if !closed {
+                        if can && ui.small_button(t("ts_period_close")).clicked() {
+                            close = Some(*m);
+                        }
+                    } else if can && ui.small_button(t("ts_period_reopen")).clicked() {
+                        reopen = period.map(|p| p.id);
+                    }
+                });
+                ui.end_row();
+            }
+        });
+
+    if let Some(month) = close {
+        let existing = periods.iter().find(|p| p.month == month).cloned();
+        match existing {
+            Some(mut p) => {
+                p.closed = true;
+                p.closed_at = Some(today);
+                p.closed_by = app.current_user_name();
+                app.db.update_timesheet_period(&p);
+            }
+            None => {
+                app.db
+                    .insert_timesheet_period(&crate::domain::TimesheetPeriod {
+                        id: 0,
+                        project_id: pid,
+                        month,
+                        closed: true,
+                        closed_at: Some(today),
+                        closed_by: app.current_user_name(),
+                        reopen_reason: String::new(),
+                        note: String::new(),
+                    });
+            }
+        }
+        app.notify(t("ts_period_closed_msg").to_string());
+    }
+    if let Some(id) = reopen {
+        if let Some(mut p) = periods.into_iter().find(|p| p.id == id) {
+            p.closed = false;
+            p.closed_at = None;
+            // Sabab bo'sh qolmasin: uni odam yozadi, lekin belgisi qoladi.
+            p.reopen_reason = format!("{} {}", t("ts_period_reopened_by"), app.current_user_name());
+            app.db.update_timesheet_period(&p);
+            app.notify(t("ts_period_reopened").to_string());
+        }
+    }
+}
+
+// ================================================================ Xodimlar
+
+/// Anomaliyalar va xodim ehtiyoji (TZ XIII.20-21, 26-27).
+fn staff_tab(ui: &mut egui::Ui, app: &mut App) {
+    let anomalies = crate::checks::timesheet_anomalies(&app.timesheet);
+    let forecast = crate::checks::staff_forecast(
+        &app.tasks,
+        &app.productivity(),
+        &app.workers,
+        app.today,
+        STAFF_HORIZON,
+    );
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ts_staff_have"),
+                forecast.have.to_string(),
+                t("ts_staff_have_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("ts_staff_need"),
+                forecast.needed_workers.to_string(),
+                &format!(
+                    "{} {}",
+                    super::materials::trim_num(forecast.needed_hours),
+                    t("ts_staff_hours")
+                ),
+                theme::accent(),
+            ),
+            stat(
+                t("ts_staff_gap"),
+                format!("{:+}", forecast.gap),
+                t("ts_staff_gap_hint"),
+                if forecast.gap > 0 {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+            stat(
+                t("ts_staff_anomalies"),
+                anomalies.len().to_string(),
+                t("ts_staff_anomalies_hint"),
+                if anomalies.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    ui.label(
+        RichText::new(t("ts_staff_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    if anomalies.is_empty() {
+        ui.label(
+            RichText::new(t("ts_staff_clean"))
+                .size(13.0)
+                .color(theme::ok()),
+        );
+        return;
+    }
+
+    ui.label(RichText::new(t("ts_staff_list")).size(13.5).strong());
+    ui.add_space(6.0);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for a in &anomalies {
+                let (worker, text, color) = anomaly_text(app, a);
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(3.0, 16.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 1.5, color);
+                    ui.add_space(6.0);
+                    ui.add_sized(
+                        [160.0, 18.0],
+                        egui::Label::new(RichText::new(worker).size(12.5)),
+                    );
+                    ui.label(RichText::new(text).size(12.0).color(color));
+                });
+                ui.add_space(3.0);
+            }
+        });
+}
+
+/// Xodim ehtiyoji shuncha kun oldinga qaraydi.
+const STAFF_HORIZON: i64 = 30;
+
+/// Anomaliya matni: kim, nima va qanday rangda.
+fn anomaly_text(app: &App, a: &crate::checks::TimesheetAnomaly) -> (String, String, egui::Color32) {
+    use crate::checks::TimesheetAnomaly as A;
+    let name = |id: i64| {
+        app.workers
+            .iter()
+            .find(|w| w.id == id)
+            .map(|w| w.name.clone())
+            .unwrap_or_default()
+    };
+    match a {
+        A::TooManyHours {
+            worker_id,
+            day,
+            hours,
+        } => (
+            name(*worker_id),
+            format!(
+                "{} — {} {} ({})",
+                day.format("%d.%m.%Y"),
+                super::materials::trim_num(*hours),
+                t("ts_a_hours"),
+                t("ts_a_too_many")
+            ),
+            theme::danger(),
+        ),
+        A::WeekendWork { worker_id, day } => (
+            name(*worker_id),
+            format!("{} — {}", day.format("%d.%m.%Y"), t("ts_a_weekend")),
+            theme::warn(),
+        ),
+        A::NoRest { worker_id, days } => (
+            name(*worker_id),
+            format!("{days} {}", t("ts_a_no_rest")),
+            theme::warn(),
+        ),
+        A::Identical {
+            worker_id,
+            hours,
+            days,
+        } => (
+            name(*worker_id),
+            format!(
+                "{days} {} {} {}",
+                t("ts_a_days"),
+                super::materials::trim_num(*hours),
+                t("ts_a_identical")
+            ),
+            theme::accent(),
+        ),
     }
 }
 
