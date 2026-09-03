@@ -1764,6 +1764,68 @@ impl App {
         checks::tool_status(&self.tools, &self.tool_issues, self.today)
     }
 
+    /// Yopilishga yaqin ishlarning sifat to'siqlari (TZ XIV.10, 35).
+    pub fn task_blocks(&self) -> Vec<checks::TaskBlock> {
+        checks::task_blocks(&self.tasks, &self.quality, &self.check_points, self.today)
+    }
+
+    /// Bugun ketayotgan ishlar: grafik bo'yicha bugunni qamragan va
+    /// hali tugallanmaganlari.
+    ///
+    /// Ro'yxat bitta joyda hisoblanadi — prorab ekrani ham, kunni yakunlash
+    /// tekshiruvi ham shundan oladi, shuning uchun ular bir xil ishni
+    /// ko'rsatadi.
+    pub fn running_today(&self) -> Vec<i64> {
+        let origin = self.origin();
+        self.tasks
+            .iter()
+            .filter(|t| t.progress < 99.99)
+            .filter(|t| {
+                let Some(c) = self.schedule.get(t.id) else {
+                    return false;
+                };
+                let start = origin + chrono::Duration::days(c.es);
+                let end = origin + chrono::Duration::days(c.ef);
+                start <= self.today && self.today <= end
+            })
+            .map(|t| t.id)
+            .collect()
+    }
+
+    /// Kunni yakunlash va hisobotni yuborishdan oldingi tekshiruv (TZ VI.33-34).
+    pub fn day_close(&self) -> Vec<checks::DayIssue> {
+        let open_issues = self
+            .safety
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.status,
+                    crate::domain::IssueStatus::Open | crate::domain::IssueStatus::InWork
+                )
+            })
+            .count();
+        checks::day_close(&checks::DayCtx {
+            journal: &self.journal,
+            timesheet: &self.timesheet,
+            tasks: &self.tasks,
+            running: &self.running_today(),
+            open_issues,
+            day: self.today,
+        })
+    }
+
+    /// Ishni yopishdan oldingi ogohlantirishlar (TZ VI.25).
+    pub fn close_warnings(&self, task_id: i64) -> Vec<checks::CloseWarning> {
+        checks::close_warnings(
+            task_id,
+            &self.task_blocks(),
+            &checks::required_docs(&self.tasks, &self.exec_docs, false),
+            &self.stock_moves,
+            &self.timesheet,
+            &self.journal,
+        )
+    }
+
     /// Materialning loyihaga mosligi (TZ XII.8, 15, 32).
     pub fn material_fit(&self) -> Vec<checks::MaterialFit> {
         checks::material_fit(&self.materials, &self.stock_moves, self.today)

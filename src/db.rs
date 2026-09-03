@@ -6639,6 +6639,165 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// TZ VI.33-34: kun yakuni tekshiruvi bugungi yozuvlarga qaraydi va
+    /// to'sadigan kamchiliklar ro'yxat boshida turadi.
+    #[test]
+    fn day_close_reads_todays_records() {
+        use crate::checks::DayIssue as D;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let issues = app.day_close();
+        let today = app.today;
+
+        for i in &issues {
+            match i {
+                D::NoJournal => assert!(!app.journal.iter().any(|j| j.date == today)),
+                D::NoTimesheet => {
+                    assert!(!app
+                        .timesheet
+                        .iter()
+                        .any(|e| e.date == today && e.hours > 0.0));
+                }
+                D::CrewMismatch { journal, timesheet } => {
+                    let counted = app
+                        .timesheet
+                        .iter()
+                        .filter(|e| e.date == today && e.hours > 0.0)
+                        .count() as i64;
+                    assert_eq!(*timesheet, counted);
+                    assert!((journal - timesheet).abs() > 1);
+                }
+                // Hajm faqat bugun ketayotgan ish bo'yicha so'raladi.
+                D::NoVolume { task_id } => {
+                    assert!(app.running_today().contains(task_id));
+                    assert!(!app
+                        .journal
+                        .iter()
+                        .any(|j| j.date == today && j.task_id == Some(*task_id) && j.volume > 0.0));
+                }
+                _ => {}
+            }
+        }
+
+        let mut seen_soft = false;
+        for i in &issues {
+            if i.blocking() {
+                assert!(!seen_soft, "to'sadigan kamchilik pastga tushib qolgan");
+            } else {
+                seen_soft = true;
+            }
+        }
+    }
+
+    /// Jurnal va tabel to'ldirilgach, kun yakuni tekshiruvidan bu ikki
+    /// to'siq yo'qoladi.
+    #[test]
+    fn filling_the_day_clears_the_blocks() {
+        use crate::checks::DayIssue as D;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let today = app.today;
+
+        // Bugungi jurnal yozuvi va tabel. Namunada bugungi yozuv bo'lishi
+        // mumkin — shunda uni to'ldiramiz, yangisini yaratmaymiz.
+        if let Some(mut j) = app.journal.iter().find(|j| j.date == today).cloned() {
+            j.weather = "ochiq".into();
+            j.photos = "foto.jpg".into();
+            assert!(app.db.update_journal(&j));
+        } else {
+            app.db.insert_journal(&crate::domain::JournalEntry {
+                id: 0,
+                project_id: pid,
+                date: today,
+                author: "Test".into(),
+                weather: "ochiq".into(),
+                temperature: 24.0,
+                workers: 0,
+                machines: 0,
+                task_id: None,
+                volume: 0.0,
+                unit: String::new(),
+                text: "kun yakuni".into(),
+                remarks: String::new(),
+                photos: "foto.jpg".into(),
+            });
+        }
+        for w in app.workers.iter().filter(|w| w.active) {
+            app.db.set_timesheet(pid, w.id, today, 8.0);
+        }
+        app.reload_modules();
+
+        let issues = app.day_close();
+        assert!(!issues.contains(&D::NoJournal));
+        assert!(!issues.contains(&D::NoTimesheet));
+        assert!(!issues.contains(&D::NoWeather));
+        assert!(!issues.contains(&D::NoPhoto));
+    }
+
+    /// TZ VI.25: yopish ogohlantirishi sifat va hujjat modullaridan o'qiydi —
+    /// o'zi qayta hisoblamaydi.
+    #[test]
+    fn close_warnings_come_from_other_modules() {
+        use crate::checks::CloseWarning as W;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let blocks = app.task_blocks();
+        let required = crate::checks::required_docs(&app.tasks, &app.exec_docs, false);
+
+        let mut checked = 0;
+        for task in app.tasks.clone() {
+            let warns = app.close_warnings(task.id);
+            for w in &warns {
+                checked += 1;
+                match w {
+                    W::Quality { defects, points } => {
+                        let b = blocks
+                            .iter()
+                            .find(|b| b.task_id == task.id)
+                            .expect("sifat to'sig'i modulda yo'q");
+                        assert_eq!(b.open_defects, *defects);
+                        assert_eq!(b.pending_points, *points);
+                    }
+                    W::Docs { missing } => {
+                        let n = required
+                            .iter()
+                            .filter(|r| r.task_id == task.id && !r.signed)
+                            .count();
+                        assert_eq!(n, *missing);
+                    }
+                    W::NoLabour => {
+                        assert!(!app
+                            .timesheet
+                            .iter()
+                            .any(|e| e.task_id == Some(task.id) && e.hours > 0.0));
+                    }
+                    _ => {}
+                }
+            }
+            // Jiddiylari oldinda.
+            let mut seen_soft = false;
+            for w in &warns {
+                if w.severe() {
+                    assert!(!seen_soft, "jiddiy ogohlantirish pastga tushgan");
+                } else {
+                    seen_soft = true;
+                }
+            }
+        }
+        assert!(checked > 0, "namunada ogohlantirish umuman yo'q");
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

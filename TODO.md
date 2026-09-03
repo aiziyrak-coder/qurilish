@@ -23,7 +23,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
 | IV. Ijro hujjatlari | 30 | 15 | 9 | 6 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
-| VI. Prorab ilovasi | 37 | 16 | 10 | 11 | 7 |
+| VI. Prorab ilovasi | 37 | 20 | 10 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
 | IX. Arizalar | 42 | 31 | 6 | 5 | 1 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **425** | **160** | **115** | **53** |
+| **Jami** | **700** | **429** | **160** | **111** | **53** |
 
 Ya'ni **~61 % to'liq**, **~23 % qisman**, **~16 % hali yo'q**.
 
@@ -221,11 +221,11 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 18. Ishchilar hisobi
 - [ ] 🔒 19. Geolokatsiya
 - [x] 20. Texnika
-- [ ] 21. Texnika buzilishi
+- [x] 21. Texnika buzilishi
 - [~] 22. Izohlar — *xavfsizlik va sifat orqali*
 - [x] 23. Texnik nazorat izohlari
 - [x] 24. Ijro hujjatlari
-- [ ] 25. Ishni yopishdan oldin ogohlantirish
+- [x] 25. Ishni yopishdan oldin ogohlantirish
 - [x] 26. Texnika xavfsizligi
 - [x] 27. Instruktaj
 - [ ] 🔒 28. Internetsiz ishlash — *lokal baza; sinxronizatsiya paket orqali*
@@ -233,8 +233,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 30. AI-yordamchi — *qoidalarga asoslangan yordamchi*
 - [x] 31. AI aniq obyektni bilishi
 - [ ] 🔒 32. Ofis bilan chat
-- [ ] 33. Ish kunining avtomatik yakunlanishi
-- [ ] 34. Hisobotni yuborishdan oldin AI tekshiruvi
+- [x] 33. Ish kunining avtomatik yakunlanishi — *yakuniy tekshiruv ro'yxati*
+- [x] 34. Hisobotni yuborishdan oldin AI tekshiruvi
 - [x] 35. Prorabning bosh paneli
 - [~] 36. Platforma bilan bog'lanish — *fayl orqali paket*
 - [x] 37. Ishlab chiqishning bosh tamoyili

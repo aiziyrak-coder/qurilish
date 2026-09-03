@@ -137,8 +137,7 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     // Nuqsoni bor va muddati o'tgan yozuvlar — birinchi navbatdagi ish.
     let overdue = score.overdue;
     // Yopilishga yaqin, lekin sifat bo'yicha yopilmagan ishlar (TZ XIV.35).
-    let blocked =
-        crate::checks::task_blocks(&app.tasks, &app.quality, &app.check_points, app.today).len();
+    let blocked = app.task_blocks().len();
 
     stat_row(
         ui,
@@ -921,7 +920,7 @@ fn defects_tab(ui: &mut egui::Ui, app: &mut App) {
 
 /// Sifat bo'yicha yopib bo'lmaydigan ishlar (TZ XIV.10, 35).
 fn blocks_tab(ui: &mut egui::Ui, app: &mut App) {
-    let blocks = crate::checks::task_blocks(&app.tasks, &app.quality, &app.check_points, app.today);
+    let blocks = app.task_blocks();
 
     ui.label(
         RichText::new(t("blocks_hint"))

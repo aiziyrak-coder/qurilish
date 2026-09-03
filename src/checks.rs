@@ -7056,3 +7056,190 @@ pub fn maker_comparison(quotes: &[Quote], purchases: &[Purchase]) -> Vec<MakerCo
     out.sort_by(|a, b| b.spread_pct.total_cmp(&a.spread_pct));
     out
 }
+
+// ================= VI.25, 33-34. Kunni yakunlash va ishni yopish =================
+
+/// Kun yakunlanishidan oldin topilgan kamchilik (TZ VI.33-34).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DayIssue {
+    /// Kunlik jurnalga yozuv kiritilmagan.
+    NoJournal,
+    /// Jurnalda ob-havo yozilmagan — sovuqda beton ishlari uchun muhim.
+    NoWeather,
+    /// Foto biriktirilmagan.
+    NoPhoto,
+    /// Tabel to'ldirilmagan: bugun hech kim belgilanmagan.
+    NoTimesheet,
+    /// Jurnaldagi ishchi soni tabeldagidan farq qiladi.
+    CrewMismatch { journal: i64, timesheet: i64 },
+    /// Ketayotgan ish bo'yicha bugun hajm kiritilmagan.
+    NoVolume { task_id: i64 },
+    /// Bugun ochilgan xavfsizlik yoki sifat holati yopilmagan.
+    OpenIssues { count: usize },
+}
+
+impl DayIssue {
+    /// Kunni yopishga to'sadimi. To'smaydiganlari — eslatma.
+    pub fn blocking(&self) -> bool {
+        matches!(
+            self,
+            DayIssue::NoJournal | DayIssue::NoTimesheet | DayIssue::CrewMismatch { .. }
+        )
+    }
+}
+
+/// Kun yakunini tekshirish uchun manba.
+pub struct DayCtx<'a> {
+    pub journal: &'a [JournalEntry],
+    pub timesheet: &'a [TimesheetEntry],
+    pub tasks: &'a [Task],
+    /// Bugun ketayotgan ishlar ro'yxati — ekran qaysi ishni ko'rsatsa, o'sha.
+    pub running: &'a [i64],
+    /// Bugun ochiq qolgan xavfsizlik va sifat holatlari soni.
+    pub open_issues: usize,
+    pub day: NaiveDate,
+}
+
+/// TZ VI.33-34: ish kuni yopilishidan va hisobot yuborilishidan oldingi
+/// tekshiruv.
+///
+/// Tekshiruv **bugungi yozuvlarga** qaraydi: jurnal, tabel va bajarilgan
+/// hajm. Maqsadi — kechqurun esdan chiqqan narsani ertaga emas, bugun
+/// aytish: bir kun o'tsa, kim qancha ishlagani endi eslanmaydi.
+pub fn day_close(ctx: &DayCtx) -> Vec<DayIssue> {
+    let mut out = Vec::new();
+
+    let today_entries: Vec<&JournalEntry> =
+        ctx.journal.iter().filter(|j| j.date == ctx.day).collect();
+    let today_hours: Vec<&TimesheetEntry> = ctx
+        .timesheet
+        .iter()
+        .filter(|e| e.date == ctx.day && e.hours > 0.0)
+        .collect();
+
+    if today_entries.is_empty() {
+        out.push(DayIssue::NoJournal);
+    } else {
+        if today_entries.iter().all(|j| j.weather.trim().is_empty()) {
+            out.push(DayIssue::NoWeather);
+        }
+        if today_entries.iter().all(|j| j.photos.trim().is_empty()) {
+            out.push(DayIssue::NoPhoto);
+        }
+    }
+
+    if today_hours.is_empty() {
+        out.push(DayIssue::NoTimesheet);
+    } else if let Some(j) = today_entries.iter().find(|j| j.workers > 0) {
+        let counted = today_hours.len() as i64;
+        // Bitta odam farq — yaxlitlash emas, lekin ikkitadan ortiq farq
+        // odatda kimdir tabelga tushmaganini bildiradi.
+        if (j.workers - counted).abs() > 1 {
+            out.push(DayIssue::CrewMismatch {
+                journal: j.workers,
+                timesheet: counted,
+            });
+        }
+    }
+
+    for id in ctx.running {
+        let has_volume = today_entries
+            .iter()
+            .any(|j| j.task_id == Some(*id) && j.volume > 0.0);
+        if !has_volume && ctx.tasks.iter().any(|t| t.id == *id) {
+            out.push(DayIssue::NoVolume { task_id: *id });
+        }
+    }
+
+    if ctx.open_issues > 0 {
+        out.push(DayIssue::OpenIssues {
+            count: ctx.open_issues,
+        });
+    }
+
+    // To'sadiganlar oldinda.
+    out.sort_by_key(|i| !i.blocking());
+    out
+}
+
+/// Ishni yopishdan oldingi ogohlantirish (TZ VI.25).
+#[derive(Debug, Clone, PartialEq)]
+pub enum CloseWarning {
+    /// Sifat bo'yicha to'siq: nuqson yoki qabul nazorati.
+    Quality { defects: usize, points: usize },
+    /// Talab qilinadigan ijro hujjati imzolanmagan.
+    Docs { missing: usize },
+    /// Ishga material chiqim qilinmagan — sarf yozilmagan.
+    NoConsumption,
+    /// Ishga bironta soat yozilmagan — kim bajarganini bilib bo'lmaydi.
+    NoLabour,
+    /// Jurnalda bu ish bo'yicha hajm yozuvi yo'q.
+    NoJournalVolume,
+}
+
+impl CloseWarning {
+    /// Jiddiy: yopilsa keyin tuzatib bo'lmaydigan narsa qoladi.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            CloseWarning::Quality { .. } | CloseWarning::Docs { .. }
+        )
+    }
+}
+
+/// TZ VI.25: ishni «bajarildi» deb belgilashdan oldin nimalar yopilmagani.
+///
+/// Sifat to'sig'i [`task_blocks`] dan, hujjat talabi [`required_docs`] dan
+/// olinadi — bu yerda qayta yozilmaydi, shuning uchun prorab ekranidagi
+/// ogohlantirish sifat va hujjat ekranlaridagi bilan bir xil gapiradi.
+pub fn close_warnings(
+    task_id: i64,
+    blocks: &[TaskBlock],
+    required: &[RequiredDoc],
+    moves: &[StockMove],
+    timesheet: &[TimesheetEntry],
+    journal: &[JournalEntry],
+) -> Vec<CloseWarning> {
+    let mut out = Vec::new();
+
+    if let Some(b) = blocks.iter().find(|b| b.task_id == task_id) {
+        if b.blocked() {
+            out.push(CloseWarning::Quality {
+                defects: b.open_defects,
+                points: b.pending_points,
+            });
+        }
+    }
+
+    let missing = required
+        .iter()
+        .filter(|r| r.task_id == task_id && !r.signed)
+        .count();
+    if missing > 0 {
+        out.push(CloseWarning::Docs { missing });
+    }
+
+    let consumed = moves
+        .iter()
+        .any(|m| m.task_id == Some(task_id) && matches!(m.kind, MoveKind::Out));
+    if !consumed {
+        out.push(CloseWarning::NoConsumption);
+    }
+
+    let worked = timesheet
+        .iter()
+        .any(|e| e.task_id == Some(task_id) && e.hours > 0.0);
+    if !worked {
+        out.push(CloseWarning::NoLabour);
+    }
+
+    let logged = journal
+        .iter()
+        .any(|j| j.task_id == Some(task_id) && j.volume > 0.0);
+    if !logged {
+        out.push(CloseWarning::NoJournalVolume);
+    }
+
+    out.sort_by_key(|w| !w.severe());
+    out
+}

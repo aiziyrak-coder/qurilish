@@ -3566,6 +3566,43 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "mat_maker_spread" => ("tarqoqlik", "разброс"),
         "mat_maker_best" => ("eng arzon", "дешевле всех"),
         "mat_maker_deals" => ("xarid", "закупок"),
+        // VI. Prorab ilovasi — kunni yakunlash va texnika buzilishi
+        "fm_day_close" => ("Kunni yakunlash", "Закрытие дня"),
+        "fm_day_ready" => (
+            "Kun yozuvlari to'liq — hisobotni yuborish mumkin.",
+            "Записи за день полные — отчёт можно отправлять."
+        ),
+        "fm_day_blocked" => (
+            "Kunni yopishdan oldin quyidagilar to'ldirilishi kerak:",
+            "Перед закрытием дня нужно заполнить следующее:"
+        ),
+        "fm_day_almost" => (
+            "Kun deyarli yopiq, lekin bularga e'tibor bering:",
+            "День почти закрыт, но обратите внимание:"
+        ),
+        "di_no_journal" => ("Kunlik jurnalga yozuv kiritilmagan", "В общий журнал работ запись не внесена"),
+        "di_no_weather" => ("Ob-havo yozilmagan", "Не записана погода"),
+        "di_no_photo" => ("Foto biriktirilmagan", "Не приложено фото"),
+        "di_no_timesheet" => ("Tabel to'ldirilmagan", "Табель не заполнен"),
+        "di_crew_mismatch" => ("Jurnal va tabeldagi ishchi soni farq qiladi", "Число рабочих в журнале и табеле расходится"),
+        "di_no_volume" => ("Bugungi hajm kiritilmagan", "Не введён объём за сегодня"),
+        "di_open_issues" => ("Yopilmagan xavfsizlik holatlari", "Незакрытые случаи по охране труда"),
+        "cw_quality" => ("Sifat: nuqson / qabul nazorati", "Качество: дефекты / точки контроля"),
+        "cw_docs" => ("Imzolanmagan ijro hujjati", "Неподписанных исполнительных документов"),
+        "cw_no_consumption" => ("Ishga material chiqim qilinmagan", "На работу материал не списан"),
+        "cw_no_labour" => ("Ishga soat yozilmagan", "На работу не записаны часы"),
+        "cw_no_volume" => ("Jurnalda hajm yozuvi yo'q", "В журнале нет записи объёма"),
+        "fm_machine_broke" => ("Buzildi", "Сломалась"),
+        "fm_machine_broke_hint" => (
+            "Ta'mir yozuvi ochiladi va texnika holati «ta'mirda» ga o'tadi.",
+            "Откроется запись о ремонте, статус техники станет «в ремонте»."
+        ),
+        "fm_machine_broke_reason" => ("Obyektda buzildi", "Сломалась на объекте"),
+        "fm_machine_fixed" => ("Ta'mirdan chiqdi", "Из ремонта"),
+        "fm_machine_fixed_hint" => (
+            "Ochiq ta'mir yopiladi va texnika ishga qaytadi.",
+            "Открытый ремонт закрывается, техника возвращается в работу."
+        ),
         "ct_tab_contracts" => ("Shartnomalar", "Договоры"),
         "ct_tab_changes" => ("O'zgarishlar", "Изменения"),
         "ct_tab_stages" => ("To'lov jadvali", "График платежей"),

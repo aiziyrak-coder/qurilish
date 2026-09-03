@@ -11,7 +11,7 @@
 use super::warehouse::{cell_l, cell_r};
 use super::*;
 use crate::domain::{IssueStatus, JournalEntry, MachineLog, MachineStatus, SafetyEvent};
-use chrono::{Duration, NaiveDate};
+use chrono::NaiveDate;
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let Some(pid) = app.current else {
@@ -61,6 +61,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 machines_block(ui, app, pid);
                 ui.add_space(12.0);
                 attention_block(ui, app);
+                ui.add_space(12.0);
+                day_close_block(ui, app);
                 ui.add_space(20.0);
             });
         });
@@ -68,20 +70,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
 /// Bugun ketayotgan ishlar: boshlangan, tugallanmagan va rejasi bugunni qamragan.
 fn running_today(app: &App) -> Vec<i64> {
-    let origin = app.origin();
-    app.tasks
-        .iter()
-        .filter(|t| t.progress < 99.99)
-        .filter(|t| {
-            let Some(c) = app.schedule.get(t.id) else {
-                return false;
-            };
-            let start = origin + Duration::days(c.es);
-            let end = origin + Duration::days(c.ef);
-            start <= app.today && app.today <= end
-        })
-        .map(|t| t.id)
-        .collect()
+    app.running_today()
 }
 
 fn kpi_row(ui: &mut egui::Ui, app: &App) {
@@ -271,6 +260,30 @@ fn today_tasks(ui: &mut egui::Ui, app: &mut App) {
 
                             if resp.changed() {
                                 changed = Some(task);
+                            }
+
+                            // Ish yopilishga yaqinlashsa — nima qolganini
+                            // shu yerda aytamiz (TZ VI.25). Yopilgandan keyin
+                            // aytish kech: bosqich ustidan ish ketadi.
+                            if src.progress < 99.99 {
+                                let warns = app.close_warnings(*id);
+                                if !warns.is_empty() {
+                                    cell_l(ui, 60.0, RichText::new(""));
+                                    ui.vertical(|ui| {
+                                        for w in &warns {
+                                            ui.label(
+                                                RichText::new(format!("· {}", close_text(w)))
+                                                    .size(11.0)
+                                                    .color(if w.severe() {
+                                                        theme::danger()
+                                                    } else {
+                                                        theme::muted()
+                                                    }),
+                                            );
+                                        }
+                                    });
+                                    ui.end_row();
+                                }
                             }
                         }
                     });
@@ -507,6 +520,8 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
     let today = app.today;
     let mut add: Option<i64> = None;
     let mut edited: Option<MachineLog> = None;
+    let mut broke: Option<i64> = None;
+    let mut fixed: Option<i64> = None;
 
     block(ui, t("foreman_machines"), |ui| {
         if app.machines.is_empty() {
@@ -580,6 +595,25 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                             }
                         }
                     }
+                    // Buzilishni prorab bir bosishda qayd qiladi (TZ VI.21):
+                    // texnika holati o'zgaradi va ta'mir yozuvi ochiladi.
+                    let repairing = app.repairs.iter().any(|r| r.machine_id == m.id && r.open());
+                    if repairing {
+                        if ui
+                            .small_button(t("fm_machine_fixed"))
+                            .on_hover_text(t("fm_machine_fixed_hint"))
+                            .clicked()
+                        {
+                            fixed = Some(m.id);
+                        }
+                    } else if ui
+                        .small_button(t("fm_machine_broke"))
+                        .on_hover_text(t("fm_machine_broke_hint"))
+                        .clicked()
+                    {
+                        broke = Some(m.id);
+                    }
+
                     // Texnik ko'rik muddati o'tgan bo'lsa — prorab buni ko'rishi shart.
                     if m.inspection_until.is_some_and(|d| d < today) {
                         cell_l(
@@ -596,6 +630,47 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                 }
             });
     });
+
+    if let Some(id) = broke {
+        // Ta'mir yozuvi bilan texnika holati birga o'zgaradi — aks holda
+        // ro'yxatda «ishlayapti» deb turaveradi.
+        app.db.insert_machine_repair(&crate::domain::MachineRepair {
+            id: 0,
+            project_id: pid,
+            machine_id: id,
+            kind: crate::domain::RepairKind::Fault,
+            started: today,
+            finished: None,
+            reason: t("fm_machine_broke_reason").to_string(),
+            cost: 0.0,
+            hours_at: 0.0,
+            note: String::new(),
+        });
+        if let Some(m) = app.machines.iter().find(|m| m.id == id) {
+            let mut m = m.clone();
+            m.status = MachineStatus::Repair;
+            app.db.update_machine(&m);
+        }
+        app.reload_modules();
+    }
+    if let Some(id) = fixed {
+        let open = app
+            .repairs
+            .iter()
+            .filter(|r| r.machine_id == id && r.open())
+            .max_by_key(|r| r.started)
+            .cloned();
+        if let Some(mut r) = open {
+            r.finished = Some(today);
+            app.db.update_machine_repair(&r);
+        }
+        if let Some(m) = app.machines.iter().find(|m| m.id == id) {
+            let mut m = m.clone();
+            m.status = MachineStatus::Working;
+            app.db.update_machine(&m);
+        }
+        app.reload_modules();
+    }
 
     if let Some(machine_id) = add {
         app.db.insert_machine_log(&MachineLog {
@@ -692,6 +767,113 @@ fn attention_block(ui: &mut egui::Ui, app: &mut App) {
 
     if let Some(s) = go {
         app.screen = s;
+    }
+}
+
+// ================================================================ Kunni yakunlash
+
+/// Kun yakunlanishidan va hisobot yuborilishidan oldingi tekshiruv
+/// (TZ VI.33-34).
+///
+/// Maqsad — kechqurun esdan chiqqan narsani ertaga emas, bugun aytish:
+/// bir kun o'tsa, kim qancha ishlagani endi aniq eslanmaydi.
+fn day_close_block(ui: &mut egui::Ui, app: &mut App) {
+    let issues = app.day_close();
+    let blocking = issues.iter().filter(|i| i.blocking()).count();
+    let mut go: Option<Screen> = None;
+
+    block(ui, t("fm_day_close"), |ui| {
+        if issues.is_empty() {
+            ui.label(
+                RichText::new(t("fm_day_ready"))
+                    .size(12.5)
+                    .color(theme::ok()),
+            );
+            return;
+        }
+        ui.label(
+            RichText::new(if blocking > 0 {
+                t("fm_day_blocked")
+            } else {
+                t("fm_day_almost")
+            })
+            .size(12.0)
+            .color(if blocking > 0 {
+                theme::danger()
+            } else {
+                theme::warn()
+            }),
+        );
+        ui.add_space(4.0);
+        for i in &issues {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(if i.blocking() { "!" } else { "·" })
+                        .color(if i.blocking() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        })
+                        .strong(),
+                );
+                ui.label(RichText::new(day_text(app, i)).size(12.0));
+                if let Some(screen) = day_screen(i) {
+                    if ui.small_button(t("an_open")).clicked() {
+                        go = Some(screen);
+                    }
+                }
+            });
+        }
+    });
+
+    if let Some(s) = go {
+        app.screen = s;
+    }
+}
+
+/// Kun kamchiligini odam o'qiydigan gapga aylantiradi.
+fn day_text(app: &App, i: &crate::checks::DayIssue) -> String {
+    use crate::checks::DayIssue as D;
+    match i {
+        D::NoJournal => t("di_no_journal").to_string(),
+        D::NoWeather => t("di_no_weather").to_string(),
+        D::NoPhoto => t("di_no_photo").to_string(),
+        D::NoTimesheet => t("di_no_timesheet").to_string(),
+        D::CrewMismatch { journal, timesheet } => {
+            format!("{}: {} / {}", t("di_crew_mismatch"), journal, timesheet)
+        }
+        D::NoVolume { task_id } => format!(
+            "{} — {}",
+            t("di_no_volume"),
+            app.task(*task_id)
+                .map(|x| super::issues::truncate(&x.name, 34))
+                .unwrap_or_default()
+        ),
+        D::OpenIssues { count } => format!("{} ({})", t("di_open_issues"), count),
+    }
+}
+
+/// Kamchilik qaysi ekranda tuzatiladi — har ogohlantirishning manzili bo'lsin.
+fn day_screen(i: &crate::checks::DayIssue) -> Option<Screen> {
+    use crate::checks::DayIssue as D;
+    match i {
+        D::NoJournal | D::NoWeather | D::NoPhoto | D::NoVolume { .. } => Some(Screen::Journal),
+        D::NoTimesheet | D::CrewMismatch { .. } => Some(Screen::Timesheet),
+        D::OpenIssues { .. } => Some(Screen::Safety),
+    }
+}
+
+/// Ishni yopishdan oldingi ogohlantirish matni.
+fn close_text(w: &crate::checks::CloseWarning) -> String {
+    use crate::checks::CloseWarning as W;
+    match w {
+        W::Quality { defects, points } => {
+            format!("{}: {} / {}", t("cw_quality"), defects, points)
+        }
+        W::Docs { missing } => format!("{} ({})", t("cw_docs"), missing),
+        W::NoConsumption => t("cw_no_consumption").to_string(),
+        W::NoLabour => t("cw_no_labour").to_string(),
+        W::NoJournalVolume => t("cw_no_volume").to_string(),
     }
 }
 
