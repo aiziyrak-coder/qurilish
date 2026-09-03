@@ -19,7 +19,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 22 | 13 | 7 | 2 | 2 |
+| II. AI loyiha tekshiruvi | 22 | 19 | 1 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 20 | 7 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **529** | **125** | **46** | **46** |
+| **Jami** | **700** | **535** | **119** | **46** | **46** |
 
-Ya'ni **~76 % to'liq**, **~18 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~76 % to'liq**, **~17 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -59,12 +59,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 - [x] 1. Umumiy vazifa — *bilimlar grafi va qoidalar dvigateli*
 - [x] 2. Ishlash tamoyili — *fakt/hisob/xulosa ajratilgan (III.32)*
-- [~] 3. **AR — arxitektura** — *xona, eshik, deraza, devor turlari bor; TZ dagi barcha AR tekshiruvlari emas*
-- [~] 4. **KJ — temir-beton** — *ustun, rigel, plita, teshik; armatura va yuklama tekshiruvi yo'q*
-- [~] 5. **KM — metall** — *rigel va ustun; tugun va payvand tekshiruvi yo'q*
-- [~] 6. **VK — suv va kanalizatsiya** — *truba, uklon, kesish; diametr hisobi yo'q*
-- [~] 7. **OV — isitish va ventilyatsiya** — *vozduxovod, qurilma; havo hisobi yo'q*
-- [~] 8. **EOM — elektrika** — *kabel, qurilma, quvvat; kesim hisobi yo'q*
+- [x] 3. **AR — arxitektura** — *eshik kengligi va tabiiy yoritish hisobi*
+- [x] 4. **KJ — temir-beton** — *beton sinfi va kesim o'lchami*
+- [x] 5. **KM — metall** — *po'lat markasi va tayanch tuguni*
+- [x] 6. **VK — suv va kanalizatsiya** — *uklon va suv tezligi hisobi*
+- [x] 7. **OV — isitish va ventilyatsiya** — *havo tezligi hisobi*
+- [x] 8. **EOM — elektrika** — *tok va kabel kesimi hisobi*
 - [x] 9. **SS — kuchsiz tok** — *kabel va o'rnatish joyi tekshiriladi*
 - [x] 10. **PB — yong'in xavfsizligi** — *himoya, chiqish va suv ta'minoti*
 - [x] 11. **CROSS CHECK** — *bo'limlararo tekshiruv: AR↔KJ, VK↔KJ, EOM↔OV va h.k.*

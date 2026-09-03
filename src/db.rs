@@ -9531,6 +9531,208 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(crate::app::Screen::Director.numeral(), "");
     }
 
+    /// TZ II.6-8: tezlik va kesim hisoblari formulaga mos keladi va
+    /// ma'lumot yetishmasa tekshiruv o'tkazilmaydi.
+    #[test]
+    fn engineering_rules_use_real_formulas() {
+        use crate::checks::{check_project, Ctx};
+        use crate::domain::{ElementKind, Relation};
+        use crate::model::Section;
+        use std::collections::HashMap;
+
+        let norms = HashMap::new();
+        let run = |elements: &[crate::domain::Element], links: &[crate::domain::ElementLink]| {
+            check_project(&Ctx {
+                project_id: 1,
+                tasks: &[],
+                elements,
+                links,
+                items: &[],
+                declared_total: 0.0,
+                norms: &norms,
+            })
+        };
+        let has = |out: &[crate::domain::Issue], key: &str| {
+            out.iter().any(|i| i.title == crate::i18n::t(key))
+        };
+
+        // --- VK: d = 50 mm, Q = 10 l/s -> v ≈ 5.1 m/s > 3 ---
+        let mut pipe = test_element(1, Section::Vk, ElementKind::Pipe, "T-1", 50.0);
+        pipe.value = 10.0;
+        pipe.value_name = "sarf".into();
+        assert!(has(
+            &run(std::slice::from_ref(&pipe), &[]),
+            "chk_vk_velocity_title"
+        ));
+
+        // Sarf kam bo'lsa — tezlik chegarada, e'tiroz yo'q.
+        let mut slow = pipe.clone();
+        slow.value = 3.0; // v ≈ 1.5 m/s
+        assert!(!has(
+            &run(std::slice::from_ref(&slow), &[]),
+            "chk_vk_velocity_title"
+        ));
+
+        // Sarf ko'rsatilmagan — tekshiruv o'tkazilmaydi.
+        let mut unknown = pipe.clone();
+        unknown.value = 0.0;
+        assert!(!has(
+            &run(std::slice::from_ref(&unknown), &[]),
+            "chk_vk_velocity_title"
+        ));
+
+        // --- OV: d = 200 mm, L = 3000 m3/h -> v ≈ 26.5 m/s > 6 ---
+        let mut duct = test_element(2, Section::Ov, ElementKind::Duct, "V-1", 200.0);
+        duct.value = 3000.0;
+        duct.value_name = "havo sarfi".into();
+        assert!(has(
+            &run(std::slice::from_ref(&duct), &[]),
+            "chk_ov_velocity_title"
+        ));
+
+        // --- EOM: P = 30 kW -> I ≈ 53.6 A -> S ≈ 10.7 mm2; kabel 6 mm2 ---
+        let mut device = test_element(3, Section::Eom, ElementKind::Device, "Q-1", 0.0);
+        device.value = 30.0;
+        device.value_name = "quvvat".into();
+        let cable = test_element(4, Section::Eom, ElementKind::Cable, "K-1", 6.0);
+        let out = run(
+            &[device.clone(), cable.clone()],
+            &[test_link(4, 3, Relation::Serves)],
+        );
+        assert!(has(&out, "chk_eom_title"));
+
+        // Kesim yetarli bo'lsa — e'tiroz yo'q.
+        let mut thick = cable.clone();
+        thick.size = 25.0;
+        assert!(!has(
+            &run(
+                &[device.clone(), thick],
+                &[test_link(4, 3, Relation::Serves)]
+            ),
+            "chk_eom_title"
+        ));
+
+        // Kabel bog'lanmagan bo'lsa — hisob qilinmaydi.
+        assert!(!has(
+            &run(std::slice::from_ref(&device), &[]),
+            "chk_eom_title"
+        ));
+    }
+
+    /// TZ II.3-5: eshik, yoritish, beton sinfi va po'lat markasi.
+    #[test]
+    fn section_rules_ask_for_the_missing_data() {
+        use crate::checks::{check_project, Ctx};
+        use crate::domain::{ElementKind, Relation};
+        use crate::model::Section;
+        use std::collections::HashMap;
+
+        let norms = HashMap::new();
+        let run = |elements: &[crate::domain::Element], links: &[crate::domain::ElementLink]| {
+            check_project(&Ctx {
+                project_id: 1,
+                tasks: &[],
+                elements,
+                links,
+                items: &[],
+                declared_total: 0.0,
+                norms: &norms,
+            })
+        };
+        let has = |out: &[crate::domain::Issue], key: &str| {
+            out.iter().any(|i| i.title == crate::i18n::t(key))
+        };
+
+        // Tor eshik.
+        let narrow = test_element(1, Section::Ar, ElementKind::Door, "D-1", 600.0);
+        assert!(has(
+            &run(std::slice::from_ref(&narrow), &[]),
+            "chk_ar_door_title"
+        ));
+        // Kengi — e'tiroz yo'q. Metrda berilgani ham tushuniladi.
+        let mut wide = narrow.clone();
+        wide.size = 0.9;
+        assert!(!has(
+            &run(std::slice::from_ref(&wide), &[]),
+            "chk_ar_door_title"
+        ));
+
+        // Yoritish: 20 m2 xona, 1 m2 deraza -> 1/20 < 1/8.
+        let mut room = test_element(2, Section::Ar, ElementKind::Room, "X-1", 20.0);
+        room.unit = "m2".into();
+        let mut window = test_element(3, Section::Ar, ElementKind::Window, "OK-1", 1.0);
+        window.unit = "m2".into();
+        let out = run(
+            &[room.clone(), window.clone()],
+            &[test_link(2, 3, Relation::Contains)],
+        );
+        assert!(has(&out, "chk_ar_light_title"));
+
+        // Deraza kattaroq bo'lsa — talab bajariladi.
+        let mut big = window.clone();
+        big.size = 4.0;
+        assert!(!has(
+            &run(&[room, big], &[test_link(2, 3, Relation::Contains)]),
+            "chk_ar_light_title"
+        ));
+
+        // Beton sinfisiz ustun.
+        let column = test_element(4, Section::Kj, ElementKind::Column, "K-1", 400.0);
+        assert!(has(
+            &run(std::slice::from_ref(&column), &[]),
+            "chk_kj_class_title"
+        ));
+        // Sinfi ko'rsatilgan — e'tiroz yo'q.
+        let mut classed = column.clone();
+        classed.mark = "K-1 B25".into();
+        assert!(!has(
+            &run(std::slice::from_ref(&classed), &[]),
+            "chk_kj_class_title"
+        ));
+        // Kesimi juda kichik.
+        let mut thin = classed.clone();
+        thin.size = 120.0;
+        assert!(has(
+            &run(std::slice::from_ref(&thin), &[]),
+            "chk_kj_section_title"
+        ));
+
+        // Po'lat markasisiz metall rigel.
+        let beam = test_element(5, Section::Km, ElementKind::Beam, "B-1", 300.0);
+        assert!(has(
+            &run(std::slice::from_ref(&beam), &[]),
+            "chk_km_steel_title"
+        ));
+        let mut graded = beam.clone();
+        graded.note = "S245 po'lat".into();
+        assert!(!has(
+            &run(std::slice::from_ref(&graded), &[]),
+            "chk_km_steel_title"
+        ));
+    }
+
+    /// Namunadagi loyiha tekshiruvi haddan tashqari ko'p e'tiroz
+    /// chiqarmasligi kerak: 30 tadan oshsa ekran o'qilmay qoladi.
+    #[test]
+    fn demo_project_check_stays_readable() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        app.run_project_check();
+        let found: Vec<_> = app
+            .issues
+            .iter()
+            .filter(|i| i.module == crate::domain::IssueModule::Project && i.auto)
+            .collect();
+        assert!(
+            found.len() <= 30,
+            "namunada juda ko'p e'tiroz: {}",
+            found.len()
+        );
+        assert!(!found.is_empty(), "namunada e'tiroz umuman yo'q");
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

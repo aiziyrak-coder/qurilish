@@ -70,6 +70,14 @@ pub const RULES: &[(&str, &str)] = &[
     ("PRJ_SPEC_UNIT", "rule_prj_spec_unit"),
     ("PRJ_BUILD_SIZE", "rule_prj_build_size"),
     ("PRJ_BUILD_LEVEL", "rule_prj_build_level"),
+    ("PRJ_AR_DOOR", "rule_prj_ar_door"),
+    ("PRJ_AR_LIGHT", "rule_prj_ar_light"),
+    ("PRJ_KJ_SECTION", "rule_prj_kj_section"),
+    ("PRJ_KJ_CLASS", "rule_prj_kj_class"),
+    ("PRJ_KM_STEEL", "rule_prj_km_steel"),
+    ("PRJ_VK_VELOCITY", "rule_prj_vk_velocity"),
+    ("PRJ_OV_VELOCITY", "rule_prj_ov_velocity"),
+    ("PRJ_EOM_SECTION", "rule_prj_eom_section"),
 ];
 
 impl Db {
@@ -1421,6 +1429,416 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
                 ));
             }
         }
+    }
+
+    // ================= II.3-8. Bo'limlar bo'yicha muhandislik hisobi =================
+    //
+    // Quyidagi tekshiruvlar **hisoblanadigan** qoidalar: har birining
+    // orqasida oddiy formula turadi va formulaning taxminlari ekranda
+    // ochiq yoziladi. Ma'lumot yetishmasa tekshiruv **o'tkazilmaydi** —
+    // taxmin qilib xulosa chiqarilmaydi.
+
+    // --- II.3 AR: eshik kengligi ---
+    let (door_min, door_confirmed) = ctx.threshold("PRJ_AR_DOOR", 800.0);
+    for e in ctx
+        .elements
+        .iter()
+        .filter(|e| e.kind == ElementKind::Door && e.size > 0.0)
+    {
+        // O'lchov millimetrda kutiladi; metrda berilgan bo'lsa o'giramiz.
+        let width = if e.size < 10.0 {
+            e.size * 1000.0
+        } else {
+            e.size
+        };
+        if width >= door_min {
+            continue;
+        }
+        let mut desc = format!(
+            "{}: {:.0} {}; {}: {:.0}",
+            crate::i18n::t("chk_ar_door_actual"),
+            width,
+            crate::i18n::t("unit_mm"),
+            crate::i18n::t("chk_ar_door_min"),
+            door_min
+        );
+        if !door_confirmed {
+            desc.push('\n');
+            desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+        }
+        out.push(b.make(
+            "PRJ_AR_DOOR",
+            "PR",
+            Section::Ar,
+            Severity::Major,
+            crate::i18n::t("chk_ar_door_title").to_string(),
+            desc,
+            format!("{} {}", e.room, e.axis).trim().to_string(),
+            e.mark.clone(),
+            e.sheet.clone(),
+            crate::i18n::t("chk_ar_door_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.3 AR: tabiiy yoritish ---
+    // Deraza yuzasining xona maydoniga nisbati. Nisbat reyestrda
+    // sozlanadi; sukut bo'yicha 1/8 — turar joy uchun keng tarqalgan talab.
+    let (light_ratio, light_confirmed) = ctx.threshold("PRJ_AR_LIGHT", 0.125);
+    for room in ctx.elements.iter().filter(|e| e.kind == ElementKind::Room) {
+        let area = if room.size > 0.0 {
+            room.size
+        } else {
+            room.value
+        };
+        if area <= 0.0 {
+            continue;
+        }
+        // Xonaga tegishli derazalar: `Contains` bog'lanishi bo'yicha.
+        let windows: Vec<&Element> = rel_out
+            .get(&room.id)
+            .into_iter()
+            .chain(rel_in.get(&room.id))
+            .flatten()
+            .filter(|(l, o)| l.relation == Relation::Contains && o.kind == ElementKind::Window)
+            .map(|(_, o)| *o)
+            .collect();
+        if windows.is_empty() {
+            continue;
+        }
+        let glass: f64 = windows
+            .iter()
+            .map(|w| if w.size > 0.0 { w.size } else { w.value })
+            .sum();
+        if glass <= 0.0 {
+            continue;
+        }
+        let ratio = glass / area;
+        if ratio >= light_ratio {
+            continue;
+        }
+        let mut desc = format!(
+            "{}: {:.2} / {:.2} = 1/{:.0}; {}: 1/{:.0}",
+            crate::i18n::t("chk_ar_light_actual"),
+            glass,
+            area,
+            1.0 / ratio.max(0.0001),
+            crate::i18n::t("chk_ar_light_min"),
+            1.0 / light_ratio
+        );
+        if !light_confirmed {
+            desc.push('\n');
+            desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+        }
+        out.push(b.make(
+            "PRJ_AR_LIGHT",
+            "PR",
+            Section::Ar,
+            Severity::Major,
+            crate::i18n::t("chk_ar_light_title").to_string(),
+            desc,
+            room.room.clone(),
+            room.mark.clone(),
+            room.sheet.clone(),
+            crate::i18n::t("chk_ar_light_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.4 KJ: kesim o'lchami va beton sinfi ---
+    let (min_section, section_confirmed) = ctx.threshold("PRJ_KJ_SECTION", 200.0);
+    for e in ctx.elements.iter().filter(|e| {
+        e.section == Section::Kj
+            && matches!(
+                e.kind,
+                ElementKind::Column | ElementKind::Beam | ElementKind::Slab
+            )
+    }) {
+        // Beton sinfi: marka yoki izohda «B25», «C20/25» ko'rinishida.
+        let text = format!("{} {}", e.mark, e.note).to_lowercase();
+        let has_class = text
+            .split(|c: char| !c.is_alphanumeric() && c != '/')
+            .any(|w| {
+                (w.starts_with('b') || w.starts_with('c') || w.starts_with('в'))
+                    && w.chars().skip(1).any(|c| c.is_ascii_digit())
+            });
+        if !has_class {
+            out.push(b.make(
+                "PRJ_KJ_CLASS",
+                "PR",
+                Section::Kj,
+                Severity::Major,
+                crate::i18n::t("chk_kj_class_title").to_string(),
+                format!(
+                    "{} «{}» {}",
+                    e.kind.label(),
+                    e.mark,
+                    crate::i18n::t("chk_kj_class_desc")
+                ),
+                format!("{} {}", e.room, e.axis).trim().to_string(),
+                e.mark.clone(),
+                e.sheet.clone(),
+                crate::i18n::t("chk_kj_class_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+
+        if e.size <= 0.0 {
+            continue;
+        }
+        let size = if e.size < 10.0 {
+            e.size * 1000.0
+        } else {
+            e.size
+        };
+        // Plita uchun chegara pastroq: u qalinlik bo'yicha o'lchanadi.
+        let limit = if e.kind == ElementKind::Slab {
+            min_section * 0.4
+        } else {
+            min_section
+        };
+        if size >= limit {
+            continue;
+        }
+        let mut desc = format!(
+            "{}: {:.0} {}; {}: {:.0}",
+            crate::i18n::t("chk_kj_section_actual"),
+            size,
+            crate::i18n::t("unit_mm"),
+            crate::i18n::t("chk_kj_section_min"),
+            limit
+        );
+        if !section_confirmed {
+            desc.push('\n');
+            desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+        }
+        out.push(b.make(
+            "PRJ_KJ_SECTION",
+            "PR",
+            Section::Kj,
+            Severity::Critical,
+            crate::i18n::t("chk_kj_section_title").to_string(),
+            desc,
+            format!("{} {}", e.room, e.axis).trim().to_string(),
+            e.mark.clone(),
+            e.sheet.clone(),
+            crate::i18n::t("chk_kj_section_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.5 KM: po'lat markasi ---
+    // Payvand chokini belgilash uchun po'lat markasi kerak: marka
+    // bo'lmasa, elektrod ham, chok o'lchami ham tanlanmaydi.
+    for e in ctx.elements.iter().filter(|e| {
+        e.section == Section::Km && matches!(e.kind, ElementKind::Column | ElementKind::Beam)
+    }) {
+        let text = format!("{} {}", e.mark, e.note).to_lowercase();
+        let has_steel = [
+            "s235", "s245", "s255", "s345", "09g2s", "09г2с", "ст3", "st3",
+        ]
+        .iter()
+        .any(|k| text.contains(k));
+        if has_steel {
+            continue;
+        }
+        out.push(b.make(
+            "PRJ_KM_STEEL",
+            "PR",
+            Section::Km,
+            Severity::Major,
+            crate::i18n::t("chk_km_steel_title").to_string(),
+            format!(
+                "{} «{}» {}",
+                e.kind.label(),
+                e.mark,
+                crate::i18n::t("chk_km_steel_desc")
+            ),
+            format!("{} {}", e.room, e.axis).trim().to_string(),
+            e.mark.clone(),
+            e.sheet.clone(),
+            crate::i18n::t("chk_km_steel_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.6 VK: suv tezligi ---
+    // v = Q / A. Diametr `size` (mm), sarf `value` (l/s) bo'lganda
+    // hisoblanadi; ikkalasi bo'lmasa tekshiruv o'tkazilmaydi.
+    let (max_water, water_confirmed) = ctx.threshold("PRJ_VK_VELOCITY", 3.0);
+    for e in ctx.elements.iter().filter(|e| {
+        e.section == Section::Vk && e.kind == ElementKind::Pipe && e.size > 0.0 && e.value > 0.0
+    }) {
+        let name = e.value_name.to_lowercase();
+        if !["sarf", "расход", "flow", "q"]
+            .iter()
+            .any(|k| name.contains(k))
+        {
+            continue;
+        }
+        let d_m = if e.size < 10.0 {
+            e.size
+        } else {
+            e.size / 1000.0
+        };
+        let area = std::f64::consts::PI * d_m * d_m / 4.0;
+        if area <= 0.0 {
+            continue;
+        }
+        // l/s -> m3/s.
+        let v = (e.value / 1000.0) / area;
+        if v <= max_water {
+            continue;
+        }
+        let mut desc = format!(
+            "{}: {:.2} {}; {}: {:.2}",
+            crate::i18n::t("chk_velocity_actual"),
+            v,
+            crate::i18n::t("unit_ms"),
+            crate::i18n::t("chk_velocity_max"),
+            max_water
+        );
+        desc.push('\n');
+        desc.push_str(crate::i18n::t("chk_vk_velocity_note"));
+        if !water_confirmed {
+            desc.push('\n');
+            desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+        }
+        out.push(b.make(
+            "PRJ_VK_VELOCITY",
+            "PR",
+            Section::Vk,
+            Severity::Major,
+            crate::i18n::t("chk_vk_velocity_title").to_string(),
+            desc,
+            format!("{} {}", e.room, e.axis).trim().to_string(),
+            e.mark.clone(),
+            e.sheet.clone(),
+            crate::i18n::t("chk_vk_velocity_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.7 OV: havo tezligi ---
+    // v = L / (3600 · A). Sarf `value` (m3/soat), kesim `size` (mm).
+    let (max_air, air_confirmed) = ctx.threshold("PRJ_OV_VELOCITY", 6.0);
+    for e in ctx.elements.iter().filter(|e| {
+        e.section == Section::Ov && e.kind == ElementKind::Duct && e.size > 0.0 && e.value > 0.0
+    }) {
+        let name = e.value_name.to_lowercase();
+        if !["sarf", "расход", "havo", "воздух", "l"]
+            .iter()
+            .any(|k| name.contains(k))
+        {
+            continue;
+        }
+        let d_m = if e.size < 10.0 {
+            e.size
+        } else {
+            e.size / 1000.0
+        };
+        let area = std::f64::consts::PI * d_m * d_m / 4.0;
+        if area <= 0.0 {
+            continue;
+        }
+        let v = e.value / 3600.0 / area;
+        if v <= max_air {
+            continue;
+        }
+        let mut desc = format!(
+            "{}: {:.2} {}; {}: {:.2}",
+            crate::i18n::t("chk_velocity_actual"),
+            v,
+            crate::i18n::t("unit_ms"),
+            crate::i18n::t("chk_velocity_max"),
+            max_air
+        );
+        desc.push('\n');
+        desc.push_str(crate::i18n::t("chk_ov_velocity_note"));
+        if !air_confirmed {
+            desc.push('\n');
+            desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+        }
+        out.push(b.make(
+            "PRJ_OV_VELOCITY",
+            "PR",
+            Section::Ov,
+            Severity::Major,
+            crate::i18n::t("chk_ov_velocity_title").to_string(),
+            desc,
+            format!("{} {}", e.room, e.axis).trim().to_string(),
+            e.mark.clone(),
+            e.sheet.clone(),
+            crate::i18n::t("chk_ov_velocity_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.8 EOM: kabel kesimi ---
+    // I = P / (√3 · U · cosφ), keyin S = I / J. Taxminlar ekranda ochiq
+    // yoziladi: 380 V, cosφ 0.85, mis o'tkazgich, J = 5 A/mm2.
+    let (density, density_confirmed) = ctx.threshold("PRJ_EOM_SECTION", 5.0);
+    for device in ctx
+        .elements
+        .iter()
+        .filter(|e| e.section == Section::Eom && e.kind == ElementKind::Device && e.value > 0.0)
+    {
+        let name = device.value_name.to_lowercase();
+        if !["quvvat", "мощн", "power", "kw", "kvt"]
+            .iter()
+            .any(|k| name.contains(k))
+        {
+            continue;
+        }
+        // Qurilmani ta'minlaydigan kabel.
+        let cable = rel_out
+            .get(&device.id)
+            .into_iter()
+            .chain(rel_in.get(&device.id))
+            .flatten()
+            .map(|(_, o)| *o)
+            .find(|o| o.kind == ElementKind::Cable && o.size > 0.0);
+        let Some(cable) = cable else { continue };
+
+        let current = device.value * 1000.0 / (3.0_f64.sqrt() * 380.0 * 0.85);
+        let needed = current / density;
+        if cable.size >= needed {
+            continue;
+        }
+        let mut desc = format!(
+            "{}: {:.1} {}; {}: {:.1} {}; {}: {:.1}",
+            crate::i18n::t("chk_eom_current"),
+            current,
+            crate::i18n::t("unit_a"),
+            crate::i18n::t("chk_eom_needed"),
+            needed,
+            crate::i18n::t("unit_mm2"),
+            crate::i18n::t("chk_eom_actual"),
+            cable.size
+        );
+        desc.push('\n');
+        desc.push_str(crate::i18n::t("chk_eom_note"));
+        if !density_confirmed {
+            desc.push('\n');
+            desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+        }
+        out.push(
+            b.make(
+                "PRJ_EOM_SECTION",
+                "PR",
+                Section::Eom,
+                Severity::Critical,
+                crate::i18n::t("chk_eom_title").to_string(),
+                desc,
+                format!("{} {}", device.room, device.axis)
+                    .trim()
+                    .to_string(),
+                cable.mark.clone(),
+                cable.sheet.clone(),
+                crate::i18n::t("chk_eom_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ),
+        );
     }
 
     // --- Bog'lanmagan elementlar: grafda yolg'iz turibdi ---
