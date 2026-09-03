@@ -692,6 +692,24 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_tsperiod_pid ON timesheet_period(project_id);
 
+            CREATE TABLE IF NOT EXISTS lab_test (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                task_id INTEGER,
+                kind TEXT NOT NULL DEFAULT 'other',
+                number TEXT NOT NULL DEFAULT '',
+                subject TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL,
+                value REAL,
+                required REAL,
+                unit TEXT NOT NULL DEFAULT '',
+                result TEXT NOT NULL DEFAULT 'waiting',
+                lab TEXT NOT NULL DEFAULT '',
+                retest TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_labtest_pid ON lab_test(project_id);
+
             CREATE TABLE IF NOT EXISTS contract (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -3710,6 +3728,84 @@ impl Db {
         )
     }
 
+    // ---------- XIV.22-25. Sinovlar ----------
+
+    pub fn lab_tests(&self, pid: i64) -> Vec<LabTest> {
+        self.list(
+            "SELECT id,project_id,task_id,kind,number,subject,date,value,required,unit,result,
+                    lab,retest,note
+             FROM lab_test WHERE project_id=?1 ORDER BY date DESC,id DESC",
+            pid,
+            |r| {
+                Ok(LabTest {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    task_id: r.get(2)?,
+                    kind: LabTestKind::parse(&r.get::<_, String>(3)?),
+                    number: r.get(4)?,
+                    subject: r.get(5)?,
+                    date: date(&r.get::<_, String>(6)?),
+                    value: r.get(7)?,
+                    required: r.get(8)?,
+                    unit: r.get(9)?,
+                    result: LabTestResult::parse(&r.get::<_, String>(10)?),
+                    lab: r.get(11)?,
+                    retest: odate(r.get(12)?),
+                    note: r.get(13)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_lab_test(&self, x: &LabTest) -> i64 {
+        self.ins(
+            "INSERT INTO lab_test (project_id,task_id,kind,number,subject,date,value,required,
+                                   unit,result,lab,retest,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            params![
+                x.project_id,
+                x.task_id,
+                x.kind.code(),
+                x.number,
+                x.subject,
+                x.date.to_string(),
+                x.value,
+                x.required,
+                x.unit,
+                x.result.code(),
+                x.lab,
+                ods(x.retest),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_lab_test(&self, x: &LabTest) -> bool {
+        self.upd(
+            "UPDATE lab_test SET task_id=?2,kind=?3,number=?4,subject=?5,date=?6,value=?7,
+                    required=?8,unit=?9,result=?10,lab=?11,retest=?12,note=?13 WHERE id=?1",
+            params![
+                x.id,
+                x.task_id,
+                x.kind.code(),
+                x.number,
+                x.subject,
+                x.date.to_string(),
+                x.value,
+                x.required,
+                x.unit,
+                x.result.code(),
+                x.lab,
+                ods(x.retest),
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_lab_test(&self, id: i64) -> bool {
+        self.del("lab_test", id)
+    }
+
     // ---------- VIII. Buyurtmachi: shartnomalar va to'lovlar ----------
 
     pub fn contracts(&self, pid: i64) -> Vec<Contract> {
@@ -4598,6 +4694,7 @@ impl Db {
         self.seed_demo_history(pid, ru);
         self.seed_demo_supply_extra(pid, ru);
         self.seed_demo_tools(pid, ru);
+        self.seed_demo_lab(pid, ru);
         self.seed_demo_estimate_alt(pid, ru);
     }
 
@@ -7033,6 +7130,141 @@ impl Db {
                 issued: d(back),
                 due: due.map(d),
                 returned: ret.map(d),
+                note: String::new(),
+            });
+        }
+    }
+
+    /// Laboratoriya va maydon sinovlari namunasi (TZ XIV.22, 24-25).
+    pub fn seed_demo_lab(&self, pid: i64, ru: bool) {
+        if !self.lab_tests(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        // (tur, raqam, mavzu uz/ru, kun oldin, qiymat, talab, birlik, natija, VBS)
+        let tests: [LabTestDef; 8] = [
+            (
+                LabTestKind::Weld,
+                "SV-014",
+                "Ferma tayanchi choklari",
+                "Швы опирания фермы",
+                74,
+                Some(100.0),
+                Some(95.0),
+                "%",
+                LabTestResult::Pass,
+                "8",
+            ),
+            (
+                LabTestKind::Weld,
+                "SV-015",
+                "Zakladnoy detallar choklari",
+                "Швы закладных деталей",
+                52,
+                Some(88.0),
+                Some(95.0),
+                "%",
+                LabTestResult::Fail,
+                "8",
+            ),
+            (
+                LabTestKind::Pressure,
+                "OP-007",
+                "Isitish tizimi, 1-qavat",
+                "Система отопления, 1 этаж",
+                38,
+                Some(6.0),
+                Some(6.0),
+                "bar",
+                LabTestResult::Pass,
+                "11",
+            ),
+            (
+                LabTestKind::Pressure,
+                "OP-008",
+                "Suv quvuri, ko'tarma",
+                "Водопровод, стояк",
+                24,
+                Some(9.0),
+                Some(10.0),
+                "bar",
+                LabTestResult::Fail,
+                "11",
+            ),
+            (
+                LabTestKind::Insulation,
+                "IZ-003",
+                "Kabel liniyasi, shchit",
+                "Кабельная линия, щитовая",
+                18,
+                Some(52.0),
+                Some(0.5),
+                "MOm",
+                LabTestResult::Pass,
+                "13",
+            ),
+            (
+                LabTestKind::Soil,
+                "GR-002",
+                "Zichlash koeffitsiyenti",
+                "Коэффициент уплотнения",
+                96,
+                Some(0.97),
+                Some(0.95),
+                "",
+                LabTestResult::Pass,
+                "2",
+            ),
+            (
+                LabTestKind::Commission,
+                "PN-001",
+                "Shamollatish, ishga tushirish",
+                "Вентиляция, пусконаладка",
+                6,
+                None,
+                None,
+                "",
+                LabTestResult::Waiting,
+                "12",
+            ),
+            (
+                LabTestKind::Weld,
+                "SV-016",
+                "Fasad karkasi choklari",
+                "Швы фасадного каркаса",
+                3,
+                None,
+                Some(95.0),
+                "%",
+                LabTestResult::Waiting,
+                "12",
+            ),
+        ];
+        for (kind, number, uz, rux, back, value, required, unit, result, wbs) in tests {
+            self.insert_lab_test(&LabTest {
+                id: 0,
+                project_id: pid,
+                task_id: by_wbs(wbs),
+                kind,
+                number: number.into(),
+                subject: if ru { rux } else { uz }.into(),
+                date: d(back),
+                value,
+                required,
+                unit: unit.into(),
+                result,
+                lab: if ru {
+                    "Стройлаборатория №4"
+                } else {
+                    "4-son qurilish laboratoriyasi"
+                }
+                .into(),
+                // Salbiy natijadan keyin qayta sinov tayinlanadi.
+                retest: (result == LabTestResult::Fail).then(|| d(back - 14)),
                 note: String::new(),
             });
         }
@@ -9867,4 +10099,19 @@ type ToolDef = (
     f64,
     ToolCondition,
     Option<i64>,
+);
+
+/// Namunaviy sinov: tur, raqam, mavzu (uz/ru), kun (orqaga), qiymat,
+/// talab, birlik, natija, VBS.
+type LabTestDef = (
+    LabTestKind,
+    &'static str,
+    &'static str,
+    &'static str,
+    i64,
+    Option<f64>,
+    Option<f64>,
+    &'static str,
+    LabTestResult,
+    &'static str,
 );

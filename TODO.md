@@ -31,15 +31,15 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XI. Ombor | 48 | 32 | 8 | 8 | 1 |
 | XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
-| XIV. Sifat | 41 | 19 | 9 | 13 | 2 |
+| XIV. Sifat | 41 | 28 | 9 | 4 | 2 |
 | XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
 | XVI. Mashinalar | 50 | 28 | 8 | 14 | 2 |
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **372** | **170** | **158** | **53** |
+| **Jami** | **700** | **381** | **170** | **149** | **53** |
 
-Ya'ni **~53 % to'liq**, **~24 % qisman**, **~23 % hali yo'q**.
+Ya'ni **~54 % to'liq**, **~24 % qisman**, **~21 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -581,14 +581,14 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 3. **Uch daraja nazorat** — *kirish, operatsion, qabul*
 - [x] 4. Materiallarning kirish nazorati
 - [~] 5. AI material tekshiruvi — *kirish nazorati chek-listi*
-- [ ] 6. Brakka chiqarilgan materialni ishlatishni taqiqlash
+- [x] 6. Brakka chiqarilgan material — *taqiqdan keyin chiqarilgani ko'rsatiladi: qancha va necha marta*
 - [x] 7. Operatsion nazorat
 - [x] 8. Chek-listlar — *namuna, normativ havolasi, tekshiruvga ko'chiriladi*
 - [x] 9. Yashirin ishlar nazorati — *chek-list bandi sifatida*
 - [x] 10. Keyingi bosqichni bloklash — *ochiq nuqson ishni yopishga qo'ymaydi*
 - [~] 11. Sifat fotofiksatsiyasi
 - [ ] 🔒 12. Fotolarni AI tahlili
-- [ ] 13. Geometriya nazorati
+- [x] 13. Geometriya nazorati — *geodeziya: loyiha/fakt/dopusk (VII)*
 - [ ] 🔒 14. BIM Quality Control
 - [~] 15. Bo'limlarni nazorat qilish
 - [~] 16. Kolliziyalarni tekshirish — *AI tekshiruvida*
@@ -597,17 +597,17 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 19. AI ustuvorlikni aniqlashi
 - [x] 20. Izohni bartaraf etish
 - [ ] 21. Oldin / keyin fotosi
-- [ ] 22. Laboratoriya sinovlari
-- [ ] 23. Beton nazorati
-- [ ] 24. Payvand nazorati
-- [ ] 25. Muhandislik tizimlari sinovlari
+- [x] 22. Laboratoriya sinovlari — *«Sinovlar» tabi: payvand, bosim, izolyatsiya, grunt, ishga tushirish*
+- [x] 23. Beton nazorati — *7 va 28 kunlik namunalar (VII)*
+- [x] 24. Payvand nazorati — *sinov turi, talab bilan solishtiriladi*
+- [x] 25. Muhandislik tizimlari sinovlari — *bosim, izolyatsiya, ishga tushirish*
 - [~] 26. PPR nazorati
 - [~] 27. Texnologik ketma-ketlik nazorati
-- [ ] 28. Pudratchilar bo'yicha sifat nazorati
-- [ ] 29. Pudratchilar sifat reytingi
+- [x] 28. Mas'ullar bo'yicha sifat nazorati — *tekshiruv, salbiy, ochiq nuqson, muddat*
+- [x] 29. Sifat reytingi — *ball umumiy ball bilan bir xil qoidada*
 - [x] 30. Brak sabablarini tahlil qilish
 - [x] 31. Takrorlanuvchi nuqsonlar — *bir xil sabab guruhlanadi*
-- [ ] 32. Prediktiv sifat nazorati
+- [x] 32. Prediktiv sifat nazorati — *ikki va undan ortiq sabab bo'lsa ish e'tibor ro'yxatiga tushadi*
 - [x] 33. **Quality Score** — *0-100, ochiq va muddati o'tgan nuqsonlar jarimasi*
 - [x] 34. Bosqich tayyorligini nazorat qilish
 - [x] 35. Bosqichni yopishni taqiqlash — *ogohlantirish, taqiq emas*

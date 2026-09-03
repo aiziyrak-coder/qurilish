@@ -5747,6 +5747,149 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(again.reopen_reason, "Xato topildi");
     }
 
+    /// TZ XIV.22: sinovda hukm laboratoriyaniki — ilova faqat solishtiradi.
+    #[test]
+    fn lab_test_keeps_result_and_value() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let tests = t.db.lab_tests(pid);
+        assert!(!tests.is_empty(), "namunada sinov yo'q");
+
+        // Natijasi kelmagan sinovda hukm ham yo'q.
+        for x in tests.iter().filter(|x| x.pending()) {
+            assert_eq!(x.result, crate::domain::LabTestResult::Waiting);
+        }
+        // Salbiy natijada qayta sinov sanasi qo'yiladi.
+        for x in tests
+            .iter()
+            .filter(|x| x.result == crate::domain::LabTestResult::Fail)
+        {
+            assert!(x.retest.is_some(), "qayta sinov tayinlanmagan");
+        }
+        // Foiz hisobi: qiymat va talab bo'lsa.
+        let with_value = tests
+            .iter()
+            .find(|x| x.value.is_some() && x.required.is_some())
+            .expect("qiymatli sinov yo'q");
+        let pct = with_value.pct().expect("foiz hisoblanmadi");
+        assert!(
+            (pct - with_value.value.unwrap() / with_value.required.unwrap() * 100.0).abs() < 0.001
+        );
+    }
+
+    /// TZ XIV.32: xavf ro'yxatiga faqat ikki va undan ortiq sababli ish tushadi.
+    #[test]
+    fn quality_risks_need_at_least_two_reasons() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let risks = app.quality_risks();
+        for r in &risks {
+            assert!(
+                r.reasons.len() >= 2,
+                "bitta sabab bilan xavf ro'yxatiga tushdi"
+            );
+            assert_eq!(r.level, r.reasons.len());
+            // Tugagan ish xavf ro'yxatiga tushmasligi kerak.
+            let task = app.task(r.task_id).expect("ish topilmadi");
+            assert!(task.fact_end.is_none() && task.progress < 99.999);
+        }
+        // Ko'proq sababli ishlar oldinda.
+        for w in risks.windows(2) {
+            assert!(w[0].level >= w[1].level);
+        }
+    }
+
+    /// TZ XIV.28: mas'ullar reytingi umumiy ball bilan bir xil qoidada.
+    #[test]
+    fn contractor_quality_uses_the_same_score_rule() {
+        use crate::checks::{contractor_quality, quality_score};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let quality = t.db.quality_checks(pid);
+        let rating = contractor_quality(&quality, today);
+        assert!(!rating.is_empty(), "namunada mas'ul ko'rsatilmagan");
+
+        for c in &rating {
+            let mine: Vec<crate::domain::QualityCheck> = quality
+                .iter()
+                .filter(|q| q.inspector.trim() == c.name)
+                .cloned()
+                .collect();
+            let s = quality_score(&mine, today);
+            assert!((c.score - s.score).abs() < 0.001, "ball boshqa qoidada");
+            assert_eq!(c.checks, s.checks);
+        }
+        // Yuqori ball oldinda.
+        for w in rating.windows(2) {
+            assert!(w[0].score >= w[1].score);
+        }
+    }
+
+    /// TZ XIV.6: taqiqlangan material chiqarilgani ko'rsatiladi.
+    #[test]
+    fn banned_material_usage_is_visible() {
+        use crate::checks::banned_usage;
+        use crate::domain::{MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let mut m = crate::domain::Material {
+            id: 3,
+            project_id: 1,
+            code: String::new(),
+            name: "Sinov".into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: String::new(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock: 0.0,
+            price: 100.0,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let mv = |kind: MoveKind, qty: f64| StockMove {
+            id: 0,
+            project_id: 1,
+            material_id: 3,
+            date: today,
+            kind,
+            qty,
+            price: 0.0,
+            document: String::new(),
+            counterparty: String::new(),
+            task_id: None,
+            warehouse_id: None,
+            batch_id: None,
+            note: String::new(),
+        };
+
+        // Taqiqlanmagan material — savol yo'q.
+        let moves = vec![mv(MoveKind::Out, 5.0)];
+        assert!(banned_usage(std::slice::from_ref(&m), &moves).is_empty());
+
+        // Taqiqlangan va chiqarilgan — ko'rsatiladi.
+        m.banned = true;
+        m.ban_reason = "Sertifikat yo'q".into();
+        let out = banned_usage(std::slice::from_ref(&m), &moves);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].qty, 5.0);
+        assert_eq!(out[0].moves, 1);
+        assert_eq!(out[0].reason, "Sertifikat yo'q");
+
+        // Faqat kirim bo'lsa — ishlatilmagan.
+        let only_in = vec![mv(MoveKind::In, 5.0)];
+        assert!(banned_usage(std::slice::from_ref(&m), &only_in).is_empty());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

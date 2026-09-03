@@ -1828,3 +1828,61 @@ pub struct TimesheetPeriod {
     pub reopen_reason: String,
     pub note: String,
 }
+
+// ================================================================ XIV.22-25. Sinovlar
+
+enum_kind!(LabTestKind {
+    Weld     => "weld",     "lt_weld";
+    Pressure => "pressure", "lt_pressure";
+    Insulation => "insulation", "lt_insulation";
+    Commission => "commission", "lt_commission";
+    Soil     => "soil",     "lt_soil";
+    Other    => "other",    "lt_other";
+});
+
+enum_kind!(LabTestResult {
+    Waiting => "waiting", "ltr_waiting";
+    Pass    => "pass",    "ltr_pass";
+    Fail    => "fail",    "ltr_fail";
+});
+
+/// Laboratoriya yoki maydon sinovi (TZ XIV.22, 24-25).
+///
+/// Betondan farqi: bu yerda mustahkamlik emas, **o'tdi/o'tmadi** natijasi
+/// muhim — bosim sinovi, izolyatsiya qarshiligi, payvand chokining
+/// nazorati. Raqamli qiymat bo'lsa u ham saqlanadi.
+#[derive(Debug, Clone)]
+pub struct LabTest {
+    pub id: i64,
+    pub project_id: i64,
+    pub task_id: Option<i64>,
+    pub kind: LabTestKind,
+    pub number: String,
+    pub subject: String,
+    pub date: NaiveDate,
+    /// O'lchangan qiymat, bo'lsa.
+    pub value: Option<f64>,
+    /// Talab qilinadigan qiymat.
+    pub required: Option<f64>,
+    pub unit: String,
+    pub result: LabTestResult,
+    pub lab: String,
+    /// Salbiy natijada qayta sinov sanasi.
+    pub retest: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl LabTest {
+    /// Natija kutilmoqda.
+    pub fn pending(&self) -> bool {
+        self.result == LabTestResult::Waiting
+    }
+
+    /// Talabdan foizda. Talab yoki qiymat bo'lmasa — `None`.
+    pub fn pct(&self) -> Option<f64> {
+        match (self.value, self.required) {
+            (Some(v), Some(r)) if r != 0.0 => Some(v / r * 100.0),
+            _ => None,
+        }
+    }
+}

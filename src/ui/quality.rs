@@ -49,6 +49,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (1, t("ql_tab_checklists")),
             (2, t("ql_tab_defects")),
             (3, t("ql_tab_blocks")),
+            (4, t("ql_tab_tests")),
+            (5, t("ql_tab_risks")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -62,6 +64,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         1 => checklists_tab(ui, app, pid),
         2 => defects_tab(ui, app),
         3 => blocks_tab(ui, app),
+        4 => tests_tab(ui, app, pid),
+        5 => risks_tab(ui, app),
         _ => {
             if app.quality.is_empty() {
                 ui.add_space(40.0);
@@ -1010,6 +1014,458 @@ fn blocks_tab(ui: &mut egui::Ui, app: &mut App) {
                     }
                 });
         });
+}
+
+// ================================================================ Sinovlar
+
+/// Laboratoriya va maydon sinovlari (TZ XIV.22, 24-25).
+///
+/// Betondan farqi: bu yerda «o'tdi / o'tmadi» muhim. Raqamli qiymat
+/// bo'lsa u ham saqlanadi, lekin hukm laboratoriyaniki — ilova faqat
+/// solishtiradi.
+fn tests_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let can = app.can_edit(Screen::Quality);
+    let today = app.today;
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if can && ui.button(t("ql_add_test")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("ql_tests_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if app.lab_tests.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("ql_tests_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let pending = app.lab_tests.iter().filter(|x| x.pending()).count();
+        let failed = app
+            .lab_tests
+            .iter()
+            .filter(|x| x.result == crate::domain::LabTestResult::Fail)
+            .count();
+        stat_row(
+            ui,
+            vec![
+                stat(
+                    t("ql_tests_total"),
+                    app.lab_tests.len().to_string(),
+                    t("ql_tests_total_hint"),
+                    theme::accent(),
+                ),
+                stat(
+                    t("ql_tests_pending"),
+                    pending.to_string(),
+                    t("ql_tests_pending_hint"),
+                    if pending == 0 {
+                        theme::ok()
+                    } else {
+                        theme::warn()
+                    },
+                ),
+                stat(
+                    t("ql_tests_failed"),
+                    failed.to_string(),
+                    t("ql_tests_failed_hint"),
+                    if failed == 0 {
+                        theme::ok()
+                    } else {
+                        theme::danger()
+                    },
+                ),
+            ],
+        );
+        ui.add_space(10.0);
+
+        let tasks = app.tasks.clone();
+        let mut edited: Option<crate::domain::LabTest> = None;
+        let mut removed: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("ql_tests_grid")
+                    .num_columns(11)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 90.0, t("col_number"));
+                        head_l(ui, 140.0, t("col_kind"));
+                        head_l(ui, 230.0, t("ql_test_subject"));
+                        head_l(ui, 104.0, t("col_date"));
+                        head_l(ui, 130.0, t("col_task"));
+                        head_r(ui, 90.0, t("ql_test_value"));
+                        head_r(ui, 90.0, t("ql_test_required"));
+                        head_l(ui, 60.0, t("col_unit"));
+                        head_l(ui, 120.0, t("col_result"));
+                        head_l(ui, 150.0, t("ql_test_lab"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.lab_tests {
+                            let mut x = src.clone();
+                            let mut changed = false;
+
+                            changed |= ui
+                                .add_sized([90.0, 22.0], egui::TextEdit::singleline(&mut x.number))
+                                .changed();
+                            egui::ComboBox::from_id_salt(("ql_lk", x.id))
+                                .selected_text(x.kind.label())
+                                .width(140.0)
+                                .show_ui(ui, |ui| {
+                                    for k in crate::domain::LabTestKind::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut x.kind, *k, k.label())
+                                            .changed();
+                                    }
+                                });
+                            changed |= ui
+                                .add_sized(
+                                    [230.0, 22.0],
+                                    egui::TextEdit::singleline(&mut x.subject),
+                                )
+                                .changed();
+                            changed |= super::passport::date_edit(
+                                ui,
+                                &format!("qlt{}", x.id),
+                                &mut x.date,
+                            );
+
+                            let label = x
+                                .task_id
+                                .and_then(|id| tasks.iter().find(|t| t.id == id))
+                                .map(|t| t.wbs.clone())
+                                .unwrap_or_else(|| t("dash").to_string());
+                            egui::ComboBox::from_id_salt(("ql_lt", x.id))
+                                .selected_text(label)
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    changed |= ui
+                                        .selectable_value(&mut x.task_id, None, t("dash"))
+                                        .changed();
+                                    for tk in &tasks {
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut x.task_id,
+                                                Some(tk.id),
+                                                format!("{} {}", tk.wbs, tk.name),
+                                            )
+                                            .changed();
+                                    }
+                                });
+
+                            // Qiymat majburiy emas: ba'zi sinovlarda faqat
+                            // «o'tdi / o'tmadi» bo'ladi.
+                            ui.horizontal(|ui| {
+                                let mut has = x.value.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    x.value = has.then_some(0.0);
+                                    changed = true;
+                                }
+                                if let Some(mut v) = x.value {
+                                    if super::materials::num_edit(ui, 60.0, &mut v, 0.1, 1e9) {
+                                        x.value = Some(v);
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            ui.horizontal(|ui| {
+                                let mut has = x.required.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    x.required = has.then_some(0.0);
+                                    changed = true;
+                                }
+                                if let Some(mut v) = x.required {
+                                    if super::materials::num_edit(ui, 60.0, &mut v, 0.1, 1e9) {
+                                        x.required = Some(v);
+                                        changed = true;
+                                    }
+                                }
+                            });
+                            changed |= ui
+                                .add_sized([60.0, 22.0], egui::TextEdit::singleline(&mut x.unit))
+                                .changed();
+
+                            egui::ComboBox::from_id_salt(("ql_lr", x.id))
+                                .selected_text(
+                                    RichText::new(x.result.label())
+                                        .color(lab_result_color(x.result)),
+                                )
+                                .width(120.0)
+                                .show_ui(ui, |ui| {
+                                    for r in crate::domain::LabTestResult::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut x.result, *r, r.label())
+                                            .changed();
+                                    }
+                                });
+                            changed |= ui
+                                .add_sized([150.0, 22.0], egui::TextEdit::singleline(&mut x.lab))
+                                .changed();
+
+                            if can
+                                && ui
+                                    .small_button(RichText::new("x").color(theme::danger()))
+                                    .clicked()
+                            {
+                                removed = Some(x.id);
+                            }
+                            ui.end_row();
+
+                            if changed && can {
+                                edited = Some(x);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(x) = edited {
+            app.db.update_lab_test(&x);
+            if let Some(slot) = app.lab_tests.iter_mut().find(|y| y.id == x.id) {
+                *slot = x;
+            }
+        }
+        if let Some(id) = removed {
+            app.db.delete_lab_test(id);
+            app.reload_modules();
+        }
+    }
+
+    if add {
+        app.db.insert_lab_test(&crate::domain::LabTest {
+            id: 0,
+            project_id: pid,
+            task_id: None,
+            kind: crate::domain::LabTestKind::Other,
+            number: String::new(),
+            subject: String::new(),
+            date: today,
+            value: None,
+            required: None,
+            unit: String::new(),
+            result: crate::domain::LabTestResult::Waiting,
+            lab: String::new(),
+            retest: None,
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+fn lab_result_color(r: crate::domain::LabTestResult) -> egui::Color32 {
+    use crate::domain::LabTestResult as R;
+    match r {
+        R::Pass => theme::ok(),
+        R::Fail => theme::danger(),
+        R::Waiting => theme::muted(),
+    }
+}
+
+// ================================================================ Xavflar
+
+/// Nuqson ehtimoli yuqori ishlar va mas'ullar reytingi (TZ XIV.28-29, 32).
+fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
+    let risks = app.quality_risks();
+    let rating = crate::checks::contractor_quality(&app.quality, app.today);
+    let banned = crate::checks::banned_usage(&app.materials, &app.stock_moves);
+
+    ui.label(
+        RichText::new(t("ql_risks_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Taqiqlangan material ----------
+            if !banned.is_empty() {
+                ui.label(
+                    RichText::new(t("ql_banned_title"))
+                        .size(13.5)
+                        .strong()
+                        .color(theme::danger()),
+                );
+                ui.label(
+                    RichText::new(t("ql_banned_hint"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(4.0);
+                for b in &banned {
+                    let name = app
+                        .materials
+                        .iter()
+                        .find(|m| m.id == b.material_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    ui.horizontal(|ui| {
+                        ui.add_space(4.0);
+                        ui.label(
+                            RichText::new(format!(
+                                "{name} — {} ({} {})",
+                                super::materials::trim_num(b.qty),
+                                b.moves,
+                                t("ql_banned_moves")
+                            ))
+                            .size(12.0)
+                            .color(theme::danger()),
+                        );
+                        if !b.reason.trim().is_empty() {
+                            ui.label(RichText::new(&b.reason).size(11.0).color(theme::muted()));
+                        }
+                    });
+                }
+                ui.add_space(14.0);
+            }
+
+            // ---------- Xavfli ishlar ----------
+            ui.label(RichText::new(t("ql_risks_title")).size(13.5).strong());
+            ui.add_space(4.0);
+            if risks.is_empty() {
+                ui.label(
+                    RichText::new(t("ql_risks_none"))
+                        .size(12.0)
+                        .color(theme::ok()),
+                );
+            }
+            for r in &risks {
+                let Some(task) = app.task(r.task_id) else {
+                    continue;
+                };
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    let color = if r.level >= 3 {
+                        theme::danger()
+                    } else {
+                        theme::warn()
+                    };
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(3.0, 16.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 1.5, color);
+                    ui.add_space(6.0);
+                    ui.add_sized(
+                        [260.0, 18.0],
+                        egui::Label::new(
+                            RichText::new(super::issues::truncate(
+                                &format!("{} {}", task.wbs, task.name),
+                                34,
+                            ))
+                            .size(12.5),
+                        ),
+                    );
+                    ui.label(
+                        RichText::new(
+                            r.reasons
+                                .iter()
+                                .map(risk_reason_text)
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                        )
+                        .size(11.5)
+                        .color(color),
+                    );
+                });
+                ui.add_space(3.0);
+            }
+
+            // ---------- Mas'ullar reytingi ----------
+            if !rating.is_empty() {
+                ui.add_space(16.0);
+                ui.label(RichText::new(t("ql_rating_title")).size(13.5).strong());
+                ui.label(
+                    RichText::new(t("ql_rating_hint"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+                egui::Grid::new("ql_rating_grid")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("ql_rating_name"));
+                        head_r(ui, 90.0, t("ql_rating_checks"));
+                        head_r(ui, 90.0, t("ql_rating_failed"));
+                        head_r(ui, 110.0, t("ql_rating_open"));
+                        head_r(ui, 110.0, t("ql_rating_overdue"));
+                        head_r(ui, 90.0, t("ql_rating_score"));
+                        ui.end_row();
+                        for c in &rating {
+                            cell_l(ui, 200.0, RichText::new(&c.name).size(12.5));
+                            cell_r(ui, 90.0, RichText::new(c.checks.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(c.failed.to_string()).size(12.0).color(
+                                    if c.failed == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(c.open_defects.to_string()).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(c.overdue.to_string()).size(12.0).color(
+                                    if c.overdue == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{:.0}", c.score))
+                                    .size(12.5)
+                                    .strong()
+                                    .color(if c.score >= 85.0 {
+                                        theme::ok()
+                                    } else if c.score >= 60.0 {
+                                        theme::warn()
+                                    } else {
+                                        theme::danger()
+                                    }),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+            ui.add_space(14.0);
+        });
+}
+
+/// Sifat xavfi sababining matni.
+fn risk_reason_text(r: &crate::checks::QualityRiskReason) -> String {
+    use crate::checks::QualityRiskReason as R;
+    match r {
+        R::PastDefects { count } => format!("{count} {}", t("ql_r_past")),
+        R::Delayed { days } => format!("{} {} {}", t("ql_r_delayed"), days, t("ql_r_days")),
+        R::OverUsage => t("ql_r_over").to_string(),
+        R::NoPpr => t("ql_r_no_ppr").to_string(),
+        R::NoInspection => t("ql_r_no_inspection").to_string(),
+    }
 }
 
 fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {

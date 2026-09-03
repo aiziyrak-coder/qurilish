@@ -6,10 +6,10 @@ use crate::db::Db;
 use crate::domain::{
     Batch, Block, ConcreteTest, Contract, ContractChange, DayKind, Deal, Document, Element,
     ElementLink, Estimate, EstimateItem, ExecDoc, GeodesyPoint, Inspection, Inventory,
-    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material,
-    Payment, PaymentStage, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent,
-    Severity, Shift, StockMove, TimesheetEntry, Tool, ToolIssue, Unit, Warehouse, WorkAcceptance,
-    Worker,
+    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, LabTest, Machine, MachineLog,
+    Material, Payment, PaymentStage, PprDoc, Purchase, QualityCheck, Request, Reservation,
+    SafetyEvent, Severity, Shift, StockMove, TimesheetEntry, Tool, ToolIssue, Unit, Warehouse,
+    WorkAcceptance, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -490,6 +490,8 @@ pub struct App {
     pub inspections: Vec<Inspection>,
     /// XI.32-34. Asboblar va ularni berish.
     pub tools: Vec<Tool>,
+    /// XIV.22-25. Laboratoriya va maydon sinovlari.
+    pub lab_tests: Vec<LabTest>,
     pub tool_issues: Vec<ToolIssue>,
     /// Bildirishnomalar: ma'lumot o'zgarganda bir marta hisoblanadi.
     ///
@@ -653,6 +655,7 @@ impl App {
             notices_rev: 0,
             inspections: Vec::new(),
             tools: Vec::new(),
+            lab_tests: Vec::new(),
             tool_issues: Vec::new(),
             contracts: Vec::new(),
             contract_changes: Vec::new(),
@@ -838,6 +841,7 @@ impl App {
         self.notices.clear();
         self.inspections.clear();
         self.tools.clear();
+        self.lab_tests.clear();
         self.tool_issues.clear();
         self.contracts.clear();
         self.contract_changes.clear();
@@ -896,6 +900,7 @@ impl App {
         self.machine_logs = self.db.machine_logs(id);
         self.inspections = self.db.inspections(id);
         self.tools = self.db.tools(id);
+        self.lab_tests = self.db.lab_tests(id);
         self.tool_issues = self.db.tool_issues(id);
         self.contracts = self.db.contracts(id);
         self.contract_changes = self.db.contract_changes(id);
@@ -1741,6 +1746,33 @@ impl App {
     /// Asboblarning hozirgi holati (TZ XI.34).
     pub fn tool_status(&self) -> Vec<checks::ToolStatus> {
         checks::tool_status(&self.tools, &self.tool_issues, self.today)
+    }
+
+    /// Nuqson ehtimoli yuqori ishlar (TZ XIV.32).
+    pub fn quality_risks(&self) -> Vec<checks::QualityRisk> {
+        let consumption = checks::consumption(
+            &self.material_norms,
+            &self.tasks,
+            &self.materials,
+            &self.stock_moves,
+        );
+        let start = self.project().map(|p| p.start_date);
+        let schedule = &self.schedule;
+        let today = self.today;
+        checks::quality_risks(
+            &self.tasks,
+            &self.quality,
+            &consumption,
+            &self.ppr_docs,
+            &self.inspections,
+            &self.progress.overdue,
+            |id| match (start, schedule.get(id)) {
+                (Some(s), Some(c)) => (today - (s + chrono::Duration::days(c.ef)))
+                    .num_days()
+                    .max(0),
+                _ => 0,
+            },
+        )
     }
 
     /// Inventarizatsiya farqlari bo'yicha kamomad (TZ XI.26).

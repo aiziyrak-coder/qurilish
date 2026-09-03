@@ -2843,6 +2843,69 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pf_move_to" => ("Qayerga", "Куда"),
         "pf_move_value" => ("Qiymati", "Стоимость"),
 
+        // ---------- XIV. Sinovlar, xavflar va reyting ----------
+        "ql_tab_tests" => ("Sinovlar", "Испытания"),
+        "ql_tab_risks" => ("Xavflar", "Риски"),
+
+        "lt_weld" => ("Payvand", "Сварка"),
+        "lt_pressure" => ("Bosim sinovi", "Опрессовка"),
+        "lt_insulation" => ("Izolyatsiya", "Изоляция"),
+        "lt_commission" => ("Ishga tushirish", "Пусконаладка"),
+        "lt_soil" => ("Grunt", "Грунт"),
+        "lt_other" => ("Boshqa", "Прочее"),
+
+        "ltr_waiting" => ("Kutilmoqda", "Ожидается"),
+        "ltr_pass" => ("O'tdi", "Прошло"),
+        "ltr_fail" => ("O'tmadi", "Не прошло"),
+
+        "ql_add_test" => ("+ Sinov", "+ Испытание"),
+        "ql_tests_hint" => (
+            "Bu yerda «o'tdi / o'tmadi» muhim. Raqamli qiymat bo'lsa saqlanadi, lekin hukm laboratoriyaniki.",
+            "Здесь важно «прошло / не прошло». Числовое значение сохраняется, но заключение — за лабораторией.",
+        ),
+        "ql_tests_empty" => ("Sinov yozuvi yo'q", "Записей об испытаниях нет"),
+        "ql_tests_total" => ("Sinovlar", "Испытаний"),
+        "ql_tests_total_hint" => ("jami", "всего"),
+        "ql_tests_pending" => ("Natija kutilmoqda", "Ждут результата"),
+        "ql_tests_pending_hint" => ("laboratoriyadan", "из лаборатории"),
+        "ql_tests_failed" => ("O'tmadi", "Не прошло"),
+        "ql_tests_failed_hint" => ("qayta sinov kerak", "нужно повторное испытание"),
+        "ql_test_subject" => ("Nima sinaldi", "Что испытывалось"),
+        "ql_test_value" => ("Qiymat", "Значение"),
+        "ql_test_required" => ("Talab", "Требуется"),
+        "ql_test_lab" => ("Laboratoriya", "Лаборатория"),
+
+        "ql_risks_hint" => (
+            "Bu bashorat emas — e'tibor ro'yxati: har bir sabab bugungi ma'lumotdan olingan va tekshirib ko'rish mumkin.",
+            "Это не предсказание, а список внимания: каждая причина взята из сегодняшних данных и её можно проверить.",
+        ),
+        "ql_banned_title" => ("Taqiqlangan material ishlatilgan", "Использован запрещённый материал"),
+        "ql_banned_hint" => (
+            "Taqiq o'z-o'zidan chiqarishni to'xtatmaydi — shuning uchun uni ko'rsatamiz.",
+            "Запрет сам по себе не останавливает выдачу — поэтому мы её показываем.",
+        ),
+        "ql_banned_moves" => ("harakat", "движений"),
+        "ql_risks_title" => ("Nuqson ehtimoli yuqori ishlar", "Работы с высоким риском брака"),
+        "ql_risks_none" => ("Xavfli ish topilmadi", "Рисковых работ не найдено"),
+        "ql_r_past" => ("marta nuqson bo'lgan", "раз были дефекты"),
+        "ql_r_delayed" => ("kechikmoqda", "отстаёт на"),
+        "ql_r_days" => ("kun", "дн."),
+        "ql_r_over" => ("normadan ortiq sarf", "перерасход материала"),
+        "ql_r_no_ppr" => ("tasdiqlangan karta yo'q", "нет утверждённой техкарты"),
+        "ql_r_no_inspection" => ("tekshiruv o'tkazilmagan", "проверка не проводилась"),
+
+        "ql_rating_title" => ("Mas'ullar bo'yicha sifat", "Качество по ответственным"),
+        "ql_rating_hint" => (
+            "Ball sifat modulidagi umumiy ball bilan bir xil qoidada hisoblanadi.",
+            "Балл считается по тому же правилу, что и общий балл модуля качества.",
+        ),
+        "ql_rating_name" => ("Mas'ul", "Ответственный"),
+        "ql_rating_checks" => ("Tekshiruv", "Проверок"),
+        "ql_rating_failed" => ("Salbiy", "Отрицательных"),
+        "ql_rating_open" => ("Ochiq nuqson", "Открытых дефектов"),
+        "ql_rating_overdue" => ("Muddati o'tgan", "Просрочено"),
+        "ql_rating_score" => ("Ball", "Балл"),
+
         // ---------- XIII. Tabel davri, anomaliyalar va xodim ehtiyoji ----------
         "ts_tab_periods" => ("Davrlar", "Периоды"),
         "ts_tab_staff" => ("Xodimlar", "Персонал"),

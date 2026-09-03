@@ -5794,3 +5794,188 @@ pub fn staff_forecast(
         tasks: counted,
     }
 }
+
+// ================================================================ XIV.28-29. Pudratchi reytingi
+
+/// Pudratchi yoki mas'ul bo'yicha sifat yakuni (TZ XIV.28-29).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContractorQuality {
+    pub name: String,
+    /// Shu mas'ul bo'yicha tekshiruvlar.
+    pub checks: usize,
+    pub passed: usize,
+    pub failed: usize,
+    /// Ochiq nuqsonlar.
+    pub open_defects: usize,
+    /// Bartaraf etish muddati o'tganlari.
+    pub overdue: usize,
+    /// Sifat balli, 0-100.
+    pub score: f64,
+}
+
+/// Mas'ullar kesimida sifat reytingi.
+///
+/// Ball sifat modulidagi umumiy ball bilan **bir xil qoidada** hisoblanadi:
+/// ikki joyda ikki xil formula bo'lsa, reytingga ishonib bo'lmaydi.
+pub fn contractor_quality(quality: &[QualityCheck], today: NaiveDate) -> Vec<ContractorQuality> {
+    let mut names: Vec<String> = quality
+        .iter()
+        .map(|q| q.inspector.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+
+    let mut out: Vec<ContractorQuality> = names
+        .into_iter()
+        .map(|name| {
+            let mine: Vec<QualityCheck> = quality
+                .iter()
+                .filter(|q| q.inspector.trim() == name)
+                .cloned()
+                .collect();
+            let s = quality_score(&mine, today);
+            ContractorQuality {
+                name,
+                checks: s.checks,
+                passed: s.passed,
+                failed: s.failed,
+                open_defects: s.open,
+                overdue: s.overdue,
+                score: s.score,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| b.score.total_cmp(&a.score));
+    out
+}
+
+// ================================================================ XIV.32. Prediktiv sifat
+
+/// Nuqson ehtimoli yuqori ish (TZ XIV.32).
+#[derive(Debug, Clone, PartialEq)]
+pub struct QualityRisk {
+    pub task_id: i64,
+    /// Nima uchun xavfli deb belgilangani.
+    pub reasons: Vec<QualityRiskReason>,
+    /// Xavf darajasi: sabablar soni.
+    pub level: usize,
+}
+
+/// Sifat xavfining sababi.
+#[derive(Debug, Clone, PartialEq)]
+pub enum QualityRiskReason {
+    /// Shu ishda ilgari nuqson bo'lgan.
+    PastDefects { count: usize },
+    /// Ish kechikmoqda — shoshilinch bajarish sifatga ta'sir qiladi.
+    Delayed { days: i64 },
+    /// Normadan ortiq material sarfi — texnologiya buzilgan bo'lishi mumkin.
+    OverUsage,
+    /// Ish uchun tasdiqlangan texnologik karta yo'q.
+    NoPpr,
+    /// Yashirin ishlar tekshiruvi o'tkazilmagan.
+    NoInspection,
+}
+
+/// Qaysi ishlarda nuqson ehtimoli yuqori.
+///
+/// Bashorat emas — **e'tibor ro'yxati**: har bir sabab bugungi
+/// ma'lumotdan olingan va tekshirib ko'rish mumkin.
+pub fn quality_risks(
+    tasks: &[Task],
+    quality: &[QualityCheck],
+    consumption: &[ConsumptionLine],
+    ppr: &[PprDoc],
+    inspections: &[Inspection],
+    progress_overdue: &[i64],
+    schedule_late: impl Fn(i64) -> i64,
+) -> Vec<QualityRisk> {
+    let mut out = Vec::new();
+    for t in tasks {
+        // Tugagan ish uchun ogohlantirish kech.
+        if t.fact_end.is_some() || t.progress >= 99.999 {
+            continue;
+        }
+        let mut reasons = Vec::new();
+
+        let past = quality
+            .iter()
+            .filter(|q| q.task_id == Some(t.id))
+            .filter(|q| q.result != QualityResult::Pass)
+            .count();
+        if past > 0 {
+            reasons.push(QualityRiskReason::PastDefects { count: past });
+        }
+        if progress_overdue.contains(&t.id) {
+            reasons.push(QualityRiskReason::Delayed {
+                days: schedule_late(t.id),
+            });
+        }
+        if consumption.iter().any(|c| c.task_id == t.id && c.over) {
+            reasons.push(QualityRiskReason::OverUsage);
+        }
+        // Boshlangan ishda tasdiqlangan karta bo'lishi kerak.
+        if t.progress > 0.0 && !ppr.iter().any(|p| p.task_id == Some(t.id) && p.approved) {
+            reasons.push(QualityRiskReason::NoPpr);
+        }
+        // Yarmidan ko'p bajarilgan ishda tekshiruv bo'lishi kerak.
+        if t.progress >= 50.0
+            && !inspections
+                .iter()
+                .any(|x| x.task_id == Some(t.id) && !x.open())
+        {
+            reasons.push(QualityRiskReason::NoInspection);
+        }
+
+        if reasons.len() >= 2 {
+            out.push(QualityRisk {
+                task_id: t.id,
+                level: reasons.len(),
+                reasons,
+            });
+        }
+    }
+    // Ko'proq sabab — ko'proq e'tibor.
+    out.sort_by_key(|r| std::cmp::Reverse(r.level));
+    out
+}
+
+// ================================================================ XIV.6. Brak taqiqi
+
+/// Taqiqlangan materialning ishlatilishi (TZ XIV.6, XII.36).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BannedUsage {
+    pub material_id: i64,
+    pub reason: String,
+    /// Taqiqdan keyin chiqarilgan miqdor.
+    pub qty: f64,
+    pub moves: usize,
+    pub last: Option<NaiveDate>,
+}
+
+/// Taqiqlangan material baribir ishlatilganini topadi.
+///
+/// Taqiq o'z-o'zidan harakatni to'xtatmaydi — bu yozuv qog'ozda qoladi.
+/// Shuning uchun uni **ko'rsatish** kerak: kim, qachon va qancha.
+pub fn banned_usage(materials: &[Material], moves: &[StockMove]) -> Vec<BannedUsage> {
+    let mut out = Vec::new();
+    for m in materials.iter().filter(|m| m.banned) {
+        let used: Vec<&StockMove> = moves
+            .iter()
+            .filter(|x| x.material_id == m.id)
+            .filter(|x| matches!(x.kind, MoveKind::Out))
+            .collect();
+        if used.is_empty() {
+            continue;
+        }
+        out.push(BannedUsage {
+            material_id: m.id,
+            reason: m.ban_reason.clone(),
+            qty: used.iter().map(|x| x.qty).sum(),
+            moves: used.len(),
+            last: used.iter().map(|x| x.date).max(),
+        });
+    }
+    out.sort_by(|a, b| b.qty.total_cmp(&a.qty));
+    out
+}
