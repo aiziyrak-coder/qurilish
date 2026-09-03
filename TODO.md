@@ -35,11 +35,11 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XV. Xavfsizlik | 41 | 38 | 0 | 3 | 3 |
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
-| XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
+| XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **613** | **41** | **46** | **46** |
+| **Jami** | **700** | **634** | **20** | **46** | **46** |
 
-Ya'ni **~88 % to'liq**, **~6 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~91 % to'liq**, **~3 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -797,13 +797,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 3. Tabiiy nutqni tushunish — *OpenAI modeli; kalit so'zlar zaxira sifatida*
 - [~] 4–10. Ovoz, kontekst, ko'p bosqichli suhbat — *suhbat va kontekst bor; ovoz 🔒*
 - [x] 11. Rol bo'yicha kirish chegarasi
-- [~] 12–20. Qoralamalar — *ariza, xarid, ijro hujjati, kelishuv marshruti*
+- [x] 12–20. Qoralamalar — *ariza, xarid, ijro hujjati, kelishuv marshruti, ta'mir, rejali TX, ishchi kuchi*
 - [x] 21–30. Amalni bajarish — *tasdiqdan keyin, rol huquqi bilan*
-- [~] 31–40. Hodisa → tavsiya → nazorat — *taklif bajarilgach ro'yxatdan chiqadi*
-- [~] 41. Ma'lumot manbasini ko'rsatish — *«Tekshirish» tugmasi*
+- [x] 31–40. Hodisa → tavsiya → nazorat — *sakkiz qoida; taklif bajarilgach ro'yxatdan chiqadi*
+- [x] 41. Ma'lumot manbasini ko'rsatish — *har javobda manba yozuvlari + «Tekshirish» tugmasi*
 - [x] 42. Sonni o'ylab topmaslik
-- [~] 43. Modullar bo'ylab kirish — *13 mavzu*
-- [x] 44. Copilot — operatsion qatlam — *yetti xil amal va til modeli*
+- [x] 43. Modullar bo'ylab kirish — *15 mavzu; har bir ma'lumot ekranidan kirish (sinov bilan qo'riqlanadi)*
+- [x] 44. Copilot — operatsion qatlam — *o'n bir xil amal va til modeli*
 - [x] 45. TZ uchun asosiy ta'rif — *chegara ochiq yozilgan*
 
 ---

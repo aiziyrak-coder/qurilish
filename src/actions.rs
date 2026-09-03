@@ -40,6 +40,12 @@ pub enum ActionKind {
     ClosePermit { permit_id: i64 },
     /// Arizaga kelishuv marshrutini ochish.
     BuildRoute { request_id: i64 },
+    /// Nosoz texnikani ta'mirga chiqarish (TZ XVIII.18, XVI.28).
+    SendToRepair { machine_id: i64 },
+    /// Rejali texnik xizmat yozuvini ochish (TZ XVI.25).
+    PlanService { machine_id: i64 },
+    /// Ishchi kuchi bo'yicha ariza ochish (TZ XIII.26-27).
+    HireRequest { count: i64 },
 }
 
 /// Yordamchining bitta taklifi.
@@ -68,6 +74,8 @@ pub fn suggest(app: &App, stock: &[StockLine]) -> Vec<Action> {
     quality_actions(app, &mut out);
     inspection_actions(app, &mut out);
     safety_actions(app, &mut out);
+    machine_actions(app, &mut out);
+    staff_actions(app, &mut out);
     out
 }
 
@@ -214,6 +222,15 @@ fn supply_actions(app: &App, stock: &[StockLine], out: &mut Vec<Action>) {
     }
 }
 
+/// Texnikaning umumiy motosoati — smena yozuvlaridan.
+fn machine_hours(app: &App, machine_id: i64) -> f64 {
+    app.machine_logs
+        .iter()
+        .filter(|l| l.machine_id == machine_id)
+        .map(|l| l.hours)
+        .sum()
+}
+
 /// Ariza orqali materialni topadi.
 fn material_of(app: &App, request_id: Option<i64>) -> Option<i64> {
     app.requests
@@ -336,6 +353,124 @@ fn safety_actions(app: &App, out: &mut Vec<Action>) {
         );
     }
     let _ = safety;
+}
+
+// ================================================================ Texnika
+
+/// Texnika bo'yicha qoralamalar (TZ XVIII.18).
+///
+/// Ikkala taklif ham `mech_issues` dan chiqadi: bir xil savolga ikki joyda
+/// ikki xil javob bo'lmasligi kerak. Taklif texnikani **o'zi to'xtatmaydi**
+/// — u faqat qoralama, tasdiq mexanikniki.
+fn machine_actions(app: &App, out: &mut Vec<Action>) {
+    use crate::checks::MechIssue as M;
+    use crate::domain::MachineStatus;
+
+    for issue in app.mech_issues() {
+        // E'tiroz texnika nomi bilan keladi; yozuvni shu nom bo'yicha topamiz.
+        let name = match &issue {
+            M::FaultButWorking { machine, .. }
+            | M::NotAllowedButUsed { machine }
+            | M::InspectionExpired { machine, .. }
+            | M::ServiceOverdue { machine, .. } => machine.clone(),
+            _ => continue,
+        };
+        let Some(m) = app.machines.iter().find(|m| m.name == name) else {
+            continue;
+        };
+
+        match &issue {
+            // Nosozlik yoki ruxsatsizlik — texnika ishlashda qolmasin.
+            M::FaultButWorking { fault, .. } => {
+                if m.status == MachineStatus::Repair {
+                    continue;
+                }
+                push(
+                    out,
+                    "AC-M1",
+                    ActionKind::SendToRepair { machine_id: m.id },
+                    format!("{} {}", t("ac_send_repair"), m.name),
+                    fault.clone(),
+                    Screen::Machines,
+                );
+            }
+            M::NotAllowedButUsed { .. } | M::InspectionExpired { .. } => {
+                if m.status == MachineStatus::Repair {
+                    continue;
+                }
+                let evidence = match &issue {
+                    M::InspectionExpired { days, .. } => {
+                        format!("{} {days} {}", t("ac_inspection_over"), t("days"))
+                    }
+                    _ => t("ac_not_allowed").to_string(),
+                };
+                push(
+                    out,
+                    "AC-M1",
+                    ActionKind::SendToRepair { machine_id: m.id },
+                    format!("{} {}", t("ac_send_repair"), m.name),
+                    evidence,
+                    Screen::Machines,
+                );
+            }
+            // Rejali TX muddati o'tgan — ochiq yozuv bo'lmasa taklif qilamiz.
+            M::ServiceOverdue { over_hours, .. } => {
+                if app.repairs.iter().any(|r| r.machine_id == m.id && r.open()) {
+                    continue;
+                }
+                push(
+                    out,
+                    "AC-M2",
+                    ActionKind::PlanService { machine_id: m.id },
+                    format!("{} {}", t("ac_plan_service"), m.name),
+                    format!(
+                        "{} {} {}",
+                        t("ac_over_hours"),
+                        crate::ui::materials::trim_num(*over_hours),
+                        t("mh")
+                    ),
+                    Screen::Machines,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+// ================================================================ Xodim
+
+/// Ishchi kuchi yetishmasa ariza qoralamasi (TZ XIII.26-27).
+///
+/// Son o'ylab topilmaydi: `staff_forecast` yaqin ishlarning qolgan hajmini
+/// bugungi unumdorlikka bo'lib chiqaradi. Unumdorligi noma'lum ish hisobga
+/// kirmaydi, shuning uchun taklif ham chiqmaydi.
+fn staff_actions(app: &App, out: &mut Vec<Action>) {
+    let f = app.staff_forecast();
+    if f.gap <= 0 || f.tasks == 0 {
+        return;
+    }
+    // Ochiq ariza bo'lsa takrorlamaymiz.
+    let open = app.requests.iter().any(|q| {
+        q.kind == RequestKind::Labor
+            && !matches!(q.status, RequestStatus::Closed | RequestStatus::Rejected)
+    });
+    if open {
+        return;
+    }
+    push(
+        out,
+        "AC-C1",
+        ActionKind::HireRequest { count: f.gap },
+        format!("{} {} {}", t("ac_hire"), f.gap, t("ac_worker")),
+        format!(
+            "{} {} · {} {}",
+            t("ac_have"),
+            f.have,
+            t("ac_need"),
+            f.needed_workers
+        ),
+        Screen::Timesheet,
+    );
 }
 
 // ================================================================ Bajarish
@@ -552,6 +687,84 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
             format!("{} {}", t("ac_done_permit"), p.number)
         }
 
+        ActionKind::SendToRepair { machine_id } => {
+            let mut m = app
+                .machines
+                .iter()
+                .find(|m| m.id == *machine_id)
+                .cloned()
+                .ok_or_else(|| t("ac_no_machine").to_string())?;
+            // Sabab ko'rikdan olinadi: nosozlik matni qayta yozilmaydi.
+            let fault = app
+                .machine_checks
+                .iter()
+                .filter(|c| c.machine_id == m.id && !c.fault.trim().is_empty())
+                .max_by_key(|c| c.date)
+                .map(|c| c.fault.trim().to_string())
+                .unwrap_or_else(|| t("ac_not_allowed").to_string());
+            m.status = crate::domain::MachineStatus::Repair;
+            app.db.update_machine(&m);
+            app.db.insert_machine_repair(&crate::domain::MachineRepair {
+                id: 0,
+                project_id: pid,
+                machine_id: m.id,
+                kind: crate::domain::RepairKind::Fault,
+                started: app.today,
+                finished: None,
+                reason: fault,
+                cost: 0.0,
+                hours_at: machine_hours(app, m.id),
+                note: t("ac_from_copilot").to_string(),
+            });
+            format!("{} {}", t("ac_done_repair"), m.name)
+        }
+
+        ActionKind::PlanService { machine_id } => {
+            let m = app
+                .machines
+                .iter()
+                .find(|m| m.id == *machine_id)
+                .cloned()
+                .ok_or_else(|| t("ac_no_machine").to_string())?;
+            app.db.insert_machine_repair(&crate::domain::MachineRepair {
+                id: 0,
+                project_id: pid,
+                machine_id: m.id,
+                kind: crate::domain::RepairKind::Service,
+                started: app.today,
+                finished: None,
+                reason: t("ac_service_reason").to_string(),
+                cost: 0.0,
+                hours_at: machine_hours(app, m.id),
+                note: t("ac_from_copilot").to_string(),
+            });
+            format!("{} {}", t("ac_done_service"), m.name)
+        }
+
+        ActionKind::HireRequest { count } => {
+            let n = app.requests.len() + 1;
+            let number = format!("Z-{n:03}");
+            app.db.insert_request(&Request {
+                id: 0,
+                project_id: pid,
+                number: number.clone(),
+                date: app.today,
+                kind: RequestKind::Labor,
+                title: format!("{} {} {}", t("ac_hire"), count, t("ac_worker")),
+                material_id: None,
+                qty: *count as f64,
+                unit: t("ac_worker").to_string(),
+                requester: app.user_name(),
+                need_date: app.today + chrono::Duration::days(14),
+                priority: Priority::High,
+                status: RequestStatus::New,
+                task_id: None,
+                reject_reason: String::new(),
+                note: t("ac_from_copilot").to_string(),
+            });
+            format!("{} {number}", t("ac_done_request"))
+        }
+
         ActionKind::BuildRoute { request_id } => {
             let q = app
                 .requests
@@ -710,6 +923,115 @@ mod tests {
             assert!(!a.code.is_empty());
             assert!(!a.title.is_empty(), "{}: sarlavha yo'q", a.code);
             assert!(!a.evidence.is_empty(), "{}: asos yo'q", a.code);
+        }
+    }
+
+    /// TZ XVIII.18: nosoz texnika ta'mirga chiqarish taklifi bilan keladi
+    /// va bajarilgach ro'yxatdan chiqadi.
+    #[test]
+    fn faulty_machine_is_offered_for_repair() {
+        use crate::domain::{MachineCheck, MachineLog, MachineStatus, WaybillState};
+
+        let (_t, mut app) = app();
+        let pid = app.current.expect("obyekt");
+        let m = app.machines.first().cloned().expect("texnika");
+
+        // Bugun ishlagan, ko'rikda nosozlik topilgan texnika.
+        app.db.insert_machine_log(&MachineLog {
+            id: 0,
+            project_id: pid,
+            machine_id: m.id,
+            date: app.today,
+            hours: 8.0,
+            fuel: 0.0,
+            task_id: None,
+            number: String::new(),
+            driver: m.operator.clone(),
+            route: String::new(),
+            odo_start: 0.0,
+            odo_end: 0.0,
+            trips: 0,
+            cargo: 0.0,
+            note: String::new(),
+        });
+        app.db.insert_machine_check(&MachineCheck {
+            id: 0,
+            project_id: pid,
+            machine_id: m.id,
+            date: app.today,
+            by: "Mexanik".into(),
+            items_ok: 5,
+            items_total: 6,
+            fault: "Tormoz shlangi oqmoqda".into(),
+            allowed: true,
+            note: String::new(),
+        });
+        app.reload_project_data();
+
+        let stock = app.stock();
+        let a = suggest(&app, &stock)
+            .into_iter()
+            .find(|a| a.code == "AC-M1" && a.kind == ActionKind::SendToRepair { machine_id: m.id })
+            .expect("ta'mir taklifi yo'q");
+        // Asos — ko'rikdagi nosozlik matni, o'ylab topilgan gap emas.
+        assert_eq!(a.evidence, "Tormoz shlangi oqmoqda");
+
+        let before = app.repairs.len();
+        perform(&mut app, &a).expect("bajarildi");
+        assert_eq!(app.repairs.len(), before + 1, "ta'mir yozuvi ochilmadi");
+        assert_eq!(
+            app.machines.iter().find(|x| x.id == m.id).map(|x| x.status),
+            Some(MachineStatus::Repair)
+        );
+        // Ta'mirdagi texnikaga taklif takrorlanmaydi.
+        let stock = app.stock();
+        assert!(!suggest(&app, &stock)
+            .iter()
+            .any(|x| x.kind == ActionKind::SendToRepair { machine_id: m.id }));
+
+        let _ = WaybillState::None;
+    }
+
+    /// TZ XIII.26-27: ishchi yetishmasa ariza qoralamasi chiqadi va
+    /// sonini yordamchi o'ylab topmaydi.
+    #[test]
+    fn labor_gap_suggests_a_request_with_the_computed_count() {
+        let (_t, mut app) = app();
+        let f = app.staff_forecast();
+        let stock = app.stock();
+        let found = suggest(&app, &stock)
+            .into_iter()
+            .find(|a| a.code == "AC-C1");
+
+        match found {
+            None => {
+                // Taklif yo'q bo'lsa — yo yetishmovchilik yo'q, yo ochiq ariza bor.
+                assert!(
+                    f.gap <= 0
+                        || f.tasks == 0
+                        || app.requests.iter().any(|q| q.kind == RequestKind::Labor
+                            && !matches!(
+                                q.status,
+                                RequestStatus::Closed | RequestStatus::Rejected
+                            )),
+                    "yetishmovchilik bor, taklif yo'q"
+                );
+            }
+            Some(a) => {
+                assert_eq!(a.kind, ActionKind::HireRequest { count: f.gap });
+                let before = app.requests.len();
+                perform(&mut app, &a).expect("bajarildi");
+                assert_eq!(app.requests.len(), before + 1);
+                let q = app
+                    .requests
+                    .iter()
+                    .find(|q| q.kind == RequestKind::Labor)
+                    .expect("ariza");
+                assert_eq!(q.qty, f.gap as f64);
+                // Ochiq ariza paydo bo'ldi — taklif takrorlanmaydi.
+                let stock = app.stock();
+                assert!(!suggest(&app, &stock).iter().any(|x| x.code == "AC-C1"));
+            }
         }
     }
 

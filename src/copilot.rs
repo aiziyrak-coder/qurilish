@@ -32,6 +32,8 @@ pub enum Intent {
     Docs,
     Cash,
     Attention,
+    /// Loyiha hujjatlari va ulardagi ziddiyatlar (TZ II, III).
+    Project,
 }
 
 impl Intent {
@@ -52,6 +54,7 @@ impl Intent {
         Intent::Quality,
         Intent::Safety,
         Intent::Sales,
+        Intent::Project,
     ];
 
     /// Savolning tayyor ko'rinishi — tugma sifatida chiqadi.
@@ -71,6 +74,7 @@ impl Intent {
             Intent::Quality => t("cp_q_quality"),
             Intent::Safety => t("cp_q_safety"),
             Intent::Sales => t("cp_q_sales"),
+            Intent::Project => t("cp_q_project"),
         }
     }
 
@@ -89,6 +93,32 @@ impl Intent {
             Intent::Quality => Screen::Quality,
             Intent::Safety => Screen::Safety,
             Intent::Sales => Screen::Deals,
+            Intent::Project => Screen::AiCheck,
+        }
+    }
+
+    /// Javobdagi sonlar qaysi yozuvlardan chiqqani (TZ XVIII.41).
+    ///
+    /// Ekran nomi «qayerda ko'rish mumkin»ni aytadi, bu esa «nimadan
+    /// hisoblangan»ni. Ikkalasi birga turgandagina javobni tekshirib
+    /// bo'ladi: foydalanuvchi o'sha yozuvlarni ochib, sonni o'zi qayta
+    /// sanay oladi.
+    pub fn source(self) -> &'static str {
+        match self {
+            Intent::Overview => t("cp_src_overview"),
+            Intent::Attention => t("cp_src_attention"),
+            Intent::Delays | Intent::Critical => t("cp_src_tasks"),
+            Intent::Money => t("cp_src_money"),
+            Intent::Cash => t("cp_src_cash"),
+            Intent::Docs => t("cp_src_docs"),
+            Intent::Supply => t("cp_src_supply"),
+            Intent::Stock => t("cp_src_stock"),
+            Intent::Crew => t("cp_src_crew"),
+            Intent::Machines => t("cp_src_machines"),
+            Intent::Quality => t("cp_src_quality"),
+            Intent::Safety => t("cp_src_safety"),
+            Intent::Sales => t("cp_src_sales"),
+            Intent::Project => t("cp_src_project"),
         }
     }
 
@@ -113,6 +143,9 @@ impl Intent {
             Screen::Client | Screen::Contracts => Intent::Cash,
             Screen::Foreman | Screen::Journal => Intent::Attention,
             Screen::Dashboard | Screen::Director | Screen::Portfolio => Intent::Overview,
+            Screen::Notices | Screen::Analytics => Intent::Attention,
+            Screen::TechSupervision => Intent::Docs,
+            Screen::Passport | Screen::AiCheck => Intent::Project,
             _ => return None,
         })
     }
@@ -231,6 +264,17 @@ impl Intent {
                 "договор",
                 "клиент",
             ],
+            Intent::Project => &[
+                "loyiha hujjat",
+                "chizma",
+                "ziddiyat",
+                "kolliz",
+                "bo'lim",
+                "проектн",
+                "чертеж",
+                "коллиз",
+                "раздел",
+            ],
         }
     }
 }
@@ -268,6 +312,8 @@ pub struct Answer {
     pub lines: Vec<Line>,
     /// Qo'shimcha izoh — javobning chegarasi haqida.
     pub note: String,
+    /// Sonlar qaysi yozuvlardan chiqqani (TZ XVIII.41).
+    pub source: String,
     pub screen: Screen,
 }
 
@@ -324,12 +370,14 @@ pub fn answer(intent: Intent, inp: &Input) -> Answer {
         Intent::Quality => quality(inp),
         Intent::Safety => safety(inp),
         Intent::Sales => sales(inp),
+        Intent::Project => project(inp),
     };
     Answer {
         intent,
         title: intent.question().to_string(),
         lines,
         note: t("cp_note").to_string(),
+        source: intent.source().to_string(),
         screen: intent.screen(),
     }
 }
@@ -754,6 +802,73 @@ fn sales(inp: &Input) -> Vec<Line> {
     out
 }
 
+/// Loyiha hujjatlari va ulardagi ziddiyatlar (TZ II, III).
+///
+/// Sonlar `issues` ro'yxatidan olinadi — bu AI tekshiruvi topgan
+/// ziddiyatlarning **o'sha ro'yxati**, ikkinchi marta hisoblanmaydi.
+fn project(inp: &Input) -> Vec<Line> {
+    if inp.issues.is_empty() {
+        return vec![line(t("cp_l_none"), t("cp_no_issues").to_string())];
+    }
+    let by = |s: Severity| inp.issues.iter().filter(|i| i.severity == s).count();
+    let open = inp
+        .issues
+        .iter()
+        .filter(|i| matches!(i.status, IssueStatus::Open | IssueStatus::InWork))
+        .count();
+
+    let mut out = vec![line(t("cp_l_count"), inp.issues.len().to_string())];
+    if by(Severity::Critical) > 0 {
+        out.push(alert(
+            Severity::Critical.label(),
+            by(Severity::Critical).to_string(),
+        ));
+    }
+    if by(Severity::Major) > 0 {
+        out.push(alert(
+            Severity::Major.label(),
+            by(Severity::Major).to_string(),
+        ));
+    }
+    if by(Severity::Warning) > 0 {
+        out.push(line(
+            Severity::Warning.label(),
+            by(Severity::Warning).to_string(),
+        ));
+    }
+    out.push(if open > 0 {
+        alert(t("cp_l_open"), open.to_string())
+    } else {
+        line(t("cp_l_open"), open.to_string())
+    });
+
+    // Eng jiddiy uchtasi nomma-nom — javob umumiy son bo'lib qolmasin.
+    let mut top: Vec<&crate::domain::Issue> = inp.issues.iter().collect();
+    top.sort_by_key(|i| rank(i.severity));
+    for i in top.iter().take(3) {
+        out.push(Line {
+            label: i.code.clone(),
+            value: if i.title.chars().count() > 46 {
+                format!("{}…", i.title.chars().take(45).collect::<String>())
+            } else {
+                i.title.clone()
+            },
+            alert: matches!(i.severity, Severity::Critical | Severity::Major),
+        });
+    }
+    out
+}
+
+/// Muhimlik tartibi — eng jiddiysi oldinda.
+fn rank(s: Severity) -> u8 {
+    match s {
+        Severity::Critical => 0,
+        Severity::Major => 1,
+        Severity::Warning => 2,
+        _ => 3,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -779,6 +894,34 @@ mod tests {
         // Mavzusiz umumiy savol — umumiy javob.
         assert_eq!(detect("obyekt qanday ketyapti"), Some(Intent::Overview));
         assert_eq!(detect("nimaga e'tibor bering"), Some(Intent::Attention));
+    }
+
+    /// TZ XVIII.41: har javob sonlar qaysi yozuvlardan chiqqanini aytadi.
+    #[test]
+    fn every_answer_names_its_source() {
+        for i in Intent::ALL {
+            assert!(!i.source().is_empty(), "{i:?} manbasiz");
+            // Manba ekran nomining takrori bo'lmasin — u boshqa savolga javob beradi.
+            assert_ne!(i.source(), i.screen().label(), "{i:?}");
+        }
+    }
+
+    /// TZ XVIII.43: ma'lumot ko'rsatadigan har bir ekrandan yordamchiga
+    /// kirish bor — sozlama va yordamchining o'zi bundan mustasno.
+    #[test]
+    fn every_data_screen_reaches_the_copilot() {
+        use crate::app::{Screen, NAV_GROUPS};
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                if matches!(s, Screen::Settings | Screen::Copilot) {
+                    continue;
+                }
+                assert!(
+                    Intent::for_screen(*s).is_some(),
+                    "{s:?} ekranidan yordamchiga kirish yo'q"
+                );
+            }
+        }
     }
 
     /// Tanilmagan savolga javob o'ylab topilmaydi.

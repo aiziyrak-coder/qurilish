@@ -2410,6 +2410,69 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cp_q_quality" => ("Sifat qanday?", "Как с качеством?"),
         "cp_q_safety" => ("Xavfsizlikda muammo bormi?", "Есть ли проблемы по ТБ?"),
         "cp_q_sales" => ("Sotuv qanday ketyapti?", "Как идут продажи?"),
+        "cp_q_project" => (
+            "Loyiha hujjatlarida nima muammo?",
+            "Что не так в проектной документации?",
+        ),
+        "cp_no_issues" => (
+            "loyiha tekshiruvi topilma bermadi",
+            "проверка проекта не дала замечаний",
+        ),
+        "cp_l_open" => ("ochiq", "открыто"),
+        "cp_source" => ("Manba:", "Источник:"),
+        "cp_src_overview" => (
+            "ishlar ro'yxati, bajarilish foizi va tekshiruv topilmalari",
+            "список работ, процент выполнения и замечания проверки",
+        ),
+        "cp_src_attention" => (
+            "barcha modullardan yig'ilgan topilmalar",
+            "замечания, собранные из всех модулей",
+        ),
+        "cp_src_tasks" => (
+            "ishlar jadvali va tarmoq hisobi",
+            "график работ и сетевой расчёт",
+        ),
+        "cp_src_money" => (
+            "smeta qatorlari, shartnoma summasi va bajarilish",
+            "строки сметы, сумма договора и выполнение",
+        ),
+        "cp_src_cash" => (
+            "to'lov jadvali va qabul qilingan to'lovlar",
+            "график платежей и поступившие оплаты",
+        ),
+        "cp_src_docs" => (
+            "ijro hujjatlari reyestri va tugallangan ishlar",
+            "реестр исполнительной документации и завершённые работы",
+        ),
+        "cp_src_supply" => (
+            "arizalar va xaridlar ro'yxati",
+            "список заявок и закупок",
+        ),
+        "cp_src_stock" => (
+            "ombor harakatlari va material minimal zaxirasi",
+            "движения склада и минимальный запас материалов",
+        ),
+        "cp_src_crew" => ("tabel yozuvlari va ishchilar", "табель и список рабочих"),
+        "cp_src_machines" => (
+            "texnika ro'yxati va smena yozuvlari",
+            "список техники и сменные записи",
+        ),
+        "cp_src_quality" => (
+            "sifat tekshiruvlari va nuqsonlar",
+            "проверки качества и дефекты",
+        ),
+        "cp_src_safety" => (
+            "xavfsizlik hodisalari va naryadlar",
+            "события охраны труда и наряды",
+        ),
+        "cp_src_sales" => (
+            "kvartiralar, shartnomalar va to'lovlar",
+            "квартиры, договоры и платежи",
+        ),
+        "cp_src_project" => (
+            "loyiha tekshiruvi topilmalari",
+            "замечания проверки проекта",
+        ),
 
         // Javob qatorlari
         "cp_l_fact" => ("Bajarilgan", "Выполнено"),
@@ -2697,6 +2760,20 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "ac_arrived" => ("kelgan:", "поступило:"),
         "ac_done" => ("ish tugallangan, bo'lim", "работа завершена, раздел"),
         "ac_permit_expired" => ("muddati tugagan:", "срок истёк:"),
+        "ac_send_repair" => ("Ta'mirga chiqarish:", "Отправить в ремонт:"),
+        "ac_plan_service" => ("Rejali TX yozuvi:", "Запись планового ТО:"),
+        "ac_inspection_over" => ("texnik ko'rik muddati o'tgan:", "срок техосмотра истёк:"),
+        "ac_not_allowed" => ("ko'rikda ruxsat berilmagan", "осмотром не допущена"),
+        "ac_over_hours" => ("normadan oshgan:", "сверх нормы:"),
+        "ac_hire" => ("Ishchi kuchi arizasi:", "Заявка на рабочих:"),
+        "ac_worker" => ("ishchi", "рабочих"),
+        "ac_have" => ("bor:", "есть:"),
+        "ac_need" => ("kerak:", "нужно:"),
+        "ac_no_machine" => ("Texnika topilmadi", "Техника не найдена"),
+        "ac_done_repair" => ("Ta'mirga chiqarildi:", "Отправлена в ремонт:"),
+        "ac_done_service" => ("TX yozuvi ochildi:", "Запись ТО открыта:"),
+        "ac_service_reason" => ("Rejali texnik xizmat", "Плановое техобслуживание"),
+        "mh" => ("mot/soat", "мот/ч"),
         "ac_from_copilot" => (
             "Yordamchi taklifi bo'yicha yaratildi",
             "Создано по предложению помощника",

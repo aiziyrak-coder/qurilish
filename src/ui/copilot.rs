@@ -611,6 +611,12 @@ fn answer_card(
                     });
 
                 ui.add_space(8.0);
+                // Manba: son qaysi yozuvlardan chiqqani (TZ XVIII.41).
+                ui.label(
+                    RichText::new(format!("{} {}", t("cp_source"), a.source))
+                        .size(10.5)
+                        .color(theme::muted()),
+                );
                 ui.label(RichText::new(&a.note).size(10.5).color(theme::muted()));
             });
         });
