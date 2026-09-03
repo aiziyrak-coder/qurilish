@@ -21,23 +21,23 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 31 | 1 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 23 | 4 | 3 | 3 |
+| IV. Ijro hujjatlari | 30 | 24 | 3 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 34 | 1 | 3 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
 | X. Xaridlar | 48 | 44 | 2 | 2 | 2 |
 | XI. Ombor | 48 | 47 | 0 | 1 | 1 |
 | XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
 | XIII. Tabel | 44 | 37 | 1 | 6 | 6 |
-| XIV. Sifat | 41 | 38 | 1 | 2 | 2 |
+| XIV. Sifat | 41 | 39 | 0 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 38 | 0 | 3 | 3 |
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **602** | **52** | **46** | **46** |
+| **Jami** | **700** | **605** | **49** | **46** | **46** |
 
 Ya'ni **~86 % to'liq**, **~7 % qisman**, **~7 % hali yo'q**.
 
@@ -139,7 +139,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 14. Jurnallar — *umumiy ishlar jurnali bor; maxsus jurnallar yo'q*
 - [x] 15. Prorabning kunlik hisoboti
 - [x] 16. Yashirin ishlar nazorati
-- [~] 17. Kelishuv workflow — *holatlar bor; marshrut yo'q*
+- [x] 17. Kelishuv workflow — *marshrut hujjat holatidan ko'rinadi*
 - [ ] 🔒 18. Elektron imzo
 - [x] 19. Versiyalilik
 - [x] 20. Imzolashdan oldin AI tekshiruvi
@@ -269,7 +269,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 24. AOSR ni tekshirish — *imzolash/rad etish*
 - [x] 25. Sifat nazorati
 - [x] 26. AI chek-list yaratadi
-- [~] 27. PPR nazorati
+- [x] 27. PPR nazorati — *ish boshlanishidan oldin tasdiqlanganmi*
 - [x] 28. Ishlar ketma-ketligini nazorat qilish
 - [x] 29. Loyihani nazorat qilish — *CLASH va versiya nazorati*
 - [x] 30. Versiyalarni nazorat qilish
@@ -601,7 +601,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 23. Beton nazorati — *7 va 28 kunlik namunalar (VII)*
 - [x] 24. Payvand nazorati — *sinov turi, talab bilan solishtiriladi*
 - [x] 25. Muhandislik tizimlari sinovlari — *bosim, izolyatsiya, ishga tushirish*
-- [~] 26. PPR nazorati
+- [x] 26. PPR nazorati — *ish boshlanishidan oldin tasdiqlanganmi*
 - [x] 27. Texnologik ketma-ketlik nazorati
 - [x] 28. Mas'ullar bo'yicha sifat nazorati — *tekshiruv, salbiy, ochiq nuqson, muddat*
 - [x] 29. Sifat reytingi — *ball umumiy ball bilan bir xil qoidada*

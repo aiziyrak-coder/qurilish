@@ -1129,6 +1129,24 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
                         {
                             make_aosr = Some(d.id);
                         }
+                        // Kelishuv marshruti (TZ IV.17): bosqich hujjat
+                        // holatidan aniqlanadi — ikki joyda holat saqlash
+                        // ularning bir-biriga zid bo'lishiga olib keladi.
+                        let route = crate::checks::doc_route(&d);
+                        ui.horizontal(|ui| {
+                            for step in &route {
+                                let (mark, colour) = if step.done {
+                                    ("v", theme::ok())
+                                } else if step.current {
+                                    ("»", theme::accent())
+                                } else {
+                                    ("·", theme::muted())
+                                };
+                                ui.label(RichText::new(mark).size(12.0).color(colour))
+                                    .on_hover_text(t(step.role_key));
+                            }
+                        });
+
                         // Hujjatga foto va izoh biriktirish (TZ IV.8).
                         if super::notes::badge(ui, app, NoteTarget::ExecDoc, d.id) {
                             open_notes = Some(d.id);

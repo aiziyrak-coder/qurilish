@@ -2406,6 +2406,12 @@ impl App {
         checks::missing_works(&self.tasks, &self.estimate_items)
     }
 
+    /// PPR nazorati: ish boshlanishidan oldin tasdiqlanganmi
+    /// (TZ VII.27, XIV.26).
+    pub fn ppr_control(&self) -> Vec<checks::PprIssue> {
+        checks::ppr_control(&self.tasks, &self.ppr_docs)
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

@@ -10683,6 +10683,98 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(big[0].items, 1);
     }
 
+    /// TZ VII.27, XIV.26: PPR ish boshlanishidan oldin tasdiqlanishi
+    /// kerak; keyin tasdiqlangani alohida ko'rsatiladi.
+    #[test]
+    fn ppr_must_be_approved_before_start() {
+        use crate::checks::{ppr_control, PprIssue as P};
+        use crate::domain::{PprDoc, PprKind};
+
+        let start = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let mut task = test_task(10, 100.0, 30.0);
+        task.fact_start = Some(start);
+        let doc = |approved_at: Option<chrono::NaiveDate>| PprDoc {
+            id: 1,
+            project_id: 1,
+            kind: PprKind::Ppr,
+            number: "PPR-1".into(),
+            name: "Monolit ishlari".into(),
+            section: crate::model::Section::Kj,
+            task_id: Some(10),
+            workers: 5,
+            machines: 1,
+            path: String::new(),
+            approved: approved_at.is_some(),
+            author: String::new(),
+            approved_at,
+            note: String::new(),
+        };
+
+        // PPR yo'q — jiddiy.
+        let none = ppr_control(std::slice::from_ref(&task), &[]);
+        assert!(none.iter().any(|i| matches!(i, P::Missing { .. })));
+        assert!(none[0].severe());
+
+        // PPR bor, tasdiqlanmagan — ham jiddiy.
+        let draft = ppr_control(std::slice::from_ref(&task), &[doc(None)]);
+        assert!(draft.iter().any(|i| matches!(i, P::NotApproved { .. })));
+
+        // Ish boshlanishidan oldin tasdiqlangan — e'tiroz yo'q.
+        let early = ppr_control(
+            std::slice::from_ref(&task),
+            &[doc(Some(start - chrono::Duration::days(5)))],
+        );
+        assert!(early.is_empty());
+
+        // Keyin tasdiqlangan — alohida e'tiroz, lekin to'xtatish emas.
+        let late = ppr_control(
+            std::slice::from_ref(&task),
+            &[doc(Some(start + chrono::Duration::days(7)))],
+        );
+        let found = late
+            .iter()
+            .find(|i| matches!(i, P::ApprovedLate { days: 7, .. }))
+            .expect("kech tasdiq e'tirozi yo'q");
+        assert!(!found.severe());
+
+        // Boshlanmagan ishdan PPR so'ralmaydi.
+        let idle = test_task(11, 100.0, 0.0);
+        assert!(ppr_control(std::slice::from_ref(&idle), &[]).is_empty());
+    }
+
+    /// TZ IV.17: marshrut bosqichi hujjat holatidan aniqlanadi —
+    /// alohida yozuv yuritilmaydi.
+    #[test]
+    fn document_route_follows_the_status() {
+        use crate::checks::doc_route;
+        use crate::domain::ExecDocStatus;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut doc = t.db.exec_docs(pid).into_iter().next().expect("hujjat");
+
+        doc.status = ExecDocStatus::Draft;
+        let r = doc_route(&doc);
+        assert_eq!(r.len(), 3);
+        assert!(r[0].current && !r[0].done);
+        assert!(!r[1].done && !r[2].done);
+
+        doc.status = ExecDocStatus::OnReview;
+        let r = doc_route(&doc);
+        assert!(r[0].done);
+        assert!(r[1].current);
+
+        doc.status = ExecDocStatus::Signed;
+        let r = doc_route(&doc);
+        assert!(r.iter().all(|s| s.done));
+        assert!(!r.iter().any(|s| s.current));
+
+        // Rad etilgan hujjat boshiga qaytadi.
+        doc.status = ExecDocStatus::Rejected;
+        let r = doc_route(&doc);
+        assert!(r[0].current && !r[0].done);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

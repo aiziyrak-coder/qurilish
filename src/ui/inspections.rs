@@ -66,6 +66,55 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
 }
 
+/// PPR nazorati: ish boshlanishidan oldin tasdiqlanganmi
+/// (TZ VII.27, XIV.26).
+///
+/// PPR — ishni **qanday** bajarish hujjati. U ish boshlangandan keyin
+/// tasdiqlansa, hujjat ish tartibini emas, bajarilgan ishni tasvirlaydi.
+fn ppr_block(ui: &mut egui::Ui, app: &App) {
+    let rows = app.ppr_control();
+    ui.label(RichText::new(t("in_ppr")).size(13.5).strong());
+    ui.label(
+        RichText::new(t("in_ppr_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+    if rows.is_empty() {
+        ui.label(RichText::new(t("in_ppr_ok")).size(12.5).color(theme::ok()));
+        return;
+    }
+    for i in rows.iter().take(15) {
+        use crate::checks::PprIssue as P;
+        let name = app
+            .task(i.task_id())
+            .map(|x| format!("{} {}", x.wbs, x.name))
+            .unwrap_or_default();
+        let text = match i {
+            P::Missing { .. } => t("in_ppr_missing").to_string(),
+            P::NotApproved { name, .. } => {
+                format!("{} — {}", t("in_ppr_not_approved"), name)
+            }
+            P::ApprovedLate { days, .. } => {
+                format!("{} ({days} {})", t("in_ppr_late"), t("days"))
+            }
+        };
+        ui.label(
+            RichText::new(format!(
+                "· {} — {}",
+                super::issues::truncate(&name, 34),
+                text
+            ))
+            .size(12.0)
+            .color(if i.severe() {
+                theme::danger()
+            } else {
+                theme::warn()
+            }),
+        );
+    }
+}
+
 // ================================================================ Yakuniy qabul
 
 /// Obyekt yakuniy qabulga tayyormi (TZ VII.35-36).
@@ -122,12 +171,16 @@ fn final_tab(ui: &mut egui::Ui, app: &mut App) {
                     .size(15.0),
             );
         });
+        ui.add_space(16.0);
+        ppr_block(ui, app);
         return;
     }
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            ppr_block(ui, app);
+            ui.add_space(16.0);
             for b in &r.blocks {
                 egui::Frame::new()
                     .fill(theme::card())

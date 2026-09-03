@@ -4716,6 +4716,19 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "es_cc_saving_hint" => ("eng past narxga keltirilsa", "если привести к минимальной цене"),
         "es_cc_missing" => ("Smetasiz ish", "Работ без сметы"),
         "es_cc_missing_hint" => ("boshlangan / jami", "начато / всего"),
+        // VII.27, XIV.26. PPR nazorati
+        "in_ppr" => ("PPR nazorati", "Контроль ППР"),
+        "in_ppr_hint" => (
+            "PPR — ishni qanday bajarish hujjati. U ish boshlangandan keyin tasdiqlansa, hujjat ish tartibini emas, bajarilgan ishni tasvirlaydi.",
+            "ППР — документ о том, как выполнять работу. Если он утверждён после начала, документ описывает не порядок работ, а уже выполненное.",
+        ),
+        "in_ppr_ok" => (
+            "Barcha boshlangan ishlarda PPR tasdiqlangan.",
+            "По всем начатым работам ППР утверждён.",
+        ),
+        "in_ppr_missing" => ("PPR umuman yo'q", "ППР вообще нет"),
+        "in_ppr_not_approved" => ("PPR tasdiqlanmagan", "ППР не утверждён"),
+        "in_ppr_late" => ("PPR ish boshlangandan keyin tasdiqlangan", "ППР утверждён после начала работ"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

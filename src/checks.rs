@@ -12622,3 +12622,107 @@ pub fn missing_works(tasks: &[Task], items: &[EstimateItem]) -> Vec<MissingWork>
     out.sort_by_key(|m| (!m.started, m.task_id));
     out
 }
+
+// ================= VII.27, XIV.26, IV.17. PPR nazorati va marshrut =================
+
+/// PPR bo'yicha e'tiroz (TZ VII.27, XIV.26).
+#[derive(Debug, Clone, PartialEq)]
+pub enum PprIssue {
+    /// Ish boshlangan, PPR umuman yo'q.
+    Missing { task_id: i64 },
+    /// PPR bor, lekin tasdiqlanmagan.
+    NotApproved { task_id: i64, name: String },
+    /// PPR ish boshlangandan keyin tasdiqlangan.
+    ApprovedLate { task_id: i64, days: i64 },
+}
+
+impl PprIssue {
+    /// Ishni to'xtatishga arziydigan holat.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            PprIssue::Missing { .. } | PprIssue::NotApproved { .. }
+        )
+    }
+
+    pub fn task_id(&self) -> i64 {
+        match self {
+            PprIssue::Missing { task_id }
+            | PprIssue::NotApproved { task_id, .. }
+            | PprIssue::ApprovedLate { task_id, .. } => *task_id,
+        }
+    }
+}
+
+/// TZ VII.27, XIV.26: ish boshlanishidan oldin PPR tasdiqlanganmi.
+///
+/// PPR — ishni **qanday** bajarish hujjati. U ish boshlangandan keyin
+/// tasdiqlansa, hujjat ish tartibini emas, bajarilgan ishni tasvirlaydi:
+/// bu boshqa narsa va shuning uchun alohida ko'rsatiladi.
+pub fn ppr_control(tasks: &[Task], docs: &[PprDoc]) -> Vec<PprIssue> {
+    let mut out = Vec::new();
+    for task in tasks {
+        let started = task.progress > 0.0 || task.fact_start.is_some();
+        if !started {
+            continue;
+        }
+        let start = task.fact_start.unwrap_or(task.plan_start);
+        let mine: Vec<&PprDoc> = docs.iter().filter(|d| d.task_id == Some(task.id)).collect();
+        if mine.is_empty() {
+            out.push(PprIssue::Missing { task_id: task.id });
+            continue;
+        }
+        match mine.iter().find(|d| d.approved_at.is_some()) {
+            None => out.push(PprIssue::NotApproved {
+                task_id: task.id,
+                name: mine[0].name.clone(),
+            }),
+            Some(d) => {
+                let at = d.approved_at.unwrap();
+                if at > start {
+                    out.push(PprIssue::ApprovedLate {
+                        task_id: task.id,
+                        days: (at - start).num_days(),
+                    });
+                }
+            }
+        }
+    }
+    out.sort_by_key(|i| (!i.severe(), i.task_id()));
+    out
+}
+
+/// Kelishuv marshrutining bitta bosqichi (TZ IV.17).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RouteStep {
+    /// Kim kelishishi kerak — rol nomining i18n kaliti.
+    pub role_key: &'static str,
+    /// Bosqich o'tilganmi.
+    pub done: bool,
+    /// Hozir shu bosqichda turibdimi.
+    pub current: bool,
+}
+
+/// TZ IV.17: ijro hujjatining kelishuv marshruti.
+///
+/// Marshrut hujjat **turiga** bog'liq emas — u har doim bir xil:
+/// pudratchi tayyorlaydi, texnik nazorat tekshiradi, buyurtmachi qabul
+/// qiladi. Bosqich hujjat holatidan aniqlanadi, alohida yozuv
+/// yuritilmaydi: ikki joyda holat saqlash ularning bir-biriga zid
+/// bo'lishiga olib keladi.
+pub fn doc_route(doc: &ExecDoc) -> Vec<RouteStep> {
+    let stage = match doc.status {
+        ExecDocStatus::Draft | ExecDocStatus::Rejected => 0,
+        ExecDocStatus::OnReview => 1,
+        ExecDocStatus::Signed => 3,
+    };
+    ["role_contractor", "role_tech_supervision", "role_client"]
+        .iter()
+        .enumerate()
+        .map(|(i, role_key)| RouteStep {
+            role_key,
+            done: i < stage,
+            current: i == stage,
+        })
+        .collect()
+}
