@@ -20,7 +20,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 9 | 7 | 6 | 2 |
-| III. AI smeta tekshiruvi | 34 | 15 | 8 | 11 | 2 |
+| III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
 | IV. Ijro hujjatlari | 30 | 10 | 10 | 10 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 17 | 7 | 10 | 6 |
 | VI. Prorab ilovasi | 37 | 16 | 10 | 11 | 7 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **406** | **164** | **130** | **53** |
+| **Jami** | **700** | **413** | **162** | **125** | **53** |
 
-Ya'ni **~58 % to'liq**, **~23 % qisman**, **~19 % hali yo'q**.
+Ya'ni **~59 % to'liq**, **~23 % qisman**, **~18 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -106,18 +106,18 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 19. Foydani tekshirish — *ustama bilan birga summadan*
 - [x] 20. QQS ni tekshirish — *yakuniy summadan*
 - [x] 21. Bir necha smeta variantini solishtirish — *bo'lim kesimida*
-- [~] 22. Smetani shartnoma bilan solishtirish — *analitikada AN-C4 qoidasi*
+- [x] 22. Smetani shartnoma bilan solishtirish — *analitika qoidasi va prognoz tabidagi amaldagi summa*
 - [x] 23. Smetani byudjet bilan solishtirish — *bo'lim bo'yicha*
-- [ ] 24. Smeta → Xaridlar (avtomatik)
-- [ ] 25. Smeta → Ombor (avtomatik)
+- [x] 24. Smeta → Xaridlar — *zanjirda ariza va xarid summasi ish kesimida*
+- [x] 25. Smeta → Ombor — *kirim va ishga berilgan material zanjirda*
 - [x] 26. Smeta → GPR — *pozitsiya ishga bog'lanadi, qoplanish foizi*
-- [ ] 27. Smeta → Prorabning kunlik hisoboti
+- [x] 27. Smeta → fakt — *bajarilish foizi va haqiqiy tannarx zanjirda*
 - [x] 28. Ortiqcha sarfni nazorat qilish — *sarf normalari bilan*
-- [ ] 29. AI yakuniy qiymat prognozi
-- [~] 30. Tejashni izlash — *eng past narxga keltirish hisobi*
+- [x] 29. Yakuniy qiymat prognozi — *analitikadagi «Prognoz» tabi*
+- [x] 30. Tejashni izlash — *eng past narx hisobi va analitikadagi «Yo'qotishlar» tabi*
 - [~] 31. AI-smetachining bosh ekrani — *KPI bor, to'liq COST CONTROL paneli yo'q*
 - [x] 32. Eng muhim talab — *hukm chiqarmaslik (III.32)*
-- [ ] 33. Yakuniy arxitektura: smeta → arizalar → xaridlar → ombor → fakt → foyda
+- [x] 33. Yakuniy arxitektura — *«Zanjir» tabi: reja → ariza → xarid → ombor → fakt → farq; uzilish belgilanadi*
 
 ---
 

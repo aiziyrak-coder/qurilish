@@ -4,6 +4,7 @@
 //! qoidalar arifmetika, birliklar, dublikatlar, hajmlar va narxlarni tekshiradi.
 
 use super::issues;
+use super::warehouse::{cell_l, cell_r};
 use super::*;
 use crate::domain::{Estimate, EstimateItem, IssueModule};
 use crate::model::Section;
@@ -36,6 +37,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (1, t("tab_cost_control")),
             (2, t("tab_issues")),
             (3, t("tab_structure")),
+            (4, t("tab_chain")),
         ];
         for (i, label) in tabs {
             if ui.selectable_label(tab == i, label).clicked() {
@@ -50,8 +52,171 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         1 => cost_tab(ui, app),
         2 => issues_tab(ui, app),
         3 => structure_tab(ui, app),
+        4 => chain_tab(ui, app),
         _ => items(ui, app),
     }
+}
+
+// ================================================================ Zanjir
+
+/// Smetadan faktgacha bo'lgan yo'l (TZ III.33).
+///
+/// Pul smetadan chiqib, ariza va xarid orqali omborga, u yerdan ishga
+/// o'tadi va tannarxga aylanadi. Har bosqich alohida modulda yozilgan —
+/// bu yerda ular bir qatorda, shuning uchun uzilish darhol ko'rinadi.
+fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
+    let lines = app.estimate_chain();
+    let totals = crate::checks::chain_totals(&lines);
+
+    ui.label(
+        RichText::new(t("es_chain_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    if lines.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("es_chain_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("es_chain_planned"),
+                money(totals.planned),
+                t("es_chain_planned_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("es_chain_purchased"),
+                money(totals.purchased),
+                t("es_chain_purchased_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("es_chain_actual"),
+                money(totals.actual),
+                &format!("{} {}", money(totals.earned), t("es_chain_earned")),
+                theme::text(),
+            ),
+            stat(
+                t("es_chain_diff"),
+                money(totals.diff),
+                t("es_chain_diff_hint"),
+                if totals.diff >= 0.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("es_chain_gaps"),
+                totals.gaps.to_string(),
+                t("es_chain_gaps_hint"),
+                if totals.gaps == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("es_chain_grid")
+                .num_columns(9)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 240.0, t("col_task"));
+                    head_r(ui, 80.0, t("col_progress"));
+                    head_r(ui, 140.0, t("es_chain_c_plan"));
+                    head_r(ui, 130.0, t("es_chain_c_request"));
+                    head_r(ui, 130.0, t("es_chain_c_purchase"));
+                    head_r(ui, 130.0, t("es_chain_c_issued"));
+                    head_r(ui, 140.0, t("es_chain_c_actual"));
+                    head_r(ui, 140.0, t("es_chain_c_diff"));
+                    head_l(ui, 120.0, "");
+                    ui.end_row();
+
+                    for l in &lines {
+                        let Some(task) = l.task_id.and_then(|id| app.task(id)) else {
+                            continue;
+                        };
+                        cell_l(
+                            ui,
+                            240.0,
+                            RichText::new(super::issues::truncate(
+                                &format!("{} {}", task.wbs, task.name),
+                                32,
+                            ))
+                            .size(12.5),
+                        );
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(format!("{:.0}%", l.progress))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        let cell = |ui: &mut egui::Ui, w: f32, v: f64| {
+                            cell_r(
+                                ui,
+                                w,
+                                if v == 0.0 {
+                                    RichText::new(t("dash")).color(theme::muted())
+                                } else {
+                                    RichText::new(money(v)).size(12.0)
+                                },
+                            );
+                        };
+                        cell(ui, 140.0, l.planned);
+                        cell(ui, 130.0, l.requested);
+                        cell(ui, 130.0, l.purchased);
+                        cell(ui, 130.0, l.issued);
+                        cell_r(
+                            ui,
+                            140.0,
+                            RichText::new(money(l.actual)).size(12.5).strong(),
+                        );
+                        cell_r(
+                            ui,
+                            140.0,
+                            RichText::new(money(l.diff))
+                                .size(12.5)
+                                .color(if l.diff >= 0.0 {
+                                    theme::ok()
+                                } else {
+                                    theme::danger()
+                                }),
+                        );
+                        cell_l(
+                            ui,
+                            120.0,
+                            if l.has_gap() {
+                                RichText::new(t("es_chain_gap"))
+                                    .size(11.0)
+                                    .color(theme::warn())
+                            } else {
+                                RichText::new("").size(11.0)
+                            },
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 // ================================================================ Tuzilish
@@ -980,4 +1145,12 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
             issues::issue_detail(ui, app, h - 24.0);
         });
     });
+}
+
+fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
+    cell_l(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
+}
+
+fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
+    cell_r(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
 }

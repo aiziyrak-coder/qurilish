@@ -6276,6 +6276,69 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|a| matches!(a, ContractAlert::ChangePending { .. })));
     }
 
+    /// TZ III.33: zanjir smetadan faktgacha bo'lgan yo'lni bir qatorga yig'adi.
+    #[test]
+    fn estimate_chain_links_plan_to_fact() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let lines = app.estimate_chain();
+        assert!(!lines.is_empty(), "zanjir bo'sh");
+
+        for l in &lines {
+            // Bo'sh qator zanjirga tushmasligi kerak.
+            assert!(
+                l.planned != 0.0 || l.requested != 0.0 || l.purchased != 0.0 || l.actual != 0.0,
+                "bo'sh qator zanjirda"
+            );
+            assert!(l.progress >= 0.0 && l.progress <= 100.0);
+            // Bajarilgan reja: reja × bajarilish ulushi.
+            assert!((l.earned - l.planned * l.progress / 100.0).abs() < 0.01);
+            // Farq: bajarilgan reja minus fakt.
+            assert!((l.diff - (l.earned - l.actual)).abs() < 0.01);
+        }
+
+        // Ortiqcha sarf kattalari oldinda.
+        for w in lines.windows(2) {
+            assert!(w[0].diff <= w[1].diff);
+        }
+
+        let totals = crate::checks::chain_totals(&lines);
+        assert!((totals.planned - lines.iter().map(|l| l.planned).sum::<f64>()).abs() < 0.01);
+        assert!((totals.diff - lines.iter().map(|l| l.diff).sum::<f64>()).abs() < 0.01);
+        assert_eq!(totals.gaps, lines.iter().filter(|l| l.has_gap()).count());
+    }
+
+    /// Zanjirdagi uzilish: xarid arizadan katta yoki chiqim kirimdan katta.
+    #[test]
+    fn chain_gap_is_detected() {
+        use crate::checks::ChainLine;
+
+        let line = |requested: f64, purchased: f64, received: f64, issued: f64| ChainLine {
+            task_id: Some(1),
+            planned: 100.0,
+            requested,
+            purchased,
+            received,
+            issued,
+            actual: 0.0,
+            progress: 0.0,
+            earned: 0.0,
+            diff: 0.0,
+        };
+
+        // Hammasi joyida.
+        assert!(!line(100.0, 90.0, 90.0, 80.0).has_gap());
+        // Xarid arizadan katta — ariza bosqichi hujjatsiz o'tgan.
+        assert!(line(50.0, 90.0, 90.0, 80.0).has_gap());
+        // Chiqim kirimdan katta — omborda yo'q material berilgan.
+        assert!(line(100.0, 90.0, 40.0, 80.0).has_gap());
+        // Teng qiymatlar uzilish emas.
+        assert!(!line(90.0, 90.0, 80.0, 80.0).has_gap());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

@@ -2843,6 +2843,34 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pf_move_to" => ("Qayerga", "Куда"),
         "pf_move_value" => ("Qiymati", "Стоимость"),
 
+        // ---------- III.33. Smeta zanjiri ----------
+        "tab_chain" => ("Zanjir", "Цепочка"),
+        "es_chain_hint" => (
+            "Pul smetadan chiqib, ariza va xarid orqali omborga, u yerdan ishga o'tadi. Har bosqich bir qatorda — uzilish darhol ko'rinadi.",
+            "Деньги идут из сметы через заявку и закупку на склад, оттуда в работу. Все этапы в одной строке — разрыв виден сразу.",
+        ),
+        "es_chain_empty" => (
+            "Zanjir uchun ma'lumot yetarli emas",
+            "Недостаточно данных для цепочки",
+        ),
+        "es_chain_planned" => ("Smeta bo'yicha", "По смете"),
+        "es_chain_planned_hint" => ("ishlarga bog'langan pozitsiyalar", "позиции, привязанные к работам"),
+        "es_chain_purchased" => ("Xarid qilingan", "Закуплено"),
+        "es_chain_purchased_hint" => ("ishlarga bog'langan xaridlar", "закупки по работам"),
+        "es_chain_actual" => ("Haqiqiy tannarx", "Фактическая себестоимость"),
+        "es_chain_earned" => ("bajarilganiga to'g'ri keladi", "приходится на выполненное"),
+        "es_chain_diff" => ("Farq", "Разница"),
+        "es_chain_diff_hint" => ("bajarilgan reja minus fakt", "освоенный план минус факт"),
+        "es_chain_gaps" => ("Zanjir uzilishi", "Разрывов в цепочке"),
+        "es_chain_gaps_hint" => ("bosqich hujjatsiz o'tgan", "этап прошёл без документа"),
+        "es_chain_c_plan" => ("Reja", "План"),
+        "es_chain_c_request" => ("Ariza", "Заявка"),
+        "es_chain_c_purchase" => ("Xarid", "Закупка"),
+        "es_chain_c_issued" => ("Ishga berilgan", "Выдано в работу"),
+        "es_chain_c_actual" => ("Fakt", "Факт"),
+        "es_chain_c_diff" => ("Farq", "Разница"),
+        "es_chain_gap" => ("uzilish bor", "есть разрыв"),
+
         // ---------- VIII. Kabinet: ogohlantirish, xarid, izoh ----------
         "cl_alerts" => ("Shartnoma bo'yicha ogohlantirishlar", "Предупреждения по договорам"),
         "cl_a_deviation" => ("qiymat dastlabkidan chetga chiqdi:", "стоимость отклонилась от первоначальной на"),

@@ -6352,3 +6352,165 @@ pub fn contract_alerts(
 
     out
 }
+
+// ================================================================ III.24-25, 33. Smeta zanjiri
+
+/// Smeta pozitsiyasidan haqiqiy sarfgacha bo'lgan yo'l (TZ III.24-25, 27, 33).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChainLine {
+    /// Qaysi ish. Smeta pozitsiyasi ishga bog'lanmagan bo'lsa — `None`.
+    pub task_id: Option<i64>,
+    /// Smetadagi reja qiymati.
+    pub planned: f64,
+    /// Ariza berilgan summa.
+    pub requested: f64,
+    /// Xarid qilingan summa.
+    pub purchased: f64,
+    /// Omborga kirim qilingan qiymat.
+    pub received: f64,
+    /// Ishga berilgan material qiymati.
+    pub issued: f64,
+    /// Haqiqiy tannarx: ish haqi, material va texnika.
+    pub actual: f64,
+    /// Bajarilish foizi.
+    pub progress: f64,
+    /// Bajarilgan ulushga to'g'ri keladigan reja.
+    pub earned: f64,
+    /// Farq: reja minus fakt. Manfiy — ortiqcha sarf.
+    pub diff: f64,
+}
+
+impl ChainLine {
+    /// Zanjirning har bosqichida qiymat kamaymasligi kerak: ariza
+    /// xariddan kam bo'lsa — biror bosqich hujjatsiz o'tgan.
+    pub fn has_gap(&self) -> bool {
+        self.requested + 0.01 < self.purchased || self.received + 0.01 < self.issued
+    }
+}
+
+/// Smetadan faktgacha bo'lgan zanjirni ishlar kesimida yig'adi.
+///
+/// Bu **yakuniy arxitektura** (TZ III.33): pul smetadan chiqib, ariza va
+/// xarid orqali omborga, u yerdan ishga o'tadi va tannarxga aylanadi.
+/// Har bosqich alohida modulda yozilgan — bu yerda ular bir qatorda.
+#[allow(clippy::too_many_arguments)]
+pub fn estimate_chain(
+    items: &[EstimateItem],
+    tasks: &[Task],
+    requests: &[Request],
+    purchases: &[Purchase],
+    moves: &[StockMove],
+    materials: &[Material],
+    costs: &[TaskCost],
+) -> Vec<ChainLine> {
+    let mut out: Vec<ChainLine> = Vec::new();
+
+    for t in tasks {
+        // Smetada shu ishga bog'langan pozitsiyalar.
+        let planned: f64 = items
+            .iter()
+            .filter(|i| i.task_id == Some(t.id))
+            .map(|i| i.computed())
+            .sum();
+        // Ariza va xaridlar ishga bog'langanlari.
+        let requested: f64 = requests
+            .iter()
+            .filter(|r| r.task_id == Some(t.id))
+            .map(|r| {
+                let price = r
+                    .material_id
+                    .and_then(|id| materials.iter().find(|m| m.id == id))
+                    .map(|m| m.price)
+                    .unwrap_or(0.0);
+                r.qty * price
+            })
+            .sum();
+        let purchased: f64 = purchases
+            .iter()
+            .filter(|p| p.task_id == Some(t.id))
+            .map(|p| p.amount())
+            .sum();
+        // Omborga kirim va ishga chiqim.
+        let received: f64 = moves
+            .iter()
+            .filter(|m| m.task_id == Some(t.id) && matches!(m.kind, MoveKind::In))
+            .map(|m| m.qty * m.price)
+            .sum();
+        let issued: f64 = moves
+            .iter()
+            .filter(|m| m.task_id == Some(t.id) && matches!(m.kind, MoveKind::Out))
+            .map(|m| {
+                let price = if m.price > 0.0 {
+                    m.price
+                } else {
+                    materials
+                        .iter()
+                        .find(|x| x.id == m.material_id)
+                        .map(|x| x.price)
+                        .unwrap_or(0.0)
+                };
+                m.qty * price
+            })
+            .sum();
+        let actual = costs
+            .iter()
+            .find(|c| c.task_id == t.id)
+            .map(|c| c.total)
+            .unwrap_or(0.0);
+
+        // Hech bir bosqichda yozuv bo'lmasa — qator ham kerak emas.
+        if planned == 0.0 && requested == 0.0 && purchased == 0.0 && actual == 0.0 {
+            continue;
+        }
+
+        let progress = t.progress.clamp(0.0, 100.0);
+        let earned = planned * progress / 100.0;
+        out.push(ChainLine {
+            task_id: Some(t.id),
+            planned,
+            requested,
+            purchased,
+            received,
+            issued,
+            actual,
+            progress,
+            earned,
+            diff: earned - actual,
+        });
+    }
+
+    // Ortiqcha sarf kattalari oldinda: e'tibor shu yerga kerak.
+    out.sort_by(|a, b| a.diff.total_cmp(&b.diff));
+    out
+}
+
+/// Zanjir bo'yicha umumiy yakun.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ChainTotals {
+    pub planned: f64,
+    pub requested: f64,
+    pub purchased: f64,
+    pub received: f64,
+    pub issued: f64,
+    pub actual: f64,
+    pub earned: f64,
+    pub diff: f64,
+    /// Zanjirida uzilish bor qatorlar.
+    pub gaps: usize,
+}
+
+/// Zanjir yakunini yig'adi.
+pub fn chain_totals(lines: &[ChainLine]) -> ChainTotals {
+    let sum = |f: fn(&ChainLine) -> f64| lines.iter().map(f).sum();
+    ChainTotals {
+        planned: sum(|l| l.planned),
+        requested: sum(|l| l.requested),
+        purchased: sum(|l| l.purchased),
+        received: sum(|l| l.received),
+        issued: sum(|l| l.issued),
+        actual: sum(|l| l.actual),
+        earned: sum(|l| l.earned),
+        diff: sum(|l| l.diff),
+        gaps: lines.iter().filter(|l| l.has_gap()).count(),
+    }
+}

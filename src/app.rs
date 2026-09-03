@@ -1764,6 +1764,19 @@ impl App {
         checks::tool_status(&self.tools, &self.tool_issues, self.today)
     }
 
+    /// Smetadan faktgacha bo'lgan zanjir (TZ III.33).
+    pub fn estimate_chain(&self) -> Vec<checks::ChainLine> {
+        checks::estimate_chain(
+            &self.estimate_items,
+            &self.tasks,
+            &self.requests,
+            &self.purchases,
+            &self.stock_moves,
+            &self.materials,
+            &self.task_costs(),
+        )
+    }
+
     /// Xavfsizlik bo'yicha ogohlantirishlar (TZ XV.36).
     pub fn safety_risks(&self) -> Vec<checks::SafetyRisk> {
         checks::safety_risks(
