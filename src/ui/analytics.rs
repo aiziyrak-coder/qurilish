@@ -73,6 +73,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (4, t("an_tab_scenario")),
             (5, t("an_tab_losses")),
             (6, t("an_tab_cuts")),
+            (7, t("an_tab_why")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -113,6 +114,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
     if tab == 6 {
         cuts_tab(ui, app);
+        return;
+    }
+    if tab == 7 {
+        why_tab(ui, app);
         return;
     }
 
@@ -853,6 +858,251 @@ fn scenario_tab(ui: &mut egui::Ui, app: &mut App) {
             .size(11.0)
             .color(theme::muted()),
     );
+}
+
+// ================================================================ Nega va keyin nima
+
+/// «Nega kechikdi» va «keyin nima bo'ladi» (TZ XVII.3, 7, 10).
+///
+/// Ikki savol bir ekranda turadi, chunki ular bog'liq: bugungi sabab
+/// ertangi risk bo'lib qaytadi. Har ikkalasida ham son o'ylab topilmaydi
+/// — sabab bazadagi yozuvdan, prognoz esa bugungi sur'atdan chiqadi.
+fn why_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let delays = app.delay_causes();
+    let risks = app.risk_forecast();
+    let known = delays.iter().filter(|d| d.cause.actionable()).count();
+    let total_cost: f64 = delays.iter().map(|d| d.cost()).sum();
+    let mut go: Option<Screen> = None;
+
+    ui.label(
+        RichText::new(t("an_why_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("an_why_delays"),
+                delays.len().to_string(),
+                t("an_why_delays_hint"),
+                if delays.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("an_why_known"),
+                format!("{known} / {}", delays.len()),
+                t("an_why_known_hint"),
+                if known == delays.len() {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("an_why_cost"),
+                money(total_cost),
+                t("an_why_cost_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("an_why_risks"),
+                risks.iter().filter(|r| r.high()).count().to_string(),
+                t("an_why_risks_hint"),
+                if risks.iter().any(|r| r.high()) {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                },
+            ),
+        ],
+    );
+    ui.add_space(14.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Nega (TZ XVII.7) ----------
+            ui.label(RichText::new(t("an_why_title")).size(14.0).strong());
+            ui.add_space(6.0);
+            if delays.is_empty() {
+                ui.label(
+                    RichText::new(t("an_why_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            } else {
+                egui::Grid::new("an_why")
+                    .num_columns(5)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 260.0, t("col_task"));
+                        head_r(ui, 90.0, t("an_why_days"));
+                        head_l(ui, 320.0, t("an_why_cause"));
+                        head_r(ui, 140.0, t("an_why_price"));
+                        head_l(ui, 90.0, "");
+                        ui.end_row();
+
+                        for d in &delays {
+                            let name = app
+                                .task(d.task_id)
+                                .map(|x| format!("{} {}", x.wbs, x.name))
+                                .unwrap_or_default();
+                            cell_l(
+                                ui,
+                                260.0,
+                                RichText::new(super::issues::truncate(&name, 34)).size(12.5),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(d.days.to_string())
+                                    .size(12.5)
+                                    .color(theme::danger()),
+                            );
+                            cell_l(
+                                ui,
+                                320.0,
+                                RichText::new(cause_text(&d.cause)).size(12.0).color(
+                                    if d.cause.actionable() {
+                                        theme::text()
+                                    } else {
+                                        theme::muted()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                140.0,
+                                RichText::new(if d.daily_cost > 0.0 {
+                                    money(d.cost())
+                                } else {
+                                    t("an_why_unknown_cost").to_string()
+                                })
+                                .size(12.0)
+                                .color(theme::muted()),
+                            );
+                            if d.cause.actionable() {
+                                if ui.small_button(t("an_open")).clicked() {
+                                    go = Some(d.cause.screen());
+                                }
+                            } else {
+                                cell_l(ui, 90.0, RichText::new(""));
+                            }
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            // ---------- Keyin nima bo'ladi (TZ XVII.10) ----------
+            ui.add_space(18.0);
+            ui.label(RichText::new(t("an_risk_title")).size(14.0).strong());
+            ui.label(
+                RichText::new(t("an_risk_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if risks.is_empty() {
+                ui.label(
+                    RichText::new(t("an_risk_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for r in &risks {
+                ui.horizontal(|ui| {
+                    // Og'irlik chizig'i: son o'rniga ko'z bilan ko'rinadi.
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(60.0, 8.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 2.0, theme::line());
+                    let w = rect.width() * (r.weight / 100.0) as f32;
+                    ui.painter().rect_filled(
+                        egui::Rect::from_min_size(rect.min, egui::vec2(w, rect.height())),
+                        2.0,
+                        if r.high() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        },
+                    );
+                    ui.label(RichText::new(risk_text(r)).size(12.0).color(if r.high() {
+                        theme::text()
+                    } else {
+                        theme::muted()
+                    }));
+                    if let Some(when) = r.when {
+                        ui.label(
+                            RichText::new(when.format("%d.%m.%Y").to_string())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                    }
+                    if ui.small_button(t("an_open")).clicked() {
+                        go = Some(r.screen());
+                    }
+                });
+            }
+            ui.add_space(20.0);
+        });
+
+    if let Some(s) = go {
+        app.screen = s;
+    }
+}
+
+/// Kechikish sababini gapga aylantiradi.
+fn cause_text(c: &crate::checks::DelayCause) -> String {
+    use crate::checks::DelayCause as C;
+    match c {
+        C::MaterialShort { material, short } => format!(
+            "{}: {} ({})",
+            t("dc_material"),
+            super::issues::truncate(material, 24),
+            super::materials::trim_num(*short)
+        ),
+        C::NoCrew => t("dc_no_crew").to_string(),
+        C::QualityBlock { defects } => format!("{} ({defects})", t("dc_quality")),
+        C::WaitingDocs { missing } => format!("{} ({missing})", t("dc_docs")),
+        C::MachineDown { machine } => format!(
+            "{}: {}",
+            t("dc_machine"),
+            super::issues::truncate(machine, 24)
+        ),
+        C::PredecessorLate { task, days } => format!(
+            "{}: {} ({days} {})",
+            t("dc_predecessor"),
+            super::issues::truncate(task, 26),
+            t("days")
+        ),
+        C::Unknown => t("dc_unknown").to_string(),
+    }
+}
+
+/// Prognoz qatorini gapga aylantiradi.
+fn risk_text(r: &crate::checks::RiskLine) -> String {
+    use crate::checks::RiskKind as K;
+    match &r.kind {
+        K::ScheduleSlip { days } => format!("{}: {days} {}", t("rk_schedule"), t("days")),
+        K::StockOut { material, days } => format!(
+            "{}: {} ({days} {})",
+            t("rk_stock"),
+            super::issues::truncate(material, 26),
+            t("days")
+        ),
+        K::PendingMoney { amount } => format!("{}: {}", t("rk_pending_money"), money(*amount)),
+        K::QualityDrop { open, overdue } => {
+            format!("{}: {open} / {overdue}", t("rk_quality"))
+        }
+        K::SafetyOpen { count } => format!("{}: {count}", t("rk_safety")),
+    }
 }
 
 // ================================================================ Kesimlar

@@ -10787,3 +10787,337 @@ pub fn author_supervision(
     out.sort_by_key(|a| !a.late());
     out
 }
+
+// ================= XVII.3, 7, 10. Sabab va prognoz =================
+
+/// Ishning kechikish sababi (TZ XVII.7).
+///
+/// Sabab **taxmin qilinmaydi**: u faqat bazadagi yozuvdan chiqadi. Hech
+/// bir yozuv sababni ko'rsatmasa — `Unknown`, va ekranda shu ochiq
+/// yoziladi. O'ylab topilgan sabab noto'g'ri qarorga olib keladi.
+#[derive(Debug, Clone, PartialEq)]
+pub enum DelayCause {
+    /// Material yetishmaydi.
+    MaterialShort { material: String, short: f64 },
+    /// Ishga hech kim yozilmagan.
+    NoCrew,
+    /// Sifat to'sig'i: bartaraf etilmagan nuqson.
+    QualityBlock { defects: usize },
+    /// Talab qilinadigan hujjat imzolanmagan.
+    WaitingDocs { missing: usize },
+    /// Texnika ta'mirda.
+    MachineDown { machine: String },
+    /// Oldingi ish kechikkan.
+    PredecessorLate { task: String, days: i64 },
+    /// Yozuvlardan sabab topilmadi.
+    Unknown,
+}
+
+impl DelayCause {
+    /// Sabab bartaraf etilishi mumkinmi — ya'ni aniq amal bormi.
+    pub fn actionable(&self) -> bool {
+        !matches!(self, DelayCause::Unknown)
+    }
+
+    /// Sabab qaysi ekranda yopiladi.
+    pub fn screen(&self) -> crate::app::Screen {
+        use crate::app::Screen as S;
+        match self {
+            DelayCause::MaterialShort { .. } => S::Warehouse,
+            DelayCause::NoCrew => S::Timesheet,
+            DelayCause::QualityBlock { .. } => S::Quality,
+            DelayCause::WaitingDocs { .. } => S::ExecDocs,
+            DelayCause::MachineDown { .. } => S::Machines,
+            DelayCause::PredecessorLate { .. } | DelayCause::Unknown => S::Gantt,
+        }
+    }
+}
+
+/// Kechikkan ish va uning sababi.
+#[derive(Debug, Clone)]
+pub struct TaskDelay {
+    pub task_id: i64,
+    /// Necha kun kechikkan.
+    pub days: i64,
+    pub cause: DelayCause,
+    /// Kechikishning kunlik narxi: shu ishga yozilgan brigadaning
+    /// bir kunlik ish haqi. Brigada yozilmagan bo'lsa — nol va bu
+    /// «narx noma'lum» degani, «nol» degani emas.
+    pub daily_cost: f64,
+}
+
+impl TaskDelay {
+    /// Butun kechikishning taxminiy narxi.
+    pub fn cost(&self) -> f64 {
+        self.daily_cost * self.days.max(0) as f64
+    }
+}
+
+/// Kechikish sababini topish uchun manba.
+pub struct DelayCtx<'a> {
+    pub tasks: &'a [Task],
+    pub links: &'a [crate::model::Link],
+    pub overdue: &'a [i64],
+    pub readiness: &'a [Readiness],
+    pub materials: &'a [Material],
+    pub blocks: &'a [TaskBlock],
+    pub required: &'a [RequiredDoc],
+    pub timesheet: &'a [TimesheetEntry],
+    pub workers: &'a [Worker],
+    pub machines: &'a [Machine],
+    pub machine_logs: &'a [MachineLog],
+    pub today: NaiveDate,
+}
+
+/// TZ XVII.7: nega kechikdi degan savolga javob.
+///
+/// Sabablar **tartib bilan** tekshiriladi: avval eng aniqlari (material
+/// yetishmasligi, sifat to'sig'i), keyin umumiylari. Birinchi mos kelgani
+/// olinadi — bir ishga beshta sabab yozib qo'yish javob emas.
+pub fn delay_causes(ctx: &DelayCtx) -> Vec<TaskDelay> {
+    let mut out = Vec::new();
+
+    for id in ctx.overdue {
+        let Some(task) = ctx.tasks.iter().find(|t| t.id == *id) else {
+            continue;
+        };
+        let plan_end = task.plan_start + chrono::Duration::days(task.duration.max(0));
+        let days = (ctx.today - plan_end).num_days().max(0);
+
+        // 1. Material yetishmaydi — eng aniq va eng tez tuzatiladigan sabab.
+        let cause = if let Some(r) = ctx.readiness.iter().find(|r| r.task_id == *id) {
+            DelayCause::MaterialShort {
+                material: ctx
+                    .materials
+                    .iter()
+                    .find(|m| m.id == r.material_id)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_default(),
+                short: r.short,
+            }
+        }
+        // 2. Sifat to'sig'i.
+        else if let Some(b) = ctx
+            .blocks
+            .iter()
+            .find(|b| b.task_id == *id && b.open_defects > 0)
+        {
+            DelayCause::QualityBlock {
+                defects: b.open_defects,
+            }
+        }
+        // 3. Hujjat kutilyapti.
+        else if ctx
+            .required
+            .iter()
+            .filter(|r| r.task_id == *id && !r.signed)
+            .count()
+            > 0
+        {
+            DelayCause::WaitingDocs {
+                missing: ctx
+                    .required
+                    .iter()
+                    .filter(|r| r.task_id == *id && !r.signed)
+                    .count(),
+            }
+        }
+        // 4. Ishga hech kim yozilmagan.
+        else if !ctx
+            .timesheet
+            .iter()
+            .any(|e| e.task_id == Some(*id) && e.hours > 0.0)
+        {
+            DelayCause::NoCrew
+        }
+        // 5. Texnika ta'mirda.
+        else if let Some(m) = ctx
+            .machine_logs
+            .iter()
+            .filter(|l| l.task_id == Some(*id))
+            .filter_map(|l| ctx.machines.iter().find(|m| m.id == l.machine_id))
+            .find(|m| m.status == MachineStatus::Repair)
+        {
+            DelayCause::MachineDown {
+                machine: m.name.clone(),
+            }
+        }
+        // 6. Oldingi ish kechikkan.
+        else if let Some((pred, pred_days)) = ctx
+            .links
+            .iter()
+            .filter(|l| l.succ == *id)
+            .filter_map(|l| ctx.tasks.iter().find(|t| t.id == l.pred))
+            .filter(|p| p.progress < 99.999 && p.fact_end.is_none())
+            .map(|p| {
+                let end = p.plan_start + chrono::Duration::days(p.duration.max(0));
+                (p, (ctx.today - end).num_days().max(0))
+            })
+            .max_by_key(|(_, d)| *d)
+        {
+            DelayCause::PredecessorLate {
+                task: format!("{} {}", pred.wbs, pred.name),
+                days: pred_days,
+            }
+        } else {
+            DelayCause::Unknown
+        };
+
+        // Kunlik narx: shu ishga yozilgan odamlarning kunlik haqi.
+        let mut ids: Vec<i64> = ctx
+            .timesheet
+            .iter()
+            .filter(|e| e.task_id == Some(*id) && e.hours > 0.0)
+            .map(|e| e.worker_id)
+            .collect();
+        ids.sort_unstable();
+        ids.dedup();
+        let daily_cost: f64 = ids
+            .iter()
+            .filter_map(|w| ctx.workers.iter().find(|x| x.id == *w))
+            .map(|w| w.hourly_rate * 8.0)
+            .sum();
+
+        out.push(TaskDelay {
+            task_id: *id,
+            days,
+            cause,
+            daily_cost,
+        });
+    }
+
+    // Eng qimmat kechikish oldinda; narx noma'lum bo'lsa kun bo'yicha.
+    out.sort_by(|a, b| b.cost().total_cmp(&a.cost()).then(b.days.cmp(&a.days)));
+    out
+}
+
+/// Prognoz turi (TZ XVII.10).
+#[derive(Debug, Clone, PartialEq)]
+pub enum RiskKind {
+    /// Muddat siljiydi.
+    ScheduleSlip { days: i64 },
+    /// Material tugaydi.
+    StockOut { material: String, days: i64 },
+    /// Kelishilmagan o'zgarishlar summasi byudjetga tushadi.
+    PendingMoney { amount: f64 },
+    /// Sifat balli pasaymoqda.
+    QualityDrop { open: usize, overdue: usize },
+    /// Xavfsizlik holatlari yopilmayapti.
+    SafetyOpen { count: usize },
+}
+
+/// Bitta prognoz qatori.
+#[derive(Debug, Clone)]
+pub struct RiskLine {
+    pub kind: RiskKind,
+    /// Qachon yuz berishi kutilyapti. Sana noma'lum bo'lsa — `None`.
+    pub when: Option<NaiveDate>,
+    /// Qanchalik jiddiy: 0-100.
+    pub weight: f64,
+}
+
+impl RiskLine {
+    /// E'tibor talab qiladigan daraja.
+    pub fn high(&self) -> bool {
+        self.weight >= 60.0
+    }
+
+    /// Qaysi ekranda ko'riladi.
+    pub fn screen(&self) -> crate::app::Screen {
+        use crate::app::Screen as S;
+        match self.kind {
+            RiskKind::ScheduleSlip { .. } => S::Gantt,
+            RiskKind::StockOut { .. } => S::Warehouse,
+            RiskKind::PendingMoney { .. } => S::Contracts,
+            RiskKind::QualityDrop { .. } => S::Quality,
+            RiskKind::SafetyOpen { .. } => S::Safety,
+        }
+    }
+}
+
+/// TZ XVII.10: keyin nima bo'lishi mumkin.
+///
+/// Prognoz **bugungi sur'atga** tayanadi va uni ochiq aytadi: bu bashorat
+/// emas, hozirgi holat davom etsa nima bo'lishining hisobi. Sur'at
+/// o'zgarsa natija ham o'zgaradi.
+pub fn risk_forecast(
+    delay_days: i64,
+    plan: &[PurchasePlanLine],
+    materials: &[Material],
+    changes: &[ContractChange],
+    quality: &QualityWeek,
+    safety_open: usize,
+    today: NaiveDate,
+) -> Vec<RiskLine> {
+    let mut out = Vec::new();
+
+    if delay_days > 0 {
+        out.push(RiskLine {
+            kind: RiskKind::ScheduleSlip { days: delay_days },
+            when: None,
+            // Har kun kechikish uch ball: 20 kun — 60, ya'ni yuqori daraja.
+            weight: (delay_days as f64 * 3.0).clamp(0.0, 100.0),
+        });
+    }
+
+    // Materiallar: sotib olish kerak bo'lganlari, eng yaqin muddatlisi
+    // oldinda. Muddat ko'rsatilmagan qator prognozga tushmaydi — «qachon»
+    // degan savolga javob bo'lmasa, bu prognoz emas.
+    for line in plan.iter().filter(|l| l.to_buy > 0.0) {
+        let Some(need_by) = line.need_by else {
+            continue;
+        };
+        let days = (need_by - today).num_days().max(0);
+        out.push(RiskLine {
+            kind: RiskKind::StockOut {
+                material: materials
+                    .iter()
+                    .find(|m| m.id == line.material_id)
+                    .map(|m| m.name.clone())
+                    .unwrap_or_default(),
+                days,
+            },
+            when: Some(need_by),
+            // Yaqinroq bo'lsa og'irroq: 0 kun — 100, 30 kun — 0.
+            weight: ((30 - days.min(30)) as f64 * 100.0 / 30.0).clamp(0.0, 100.0),
+        });
+    }
+
+    let pending: f64 = changes
+        .iter()
+        .filter(|c| matches!(c.status, ChangeStatus::Draft | ChangeStatus::Sent))
+        .map(|c| c.amount)
+        .sum();
+    if pending > 0.0 {
+        out.push(RiskLine {
+            kind: RiskKind::PendingMoney { amount: pending },
+            when: None,
+            weight: 50.0,
+        });
+    }
+
+    if quality.defects_open > 0 {
+        out.push(RiskLine {
+            kind: RiskKind::QualityDrop {
+                open: quality.defects_open,
+                overdue: quality.overdue,
+            },
+            when: None,
+            // Muddati o'tgan nuqson og'irroq: har biri 20 ball.
+            weight: (quality.overdue as f64 * 20.0 + quality.defects_open as f64 * 5.0)
+                .clamp(0.0, 100.0),
+        });
+    }
+
+    if safety_open > 0 {
+        out.push(RiskLine {
+            kind: RiskKind::SafetyOpen { count: safety_open },
+            when: None,
+            weight: (safety_open as f64 * 25.0).clamp(0.0, 100.0),
+        });
+    }
+
+    // Og'irlari oldinda.
+    out.sort_by(|a, b| b.weight.total_cmp(&a.weight));
+    out
+}

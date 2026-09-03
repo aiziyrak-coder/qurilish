@@ -34,12 +34,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 33 | 6 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
 | XVI. Mashinalar | 50 | 42 | 6 | 2 | 2 |
-| XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
+| XVII. AI analitika | 51 | 46 | 5 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **535** | **119** | **46** | **46** |
+| **Jami** | **700** | **541** | **113** | **46** | **46** |
 
-Ya'ni **~76 % to'liq**, **~17 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~77 % to'liq**, **~16 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -729,16 +729,16 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 4. Obyektlar bo'yicha analitika — *«Obyektlar» ekrani: barcha obyektlar yonma-yon, e'tibor talab qiladiganlari oldinda*
 - [x] 5. Plan-fakt
 - [x] 6. GPR tahlili
-- [~] 7. AI kechikish sababini aniqlashi
+- [x] 7. AI kechikish sababini aniqlashi — *sabab yozuvdan chiqadi, taxmin qilinmaydi*
 - [x] 8. Obyekt tugash prognozi
 - [x] 9. Kritik yo'l
-- [~] 10. Risklar prognozi
+- [x] 10. Risklar prognozi — *bugungi sur'atga tayanadi*
 - [x] 11. Moliyaviy analitika
 - [x] 12. Tannarx tahlili — *ish haqi, material, texnika*
 - [x] 13. Yakuniy tannarx prognozi — *bugungi tannarx ÷ bajarilish ulushi; hisob ochiq yozilgan*
 - [x] 14. Foyda prognozi — *«Prognoz» tabi: yakuniy tannarx, foyda va marja*
 - [x] 15. Materiallar tahlili
-- [~] 16. Xaridlar tahlili
+- [x] 16. Xaridlar tahlili — *yetkazib beruvchilar kesimi va markazlashtirish*
 - [x] 17. Tejashni izlash — *«Yo'qotishlar» tabi*
 - [x] 18. Ombor tahlili
 - [x] 19. Xodimlar tahlili
@@ -751,7 +751,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. Unumdorlik tahlili — *bir birlik ish: soat va pul, o'rtacha bilan solishtirish*
 - [~] 27. Benchmarking — *ishlar o'rtacha bilan solishtiriladi; obyektlar orasida hali yo'q*
 - [~] 28. Loyihalar tahlili
-- [~] 29. Smeta tahlili
+- [x] 29. Smeta tahlili — *chuqur tekshiruv va zanjir*
 - [x] 30. **Pul oqimlari tahlili** — *oylar kesimida fakt va reja*
 - [x] 31. **Kassa uzilishini rejalashtirish** — *birinchi manfiy oy va summa*
 - [x] 32. Debitorlik qarzi tahlili — *to'lov jadvalidan: qoldiq va muddati o'tgani*
@@ -761,7 +761,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 36. «Nima bo'ladi, agar?» — *muddat, material narxi va ish haqi bo'yicha ssenariy*
 - [x] 37. **Kunlik xulosa** — *faqat bugungi muddat, yetkazish, hodisa*
 - [x] 38. **AI Weekly Management Report**
-- [~] 39. AI sonlarni tushuntirishi — *fakt/hisob/tavsiya*
+- [x] 39. AI sonlarni tushuntirishi — *fakt / hisob / tavsiya va sabab*
 - [x] 40. Ogohlantirishlar tizimi
 - [x] 41. Imkoniyatlarni topish — *har biri pulda o'lchanadi va manba ekraniga bog'langan*
 - [~] 42. **Qarorlar markazi**
@@ -769,7 +769,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 44. Yashirin yo'qotishlar — *ortiqcha zaxira, bo'sh texnika, normadan sarf, tanlanmagan tejash*
 - [x] 45. Chetlanishlar tahlili
 - [x] 46. Yagona AI chat — *o'n uch savol, har biri manba ekraniga bog'langan*
-- [~] 47. Darajalar bo'yicha analitika — *ko'rsatkich → bo'lim*
+- [x] 47. Darajalar bo'yicha analitika — *ko'rsatkich → sabab → ekran*
 - [x] 48. **Drill-down** — *kartochka, topilma va oqim qatoridan bo'limga*
 - [x] 49. **AI Executive Score** — *olti ko'rsatkich, vaznlangan*
 - [~] 50. XVII ning bosh arxitekturasi

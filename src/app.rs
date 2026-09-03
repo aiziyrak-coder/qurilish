@@ -415,6 +415,9 @@ const STAFF_HORIZON: i64 = 30;
 /// Ish grafigi shuncha kun ortga qarab tekshiriladi (TZ XIII.12).
 const SCHEDULE_DAYS: i64 = 30;
 
+/// Xarid rejasi shuncha kun oldinga qaraydi (TZ X.6, XVII.10).
+const PLAN_HORIZON: i64 = 45;
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -2265,6 +2268,57 @@ impl App {
             &self.contract_changes,
             &self.documents,
             &self.inspections,
+            self.today,
+        )
+    }
+
+    /// Kechikish sabablari (TZ XVII.7).
+    pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
+        checks::delay_causes(&checks::DelayCtx {
+            tasks: &self.tasks,
+            links: &self.links,
+            overdue: &self.progress.overdue,
+            readiness: &self.readiness(),
+            materials: &self.materials,
+            blocks: &self.task_blocks(),
+            required: &checks::required_docs(&self.tasks, &self.exec_docs, false),
+            timesheet: &self.timesheet,
+            workers: &self.workers,
+            machines: &self.machines,
+            machine_logs: &self.machine_logs,
+            today: self.today,
+        })
+    }
+
+    /// Risklar prognozi (TZ XVII.10).
+    pub fn risk_forecast(&self) -> Vec<checks::RiskLine> {
+        let plan = checks::purchase_plan(
+            &self.materials,
+            &self.stock(),
+            &self.purchases,
+            &self.requests,
+            &self.material_norms,
+            &self.tasks,
+            self.today,
+            PLAN_HORIZON,
+        );
+        let safety_open = self
+            .safety
+            .iter()
+            .filter(|s| {
+                matches!(
+                    s.status,
+                    crate::domain::IssueStatus::Open | crate::domain::IssueStatus::InWork
+                )
+            })
+            .count();
+        checks::risk_forecast(
+            self.progress.delay_days,
+            &plan,
+            &self.materials,
+            &self.contract_changes,
+            &self.quality_week(),
+            safety_open,
             self.today,
         )
     }

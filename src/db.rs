@@ -9733,6 +9733,155 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(!found.is_empty(), "namunada e'tiroz umuman yo'q");
     }
 
+    /// TZ XVII.7: sabab faqat yozuvdan chiqadi va bir ishga bitta sabab
+    /// yoziladi — beshta sabab javob emas.
+    #[test]
+    fn delay_cause_comes_from_records() {
+        use crate::checks::DelayCause as C;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let delays = app.delay_causes();
+        assert_eq!(delays.len(), app.progress.overdue.len());
+
+        for d in &delays {
+            assert!(app.progress.overdue.contains(&d.task_id));
+            assert!(d.days >= 0);
+            assert!((d.cost() - d.daily_cost * d.days as f64).abs() < 0.01);
+
+            match &d.cause {
+                C::MaterialShort { short, .. } => {
+                    assert!(*short > 0.0);
+                    assert!(app.readiness().iter().any(|r| r.task_id == d.task_id));
+                }
+                C::QualityBlock { defects } => {
+                    assert!(*defects > 0);
+                    assert!(app
+                        .task_blocks()
+                        .iter()
+                        .any(|b| b.task_id == d.task_id && b.open_defects == *defects));
+                }
+                C::WaitingDocs { missing } => assert!(*missing > 0),
+                C::NoCrew => {
+                    assert!(!app
+                        .timesheet
+                        .iter()
+                        .any(|e| e.task_id == Some(d.task_id) && e.hours > 0.0));
+                }
+                C::PredecessorLate { days, .. } => assert!(*days >= 0),
+                C::MachineDown { machine } => assert!(!machine.is_empty()),
+                // Noma'lum sabab ham halol javob: o'ylab topilmaydi.
+                C::Unknown => assert!(!d.cause.actionable()),
+            }
+        }
+
+        // Eng qimmat kechikish oldinda.
+        for w in delays.windows(2) {
+            assert!(w[0].cost() >= w[1].cost() - 0.01);
+        }
+    }
+
+    /// TZ XVII.10: prognoz og'irligi qoidaga mos va og'irlari oldinda.
+    #[test]
+    fn risk_forecast_is_weighted() {
+        use crate::checks::{risk_forecast, QualityWeek, RiskKind as K};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let quiet = QualityWeek {
+            from: today - chrono::Duration::days(7),
+            to: today,
+            ..Default::default()
+        };
+
+        // Hech narsa yo'q — prognoz bo'sh.
+        assert!(risk_forecast(0, &[], &[], &[], &quiet, 0, today).is_empty());
+
+        // 20 kun kechikish — 60 ball, ya'ni yuqori daraja.
+        let out = risk_forecast(20, &[], &[], &[], &quiet, 0, today);
+        let slip = out
+            .iter()
+            .find(|r| matches!(r.kind, K::ScheduleSlip { .. }))
+            .expect("muddat riski yo'q");
+        assert!((slip.weight - 60.0).abs() < 0.001);
+        assert!(slip.high());
+
+        // Nuqsonlar: muddati o'tgani og'irroq.
+        let bad = QualityWeek {
+            defects_open: 4,
+            overdue: 3,
+            ..quiet.clone()
+        };
+        let out = risk_forecast(0, &[], &[], &[], &bad, 0, today);
+        let q = out
+            .iter()
+            .find(|r| matches!(r.kind, K::QualityDrop { .. }))
+            .expect("sifat riski yo'q");
+        // 3 × 20 + 4 × 5 = 80.
+        assert!((q.weight - 80.0).abs() < 0.001);
+
+        // Og'irlari oldinda.
+        let mixed = risk_forecast(5, &[], &[], &[], &bad, 2, today);
+        for w in mixed.windows(2) {
+            assert!(w[0].weight >= w[1].weight);
+        }
+        // Har risk manzilga ega.
+        for r in &mixed {
+            let _ = r.screen();
+        }
+    }
+
+    /// Prognozda muddat ko'rsatilmagan material qatori bo'lmaydi:
+    /// «qachon» degan savolga javob bo'lmasa, bu prognoz emas.
+    #[test]
+    fn stock_risk_needs_a_date() {
+        use crate::checks::{risk_forecast, PurchasePlanLine, QualityWeek, RiskKind as K};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let quiet = QualityWeek::default();
+        let line = |need_by: Option<chrono::NaiveDate>| PurchasePlanLine {
+            material_id: 1,
+            available: 0.0,
+            ordered: 0.0,
+            min_stock: 0.0,
+            needed_for_tasks: 10.0,
+            to_buy: 10.0,
+            cost: 100.0,
+            need_by,
+            has_request: false,
+        };
+
+        // Muddatsiz qator prognozga tushmaydi.
+        let out = risk_forecast(0, &[line(None)], &[], &[], &quiet, 0, today);
+        assert!(!out.iter().any(|r| matches!(r.kind, K::StockOut { .. })));
+
+        // Muddat bor — tushadi va yaqinroq bo'lsa og'irroq.
+        let soon = risk_forecast(0, &[line(Some(today))], &[], &[], &quiet, 0, today);
+        let near = soon
+            .iter()
+            .find(|r| matches!(r.kind, K::StockOut { .. }))
+            .expect("material riski yo'q");
+        assert!((near.weight - 100.0).abs() < 0.001);
+        assert_eq!(near.when, Some(today));
+
+        let far = risk_forecast(
+            0,
+            &[line(Some(today + chrono::Duration::days(30)))],
+            &[],
+            &[],
+            &quiet,
+            0,
+            today,
+        );
+        let late = far
+            .iter()
+            .find(|r| matches!(r.kind, K::StockOut { .. }))
+            .expect("material riski yo'q");
+        assert!(late.weight < near.weight);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
