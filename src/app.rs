@@ -2241,6 +2241,22 @@ impl App {
         ok
     }
 
+    /// Ijro sxemalari holati (TZ IV.7).
+    pub fn scheme_status(&self) -> Vec<checks::SchemeStatus> {
+        checks::scheme_status(&self.exec_docs, &self.geodesy_points, &self.inspections)
+    }
+
+    /// Mualliflik nazorati kabineti (TZ IV.24).
+    pub fn author_supervision(&self) -> Vec<checks::AuthorTask> {
+        checks::author_supervision(
+            &self.issues,
+            &self.contract_changes,
+            &self.documents,
+            &self.inspections,
+            self.today,
+        )
+    }
+
     /// Haftalik sifat hisoboti (TZ XIV.37).
     pub fn quality_week(&self) -> checks::QualityWeek {
         checks::quality_week(&self.quality, self.today)

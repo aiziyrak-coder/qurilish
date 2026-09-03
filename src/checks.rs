@@ -66,6 +66,10 @@ pub const RULES: &[(&str, &str)] = &[
     ("PRJ_PB_WATER", "rule_prj_pb_water"),
     ("PRJ_SS_CABLE", "rule_prj_ss_cable"),
     ("PRJ_SS_PLACE", "rule_prj_ss_place"),
+    ("PRJ_SPEC_QTY", "rule_prj_spec_qty"),
+    ("PRJ_SPEC_UNIT", "rule_prj_spec_unit"),
+    ("PRJ_BUILD_SIZE", "rule_prj_build_size"),
+    ("PRJ_BUILD_LEVEL", "rule_prj_build_level"),
 ];
 
 impl Db {
@@ -1258,6 +1262,164 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
                 crate::i18n::t("chk_ss_place_fix").to_string(),
                 crate::i18n::t("role_designer").to_string(),
             ));
+        }
+    }
+
+    // --- II.12 Spetsifikatsiya: miqdor va o'lchov birligi ---
+    // Spetsifikatsiya — bu «nima, qancha va qanday o'lchovda» degan
+    // jadval. Miqdorsiz yoki birliksiz qator spetsifikatsiya emas:
+    // undan na buyurtma berib bo'ladi, na smetaga qo'yib bo'ladi.
+    for e in ctx.elements {
+        let countable = matches!(
+            e.kind,
+            ElementKind::Door | ElementKind::Window | ElementKind::Device
+        );
+        if countable && e.size <= 0.0 && e.value <= 0.0 {
+            out.push(b.make(
+                "PRJ_SPEC_QTY",
+                "PR",
+                e.section,
+                Severity::Major,
+                crate::i18n::t("chk_spec_qty_title").to_string(),
+                format!(
+                    "{} «{}» {}",
+                    e.kind.label(),
+                    e.mark,
+                    crate::i18n::t("chk_spec_qty_desc")
+                ),
+                format!("{} {}", e.room, e.axis).trim().to_string(),
+                e.mark.clone(),
+                e.sheet.clone(),
+                crate::i18n::t("chk_spec_qty_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+        // Son bor, birlik yo'q: «250» — bu metrmi, millimetrmi yoki dona?
+        if e.size > 0.0 && e.unit.trim().is_empty() {
+            out.push(b.make(
+                "PRJ_SPEC_UNIT",
+                "PR",
+                e.section,
+                Severity::Info,
+                crate::i18n::t("chk_spec_unit_title").to_string(),
+                format!(
+                    "{} «{}»: {}",
+                    e.kind.label(),
+                    e.mark,
+                    crate::i18n::t("chk_spec_unit_desc")
+                ),
+                format!("{} {}", e.room, e.axis).trim().to_string(),
+                e.mark.clone(),
+                e.sheet.clone(),
+                crate::i18n::t("chk_spec_unit_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+    }
+
+    // --- II.14 Qurilish amalga oshirilishi ---
+    // Teshik o'zi joylashgan konstruksiyadan katta bo'lsa, uni qurib
+    // bo'lmaydi: konstruksiyadan hech narsa qolmaydi.
+    for l in ctx.links {
+        if l.relation != Relation::Contains {
+            continue;
+        }
+        let (Some(host), Some(hole)) = (by_id.get(&l.from_el), by_id.get(&l.to_el)) else {
+            continue;
+        };
+        if hole.kind != ElementKind::Opening {
+            continue;
+        }
+        let structural = matches!(
+            host.kind,
+            ElementKind::Beam | ElementKind::Column | ElementKind::Slab | ElementKind::Wall
+        );
+        if !structural || host.size <= 0.0 || hole.size <= 0.0 {
+            continue;
+        }
+        if hole.size >= host.size {
+            out.push(b.make(
+                "PRJ_BUILD_SIZE",
+                "PR",
+                host.section,
+                Severity::Critical,
+                crate::i18n::t("chk_build_size_title").to_string(),
+                format!(
+                    "{} «{}» {:.0} {} ≥ {} «{}» {:.0}",
+                    hole.kind.label(),
+                    hole.mark,
+                    hole.size,
+                    crate::i18n::t("chk_build_size_desc"),
+                    host.kind.label(),
+                    host.mark,
+                    host.size
+                ),
+                format!("{} {}", host.room, host.axis).trim().to_string(),
+                hole.mark.clone(),
+                hole.sheet.clone(),
+                crate::i18n::t("chk_build_size_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+    }
+
+    // Qavatda konstruksiya yo'q bo'lsa, unga hech narsani mahkamlab
+    // bo'lmaydi. Tekshiruv faqat qavatlar ko'rsatilgan loyihalarda
+    // ishlaydi: qavatsiz modelda bu savol o'rinsiz.
+    let levels_used = ctx.elements.iter().any(|e| !e.level.trim().is_empty());
+    if levels_used {
+        let mut levels: Vec<String> = Vec::new();
+        for e in ctx.elements {
+            let l = e.level.trim().to_string();
+            if !l.is_empty() && !levels.contains(&l) {
+                levels.push(l);
+            }
+        }
+        for level in levels {
+            let has_structure = ctx.elements.iter().any(|e| {
+                e.level.trim() == level
+                    && matches!(e.section, Section::Kj | Section::Km)
+                    && matches!(
+                        e.kind,
+                        ElementKind::Column | ElementKind::Beam | ElementKind::Slab
+                    )
+            });
+            if has_structure {
+                continue;
+            }
+            // Shu qavatda o'rnatiladigan qurilma yoki tarmoq bormi.
+            let mounted: Vec<&Element> = ctx
+                .elements
+                .iter()
+                .filter(|e| {
+                    e.level.trim() == level
+                        && matches!(
+                            e.kind,
+                            ElementKind::Device | ElementKind::Duct | ElementKind::Pipe
+                        )
+                })
+                .collect();
+            if let Some(first) = mounted.first() {
+                out.push(b.make(
+                    "PRJ_BUILD_LEVEL",
+                    "PR",
+                    first.section,
+                    Severity::Major,
+                    crate::i18n::t("chk_build_level_title").to_string(),
+                    format!(
+                        "{} {}: {} {}",
+                        crate::i18n::t("chk_build_level_desc"),
+                        level,
+                        mounted.len(),
+                        crate::i18n::t("chk_build_level_count")
+                    ),
+                    level.clone(),
+                    first.mark.clone(),
+                    first.sheet.clone(),
+                    crate::i18n::t("chk_build_level_fix").to_string(),
+                    crate::i18n::t("role_designer").to_string(),
+                ));
+            }
         }
     }
 
@@ -10046,5 +10208,164 @@ pub fn schedule_issues(
         }
         day += chrono::Duration::days(1);
     }
+    out
+}
+
+// ================= IV.7, 24. Ijro sxemalari va mualliflik nazorati =================
+
+/// Ijro sxemasi holati (TZ IV.7).
+#[derive(Debug, Clone)]
+pub struct SchemeStatus {
+    pub doc_id: i64,
+    pub number: String,
+    pub task_id: Option<i64>,
+    /// O'lchangan nuqtalar soni.
+    pub points: usize,
+    /// Dopuskdan chiqqan nuqtalar.
+    pub out_of_tolerance: usize,
+    /// Eng katta chetlanish.
+    pub max_deviation: f64,
+    pub unit: String,
+}
+
+impl SchemeStatus {
+    /// Sxema imzolashga tayyormi: o'lchov bor va hammasi dopusk ichida.
+    pub fn ready(&self) -> bool {
+        self.points > 0 && self.out_of_tolerance == 0
+    }
+}
+
+/// TZ IV.7: ijro sxemasi geodezik o'lchovga tayanadi.
+///
+/// Sxema — bu «qanday qurildi» degan hujjat, shuning uchun uning ortida
+/// **o'lchangan nuqtalar** turishi kerak. O'lchovsiz sxema imzolanmaydi:
+/// unda tasdiqlanadigan narsa yo'q.
+pub fn scheme_status(
+    docs: &[ExecDoc],
+    points: &[GeodesyPoint],
+    inspections: &[Inspection],
+) -> Vec<SchemeStatus> {
+    let mut out = Vec::new();
+    for d in docs.iter().filter(|d| d.kind == ExecDocKind::Scheme) {
+        // Nuqtalar ishga to'g'ridan-to'g'ri yoki tekshiruv orqali bog'lanadi.
+        let mine: Vec<&GeodesyPoint> = points
+            .iter()
+            .filter(|p| {
+                d.task_id.is_some()
+                    && p.inspection_id.is_some_and(|iid| {
+                        inspections
+                            .iter()
+                            .any(|i| i.id == iid && i.task_id == d.task_id)
+                    })
+            })
+            .collect();
+
+        let worst = mine
+            .iter()
+            .map(|p| p.deviation().abs())
+            .fold(0.0_f64, f64::max);
+        out.push(SchemeStatus {
+            doc_id: d.id,
+            number: d.number.clone(),
+            task_id: d.task_id,
+            points: mine.len(),
+            out_of_tolerance: mine.iter().filter(|p| !p.within()).count(),
+            max_deviation: worst,
+            unit: mine.first().map(|p| p.unit.clone()).unwrap_or_default(),
+        });
+    }
+    // Tayyor bo'lmaganlari oldinda.
+    out.sort_by_key(|s| (s.ready(), s.doc_id));
+    out
+}
+
+/// Mualliflik nazorati kabinetidagi bitta ish (TZ IV.24).
+#[derive(Debug, Clone, PartialEq)]
+pub enum AuthorTask {
+    /// Loyihachiga yo'naltirilgan nomuvofiqlik.
+    Issue { code: String, title: String },
+    /// Qaror kutayotgan loyiha o'zgarishi.
+    Change { number: String, days: i64 },
+    /// Yangi versiya chiqarilgan, lekin qurilishga topshirilmagan.
+    Version { name: String, revision: String },
+    /// Texnik nazorat tekshiruvi salbiy va loyiha yechimiga tegishli.
+    Inspection { number: String, days: i64 },
+}
+
+impl AuthorTask {
+    /// Muddati o'tib ketgan ish.
+    pub fn late(&self) -> bool {
+        match self {
+            AuthorTask::Change { days, .. } | AuthorTask::Inspection { days, .. } => {
+                *days > DECISION_LIMIT_DAYS
+            }
+            _ => false,
+        }
+    }
+}
+
+/// TZ IV.24: loyihachi javob berishi kerak bo'lgan ishlar.
+///
+/// Kabinet **yangi ma'lumot yaratmaydi**: u boshqa modullardagi
+/// yozuvlardan loyihachiga tegishlilarini yig'adi. Shuning uchun bu
+/// yerdagi har qator o'z ekranida ham turadi.
+pub fn author_supervision(
+    issues: &[Issue],
+    changes: &[ContractChange],
+    docs: &[Document],
+    inspections: &[Inspection],
+    today: NaiveDate,
+) -> Vec<AuthorTask> {
+    let mut out = Vec::new();
+    let designer = crate::i18n::t("role_designer").to_lowercase();
+
+    for i in issues.iter().filter(|i| {
+        matches!(i.status, IssueStatus::Open | IssueStatus::InWork)
+            && i.responsible.to_lowercase().contains(&designer)
+    }) {
+        out.push(AuthorTask::Issue {
+            code: i.code.clone(),
+            title: i.title.clone(),
+        });
+    }
+
+    for c in changes
+        .iter()
+        .filter(|c| matches!(c.status, ChangeStatus::Draft | ChangeStatus::Sent))
+    {
+        out.push(AuthorTask::Change {
+            number: c.number.clone(),
+            days: (today - c.date).num_days().max(0),
+        });
+    }
+
+    for d in docs.iter().filter(|d| d.version > 1 && d.issued.is_none()) {
+        if d.superseded(docs) {
+            continue;
+        }
+        out.push(AuthorTask::Version {
+            name: d.name.clone(),
+            revision: d.label(),
+        });
+    }
+
+    for i in inspections
+        .iter()
+        .filter(|i| i.result == InspectionResult::Fail && i.fixed_at.is_none())
+    {
+        // Faqat loyiha yechimiga tegishli tekshiruvlar: geodeziya va
+        // yashirin ishlar odatda loyihachining javobini talab qiladi.
+        if !matches!(i.kind, InspectionKind::Geodesy | InspectionKind::Hidden) {
+            continue;
+        }
+        let day = i.done.unwrap_or(i.planned);
+        out.push(AuthorTask::Inspection {
+            number: i.number.clone(),
+            days: (today - day).num_days().max(0),
+        });
+    }
+
+    // Muddati o'tganlari oldinda.
+    out.sort_by_key(|a| !a.late());
     out
 }

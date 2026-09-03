@@ -24,7 +24,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let tab_key = egui::Id::new("ed_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
     ui.horizontal_wrapped(|ui| {
-        for (i, label) in [(0u8, t("ed_tab_docs")), (1, t("ed_tab_review"))] {
+        for (i, label) in [
+            (0u8, t("ed_tab_docs")),
+            (1, t("ed_tab_review")),
+            (2, t("ed_tab_schemes")),
+            (3, t("ed_tab_author")),
+        ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
             }
@@ -36,11 +41,20 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         review_tab(ui, app);
         return;
     }
+    if tab == 2 {
+        schemes_tab(ui, app);
+        return;
+    }
+    if tab == 3 {
+        author_tab(ui, app);
+        return;
+    }
 
     let mut add_for: Option<(Option<i64>, ExecDocKind)> = None;
 
     let mut make_ks2 = false;
     let mut make_ks3 = false;
+    let mut make_archive = false;
     ui.horizontal_wrapped(|ui| {
         if ui.button(t("add_exec_doc")).clicked() {
             add_for = Some((None, ExecDocKind::Hidden));
@@ -61,6 +75,14 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         {
             make_ks3 = true;
         }
+        // Obyekt arxivi (TZ IV.27): hujjatlar reyestri.
+        if ui
+            .button(t("ed_archive"))
+            .on_hover_text(t("ed_archive_hint"))
+            .clicked()
+        {
+            make_archive = true;
+        }
         ui.label(
             RichText::new(t("exec_docs_hint"))
                 .size(11.0)
@@ -71,6 +93,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     if make_ks2 || make_ks3 {
         build_act(app, make_ks2);
+    }
+    if make_archive {
+        save_archive(app);
     }
 
     kpis(ui, app);
@@ -130,6 +155,298 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             });
             app.reload_modules();
         }
+    }
+}
+
+fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_l(ui, w, RichText::new(s).size(11.0).color(theme::muted()));
+}
+
+fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
+    super::warehouse::cell_r(ui, w, RichText::new(s).size(11.0).color(theme::muted()));
+}
+
+/// Obyekt arxivi reyestrini faylga yozadi (TZ IV.27).
+fn save_archive(app: &mut App) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let file = format!("ARX-{}.xlsx", to.format("%Y-%m-%d"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    match crate::docgen::write_archive(
+        &path,
+        &inp,
+        &app.documents,
+        &app.exec_docs,
+        &app.inspections,
+    ) {
+        Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
+    }
+}
+
+// ================================================================ Ijro sxemalari
+
+/// Ijro sxemalari va ular ortidagi geodezik o'lchov (TZ IV.7).
+///
+/// Sxema — bu «qanday qurildi» degan hujjat, shuning uchun uning ortida
+/// o'lchangan nuqtalar turishi kerak. O'lchovsiz sxemada tasdiqlanadigan
+/// narsa yo'q.
+fn schemes_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let rows = app.scheme_status();
+    let ready = rows.iter().filter(|s| s.ready()).count();
+
+    ui.label(
+        RichText::new(t("ed_schemes_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    if rows.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("ed_schemes_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ed_schemes_ready"),
+                format!("{ready} / {}", rows.len()),
+                t("ed_schemes_ready_hint"),
+                if ready == rows.len() {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("ed_schemes_out"),
+                rows.iter()
+                    .map(|s| s.out_of_tolerance)
+                    .sum::<usize>()
+                    .to_string(),
+                t("ed_schemes_out_hint"),
+                theme::text(),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("ed_schemes")
+                .num_columns(6)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 120.0, t("col_number"));
+                    head_l(ui, 240.0, t("col_task"));
+                    head_r(ui, 110.0, t("ed_schemes_points"));
+                    head_r(ui, 120.0, t("ed_schemes_bad"));
+                    head_r(ui, 140.0, t("ed_schemes_max"));
+                    head_l(ui, 120.0, t("col_status"));
+                    ui.end_row();
+
+                    for s in &rows {
+                        cell_l(ui, 120.0, RichText::new(&s.number).size(12.5));
+                        cell_l(
+                            ui,
+                            240.0,
+                            RichText::new(
+                                s.task_id
+                                    .and_then(|id| app.task(id))
+                                    .map(|x| super::issues::truncate(&x.name, 32))
+                                    .unwrap_or_default(),
+                            )
+                            .size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(s.points.to_string()).size(12.0).color(
+                                if s.points == 0 {
+                                    theme::danger()
+                                } else {
+                                    theme::text()
+                                },
+                            ),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(s.out_of_tolerance.to_string())
+                                .size(12.0)
+                                .color(if s.out_of_tolerance == 0 {
+                                    theme::muted()
+                                } else {
+                                    theme::danger()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            140.0,
+                            RichText::new(if s.points == 0 {
+                                t("dash").to_string()
+                            } else {
+                                format!("{:.3} {}", s.max_deviation, s.unit)
+                            })
+                            .size(12.0)
+                            .color(theme::muted()),
+                        );
+                        cell_l(
+                            ui,
+                            120.0,
+                            RichText::new(if s.ready() {
+                                t("ed_schemes_ok")
+                            } else if s.points == 0 {
+                                t("ed_schemes_no_points")
+                            } else {
+                                t("ed_schemes_deviation")
+                            })
+                            .size(11.5)
+                            .color(if s.ready() {
+                                theme::ok()
+                            } else {
+                                theme::warn()
+                            }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+}
+
+// ================================================================ Mualliflik nazorati
+
+/// Loyihachi javob berishi kerak bo'lgan ishlar (TZ IV.24).
+///
+/// Kabinet yangi ma'lumot yaratmaydi: boshqa modullardagi yozuvlardan
+/// loyihachiga tegishlilarini yig'adi — har qator o'z ekranida ham turadi.
+fn author_tab(ui: &mut egui::Ui, app: &mut App) {
+    let rows = app.author_supervision();
+    let late = rows.iter().filter(|a| a.late()).count();
+    let mut go: Option<Screen> = None;
+
+    ui.label(
+        RichText::new(t("ed_author_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ed_author_total"),
+                rows.len().to_string(),
+                t("ed_author_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("ed_author_late"),
+                late.to_string(),
+                t("ed_author_late_hint"),
+                if late == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if rows.is_empty() {
+        ui.vertical_centered(|ui| {
+            ui.add_space(30.0);
+            ui.label(
+                RichText::new(t("ed_author_none"))
+                    .color(theme::ok())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for a in &rows {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(format!("· {}", author_text(a)))
+                            .size(12.0)
+                            .color(if a.late() {
+                                theme::danger()
+                            } else {
+                                theme::text()
+                            }),
+                    );
+                    if ui.small_button(t("an_open")).clicked() {
+                        go = Some(author_screen(a));
+                    }
+                });
+            }
+        });
+
+    if let Some(s) = go {
+        app.screen = s;
+    }
+}
+
+/// Mualliflik nazorati ishini gapga aylantiradi.
+fn author_text(a: &crate::checks::AuthorTask) -> String {
+    use crate::checks::AuthorTask as A;
+    match a {
+        A::Issue { code, title } => format!("{code} — {title}"),
+        A::Change { number, days } => {
+            format!("{} {number} ({days} {})", t("ea_change"), t("days"))
+        }
+        A::Version { name, revision } => {
+            format!("{} {name} ({revision})", t("ea_version"))
+        }
+        A::Inspection { number, days } => {
+            format!("{} {number} ({days} {})", t("ea_inspection"), t("days"))
+        }
+    }
+}
+
+/// Ish qaysi ekranda yopiladi.
+fn author_screen(a: &crate::checks::AuthorTask) -> Screen {
+    use crate::checks::AuthorTask as A;
+    match a {
+        A::Issue { .. } => Screen::AiCheck,
+        A::Change { .. } => Screen::Contracts,
+        A::Version { .. } => Screen::Passport,
+        A::Inspection { .. } => Screen::Inspections,
     }
 }
 

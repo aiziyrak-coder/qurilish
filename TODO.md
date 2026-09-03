@@ -19,9 +19,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 22 | 11 | 7 | 4 | 2 |
+| II. AI loyiha tekshiruvi | 22 | 13 | 7 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 17 | 7 | 6 | 3 |
+| IV. Ijro hujjatlari | 30 | 20 | 7 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 21 | 9 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 29 | 6 | 3 | 3 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **505** | **144** | **51** | **46** |
+| **Jami** | **700** | **510** | **144** | **46** | **46** |
 
-Ya'ni **~72 % to'liq**, **~21 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~73 % to'liq**, **~21 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -68,9 +68,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 9. **SS — kuchsiz tok** — *kabel va o'rnatish joyi tekshiriladi*
 - [x] 10. **PB — yong'in xavfsizligi** — *himoya, chiqish va suv ta'minoti*
 - [x] 11. **CROSS CHECK** — *bo'limlararo tekshiruv: AR↔KJ, VK↔KJ, EOM↔OV va h.k.*
-- [ ] 12. Spetsifikatsiyalarni tekshirish — *spetsifikatsiya modeli yo'q*
+- [x] 12. Spetsifikatsiyalarni tekshirish — *miqdor va o'lchov birligi*
 - [x] 13. Hajmlarni tekshirish — *element o'lchamlaridan hisob*
-- [ ] 14. Qurilish amalga oshirilishini tekshirish — *texnologik imkoniyat tahlili yo'q*
+- [x] 14. Qurilish amalga oshirilishini tekshirish — *teshik o'lchami va qavat konstruksiyasi*
 - [x] 15. Yakuniy hisobot — *bo'limlar kesimida muhimlik bo'yicha*
 - [x] 16. Har xatoning kartochkasi — *kod, bo'lim, element, joy, varaq, me'yor, tavsiya, mas'ul*
 - [x] 17. AI ga majburiy talab — *normativni o'ylab topmaydi (II.17)*
@@ -129,7 +129,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 4. **AI Document Matrix** — *talablar jadvali bor; to'liq matritsa emas*
 - [x] 5. Hujjatlarni avtomatik yaratish — *KS-2, KS-3, M-29, AOSR bazadan*
 - [x] 6. **AOSR** — *ish, ishlatilgan material, sertifikat, imzo joylari*
-- [ ] 7. Ijro sxemalari
+- [x] 7. Ijro sxemalari — *geodezik o'lchovga tayanadi*
 - [x] 8. Fotolar — *hujjatga biriktiriladi*
 - [ ] 🔒 9. Geolokatsiya va vaqt
 - [~] 10. Material sertifikatlari — *katalogda sertifikat va muddati*
@@ -146,10 +146,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 21. Loyiha bilan solishtirish — *versiya va topshirish sanasi bo'yicha*
 - [~] 22. Haqiqiy qurilish bilan solishtirish — *AN-D1 qoidasi*
 - [x] 23. Texnik nazorat kabineti
-- [ ] 24. Mualliflik nazorati kabineti
+- [x] 24. Mualliflik nazorati kabineti
 - [x] 25. Buyurtmachi kabineti
 - [~] 26. To'liqlikni AI nazorati — *rasmiylashtirilmagan ishlar topiladi*
-- [ ] 27. Obyekt arxivi
+- [x] 27. Obyekt arxivi — *hujjatlar reyestri `.xlsx`*
 - [~] 28. AI orqali qidiruv — *umumiy qidiruv (Ctrl+K)*
 - [x] 29. Boshqa modullar bilan bog'lanish
 - [x] 30. Modulning bosh funksiyasi

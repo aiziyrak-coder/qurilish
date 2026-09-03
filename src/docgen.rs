@@ -391,6 +391,142 @@ pub fn write_ks3(
 // ================================================================ M-29
 
 /// M-29 — material sarfi hisoboti: normativ va haqiqiy sarf.
+/// Obyekt arxivi — topshirishga tayyorlangan hujjatlar reyestri (TZ IV.27).
+///
+/// Arxiv **fayllarni ko'chirmaydi**: dastur o'zi joylashtirmagan fayllarni
+/// ko'chirishi noto'g'ri bo'lardi va nusxa asl bilan farq qilib ketardi.
+/// O'rniga u **reyestr** beradi: qaysi hujjat bor, qaysi holatda, qaysi
+/// ishga tegishli va fayl qayerda turibdi. Reyestrni papka bilan birga
+/// topshirish qog'oz jildning ro'yxati bilan bir xil ma'noni beradi.
+pub fn write_archive(
+    path: &Path,
+    inp: &DocInput,
+    documents: &[crate::domain::Document],
+    exec_docs: &[ExecDoc],
+    inspections: &[crate::domain::Inspection],
+) -> Result<(), XlsxError> {
+    let st = Styles::new();
+    let mut wb = Workbook::new();
+
+    // ---------- 1-varaq: loyiha hujjatlari ----------
+    {
+        let sh = wb.add_worksheet();
+        sh.set_name(t("doc_arch_project"))?;
+        widths(sh, &[8.0, 12.0, 40.0, 10.0, 10.0, 14.0, 14.0, 40.0])?;
+        let mut r = header(sh, &st, inp, t("doc_archive"), &next_number(inp, "ARX"), 8)?;
+        for (i, h) in [
+            t("doc_pos"),
+            t("col_section_short"),
+            t("col_name"),
+            t("col_format"),
+            t("col_sheets"),
+            t("doc_revision"),
+            t("doc_issued"),
+            t("col_path"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            sh.write_string_with_format(r, i as u16, *h, &st.head)?;
+        }
+        r += 1;
+        for (i, d) in documents.iter().enumerate() {
+            sh.write_number_with_format(r, 0, i as f64 + 1.0, &st.cell_num)?;
+            sh.write_string_with_format(r, 1, d.section.code(), &st.cell)?;
+            sh.write_string_with_format(r, 2, &d.name, &st.cell)?;
+            sh.write_string_with_format(r, 3, &d.format, &st.cell)?;
+            sh.write_number_with_format(r, 4, d.sheets as f64, &st.cell_num)?;
+            sh.write_string_with_format(r, 5, d.label(), &st.cell)?;
+            sh.write_string_with_format(
+                r,
+                6,
+                d.issued
+                    .map(|x| x.format("%d.%m.%Y").to_string())
+                    .unwrap_or_default(),
+                &st.cell,
+            )?;
+            sh.write_string_with_format(r, 7, &d.path, &st.cell)?;
+            r += 1;
+        }
+    }
+
+    // ---------- 2-varaq: ijro hujjatlari ----------
+    {
+        let sh = wb.add_worksheet();
+        sh.set_name(t("doc_arch_exec"))?;
+        widths(sh, &[8.0, 18.0, 16.0, 40.0, 12.0, 16.0, 22.0])?;
+        let mut r = 0u32;
+        for (i, h) in [
+            t("doc_pos"),
+            t("col_kind"),
+            t("col_number"),
+            t("col_name"),
+            t("col_date"),
+            t("col_status"),
+            t("col_responsible"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            sh.write_string_with_format(r, i as u16, *h, &st.head)?;
+        }
+        r += 1;
+        for (i, d) in exec_docs.iter().enumerate() {
+            sh.write_number_with_format(r, 0, i as f64 + 1.0, &st.cell_num)?;
+            sh.write_string_with_format(r, 1, d.kind.label(), &st.cell)?;
+            sh.write_string_with_format(r, 2, &d.number, &st.cell)?;
+            sh.write_string_with_format(r, 3, &d.name, &st.cell)?;
+            sh.write_string_with_format(r, 4, d.date.format("%d.%m.%Y").to_string(), &st.cell)?;
+            sh.write_string_with_format(r, 5, d.status.label(), &st.cell)?;
+            sh.write_string_with_format(r, 6, &d.responsible, &st.cell)?;
+            r += 1;
+        }
+    }
+
+    // ---------- 3-varaq: texnik nazorat ----------
+    {
+        let sh = wb.add_worksheet();
+        sh.set_name(t("doc_arch_inspections"))?;
+        widths(sh, &[8.0, 18.0, 16.0, 14.0, 14.0, 16.0, 22.0])?;
+        let mut r = 0u32;
+        for (i, h) in [
+            t("doc_pos"),
+            t("col_kind"),
+            t("col_number"),
+            t("in_planned"),
+            t("in_done"),
+            t("col_result"),
+            t("in_inspector"),
+        ]
+        .iter()
+        .enumerate()
+        {
+            sh.write_string_with_format(r, i as u16, *h, &st.head)?;
+        }
+        r += 1;
+        for (i, x) in inspections.iter().enumerate() {
+            sh.write_number_with_format(r, 0, i as f64 + 1.0, &st.cell_num)?;
+            sh.write_string_with_format(r, 1, x.kind.label(), &st.cell)?;
+            sh.write_string_with_format(r, 2, &x.number, &st.cell)?;
+            sh.write_string_with_format(r, 3, x.planned.format("%d.%m.%Y").to_string(), &st.cell)?;
+            sh.write_string_with_format(
+                r,
+                4,
+                x.done
+                    .map(|d| d.format("%d.%m.%Y").to_string())
+                    .unwrap_or_default(),
+                &st.cell,
+            )?;
+            sh.write_string_with_format(r, 5, x.result.label(), &st.cell)?;
+            sh.write_string_with_format(r, 6, &x.inspector, &st.cell)?;
+            r += 1;
+        }
+    }
+
+    wb.save(path)?;
+    Ok(())
+}
+
 /// Buxgalteriya uchun to'lov reyestri (TZ IX.39).
 ///
 /// Reyestrga **tasdiqlangan** pul arizalari va ular bo'yicha xaridlar

@@ -9297,6 +9297,159 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(!app.move_worker(worker.id, second));
     }
 
+    /// TZ IV.7: o'lchovsiz sxema imzoga tayyor emas; dopusk ichidagi
+    /// o'lchov esa tayyorlikni beradi.
+    #[test]
+    fn scheme_needs_measured_points() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.scheme_status();
+        for s in &rows {
+            assert!(s.out_of_tolerance <= s.points);
+            // O'lchovsiz sxema hech qachon tayyor emas.
+            if s.points == 0 {
+                assert!(!s.ready());
+                assert_eq!(s.out_of_tolerance, 0);
+            }
+            // Tayyor sxemada dopuskdan chiqqan nuqta bo'lmaydi.
+            if s.ready() {
+                assert!(s.points > 0 && s.out_of_tolerance == 0);
+            }
+        }
+
+        // Tayyor bo'lmaganlari oldinda.
+        let mut seen_ready = false;
+        for s in &rows {
+            if s.ready() {
+                seen_ready = true;
+            } else {
+                assert!(!seen_ready, "tayyor bo'lmagan sxema pastga tushgan");
+            }
+        }
+    }
+
+    /// TZ IV.24: kabinet yangi ma'lumot yaratmaydi — har qator boshqa
+    /// moduldagi yozuvdan keladi.
+    #[test]
+    fn author_supervision_only_collects() {
+        use crate::checks::AuthorTask as A;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.author_supervision();
+        for a in &rows {
+            match a {
+                A::Issue { code, .. } => {
+                    assert!(app.issues.iter().any(|i| &i.code == code));
+                }
+                A::Change { number, days } => {
+                    let c = app
+                        .contract_changes
+                        .iter()
+                        .find(|c| &c.number == number)
+                        .expect("o'zgarish modulda yo'q");
+                    assert!(matches!(
+                        c.status,
+                        crate::domain::ChangeStatus::Draft | crate::domain::ChangeStatus::Sent
+                    ));
+                    assert_eq!(*days, (app.today - c.date).num_days().max(0));
+                }
+                A::Version { name, .. } => {
+                    assert!(app
+                        .documents
+                        .iter()
+                        .any(|d| &d.name == name && d.version > 1 && d.issued.is_none()));
+                }
+                A::Inspection { number, .. } => {
+                    assert!(app.inspections.iter().any(|i| &i.number == number
+                        && i.result == crate::domain::InspectionResult::Fail));
+                }
+            }
+        }
+
+        // Muddati o'tganlari oldinda.
+        let mut seen_ok = false;
+        for a in &rows {
+            if a.late() {
+                assert!(!seen_ok, "kechikkan ish pastga tushib qolgan");
+            } else {
+                seen_ok = true;
+            }
+        }
+    }
+
+    /// TZ II.12, 14: spetsifikatsiya va qurilish imkoniyati qoidalari
+    /// o'z bo'limida qoladi va tuzatish yo'lini ko'rsatadi.
+    #[test]
+    fn spec_and_constructability_rules_work() {
+        use crate::checks::{check_project, Ctx};
+        use crate::domain::{ElementKind, Relation, Severity};
+        use crate::model::Section;
+        use std::collections::HashMap;
+
+        let norms = HashMap::new();
+        let run = |elements: &[crate::domain::Element], links: &[crate::domain::ElementLink]| {
+            check_project(&Ctx {
+                project_id: 1,
+                tasks: &[],
+                elements,
+                links,
+                items: &[],
+                declared_total: 0.0,
+                norms: &norms,
+            })
+        };
+
+        // Miqdorsiz eshik — spetsifikatsiya e'tirozi.
+        let door = test_element(1, Section::Ar, ElementKind::Door, "D-1", 0.0);
+        let out = run(std::slice::from_ref(&door), &[]);
+        assert!(out
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_spec_qty_title")));
+
+        // Miqdor bor, birlik bor — e'tiroz yo'q.
+        let mut sized = door.clone();
+        sized.size = 12.0;
+        sized.unit = "dona".into();
+        assert!(!run(std::slice::from_ref(&sized), &[])
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_spec_qty_title")));
+
+        // Birliksiz son — alohida e'tiroz.
+        let mut no_unit = sized.clone();
+        no_unit.unit = String::new();
+        assert!(run(std::slice::from_ref(&no_unit), &[])
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_spec_unit_title")));
+
+        // Teshik rigeldan katta — qurib bo'lmaydi.
+        let beam = test_element(2, Section::Kj, ElementKind::Beam, "R-1", 600.0);
+        let hole = test_element(3, Section::Kj, ElementKind::Opening, "O-1", 700.0);
+        let out = run(
+            &[beam.clone(), hole.clone()],
+            &[test_link(2, 3, Relation::Contains)],
+        );
+        let found = out
+            .iter()
+            .find(|i| i.title == crate::i18n::t("chk_build_size_title"))
+            .expect("teshik o'lchami e'tirozi yo'q");
+        assert_eq!(found.severity, Severity::Critical);
+        assert!(!found.recommendation.is_empty());
+
+        // Teshik kichik — e'tiroz yo'q.
+        let mut small = hole.clone();
+        small.size = 200.0;
+        assert!(!run(&[beam, small], &[test_link(2, 3, Relation::Contains)])
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_build_size_title")));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
