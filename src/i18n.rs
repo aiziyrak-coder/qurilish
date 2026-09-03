@@ -4729,6 +4729,27 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "in_ppr_missing" => ("PPR umuman yo'q", "ППР вообще нет"),
         "in_ppr_not_approved" => ("PPR tasdiqlanmagan", "ППР не утверждён"),
         "in_ppr_late" => ("PPR ish boshlangandan keyin tasdiqlangan", "ППР утверждён после начала работ"),
+        // VI.8, 12, 17, V.21. Prorab ekrani
+        "fm_requests" => ("Ariza taklifi", "Предложение заявки"),
+        "fm_requests_hint" => (
+            "Taklif ariza emas: dastur o'zi ariza yubormaydi — kerakmas ariza tartibni buzadi.",
+            "Предложение — не заявка: программа сама заявку не отправляет, лишняя заявка ломает порядок.",
+        ),
+        "fm_hidden" => ("Yashirin ishlar", "Скрытые работы"),
+        "fm_hidden_hint" => (
+            "Dalolatnoma imzolanmaguncha keyingi ish boshlanmasligi kerak: beton quyilsa, armatura endi ko'rinmaydi.",
+            "Пока акт не подписан, следующая работа не должна начинаться: после бетонирования арматуру уже не увидеть.",
+        ),
+        "fm_drawings" => ("Chizmalar", "Чертежи"),
+        "fm_drawing_not_issued" => ("topshirilmagan", "не передан"),
+        // X.7, 16. Yetkazib beruvchini tekshirish
+        "pu_sup_issues" => ("Ta'minotchi bo'yicha e'tirozlar", "Замечания по поставщикам"),
+        "si_no_inn" => ("STIR ko'rsatilmagan", "Не указан ИНН"),
+        "si_bad_inn" => ("STIR noto'g'ri", "Некорректный ИНН"),
+        "si_blocked" => ("Taqiqlangan, lekin xarid davom etyapti", "Запрещён, но закупки продолжаются"),
+        "si_no_contact" => ("Aloqa ma'lumoti yo'q", "Нет контактных данных"),
+        "si_share" => ("Ulushi juda katta:", "Слишком большая доля:"),
+        "si_late" => ("Kechikkan yetkazishlar", "Опоздавшие поставки"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

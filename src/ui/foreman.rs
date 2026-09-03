@@ -67,6 +67,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(12.0);
                 attention_block(ui, app);
                 ui.add_space(12.0);
+                requests_block(ui, app);
+                ui.add_space(12.0);
+                hidden_block(ui, app);
+                ui.add_space(12.0);
+                drawings_block(ui, app);
+                ui.add_space(12.0);
                 day_close_block(ui, app);
                 ui.add_space(20.0);
             });
@@ -772,6 +778,158 @@ fn attention_block(ui: &mut egui::Ui, app: &mut App) {
 
     if let Some(s) = go {
         app.screen = s;
+    }
+}
+
+// ================================================================ Ariza taklifi
+
+/// Jurnaldagi hajmdan chiqadigan ariza takliflari (TZ VI.17).
+///
+/// Taklif **ariza emas**: prorab uni ko'rib, kerak bo'lsa qoralama
+/// ochadi. Dastur o'zi ariza yubormaydi — kerakmas ariza tartibni
+/// buzadi.
+fn requests_block(ui: &mut egui::Ui, app: &mut App) {
+    let rows = app.journal_requests();
+    if rows.is_empty() {
+        return;
+    }
+    let mut make: Option<usize> = None;
+
+    block(ui, t("fm_requests"), |ui| {
+        ui.label(
+            RichText::new(t("fm_requests_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(4.0);
+        for (i, r) in rows.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "· {}: {} ({} {})",
+                        super::materials::material_label(app, r.material_id),
+                        super::materials::trim_num(r.qty),
+                        t("jr_req_stock"),
+                        super::materials::trim_num(r.available)
+                    ))
+                    .size(12.0),
+                );
+                if ui.small_button(t("jr_req_make")).clicked() {
+                    make = Some(i);
+                }
+            });
+        }
+    });
+
+    if let Some(i) = make {
+        let r = rows[i].clone();
+        super::journal::create_request_from(app, &r);
+    }
+}
+
+// ================================================================ Yashirin ishlar
+
+/// Yashirin ish yopilmasdan keyingi ish boshlanmasin (TZ V.21, IV.16).
+fn hidden_block(ui: &mut egui::Ui, app: &mut App) {
+    let rows = app.hidden_blocks();
+    if rows.is_empty() {
+        return;
+    }
+    let mut go = false;
+
+    block(ui, t("fm_hidden"), |ui| {
+        ui.label(
+            RichText::new(t("fm_hidden_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(4.0);
+        for b in rows.iter().take(8) {
+            let name = |id: i64| {
+                app.task(id)
+                    .map(|x| format!("{} {}", x.wbs, x.name))
+                    .unwrap_or_default()
+            };
+            ui.label(
+                RichText::new(format!(
+                    "· {} ← {} ({})",
+                    super::issues::truncate(&name(b.task_id), 28),
+                    super::issues::truncate(&name(b.pred_id), 28),
+                    if b.missing {
+                        t("ed_hidden_missing")
+                    } else {
+                        t("ed_hidden_unsigned")
+                    }
+                ))
+                .size(12.0)
+                .color(if b.already_started {
+                    theme::danger()
+                } else {
+                    theme::warn()
+                }),
+            );
+        }
+        if ui.small_button(t("an_open")).clicked() {
+            go = true;
+        }
+    });
+
+    if go {
+        app.screen = Screen::ExecDocs;
+    }
+}
+
+// ================================================================ Chizmalar
+
+/// Obyektdagi chizmalar: qaysi versiya ishga topshirilgan (TZ VI.12).
+///
+/// Prorabga **kerakli chizma qaysi ekani** muhim: eski versiya bo'yicha
+/// ishlash eng qimmat xato. Shuning uchun ro'yxatda topshirilgan versiya
+/// va o'zgartirish belgisi turadi.
+fn drawings_block(ui: &mut egui::Ui, app: &mut App) {
+    let issued: Vec<&crate::domain::Document> = app
+        .documents
+        .iter()
+        .filter(|d| !d.superseded(&app.documents))
+        .collect();
+    if issued.is_empty() {
+        return;
+    }
+    let mut go = false;
+
+    block(ui, t("fm_drawings"), |ui| {
+        for d in issued.iter().take(10) {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "· {} {}",
+                        d.section.code(),
+                        super::issues::truncate(&d.name, 34)
+                    ))
+                    .size(12.0),
+                );
+                ui.label(RichText::new(d.label()).size(11.0).color(theme::muted()));
+                match d.issued {
+                    Some(day) => ui.label(
+                        RichText::new(day.format("%d.%m.%Y").to_string())
+                            .size(11.0)
+                            .color(theme::ok()),
+                    ),
+                    None => ui.label(
+                        RichText::new(t("fm_drawing_not_issued"))
+                            .size(11.0)
+                            .color(theme::warn()),
+                    ),
+                };
+            });
+        }
+        if ui.small_button(t("an_open")).clicked() {
+            go = true;
+        }
+    });
+
+    if go {
+        app.screen = Screen::Passport;
     }
 }
 

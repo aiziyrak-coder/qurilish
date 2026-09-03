@@ -12726,3 +12726,130 @@ pub fn doc_route(doc: &ExecDoc) -> Vec<RouteStep> {
         })
         .collect()
 }
+
+// ================= X.7, 16. Yetkazib beruvchini tekshirish =================
+
+/// Yetkazib beruvchi bo'yicha e'tiroz (TZ X.16).
+#[derive(Debug, Clone, PartialEq)]
+pub enum SupplierIssue {
+    /// STIR ko'rsatilmagan.
+    NoInn,
+    /// STIR uzunligi noto'g'ri: O'zbekistonda 9 raqam.
+    BadInn { value: String },
+    /// Ishlash taqiqlangan, lekin xarid davom etyapti.
+    BlockedButUsed { purchases: usize },
+    /// Aloqa ma'lumoti yo'q.
+    NoContact,
+    /// Bitta ta'minotchining ulushi juda katta.
+    TooBigShare { pct: f64 },
+    /// Yetkazishda kechikish tarixi bor.
+    LateHistory { late: usize, total: usize },
+}
+
+impl SupplierIssue {
+    /// Ishlashni to'xtatishga arziydigan e'tiroz.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            SupplierIssue::BlockedButUsed { .. } | SupplierIssue::BadInn { .. }
+        )
+    }
+}
+
+/// Ta'minotchi kartochkasi (TZ X.7).
+#[derive(Debug, Clone)]
+pub struct SupplierCard {
+    pub supplier_id: i64,
+    pub name: String,
+    pub purchases: usize,
+    pub amount: f64,
+    /// Umumiy xarid summasidagi ulushi, foizda.
+    pub share_pct: f64,
+    pub issues: Vec<SupplierIssue>,
+}
+
+/// STIR raqamlari soni (O'zbekiston).
+pub const INN_LEN: usize = 9;
+
+/// TZ X.7, 16: ta'minotchilarni tekshiradi.
+///
+/// Tekshiruv **hujjatga qaraydi**, obro'ga emas: STIR to'g'ri yozilganmi,
+/// taqiq belgisi qo'yilganmi, aloqa bormi va yetkazish tarixi qanday.
+/// Dastur ta'minotchini «yaxshi» yoki «yomon» deb aytmaydi — u faqat
+/// yozuvdagi bo'shliqni ko'rsatadi.
+pub fn supplier_cards(
+    suppliers: &[Supplier],
+    purchases: &[Purchase],
+    today: NaiveDate,
+) -> Vec<SupplierCard> {
+    let key = |s: &str| s.trim().to_lowercase();
+    let total: f64 = purchases
+        .iter()
+        .filter(|p| p.status != PurchaseStatus::Draft)
+        .map(|p| p.amount())
+        .sum();
+
+    let mut out = Vec::new();
+    for s in suppliers {
+        let mine: Vec<&Purchase> = purchases
+            .iter()
+            .filter(|p| key(&p.supplier) == key(&s.name) && p.status != PurchaseStatus::Draft)
+            .collect();
+        let amount: f64 = mine.iter().map(|p| p.amount()).sum();
+        let share = if total > 0.0 {
+            amount * 100.0 / total
+        } else {
+            0.0
+        };
+
+        let mut issues = Vec::new();
+        let inn = s.inn.trim();
+        if inn.is_empty() {
+            issues.push(SupplierIssue::NoInn);
+        } else if !inn.chars().all(|c| c.is_ascii_digit()) || inn.len() != INN_LEN {
+            issues.push(SupplierIssue::BadInn {
+                value: inn.to_string(),
+            });
+        }
+        if s.blocked && !mine.is_empty() {
+            issues.push(SupplierIssue::BlockedButUsed {
+                purchases: mine.len(),
+            });
+        }
+        if s.contact.trim().is_empty() && s.phone.trim().is_empty() {
+            issues.push(SupplierIssue::NoContact);
+        }
+        if share > SUPPLIER_SHARE_LIMIT {
+            issues.push(SupplierIssue::TooBigShare { pct: share });
+        }
+        // Yetkazish tarixi: muddati o'tgan va yetkazilmaganlar.
+        let late = mine
+            .iter()
+            .filter(|p| p.delivery_date < today && p.delivered_qty + 0.0001 < p.qty)
+            .count();
+        if late > 0 {
+            issues.push(SupplierIssue::LateHistory {
+                late,
+                total: mine.len(),
+            });
+        }
+
+        issues.sort_by_key(|i| !i.severe());
+        out.push(SupplierCard {
+            supplier_id: s.id,
+            name: s.name.clone(),
+            purchases: mine.len(),
+            amount,
+            share_pct: share,
+            issues,
+        });
+    }
+    // E'tirozi borlar oldinda, keyin ulush bo'yicha.
+    out.sort_by(|a, b| {
+        b.issues
+            .len()
+            .cmp(&a.issues.len())
+            .then(b.share_pct.total_cmp(&a.share_pct))
+    });
+    out
+}

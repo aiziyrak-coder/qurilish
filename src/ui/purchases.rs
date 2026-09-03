@@ -943,8 +943,67 @@ fn quotes_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
 // ================================================== Yetkazib beruvchilar
 
 /// Yetkazib beruvchilar va ularning xaridlardan hisoblangan tarixi (TZ X.7–8, 40).
+/// Ta'minotchi e'tirozini gapga aylantiradi (TZ X.16).
+fn supplier_issue_text(i: &crate::checks::SupplierIssue) -> String {
+    use crate::checks::SupplierIssue as S;
+    match i {
+        S::NoInn => t("si_no_inn").to_string(),
+        S::BadInn { value } => format!("{} «{value}»", t("si_bad_inn")),
+        S::BlockedButUsed { purchases } => format!("{} ({purchases})", t("si_blocked")),
+        S::NoContact => t("si_no_contact").to_string(),
+        S::TooBigShare { pct } => format!("{} {pct:.0}%", t("si_share")),
+        S::LateHistory { late, total } => {
+            format!("{}: {late} / {total}", t("si_late"))
+        }
+    }
+}
+
 fn suppliers_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
     let lines = crate::checks::supplier_lines(&app.purchases, app.today);
+
+    // Tekshiruv hujjatga qaraydi, obro'ga emas: STIR to'g'ri yozilganmi,
+    // taqiq belgisi bormi, aloqa bormi, yetkazish tarixi qanday (TZ X.16).
+    let cards = app.supplier_cards();
+    let bad = cards.iter().filter(|c| !c.issues.is_empty()).count();
+    if bad > 0 {
+        ui.label(
+            RichText::new(format!("{}: {bad}", t("pu_sup_issues")))
+                .size(12.5)
+                .strong()
+                .color(theme::warn()),
+        );
+        for c in cards.iter().filter(|c| !c.issues.is_empty()).take(8) {
+            ui.label(
+                RichText::new(format!(
+                    "· {} ({:.0}%) — {}",
+                    super::issues::truncate(&c.name, 26),
+                    c.share_pct,
+                    c.issues
+                        .iter()
+                        .map(supplier_issue_text)
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                ))
+                .size(12.0)
+                .color(if c.issues.iter().any(|i| i.severe()) {
+                    theme::danger()
+                } else {
+                    theme::muted()
+                }),
+            )
+            // Xaridlar soni va summasi — e'tirozning og'irligi shundan
+            // ko'rinadi: bitta xaridli ta'minotchi bilan o'ntalikning
+            // e'tirozi bir xil emas.
+            .on_hover_text(format!(
+                "#{} · {} {} · {}",
+                c.supplier_id,
+                c.purchases,
+                t("mat_maker_deals"),
+                money(c.amount)
+            ));
+        }
+        ui.add_space(10.0);
+    }
 
     let mut add = false;
     ui.horizontal_wrapped(|ui| {

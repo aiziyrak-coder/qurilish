@@ -16,7 +16,7 @@ mod foreman;
 mod gantt;
 mod inspections;
 mod issues;
-mod journal;
+pub mod journal;
 mod machines;
 pub mod materials;
 mod notes;

@@ -2412,6 +2412,11 @@ impl App {
         checks::ppr_control(&self.tasks, &self.ppr_docs)
     }
 
+    /// Yetkazib beruvchilar kartochkasi va tekshiruvi (TZ X.7, 16).
+    pub fn supplier_cards(&self) -> Vec<checks::SupplierCard> {
+        checks::supplier_cards(&self.suppliers, &self.purchases, self.today)
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

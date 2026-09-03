@@ -10775,6 +10775,101 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(r[0].current && !r[0].done);
     }
 
+    /// TZ X.16: tekshiruv hujjatga qaraydi — STIR, taqiq, aloqa,
+    /// ulush va yetkazish tarixi.
+    #[test]
+    fn supplier_check_reads_the_card() {
+        use crate::checks::{supplier_cards, SupplierIssue as S, INN_LEN, SUPPLIER_SHARE_LIMIT};
+        use crate::domain::{PurchaseStatus, Supplier};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let base = t.db.purchases(pid).into_iter().next().expect("xarid");
+
+        let supplier = |inn: &str, blocked: bool, contact: &str| Supplier {
+            id: 1,
+            project_id: pid,
+            name: base.supplier.clone(),
+            inn: inn.into(),
+            contact: contact.into(),
+            phone: String::new(),
+            blocked,
+            note: String::new(),
+        };
+        let mut buy = base.clone();
+        buy.status = PurchaseStatus::Ordered;
+        buy.qty = 10.0;
+        buy.price = 100.0;
+        buy.delivered_qty = 10.0;
+        buy.delivery_date = today + chrono::Duration::days(5);
+
+        // To'g'ri kartochka: STIR to'g'ri, taqiq yo'q, aloqa bor.
+        let good = "123456789";
+        assert_eq!(good.len(), INN_LEN);
+        let cards = supplier_cards(
+            &[supplier(good, false, "Ali")],
+            std::slice::from_ref(&buy),
+            today,
+        );
+        // Yagona ta'minotchi — ulushi 100%, bu e'tiroz.
+        assert!((cards[0].share_pct - 100.0).abs() < 0.001);
+        assert!(cards[0].share_pct > SUPPLIER_SHARE_LIMIT);
+        assert!(cards[0]
+            .issues
+            .iter()
+            .any(|i| matches!(i, S::TooBigShare { .. })));
+
+        // STIR yo'q va aloqa yo'q.
+        let empty = supplier_cards(
+            &[supplier("", false, "")],
+            std::slice::from_ref(&buy),
+            today,
+        );
+        assert!(empty[0].issues.contains(&S::NoInn));
+        assert!(empty[0].issues.contains(&S::NoContact));
+
+        // STIR uzunligi noto'g'ri — jiddiy.
+        let bad = supplier_cards(
+            &[supplier("12345", false, "Ali")],
+            std::slice::from_ref(&buy),
+            today,
+        );
+        let found = bad[0]
+            .issues
+            .iter()
+            .find(|i| matches!(i, S::BadInn { .. }))
+            .expect("STIR e'tirozi yo'q");
+        assert!(found.severe());
+        // Jiddiylari oldinda.
+        assert!(bad[0].issues[0].severe());
+
+        // Taqiqlangan, lekin xarid bor — jiddiy.
+        let blocked = supplier_cards(
+            &[supplier(good, true, "Ali")],
+            std::slice::from_ref(&buy),
+            today,
+        );
+        assert!(blocked[0]
+            .issues
+            .iter()
+            .any(|i| matches!(i, S::BlockedButUsed { purchases: 1 })));
+
+        // Kechikkan yetkazish tarixi.
+        let mut late = buy.clone();
+        late.delivery_date = today - chrono::Duration::days(3);
+        late.delivered_qty = 0.0;
+        let history = supplier_cards(
+            &[supplier(good, false, "Ali")],
+            std::slice::from_ref(&late),
+            today,
+        );
+        assert!(history[0]
+            .issues
+            .iter()
+            .any(|i| matches!(i, S::LateHistory { late: 1, total: 1 })));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

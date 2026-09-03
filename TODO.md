@@ -22,12 +22,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 31 | 1 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 24 | 3 | 3 | 3 |
-| V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
-| VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
+| V. Kunlik ishlar jurnali | 34 | 26 | 2 | 6 | 6 |
+| VI. Prorab ilovasi | 37 | 25 | 5 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
-| X. Xaridlar | 48 | 44 | 2 | 2 | 2 |
+| X. Xaridlar | 48 | 46 | 0 | 2 | 2 |
 | XI. Ombor | 48 | 47 | 0 | 1 | 1 |
 | XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
 | XIII. Tabel | 44 | 37 | 1 | 6 | 6 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **605** | **49** | **46** | **46** |
+| **Jami** | **700** | **611** | **43** | **46** | **46** |
 
-Ya'ni **~86 % to'liq**, **~7 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~87 % to'liq**, **~6 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -178,7 +178,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 18. Muammolar — *xavfsizlik, sifat va yozuvlarga izoh*
 - [x] 19. Kritik muammolarni AI aniqlashi — *analitika topilmalari*
 - [x] 20. Texnik nazorat izohlari
-- [~] 21. Yashirin ishlar nazorati
+- [x] 21. Yashirin ishlar nazorati — *prorab ekranida to'siq*
 - [x] 22. Sifat nazorati
 - [x] 23. Mehnat muhofazasi
 - [x] 24. Direktorning kunlik hisoboti
@@ -208,16 +208,16 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 5. Mobil GPR — *desktop GPR bor*
 - [x] 6. Kunlik hisobot
 - [ ] 🔒 7. Ovozli kiritish
-- [~] 8. Foto — *jurnalda*
+- [x] 8. Foto — *jurnal va yozuvlarga biriktirish*
 - [ ] 🔒 9. Fotoni AI tahlili
 - [ ] 🔒 10. Video
 - [ ] 🔒 11. QR-kod
-- [~] 12. Chizmalar bilan ishlash — *hujjat sifatida biriktiriladi*
+- [x] 12. Chizmalar bilan ishlash — *topshirilgan versiya prorab ekranida*
 - [~] 13. BIM bilan ishlash — *IFC o'qiladi; 3D ko'rinish yo'q*
 - [x] 14. Bajarilgan ishlar
 - [x] 15. Materiallar
 - [x] 16. Materialga ariza
-- [~] 17. AI ariza taklifi — *zaxira bo'yicha avtomatik ariza*
+- [x] 17. AI ariza taklifi — *jurnaldagi hajmdan norma bo'yicha*
 - [x] 18. Ishchilar hisobi
 - [ ] 🔒 19. Geolokatsiya
 - [x] 20. Texnika
@@ -381,7 +381,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 4. AI xaridlarni rejalashtirishi — *«Xarid rejasi» tabi: qoldiq, yo'ldagi buyurtma va normativ ehtiyoj*
 - [x] 5. Ehtiyojni avtomatik hisoblash — *minimal zaxira va yaqin ishlar normasi bo'yicha, 45 kunlik ufq*
 - [x] 6. Xariddan oldin tekshirish — *reja arizasi bor-yo'qligini ko'rsatadi, takrorlashni oldini oladi*
-- [~] 7. Yetkazib beruvchilarni izlash — *kartochka va ro'yxat*
+- [x] 7. Yetkazib beruvchilarni izlash — *kartochka, ulush va tarix*
 - [x] 8. Yetkazib beruvchi tarixi — *xaridlardan hisoblanadi*
 - [x] 9. Tijorat taklifini so'rash — *taklif yozuvi va zanjirda nazorat*
 - [x] 10. KP qabul qilish
@@ -390,7 +390,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 13. Narx anomaliyasi — *katalogdan 20% farq*
 - [x] 14. Narx o'zgarishini nazorat qilish — *takliflar va obyektlar kesimi*
 - [x] 15. Muqobil yetkazib beruvchi izlash — *bir arizaga bir necha taklif*
-- [~] 16. Yetkazib beruvchini tekshirish — *STIR, taqiq belgisi*
+- [x] 16. Yetkazib beruvchini tekshirish — *STIR, taqiq, aloqa, ulush, tarix*
 - [x] 17. Materialni tekshirish — *moslik tekshiruvi va kartochka*
 - [x] 18. Texnik kelishuv
 - [x] 19. Materialni almashtirish — *tasdiqlangan analog talab qilinadi*

@@ -241,7 +241,7 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
     }
 
     if let Some(i) = make {
-        create_request(app, &suggestions[i]);
+        create_request_from(app, &suggestions[i]);
     }
 
     egui::ScrollArea::both()
@@ -380,7 +380,7 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
 ///
 /// Ariza **qoralama** holatida ochiladi: dastur o'zi ariza yubormaydi,
 /// prorab uni ko'rib, tasdiqqa qo'yadi.
-fn create_request(app: &mut App, r: &crate::checks::JournalRequest) {
+pub fn create_request_from(app: &mut App, r: &crate::checks::JournalRequest) {
     let Some(pid) = app.current else { return };
     let material = app.materials.iter().find(|m| m.id == r.material_id);
     let title = material.map(|m| m.name.clone()).unwrap_or_default();
