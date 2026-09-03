@@ -62,6 +62,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (0u8, t("mch_tab_park")),
                 (1, t("mch_tab_logs")),
                 (2, t("mch_tab_usage")),
+                (3, t("mch_tab_plan")),
+                (4, t("mch_tab_repairs")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -74,6 +76,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         match tab {
             1 => logs_tab(ui, app),
             2 => usage_tab(ui, app),
+            3 => plan_tab(ui, app),
+            4 => repairs_tab(ui, app),
             _ => park_tab(ui, app),
         }
     }
@@ -95,6 +99,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             service_hours: 0.0,
             service_done: 0.0,
             rented: false,
+            price: 0.0,
         });
         app.reload_modules();
     }
@@ -818,6 +823,481 @@ fn bar(ui: &mut egui::Ui, width: f32, v: f64, color: Color32) {
         let mut fill = rect;
         fill.set_width(w);
         p.rect_filled(fill, 3.0, color);
+    }
+}
+
+// ================================================================ Bandlik rejasi
+
+/// Texnikani ishga band qilish (TZ XVI.10-12).
+///
+/// Jurnal faktni yozadi, bu esa rejani: qaysi texnika qaysi ishda qachon
+/// kerak. Reja bo'lmasa to'qnashuvni **oldindan** ko'rib bo'lmaydi — u
+/// faqat maydonda ma'lum bo'ladi.
+fn plan_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(pid) = app.current else { return };
+    let can = app.can_edit(Screen::Machines);
+    let today = app.today;
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if can && ui.button(t("mch_add_booking")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("mch_plan_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    let conflicts = crate::checks::booking_conflicts(&app.bookings);
+    if !conflicts.is_empty() {
+        for c in &conflicts {
+            let name = app
+                .machines
+                .iter()
+                .find(|m| m.id == c.machine_id)
+                .map(|m| m.name.clone())
+                .unwrap_or_default();
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!(
+                        "{name} — {} {} {}",
+                        t("mch_conflict"),
+                        c.days,
+                        t("mch_conflict_days")
+                    ))
+                    .size(12.0)
+                    .color(theme::danger()),
+                );
+            });
+        }
+        ui.add_space(8.0);
+    }
+
+    if app.bookings.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("mch_plan_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let machines = app.machines.clone();
+        let tasks = app.tasks.clone();
+        let mut edited: Option<crate::domain::MachineBooking> = None;
+        let mut removed: Option<i64> = None;
+        let bad: Vec<i64> = conflicts.iter().flat_map(|c| [c.first, c.second]).collect();
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("mch_plan_grid")
+                    .num_columns(8)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("mch_machine"));
+                        head_l(ui, 220.0, t("col_task"));
+                        head_l(ui, 110.0, t("mch_from"));
+                        head_l(ui, 110.0, t("mch_to"));
+                        head_r(ui, 80.0, t("mch_days"));
+                        head_r(ui, 90.0, t("mch_shifts"));
+                        head_l(ui, 160.0, t("col_status"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.bookings {
+                            let mut x = src.clone();
+                            let mut changed = false;
+
+                            let label = machines
+                                .iter()
+                                .find(|m| m.id == x.machine_id)
+                                .map(|m| m.name.clone())
+                                .unwrap_or_default();
+                            egui::ComboBox::from_id_salt(("mb_m", x.id))
+                                .selected_text(super::issues::truncate(&label, 24))
+                                .width(200.0)
+                                .show_ui(ui, |ui| {
+                                    for m in &machines {
+                                        changed |= ui
+                                            .selectable_value(&mut x.machine_id, m.id, &m.name)
+                                            .changed();
+                                    }
+                                });
+
+                            let tl = x
+                                .task_id
+                                .and_then(|id| tasks.iter().find(|t| t.id == id))
+                                .map(|t| format!("{} {}", t.wbs, t.name))
+                                .unwrap_or_else(|| t("dash").to_string());
+                            egui::ComboBox::from_id_salt(("mb_t", x.id))
+                                .selected_text(super::issues::truncate(&tl, 26))
+                                .width(220.0)
+                                .show_ui(ui, |ui| {
+                                    changed |= ui
+                                        .selectable_value(&mut x.task_id, None, t("dash"))
+                                        .changed();
+                                    for tk in &tasks {
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut x.task_id,
+                                                Some(tk.id),
+                                                format!("{} {}", tk.wbs, tk.name),
+                                            )
+                                            .changed();
+                                    }
+                                });
+
+                            changed |= super::passport::date_edit(
+                                ui,
+                                &format!("mbf{}", x.id),
+                                &mut x.from,
+                            );
+                            changed |=
+                                super::passport::date_edit(ui, &format!("mbt{}", x.id), &mut x.to);
+                            cell_r(
+                                ui,
+                                80.0,
+                                RichText::new(x.days().to_string())
+                                    .size(12.0)
+                                    .color(theme::muted()),
+                            );
+                            changed |=
+                                super::materials::num_edit(ui, 90.0, &mut x.shifts, 0.5, 3.0);
+
+                            // Holat: to'qnashuv, o'tgan yoki oldinda.
+                            cell_l(
+                                ui,
+                                160.0,
+                                if bad.contains(&x.id) {
+                                    RichText::new(t("mch_b_conflict"))
+                                        .size(11.5)
+                                        .color(theme::danger())
+                                } else if x.to < today {
+                                    RichText::new(t("mch_b_past"))
+                                        .size(11.5)
+                                        .color(theme::muted())
+                                } else if x.from <= today {
+                                    RichText::new(t("mch_b_now")).size(11.5).color(theme::ok())
+                                } else {
+                                    RichText::new(t("mch_b_future"))
+                                        .size(11.5)
+                                        .color(theme::text())
+                                },
+                            );
+
+                            if can
+                                && ui
+                                    .small_button(RichText::new("x").color(theme::danger()))
+                                    .clicked()
+                            {
+                                removed = Some(x.id);
+                            }
+                            ui.end_row();
+
+                            if changed && can {
+                                edited = Some(x);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(x) = edited {
+            app.db.update_machine_booking(&x);
+            if let Some(slot) = app.bookings.iter_mut().find(|y| y.id == x.id) {
+                *slot = x;
+            }
+        }
+        if let Some(id) = removed {
+            app.db.delete_machine_booking(id);
+            app.reload_modules();
+        }
+    }
+
+    if add {
+        if let Some(m) = app.machines.first().map(|m| m.id) {
+            app.db
+                .insert_machine_booking(&crate::domain::MachineBooking {
+                    id: 0,
+                    project_id: pid,
+                    machine_id: m,
+                    task_id: None,
+                    from: today,
+                    to: today + chrono::Duration::days(6),
+                    shifts: 1.0,
+                    note: String::new(),
+                });
+            app.reload_modules();
+        } else {
+            app.notify(t("mch_no_machines").to_string());
+        }
+    }
+}
+
+// ================================================================ Ta'mir
+
+/// Ta'mir va texnik xizmat (TZ XVI.23-24, 26, 43).
+fn repairs_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(pid) = app.current else { return };
+    let can = app.can_edit(Screen::Machines);
+    let today = app.today;
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if can && ui.button(t("mch_add_repair")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("mch_repairs_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    let summary = crate::checks::repair_summary(&app.machines, &app.repairs, today);
+    let in_repair = summary.iter().filter(|s| s.in_repair).count();
+    let replace = summary.iter().filter(|s| s.consider_replacing).count();
+    let total_cost: f64 = summary.iter().map(|s| s.cost).sum();
+    let downtime: i64 = summary.iter().map(|s| s.downtime).sum();
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("mch_r_in_repair"),
+                in_repair.to_string(),
+                t("mch_r_in_repair_hint"),
+                if in_repair == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("mch_r_cost"),
+                money(total_cost),
+                t("mch_r_cost_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("mch_r_downtime"),
+                downtime.to_string(),
+                t("mch_r_downtime_hint"),
+                if downtime == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("mch_r_replace"),
+                replace.to_string(),
+                t("mch_r_replace_hint"),
+                if replace == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    // Almashtirish haqida o'ylash kerak bo'lgan texnika: ta'mir qiymati
+    // balans qiymatining chegarasidan oshgan.
+    let flagged: Vec<&crate::checks::RepairSummary> =
+        summary.iter().filter(|s| s.consider_replacing).collect();
+    if !flagged.is_empty() {
+        ui.label(
+            RichText::new(t("mch_r_replace_title"))
+                .size(13.0)
+                .strong()
+                .color(theme::danger()),
+        );
+        for s in &flagged {
+            let name = app
+                .machines
+                .iter()
+                .find(|m| m.id == s.machine_id)
+                .map(|m| m.name.clone())
+                .unwrap_or_default();
+            ui.horizontal(|ui| {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!(
+                        "{name} — {} ({:.0}% {})",
+                        money(s.cost),
+                        s.cost_pct,
+                        t("mch_r_of_price")
+                    ))
+                    .size(12.0)
+                    .color(theme::danger()),
+                );
+            });
+        }
+        ui.add_space(12.0);
+    }
+
+    if app.repairs.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("mch_repairs_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let machines = app.machines.clone();
+        let mut edited: Option<crate::domain::MachineRepair> = None;
+        let mut removed: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("mch_rep_grid")
+                    .num_columns(8)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("mch_machine"));
+                        head_l(ui, 130.0, t("col_kind"));
+                        head_l(ui, 110.0, t("mch_r_started"));
+                        head_l(ui, 140.0, t("mch_r_finished"));
+                        head_l(ui, 240.0, t("mch_r_reason"));
+                        head_r(ui, 140.0, t("mch_r_amount"));
+                        head_r(ui, 100.0, t("mch_r_hours"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.repairs {
+                            let mut x = src.clone();
+                            let mut changed = false;
+
+                            let label = machines
+                                .iter()
+                                .find(|m| m.id == x.machine_id)
+                                .map(|m| m.name.clone())
+                                .unwrap_or_default();
+                            egui::ComboBox::from_id_salt(("mr_m", x.id))
+                                .selected_text(super::issues::truncate(&label, 24))
+                                .width(200.0)
+                                .show_ui(ui, |ui| {
+                                    for m in &machines {
+                                        changed |= ui
+                                            .selectable_value(&mut x.machine_id, m.id, &m.name)
+                                            .changed();
+                                    }
+                                });
+                            egui::ComboBox::from_id_salt(("mr_k", x.id))
+                                .selected_text(x.kind.label())
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    for k in crate::domain::RepairKind::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut x.kind, *k, k.label())
+                                            .changed();
+                                    }
+                                });
+                            changed |= super::passport::date_edit(
+                                ui,
+                                &format!("mrs{}", x.id),
+                                &mut x.started,
+                            );
+
+                            // Tugash sanasi bo'sh — texnika hali ta'mirda.
+                            ui.horizontal(|ui| {
+                                let mut has = x.finished.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    x.finished = has.then_some(today);
+                                    changed = true;
+                                }
+                                match x.finished {
+                                    Some(mut d) => {
+                                        if super::passport::date_edit(
+                                            ui,
+                                            &format!("mrf{}", x.id),
+                                            &mut d,
+                                        ) {
+                                            x.finished = Some(d);
+                                            changed = true;
+                                        }
+                                    }
+                                    None => {
+                                        ui.label(
+                                            RichText::new(format!(
+                                                "{} {}",
+                                                x.days(today),
+                                                t("mch_r_days")
+                                            ))
+                                            .size(11.0)
+                                            .color(theme::danger()),
+                                        );
+                                    }
+                                }
+                            });
+
+                            changed |= ui
+                                .add_sized([240.0, 22.0], egui::TextEdit::singleline(&mut x.reason))
+                                .changed();
+                            changed |=
+                                super::materials::num_edit(ui, 140.0, &mut x.cost, 10_000.0, 1e12);
+                            changed |=
+                                super::materials::num_edit(ui, 100.0, &mut x.hours_at, 10.0, 1e6);
+
+                            if can
+                                && ui
+                                    .small_button(RichText::new("x").color(theme::danger()))
+                                    .clicked()
+                            {
+                                removed = Some(x.id);
+                            }
+                            ui.end_row();
+
+                            if changed && can {
+                                edited = Some(x);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(x) = edited {
+            app.db.update_machine_repair(&x);
+            if let Some(slot) = app.repairs.iter_mut().find(|y| y.id == x.id) {
+                *slot = x;
+            }
+        }
+        if let Some(id) = removed {
+            app.db.delete_machine_repair(id);
+            app.reload_modules();
+        }
+    }
+
+    if add {
+        if let Some(m) = app.machines.first().map(|m| m.id) {
+            app.db.insert_machine_repair(&crate::domain::MachineRepair {
+                id: 0,
+                project_id: pid,
+                machine_id: m,
+                kind: crate::domain::RepairKind::Fault,
+                started: today,
+                finished: None,
+                reason: String::new(),
+                cost: 0.0,
+                hours_at: 0.0,
+                note: String::new(),
+            });
+            app.reload_modules();
+        } else {
+            app.notify(t("mch_no_machines").to_string());
+        }
     }
 }
 

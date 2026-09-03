@@ -2843,6 +2843,63 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pf_move_to" => ("Qayerga", "Куда"),
         "pf_move_value" => ("Qiymati", "Стоимость"),
 
+        // ---------- XVI. Texnika bandligi va ta'miri ----------
+        "mch_tab_plan" => ("Bandlik rejasi", "План занятости"),
+        "mch_tab_repairs" => ("Ta'mir", "Ремонт"),
+
+        "rk_planned" => ("Rejali ta'mir", "Плановый ремонт"),
+        "rk_fault" => ("Nosozlik", "Неисправность"),
+        "rk_service_to" => ("Texnik xizmat", "Техобслуживание"),
+        "rk_check" => ("Texnik ko'rik", "Техосмотр"),
+
+        "mch_plan_hint" => (
+            "Jurnal faktni yozadi, bu esa rejani. Reja bo'lmasa to'qnashuv faqat maydonda ma'lum bo'ladi.",
+            "Журнал фиксирует факт, а это — план. Без плана конфликт выяснится только на площадке.",
+        ),
+        "mch_add_booking" => ("+ Bandlik", "+ Бронь"),
+        "mch_plan_empty" => ("Bandlik rejasi bo'sh", "План занятости пуст"),
+        "mch_machine" => ("Texnika", "Техника"),
+        "mch_from" => ("Boshlanish", "Начало"),
+        "mch_to" => ("Tugash", "Окончание"),
+        "mch_days" => ("Kun", "Дней"),
+        "mch_shifts" => ("Smena/kun", "Смен/день"),
+        "mch_conflict" => ("bir vaqtda ikki ishga band,", "занята на две работы одновременно,"),
+        "mch_conflict_days" => ("kun kesishadi", "дн. пересечения"),
+        "mch_b_conflict" => ("to'qnashuv", "конфликт"),
+        "mch_b_past" => ("o'tgan", "прошло"),
+        "mch_b_now" => ("hozir ishda", "сейчас в работе"),
+        "mch_b_future" => ("oldinda", "впереди"),
+        "mch_no_machines" => (
+            "Texnika ro'yxati bo'sh: avval texnikani qo'shing.",
+            "Список техники пуст: сначала добавьте технику.",
+        ),
+
+        "mch_repairs_hint" => (
+            "Ta'mir qiymati balans qiymatining 40 % idan oshsa — almashtirish haqida o'ylash kerak.",
+            "Если стоимость ремонта превысила 40 % балансовой стоимости — стоит подумать о замене.",
+        ),
+        "mch_add_repair" => ("+ Ta'mir", "+ Ремонт"),
+        "mch_repairs_empty" => ("Ta'mir yozuvi yo'q", "Записей о ремонте нет"),
+        "mch_r_in_repair" => ("Ta'mirda", "В ремонте"),
+        "mch_r_in_repair_hint" => ("hozir ishlamayapti", "сейчас не работает"),
+        "mch_r_cost" => ("Ta'mir xarajati", "Затраты на ремонт"),
+        "mch_r_cost_hint" => ("butun davr uchun", "за весь период"),
+        "mch_r_downtime" => ("Bo'sh turgan kun", "Дней простоя"),
+        "mch_r_downtime_hint" => ("ta'mir tufayli", "из-за ремонта"),
+        "mch_r_replace" => ("Almashtirish savoli", "Вопрос замены"),
+        "mch_r_replace_hint" => ("ta'mir qiymati chegaradan oshgan", "стоимость ремонта выше предела"),
+        "mch_r_replace_title" => (
+            "Almashtirish haqida o'ylash kerak",
+            "Стоит подумать о замене",
+        ),
+        "mch_r_of_price" => ("balans qiymatidan", "от балансовой стоимости"),
+        "mch_r_started" => ("Boshlandi", "Начат"),
+        "mch_r_finished" => ("Tugadi", "Завершён"),
+        "mch_r_reason" => ("Sabab", "Причина"),
+        "mch_r_amount" => ("Xarajat", "Затраты"),
+        "mch_r_hours" => ("Motosoat", "Моточасы"),
+        "mch_r_days" => ("kun", "дн."),
+
         // ---------- XIV. Sinovlar, xavflar va reyting ----------
         "ql_tab_tests" => ("Sinovlar", "Испытания"),
         "ql_tab_risks" => ("Xavflar", "Риски"),

@@ -710,6 +710,32 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_labtest_pid ON lab_test(project_id);
 
+            CREATE TABLE IF NOT EXISTS machine_booking (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                machine_id INTEGER NOT NULL REFERENCES machine(id) ON DELETE CASCADE,
+                task_id INTEGER,
+                start TEXT NOT NULL,
+                finish TEXT NOT NULL,
+                shifts REAL NOT NULL DEFAULT 1,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_booking_pid ON machine_booking(project_id);
+
+            CREATE TABLE IF NOT EXISTS machine_repair (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                machine_id INTEGER NOT NULL REFERENCES machine(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'fault',
+                started TEXT NOT NULL,
+                finished TEXT,
+                reason TEXT NOT NULL DEFAULT '',
+                cost REAL NOT NULL DEFAULT 0,
+                hours_at REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_repair_pid ON machine_repair(project_id);
+
             CREATE TABLE IF NOT EXISTS contract (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -803,6 +829,7 @@ impl Db {
             "ALTER TABLE machine ADD COLUMN service_hours REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN service_done REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN rented INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE machine ADD COLUMN price REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine_log ADD COLUMN number TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine_log ADD COLUMN driver TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine_log ADD COLUMN route TEXT NOT NULL DEFAULT ''",
@@ -3806,6 +3833,127 @@ impl Db {
         self.del("lab_test", id)
     }
 
+    // ---------- XVI.10-12, 23-24. Texnika bandligi va ta'miri ----------
+
+    pub fn machine_bookings(&self, pid: i64) -> Vec<MachineBooking> {
+        self.list(
+            "SELECT id,project_id,machine_id,task_id,start,finish,shifts,note
+             FROM machine_booking WHERE project_id=?1 ORDER BY start,id",
+            pid,
+            |r| {
+                Ok(MachineBooking {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    machine_id: r.get(2)?,
+                    task_id: r.get(3)?,
+                    from: date(&r.get::<_, String>(4)?),
+                    to: date(&r.get::<_, String>(5)?),
+                    shifts: r.get(6)?,
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_machine_booking(&self, x: &MachineBooking) -> i64 {
+        self.ins(
+            "INSERT INTO machine_booking (project_id,machine_id,task_id,start,finish,shifts,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                x.project_id,
+                x.machine_id,
+                x.task_id,
+                x.from.to_string(),
+                x.to.to_string(),
+                x.shifts,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_machine_booking(&self, x: &MachineBooking) -> bool {
+        self.upd(
+            "UPDATE machine_booking SET machine_id=?2,task_id=?3,start=?4,finish=?5,shifts=?6,
+                    note=?7 WHERE id=?1",
+            params![
+                x.id,
+                x.machine_id,
+                x.task_id,
+                x.from.to_string(),
+                x.to.to_string(),
+                x.shifts,
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_machine_booking(&self, id: i64) -> bool {
+        self.del("machine_booking", id)
+    }
+
+    pub fn machine_repairs(&self, pid: i64) -> Vec<MachineRepair> {
+        self.list(
+            "SELECT id,project_id,machine_id,kind,started,finished,reason,cost,hours_at,note
+             FROM machine_repair WHERE project_id=?1 ORDER BY started DESC,id DESC",
+            pid,
+            |r| {
+                Ok(MachineRepair {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    machine_id: r.get(2)?,
+                    kind: RepairKind::parse(&r.get::<_, String>(3)?),
+                    started: date(&r.get::<_, String>(4)?),
+                    finished: odate(r.get(5)?),
+                    reason: r.get(6)?,
+                    cost: r.get(7)?,
+                    hours_at: r.get(8)?,
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_machine_repair(&self, x: &MachineRepair) -> i64 {
+        self.ins(
+            "INSERT INTO machine_repair (project_id,machine_id,kind,started,finished,reason,cost,
+                                         hours_at,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                x.project_id,
+                x.machine_id,
+                x.kind.code(),
+                x.started.to_string(),
+                ods(x.finished),
+                x.reason,
+                x.cost,
+                x.hours_at,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_machine_repair(&self, x: &MachineRepair) -> bool {
+        self.upd(
+            "UPDATE machine_repair SET machine_id=?2,kind=?3,started=?4,finished=?5,reason=?6,
+                    cost=?7,hours_at=?8,note=?9 WHERE id=?1",
+            params![
+                x.id,
+                x.machine_id,
+                x.kind.code(),
+                x.started.to_string(),
+                ods(x.finished),
+                x.reason,
+                x.cost,
+                x.hours_at,
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_machine_repair(&self, id: i64) -> bool {
+        self.del("machine_repair", id)
+    }
+
     // ---------- VIII. Buyurtmachi: shartnomalar va to'lovlar ----------
 
     pub fn contracts(&self, pid: i64) -> Vec<Contract> {
@@ -4158,7 +4306,7 @@ impl Db {
     pub fn machines(&self, pid: i64) -> Vec<Machine> {
         self.list(
             "SELECT id,project_id,name,kind,reg_no,owner,status,hour_rate,operator,inspection_until,
-                    fuel_norm,service_hours,service_done,rented
+                    fuel_norm,service_hours,service_done,rented,price
              FROM machine WHERE project_id=?1 ORDER BY name",
             pid,
             |r| {
@@ -4177,6 +4325,7 @@ impl Db {
                     service_hours: r.get(11)?,
                     service_done: r.get(12)?,
                     rented: r.get::<_, i64>(13)? != 0,
+                    price: r.get(14)?,
                 })
             },
         )
@@ -4185,8 +4334,9 @@ impl Db {
     pub fn insert_machine(&self, m: &Machine) -> i64 {
         self.ins(
             "INSERT INTO machine (project_id,name,kind,reg_no,owner,status,hour_rate,operator,
-                                  inspection_until,fuel_norm,service_hours,service_done,rented)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                                  inspection_until,fuel_norm,service_hours,service_done,rented,
+                                  price)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 m.project_id,
                 m.name,
@@ -4200,7 +4350,8 @@ impl Db {
                 m.fuel_norm,
                 m.service_hours,
                 m.service_done,
-                i64::from(m.rented)
+                i64::from(m.rented),
+                m.price
             ],
         )
     }
@@ -4209,7 +4360,7 @@ impl Db {
         self.upd(
             "UPDATE machine SET name=?2,kind=?3,reg_no=?4,owner=?5,status=?6,hour_rate=?7,
                     operator=?8,inspection_until=?9,fuel_norm=?10,service_hours=?11,
-                    service_done=?12,rented=?13 WHERE id=?1",
+                    service_done=?12,rented=?13,price=?14 WHERE id=?1",
             params![
                 m.id,
                 m.name,
@@ -4223,7 +4374,8 @@ impl Db {
                 m.fuel_norm,
                 m.service_hours,
                 m.service_done,
-                i64::from(m.rented)
+                i64::from(m.rented),
+                m.price
             ],
         )
     }
@@ -4695,6 +4847,7 @@ impl Db {
         self.seed_demo_supply_extra(pid, ru);
         self.seed_demo_tools(pid, ru);
         self.seed_demo_lab(pid, ru);
+        self.seed_demo_machine_plan(pid, ru);
         self.seed_demo_estimate_alt(pid, ru);
     }
 
@@ -7270,6 +7423,109 @@ impl Db {
         }
     }
 
+    /// Texnika bandligi va ta'miri namunasi (TZ XVI.10-12, 23-24).
+    pub fn seed_demo_machine_plan(&self, pid: i64, ru: bool) {
+        if !self.machine_bookings(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let machines = self.machines(pid);
+        if machines.is_empty() {
+            return;
+        }
+        let tasks = self.tasks(pid).unwrap_or_default();
+        let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
+
+        // (texnika indeksi, VBS, boshlanish kuni, tugash kuni, smena)
+        // Uchinchi va to'rtinchi bandlik ataylab kesishadi — to'qnashuv
+        // ekranda ko'rinishi kerak.
+        let plan: [(usize, &str, i64, i64, f64); 5] = [
+            (0, "8", 30, 10, 2.0),
+            (1, "9", 24, 6, 1.0),
+            (0, "10", -2, -20, 2.0),
+            (0, "12", -14, -30, 1.0),
+            (2, "11", -6, -25, 1.0),
+        ];
+        for (mi, wbs, from, to, shifts) in plan {
+            let Some(m) = machines.get(mi) else { continue };
+            self.insert_machine_booking(&MachineBooking {
+                id: 0,
+                project_id: pid,
+                machine_id: m.id,
+                task_id: by_wbs(wbs),
+                from: d(from),
+                to: d(to),
+                shifts,
+                note: String::new(),
+            });
+        }
+
+        // (texnika indeksi, tur, boshlangan kun, tugagan kun, sabab uz/ru, xarajat)
+        let repairs: [MachineRepairDef; 5] = [
+            (
+                0,
+                RepairKind::Service,
+                96,
+                Some(95),
+                "Rejali TX-2",
+                "Плановое ТО-2",
+                3_200_000.0,
+            ),
+            (
+                1,
+                RepairKind::Fault,
+                74,
+                Some(70),
+                "Gidravlika shlangi yorilgan",
+                "Порыв гидравлического шланга",
+                5_800_000.0,
+            ),
+            (
+                1,
+                RepairKind::Fault,
+                41,
+                Some(36),
+                "Yurish qismi ta'miri",
+                "Ремонт ходовой части",
+                12_400_000.0,
+            ),
+            (
+                2,
+                RepairKind::Check,
+                28,
+                Some(28),
+                "Texnik ko'rik",
+                "Технический осмотр",
+                900_000.0,
+            ),
+            (
+                1,
+                RepairKind::Fault,
+                4,
+                None,
+                "Dvigatel ishlamayapti",
+                "Не запускается двигатель",
+                6_500_000.0,
+            ),
+        ];
+        for (mi, kind, started, finished, uz, rux, cost) in repairs {
+            let Some(m) = machines.get(mi) else { continue };
+            self.insert_machine_repair(&MachineRepair {
+                id: 0,
+                project_id: pid,
+                machine_id: m.id,
+                kind,
+                started: d(started),
+                finished: finished.map(d),
+                reason: if ru { rux } else { uz }.into(),
+                cost,
+                hours_at: 0.0,
+                note: String::new(),
+            });
+        }
+    }
+
     pub fn seed_demo_resources(&self, pid: i64, ru: bool) {
         if !self.workers(pid).is_empty() {
             return;
@@ -7960,6 +8216,8 @@ impl Db {
                 service_hours,
                 service_done,
                 rented,
+                // Balans qiymati: ijaradagi texnikada u yo'q.
+                price: if rented { 0.0 } else { hour_rate * 2_400.0 },
             })
         };
         let crane = mch(
@@ -10114,4 +10372,16 @@ type LabTestDef = (
     &'static str,
     LabTestResult,
     &'static str,
+);
+
+/// Namunaviy ta'mir: texnika indeksi, tur, boshlangan kun (orqaga),
+/// tugagan kun, sabab (uz/ru), xarajat.
+type MachineRepairDef = (
+    usize,
+    RepairKind,
+    i64,
+    Option<i64>,
+    &'static str,
+    &'static str,
+    f64,
 );

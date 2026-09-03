@@ -5979,3 +5979,92 @@ pub fn banned_usage(materials: &[Material], moves: &[StockMove]) -> Vec<BannedUs
     out.sort_by(|a, b| b.qty.total_cmp(&a.qty));
     out
 }
+
+// ================================================================ XVI.12, 42-43. Texnika
+
+/// Texnika bandligidagi to'qnashuv (TZ XVI.12).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BookingConflict {
+    pub machine_id: i64,
+    pub first: i64,
+    pub second: i64,
+    /// Kesishgan kunlar soni.
+    pub days: i64,
+}
+
+/// Bir texnika bir vaqtda ikki ishga band qilinganini topadi.
+pub fn booking_conflicts(bookings: &[MachineBooking]) -> Vec<BookingConflict> {
+    let mut out = Vec::new();
+    for (i, a) in bookings.iter().enumerate() {
+        for b in bookings.iter().skip(i + 1) {
+            if !a.overlaps(b) {
+                continue;
+            }
+            let from = a.from.max(b.from);
+            let to = a.to.min(b.to);
+            out.push(BookingConflict {
+                machine_id: a.machine_id,
+                first: a.id,
+                second: b.id,
+                days: (to - from).num_days() + 1,
+            });
+        }
+    }
+    out
+}
+
+/// Texnika bo'yicha ta'mir yakuni (TZ XVI.26, 43).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RepairSummary {
+    pub machine_id: i64,
+    pub repairs: usize,
+    /// Nosozlik sababli ta'mirlar (rejali emas).
+    pub faults: usize,
+    pub cost: f64,
+    /// Ta'mirda o'tgan kunlar.
+    pub downtime: i64,
+    /// Hozir ta'mirda.
+    pub in_repair: bool,
+    /// Ta'mir xarajati texnika qiymatining necha foizi.
+    pub cost_pct: f64,
+    /// Almashtirishni o'ylash kerak: ta'mir qiymati chegaradan oshgan.
+    pub consider_replacing: bool,
+}
+
+/// Ta'mir xarajati texnika qiymatining shu ulushidan oshsa — savol tug'iladi.
+pub const REPLACE_LIMIT_PCT: f64 = 40.0;
+
+/// Texnikalar bo'yicha ta'mir yakunini yig'adi.
+///
+/// «Ta'mirlash yoki almashtirish» qarori uchun asosiy son — ta'mirga
+/// ketgan pulning texnika qiymatiga nisbati.
+pub fn repair_summary(
+    machines: &[Machine],
+    repairs: &[MachineRepair],
+    today: NaiveDate,
+) -> Vec<RepairSummary> {
+    machines
+        .iter()
+        .map(|m| {
+            let mine: Vec<&MachineRepair> =
+                repairs.iter().filter(|r| r.machine_id == m.id).collect();
+            let cost: f64 = mine.iter().map(|r| r.cost).sum();
+            // Texnika qiymati noma'lum bo'lsa foizni hisoblab bo'lmaydi.
+            let cost_pct = if m.price > 0.0 {
+                cost / m.price * 100.0
+            } else {
+                0.0
+            };
+            RepairSummary {
+                machine_id: m.id,
+                repairs: mine.len(),
+                faults: mine.iter().filter(|r| r.kind == RepairKind::Fault).count(),
+                cost,
+                downtime: mine.iter().map(|r| r.days(today)).sum(),
+                in_repair: mine.iter().any(|r| r.open()),
+                cost_pct,
+                consider_replacing: cost_pct > REPLACE_LIMIT_PCT,
+            }
+        })
+        .collect()
+}

@@ -1329,6 +1329,9 @@ pub struct Machine {
     pub service_done: f64,
     /// Ijaraga olingan texnika (TZ XVI.32).
     pub rented: bool,
+    /// Balans qiymati (TZ XVI.43). Nol — noma'lum, u holda «ta'mirlash yoki
+    /// almashtirish» savoliga javob berib bo'lmaydi.
+    pub price: f64,
 }
 
 /// Yo'l varaqasining holati (TZ XVI.19).
@@ -1884,5 +1887,75 @@ impl LabTest {
             (Some(v), Some(r)) if r != 0.0 => Some(v / r * 100.0),
             _ => None,
         }
+    }
+}
+
+// ================================================================ XVI.10-12, 23-24. Texnika
+
+/// Texnikani ishga band qilish (TZ XVI.10-12).
+///
+/// Jurnal **fakt**ni yozadi, bu esa **reja**: qaysi texnika qaysi ishda
+/// qachon kerak. Reja bo'lmasa to'qnashuvni oldindan ko'rib bo'lmaydi.
+#[derive(Debug, Clone)]
+pub struct MachineBooking {
+    pub id: i64,
+    pub project_id: i64,
+    pub machine_id: i64,
+    pub task_id: Option<i64>,
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+    /// Kuniga necha smena.
+    pub shifts: f64,
+    pub note: String,
+}
+
+impl MachineBooking {
+    /// Ikki bandlik vaqt bo'yicha kesishadimi.
+    pub fn overlaps(&self, other: &MachineBooking) -> bool {
+        self.machine_id == other.machine_id
+            && self.id != other.id
+            && self.from <= other.to
+            && other.from <= self.to
+    }
+
+    /// Bandlik davomiyligi, kunlarda.
+    pub fn days(&self) -> i64 {
+        (self.to - self.from).num_days() + 1
+    }
+}
+
+enum_kind!(RepairKind {
+    Planned  => "planned",  "rk_planned";
+    Fault    => "fault",    "rk_fault";
+    Service  => "service",  "rk_service_to";
+    Check    => "check",    "rk_check";
+});
+
+/// Texnika ta'miri va texnik xizmati (TZ XVI.23-24, 28).
+#[derive(Debug, Clone)]
+pub struct MachineRepair {
+    pub id: i64,
+    pub project_id: i64,
+    pub machine_id: i64,
+    pub kind: RepairKind,
+    pub started: NaiveDate,
+    /// Tugagan sana. Bo'sh — texnika hali ta'mirda.
+    pub finished: Option<NaiveDate>,
+    pub reason: String,
+    pub cost: f64,
+    /// Ta'mirdan keyingi soat ko'rsatkichi.
+    pub hours_at: f64,
+    pub note: String,
+}
+
+impl MachineRepair {
+    /// Texnika hozir ta'mirda.
+    pub fn open(&self) -> bool {
+        self.finished.is_none()
+    }
+
+    /// Ta'mir necha kun davom etdi (yoki davom etmoqda).
+    pub fn days(&self, today: NaiveDate) -> i64 {
+        (self.finished.unwrap_or(today) - self.started).num_days() + 1
     }
 }

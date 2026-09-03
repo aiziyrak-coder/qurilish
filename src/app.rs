@@ -6,10 +6,10 @@ use crate::db::Db;
 use crate::domain::{
     Batch, Block, ConcreteTest, Contract, ContractChange, DayKind, Deal, Document, Element,
     ElementLink, Estimate, EstimateItem, ExecDoc, GeodesyPoint, Inspection, Inventory,
-    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, LabTest, Machine, MachineLog,
-    Material, Payment, PaymentStage, PprDoc, Purchase, QualityCheck, Request, Reservation,
-    SafetyEvent, Severity, Shift, StockMove, TimesheetEntry, Tool, ToolIssue, Unit, Warehouse,
-    WorkAcceptance, Worker,
+    InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, LabTest, Machine, MachineBooking,
+    MachineLog, MachineRepair, Material, Payment, PaymentStage, PprDoc, Purchase, QualityCheck,
+    Request, Reservation, SafetyEvent, Severity, Shift, StockMove, TimesheetEntry, Tool, ToolIssue,
+    Unit, Warehouse, WorkAcceptance, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -492,6 +492,9 @@ pub struct App {
     pub tools: Vec<Tool>,
     /// XIV.22-25. Laboratoriya va maydon sinovlari.
     pub lab_tests: Vec<LabTest>,
+    /// XVI.10-12, 23-24. Texnika bandligi va ta'miri.
+    pub bookings: Vec<MachineBooking>,
+    pub repairs: Vec<MachineRepair>,
     pub tool_issues: Vec<ToolIssue>,
     /// Bildirishnomalar: ma'lumot o'zgarganda bir marta hisoblanadi.
     ///
@@ -656,6 +659,8 @@ impl App {
             inspections: Vec::new(),
             tools: Vec::new(),
             lab_tests: Vec::new(),
+            bookings: Vec::new(),
+            repairs: Vec::new(),
             tool_issues: Vec::new(),
             contracts: Vec::new(),
             contract_changes: Vec::new(),
@@ -842,6 +847,8 @@ impl App {
         self.inspections.clear();
         self.tools.clear();
         self.lab_tests.clear();
+        self.bookings.clear();
+        self.repairs.clear();
         self.tool_issues.clear();
         self.contracts.clear();
         self.contract_changes.clear();
@@ -901,6 +908,8 @@ impl App {
         self.inspections = self.db.inspections(id);
         self.tools = self.db.tools(id);
         self.lab_tests = self.db.lab_tests(id);
+        self.bookings = self.db.machine_bookings(id);
+        self.repairs = self.db.machine_repairs(id);
         self.tool_issues = self.db.tool_issues(id);
         self.contracts = self.db.contracts(id);
         self.contract_changes = self.db.contract_changes(id);
@@ -1412,6 +1421,7 @@ impl App {
                             service_hours: 0.0,
                             service_done: 0.0,
                             rented: false,
+                            price: 0.0,
                         });
                         self.machines = self.db.machines(pid);
                         id

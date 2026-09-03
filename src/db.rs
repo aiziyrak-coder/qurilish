@@ -3490,6 +3490,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             service_hours: 100.0,
             service_done: 0.0,
             rented: false,
+            price: 0.0,
         };
         let log = |days: i64, hours: f64, fuel: f64, odo: (f64, f64)| MachineLog {
             id: 0,
@@ -3557,6 +3558,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             service_hours: 0.0,
             service_done: 0.0,
             rented: false,
+            price: 0.0,
         };
         let at = |m: &Machine| {
             machine_lines(std::slice::from_ref(m), &[], today, today, today)[0]
@@ -5888,6 +5890,135 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         // Faqat kirim bo'lsa — ishlatilmagan.
         let only_in = vec![mv(MoveKind::In, 5.0)];
         assert!(banned_usage(std::slice::from_ref(&m), &only_in).is_empty());
+    }
+
+    /// TZ XVI.12: bir texnika bir vaqtda ikki ishga band bo'lsa aytiladi.
+    #[test]
+    fn booking_conflicts_are_found() {
+        use crate::checks::booking_conflicts;
+        use crate::domain::MachineBooking;
+
+        let day = |n: i64| {
+            chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap() + chrono::Duration::days(n)
+        };
+        let bk = |id: i64, machine: i64, from: i64, to: i64| MachineBooking {
+            id,
+            project_id: 1,
+            machine_id: machine,
+            task_id: None,
+            from: day(from),
+            to: day(to),
+            shifts: 1.0,
+            note: String::new(),
+        };
+
+        // Kesishmaydigan bandliklar — savol yo'q.
+        let ok = vec![bk(1, 7, 0, 5), bk(2, 7, 6, 10)];
+        assert!(booking_conflicts(&ok).is_empty());
+
+        // Kesishadi: 3-5 kunlar ikkalasida ham band.
+        let bad = vec![bk(1, 7, 0, 5), bk(2, 7, 3, 9)];
+        let found = booking_conflicts(&bad);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].machine_id, 7);
+        assert_eq!(found[0].days, 3, "3, 4 va 5-kunlar kesishadi");
+
+        // Boshqa texnika — to'qnashuv emas.
+        let other = vec![bk(1, 7, 0, 5), bk(2, 8, 3, 9)];
+        assert!(booking_conflicts(&other).is_empty());
+
+        // Bandlik davomiyligi kunlar bilan.
+        assert_eq!(bk(1, 7, 0, 6).days(), 7);
+    }
+
+    /// TZ XVI.43: «ta'mirlash yoki almashtirish» qarori ta'mir qiymatining
+    /// balans qiymatiga nisbatidan chiqadi.
+    #[test]
+    fn repair_summary_flags_expensive_machines() {
+        use crate::checks::{repair_summary, REPLACE_LIMIT_PCT};
+        use crate::domain::{MachineRepair, RepairKind};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let machine = |id: i64, price: f64| crate::domain::Machine {
+            id,
+            project_id: 1,
+            name: format!("M-{id}"),
+            kind: crate::domain::MachineKind::Excavator,
+            reg_no: String::new(),
+            owner: String::new(),
+            status: crate::domain::MachineStatus::Working,
+            hour_rate: 0.0,
+            operator: String::new(),
+            inspection_until: None,
+            fuel_norm: 0.0,
+            service_hours: 0.0,
+            service_done: 0.0,
+            rented: false,
+            price,
+        };
+        let repair = |machine_id: i64, cost: f64, open: bool| MachineRepair {
+            id: 0,
+            project_id: 1,
+            machine_id,
+            kind: RepairKind::Fault,
+            started: today - chrono::Duration::days(4),
+            finished: (!open).then(|| today - chrono::Duration::days(2)),
+            reason: String::new(),
+            cost,
+            hours_at: 0.0,
+            note: String::new(),
+        };
+
+        let machines = vec![machine(1, 100_000_000.0), machine(2, 100_000_000.0)];
+        let repairs = vec![
+            // Birinchisiga chegaradan ko'p sarflangan.
+            repair(1, 45_000_000.0, false),
+            // Ikkinchisiga kam, lekin hozir ta'mirda.
+            repair(2, 10_000_000.0, true),
+        ];
+        let out = repair_summary(&machines, &repairs, today);
+        assert_eq!(out.len(), 2);
+
+        let first = out.iter().find(|s| s.machine_id == 1).unwrap();
+        assert!(first.cost_pct > REPLACE_LIMIT_PCT);
+        assert!(first.consider_replacing);
+        assert!(!first.in_repair);
+        assert_eq!(first.faults, 1);
+        assert_eq!(first.downtime, 3, "boshlangan kun ham hisobga kiradi");
+
+        let second = out.iter().find(|s| s.machine_id == 2).unwrap();
+        assert!(!second.consider_replacing);
+        assert!(second.in_repair);
+
+        // Qiymati noma'lum texnikada savol qo'yib bo'lmaydi.
+        let unknown = repair_summary(&[machine(3, 0.0)], &[repair(3, 99.0, false)], today);
+        assert_eq!(unknown[0].cost_pct, 0.0);
+        assert!(!unknown[0].consider_replacing);
+    }
+
+    /// Namunada bandlik to'qnashuvi va ochiq ta'mir bor.
+    #[test]
+    fn demo_has_booking_conflict_and_open_repair() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+
+        let bookings = t.db.machine_bookings(pid);
+        assert!(!bookings.is_empty(), "namunada bandlik yo'q");
+        assert!(
+            !crate::checks::booking_conflicts(&bookings).is_empty(),
+            "namunada to'qnashuv ko'rsatilmagan"
+        );
+
+        let repairs = t.db.machine_repairs(pid);
+        assert!(!repairs.is_empty(), "namunada ta'mir yo'q");
+        assert!(
+            repairs.iter().any(|r| r.open()),
+            "namunada ochiq ta'mir yo'q"
+        );
+        let sum = crate::checks::repair_summary(&t.db.machines(pid), &repairs, today);
+        assert!(sum.iter().any(|s| s.in_repair));
+        assert!(sum.iter().map(|s| s.cost).sum::<f64>() > 0.0);
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

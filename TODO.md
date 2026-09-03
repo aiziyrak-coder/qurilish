@@ -33,13 +33,13 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
 | XIV. Sifat | 41 | 28 | 9 | 4 | 2 |
 | XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
-| XVI. Mashinalar | 50 | 28 | 8 | 14 | 2 |
+| XVI. Mashinalar | 50 | 35 | 9 | 6 | 2 |
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **381** | **170** | **149** | **53** |
+| **Jami** | **700** | **388** | **171** | **141** | **53** |
 
-Ya'ni **~54 % to'liq**, **~24 % qisman**, **~21 % hali yo'q**.
+Ya'ni **~55 % to'liq**, **~24 % qisman**, **~20 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -676,10 +676,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 6. Texnika qayerda — *GPS*
 - [x] 7. Holatlar
 - [~] 8. Texnikaga ariza — *ariza turi bor*
-- [ ] 9. AI texnikani taqsimlashi
-- [ ] 10. GPR bilan bog'lanish
-- [ ] 11. Texnikani rejalashtirish
-- [ ] 12. To'qnashuvlarning oldini olish
+- [x] 9. Texnikani taqsimlash — *bandlik rejasi: qaysi texnika qaysi ishda*
+- [x] 10. GPR bilan bog'lanish — *bandlik ishga bog'lanadi*
+- [x] 11. Texnikani rejalashtirish — *muddat va kunlik smena soni*
+- [x] 12. To'qnashuvlarning oldini olish — *bir texnika ikki ishda: kesishgan kunlar ko'rsatiladi*
 - [x] 13. **Motosoat**
 - [x] 14. Yurgan masofa — *spidometr farqidan*
 - [x] 15. Motosoat nazorati — *foydalanish koeffitsiyenti*
@@ -690,10 +690,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 20. Mashinaga topshiriq — *smena ishga bog'lanadi*
 - [~] 21. Bajarilishni nazorat qilish — *soat, masofa, reys*
 - [x] 22. Tashishni nazorat qilish — *reys soni va yuk*
-- [~] 23. **Ta'mir** — *holat sifatida*
-- [ ] 24. Ta'mirga ariza
+- [x] 23. Ta'mir — *rejali, nosozlik, TX, texnik ko'rik; xarajat va bo'sh turgan kun*
+- [x] 24. Ta'mirga ariza — *ariza turi (IX) va ta'mir yozuvi*
 - [x] 25. Rejali TX — *motosoat oralig'i, qolgani*
-- [ ] 26. AI ta'mir prognozi
+- [~] 26. Ta'mir prognozi — *nosozliklar soni va xarajati ko'rinadi; prognoz formulasi yo'q*
 - [x] 27. Ekspluatatsiyani taqiqlash — *ko'rik, TX, ta'mir*
 - [ ] 28. Kunlik ko'rik
 - [x] 29. Xavfsizlik bilan bog'lanish — *AN-R1 qoidasi*
@@ -709,8 +709,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 39. AI parkni optimallashtirishi
 - [ ] 🔒 40. Texnika xaritasi
 - [x] 41. Mashina tarixi — *yo'l varaqalari*
-- [ ] 42. AI samaradorlik tahlili
-- [ ] 43. «Ta'mirlash yoki almashtirish» qarori
+- [~] 42. Samaradorlik tahlili — *bo'sh turish, ta'mir xarajati va foydalanish koeffitsiyenti; umumiy ball yo'q*
+- [x] 43. «Ta'mirlash yoki almashtirish» — *ta'mir qiymati balansning 40 % idan oshsa belgilanadi*
 - [~] 44. Mashina hujjatlari — *texnik ko'rik*
 - [~] 45. Bildirishnomalar — *TX muddati markazga chiqadi; push tashqi omil*
 - [ ] 46. Mexanik kabineti
