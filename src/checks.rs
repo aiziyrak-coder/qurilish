@@ -11344,3 +11344,223 @@ pub fn supply_chain(
     out.sort_by_key(|(_, g)| std::cmp::Reverse(g.len()));
     (out, sum)
 }
+
+// ================= XVI.8, 21, 26, 42, 48. Texnika zanjiri va prognoz =================
+
+/// Bitta texnika bo'yicha to'liq manzara (TZ XVI.21, 42, 48).
+///
+/// Zanjir: **ariza → biriktirish → smena → yoqilg'i → ta'mir → tannarx.**
+/// Har bosqich alohida yozuvda; bu yerda ular bir qatorda turadi.
+#[derive(Debug, Clone)]
+pub struct MachineChain {
+    pub machine_id: i64,
+    pub name: String,
+    pub rented: bool,
+    /// Shu texnikaga berilgan arizalar soni.
+    pub requests: usize,
+    /// Ishlangan soat va bo'sh turgan kunlar.
+    pub hours: f64,
+    pub idle_days: i64,
+    /// Yoqilg'i: yozilgan va normativ bo'yicha kutilgan.
+    pub fuel_used: f64,
+    pub fuel_norm: f64,
+    /// Ta'mirlar soni va xarajati.
+    pub repairs: usize,
+    pub repair_cost: f64,
+    /// Ishlagan soatning qiymati.
+    pub work_cost: f64,
+}
+
+impl MachineChain {
+    /// Yoqilg'i normadan chetlanishi, foizda. Norma yo'q bo'lsa `None`.
+    pub fn fuel_deviation(&self) -> Option<f64> {
+        (self.fuel_norm > 0.0).then(|| (self.fuel_used - self.fuel_norm) * 100.0 / self.fuel_norm)
+    }
+
+    /// Bir motosoatning to'liq qiymati: ish va ta'mir birga.
+    pub fn cost_per_hour(&self) -> Option<f64> {
+        (self.hours > 0.0).then(|| (self.work_cost + self.repair_cost) / self.hours)
+    }
+
+    /// Samaradorlik balli, 0-100 (TZ XVI.42).
+    ///
+    /// Uch qism teng vaznda: foydalanish (bo'sh turmaganmi), ishonchlilik
+    /// (ta'mirga tushmaganmi) va yoqilg'i intizomi. Narx **ballga
+    /// kirmaydi**: qimmat, lekin doim ishlaydigan texnikani yomon deb
+    /// ko'rsatib qo'ymaslik uchun — narx alohida ustunda turadi.
+    pub fn score(&self, period_days: i64) -> f64 {
+        let days = period_days.max(1) as f64;
+        let usage = (self.hours / (days * SHIFT_HOURS) * 100.0).clamp(0.0, 100.0);
+        // Har ta'mir 20 ball tushiradi.
+        let reliability = (100.0 - self.repairs as f64 * 20.0).clamp(0.0, 100.0);
+        let fuel = match self.fuel_deviation() {
+            // Norma yo'q — bu qism baholanmaydi va to'liq ball beriladi:
+            // ma'lumot yo'qligi uchun jazolash noto'g'ri bo'lardi.
+            None => 100.0,
+            Some(d) => (100.0 - d.abs()).clamp(0.0, 100.0),
+        };
+        (usage + reliability + fuel) / 3.0
+    }
+}
+
+/// Ta'mir prognozi (TZ XVI.26).
+#[derive(Debug, Clone)]
+pub struct RepairForecast {
+    pub machine_id: i64,
+    pub name: String,
+    /// Ta'mirlar orasidagi o'rtacha motosoat (MTBF).
+    pub mtbf_hours: f64,
+    /// Oxirgi ta'mirdan keyin ishlangan soat.
+    pub since_last: f64,
+    /// Keyingi ta'mirgacha qolgan soat. Manfiy — muddat o'tgan.
+    pub hours_left: f64,
+    /// Kunlik o'rtacha soat bo'yicha taxminiy sana.
+    pub when: Option<NaiveDate>,
+    /// Prognoz nechta ta'mirga tayangan. Ikkitadan kam bo'lsa prognoz
+    /// berilmaydi — bitta hodisadan qonuniyat chiqmaydi.
+    pub based_on: usize,
+}
+
+impl RepairForecast {
+    /// Ta'mir yaqinlashdimi.
+    pub fn soon(&self) -> bool {
+        self.mtbf_hours > 0.0 && self.hours_left <= self.mtbf_hours * 0.2
+    }
+}
+
+/// TZ XVI.26: keyingi ta'mir qachon kutilishini baholaydi.
+///
+/// Hisob **tarixga** tayanadi: ta'mirlar orasidagi o'rtacha motosoat
+/// (MTBF) topiladi va oxirgi ta'mirdan keyin ishlangan soat undan
+/// ayriladi. Ikkitadan kam ta'miri bor texnikaga prognoz berilmaydi —
+/// bitta hodisadan qonuniyat chiqmaydi.
+pub fn repair_forecast(
+    machines: &[Machine],
+    logs: &[MachineLog],
+    repairs: &[MachineRepair],
+    today: NaiveDate,
+    period_days: i64,
+) -> Vec<RepairForecast> {
+    let mut out = Vec::new();
+    for m in machines {
+        let mut mine: Vec<&MachineRepair> = repairs
+            .iter()
+            .filter(|r| r.machine_id == m.id && r.kind != RepairKind::Planned)
+            .collect();
+        if mine.len() < 2 {
+            continue;
+        }
+        mine.sort_by_key(|r| r.started);
+
+        // Ta'mirlar orasidagi motosoat: har oraliqda ishlangan soat.
+        let mut gaps: Vec<f64> = Vec::new();
+        for pair in mine.windows(2) {
+            let hours: f64 = logs
+                .iter()
+                .filter(|l| {
+                    l.machine_id == m.id && l.date > pair[0].started && l.date <= pair[1].started
+                })
+                .map(|l| l.hours)
+                .sum();
+            if hours > 0.0 {
+                gaps.push(hours);
+            }
+        }
+        if gaps.is_empty() {
+            continue;
+        }
+        let mtbf = gaps.iter().sum::<f64>() / gaps.len() as f64;
+
+        let last = mine.last().unwrap().started;
+        let since: f64 = logs
+            .iter()
+            .filter(|l| l.machine_id == m.id && l.date > last)
+            .map(|l| l.hours)
+            .sum();
+
+        // Kunlik sur'at: oxirgi davr bo'yicha.
+        let from = today - chrono::Duration::days(period_days.max(1));
+        let recent: f64 = logs
+            .iter()
+            .filter(|l| l.machine_id == m.id && l.date > from && l.date <= today)
+            .map(|l| l.hours)
+            .sum();
+        let per_day = recent / period_days.max(1) as f64;
+        let left = mtbf - since;
+
+        out.push(RepairForecast {
+            machine_id: m.id,
+            name: m.name.clone(),
+            mtbf_hours: mtbf,
+            since_last: since,
+            hours_left: left,
+            when: (per_day > 0.0)
+                .then(|| today + chrono::Duration::days((left.max(0.0) / per_day).round() as i64)),
+            based_on: mine.len(),
+        });
+    }
+    // Eng yaqin ta'mir oldinda.
+    out.sort_by(|a, b| a.hours_left.total_cmp(&b.hours_left));
+    out
+}
+
+/// TZ XVI.21, 42, 48: texnika bo'yicha to'liq zanjirni yig'adi.
+pub fn machine_chain(
+    machines: &[Machine],
+    logs: &[MachineLog],
+    repairs: &[MachineRepair],
+    requests: &[Request],
+    today: NaiveDate,
+    period_days: i64,
+) -> Vec<MachineChain> {
+    let from = today - chrono::Duration::days(period_days.max(1));
+    let key = |s: &str| s.trim().to_lowercase();
+
+    let mut out = Vec::new();
+    for m in machines {
+        let mine: Vec<&MachineLog> = logs
+            .iter()
+            .filter(|l| l.machine_id == m.id && l.date > from && l.date <= today)
+            .collect();
+        let hours: f64 = mine.iter().map(|l| l.hours).sum();
+        let worked_days = {
+            let mut d: Vec<NaiveDate> = mine
+                .iter()
+                .filter(|l| l.hours > 0.0)
+                .map(|l| l.date)
+                .collect();
+            d.sort_unstable();
+            d.dedup();
+            d.len() as i64
+        };
+        let period_repairs: Vec<&MachineRepair> = repairs
+            .iter()
+            .filter(|r| r.machine_id == m.id && r.started > from && r.started <= today)
+            .collect();
+
+        out.push(MachineChain {
+            machine_id: m.id,
+            name: m.name.clone(),
+            rented: m.rented,
+            // Texnikaga ariza: nomi arizada uchraydigan yozuvlar (TZ XVI.8).
+            requests: requests
+                .iter()
+                .filter(|r| {
+                    matches!(r.kind, RequestKind::Machine | RequestKind::Transport)
+                        && (key(&r.title).contains(&key(&m.name))
+                            || key(&r.note).contains(&key(&m.name)))
+                })
+                .count(),
+            hours,
+            idle_days: period_days.max(1) - worked_days,
+            fuel_used: mine.iter().map(|l| l.fuel).sum(),
+            fuel_norm: m.fuel_norm * hours,
+            repairs: period_repairs.len(),
+            repair_cost: period_repairs.iter().map(|r| r.cost).sum(),
+            work_cost: hours * m.hour_rate,
+        });
+    }
+    // Eng past ball oldinda.
+    out.sort_by(|a, b| a.score(period_days).total_cmp(&b.score(period_days)));
+    out
+}

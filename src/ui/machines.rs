@@ -70,6 +70,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (3, t("mch_tab_plan")),
                 (4, t("mch_tab_repairs")),
                 (5, t("mch_tab_mech")),
+                (6, t("mch_tab_chain")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -85,6 +86,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             3 => plan_tab(ui, app),
             4 => repairs_tab(ui, app),
             5 => mech_tab(ui, app),
+            6 => chain_tab(ui, app),
             _ => park_tab(ui, app),
         }
     }
@@ -240,6 +242,199 @@ fn status_color(s: MachineStatus) -> Color32 {
 }
 
 // ================================================================ Park
+
+// ================================================================ Zanjir
+
+/// Texnika zanjiri va ta'mir prognozi (TZ XVI.8, 21, 26, 42, 48).
+///
+/// Zanjir: ariza → biriktirish → smena → yoqilg'i → ta'mir → tannarx.
+/// Samaradorlik balliga narx **kirmaydi**: qimmat, lekin doim ishlaydigan
+/// texnikani yomon deb ko'rsatib qo'ymaslik uchun — narx alohida ustunda.
+fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let rows = app.machine_chain();
+    let forecast = app.repair_forecast();
+    let days = 30_i64;
+
+    ui.label(
+        RichText::new(t("mch_chain_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("mch_chain")
+                .num_columns(9)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 200.0, t("col_machine"));
+                    head_r(ui, 70.0, t("mch_ch_requests"));
+                    head_r(ui, 90.0, t("col_hours"));
+                    head_r(ui, 90.0, t("mch_park_idle"));
+                    head_r(ui, 110.0, t("mch_ch_fuel"));
+                    head_r(ui, 80.0, t("mch_ch_repairs"));
+                    head_r(ui, 130.0, t("mch_ch_cost"));
+                    head_r(ui, 120.0, t("mch_ch_per_hour"));
+                    head_r(ui, 90.0, t("mch_ch_score"));
+                    ui.end_row();
+
+                    for c in &rows {
+                        cell_l(
+                            ui,
+                            200.0,
+                            RichText::new(super::issues::truncate(&c.name, 24))
+                                .size(12.5)
+                                .color(if c.rented {
+                                    theme::muted()
+                                } else {
+                                    theme::text()
+                                }),
+                        )
+                        .on_hover_text(format!(
+                            "{} · {}",
+                            if c.rented {
+                                t("mch_park_rented")
+                            } else {
+                                t("mch_park_owned")
+                            },
+                            app.machines
+                                .iter()
+                                .find(|m| m.id == c.machine_id)
+                                .map(|m| m.reg_no.clone())
+                                .unwrap_or_default()
+                        ));
+                        cell_r(ui, 70.0, RichText::new(c.requests.to_string()).size(12.0));
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(format!("{:.0}", c.hours)).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(c.idle_days.to_string())
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        // Yoqilg'i: norma bo'lsa chetlanish, bo'lmasa faqat sarf.
+                        cell_r(
+                            ui,
+                            110.0,
+                            match c.fuel_deviation() {
+                                Some(d) => RichText::new(format!("{d:+.0}%")).size(12.0).color(
+                                    if d.abs() > 10.0 {
+                                        theme::warn()
+                                    } else {
+                                        theme::muted()
+                                    },
+                                ),
+                                None => RichText::new(super::materials::trim_num(c.fuel_used))
+                                    .size(12.0)
+                                    .color(theme::muted()),
+                            },
+                        );
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(c.repairs.to_string()).size(12.0).color(
+                                if c.repairs == 0 {
+                                    theme::muted()
+                                } else {
+                                    theme::warn()
+                                },
+                            ),
+                        );
+                        cell_r(
+                            ui,
+                            130.0,
+                            RichText::new(money(c.work_cost + c.repair_cost)).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(
+                                c.cost_per_hour()
+                                    .map(money)
+                                    .unwrap_or_else(|| t("dash").to_string()),
+                            )
+                            .size(12.0)
+                            .color(theme::muted()),
+                        );
+                        let score = c.score(days);
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(format!("{score:.0}")).size(12.5).color(
+                                if score >= 80.0 {
+                                    theme::ok()
+                                } else if score >= 60.0 {
+                                    theme::warn()
+                                } else {
+                                    theme::danger()
+                                },
+                            ),
+                        );
+                        ui.end_row();
+                    }
+                });
+
+            // ---------- Ta'mir prognozi (TZ XVI.26) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("mch_forecast")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("mch_forecast_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if forecast.is_empty() {
+                ui.label(
+                    RichText::new(t("mch_forecast_none"))
+                        .size(12.5)
+                        .color(theme::muted()),
+                );
+            }
+            for f in &forecast {
+                ui.label(
+                    RichText::new(format!(
+                        "· {} — {}: {:.0} {}, {}: {:.0} {}{}",
+                        super::issues::truncate(&f.name, 24),
+                        t("mch_fc_mtbf"),
+                        f.mtbf_hours,
+                        t("col_hours"),
+                        t("mch_fc_left"),
+                        f.hours_left,
+                        t("col_hours"),
+                        f.when
+                            .map(|d| format!(" · {}", d.format("%d.%m.%Y")))
+                            .unwrap_or_default()
+                    ))
+                    .size(12.0)
+                    .color(if f.soon() {
+                        theme::warn()
+                    } else {
+                        theme::muted()
+                    }),
+                )
+                // Prognoz nechta ta'mirga tayangani va oxirgi ta'mirdan
+                // beri qancha ishlagani — ishonch darajasi shundan ko'rinadi.
+                .on_hover_text(format!(
+                    "{}: {} · {}: {:.0} {}",
+                    t("mch_fc_based"),
+                    f.based_on,
+                    t("mch_fc_since"),
+                    f.since_last,
+                    t("col_hours")
+                ));
+                let _ = f.machine_id;
+            }
+            ui.add_space(16.0);
+        });
+}
 
 // ================================================================ Mexanik
 

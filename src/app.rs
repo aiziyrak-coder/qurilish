@@ -2291,6 +2291,29 @@ impl App {
         )
     }
 
+    /// Texnika bo'yicha to'liq zanjir va samaradorlik (TZ XVI.21, 42, 48).
+    pub fn machine_chain(&self) -> Vec<checks::MachineChain> {
+        checks::machine_chain(
+            &self.machines,
+            &self.machine_logs,
+            &self.repairs,
+            &self.requests,
+            self.today,
+            PARK_DAYS,
+        )
+    }
+
+    /// Ta'mir prognozi (TZ XVI.26).
+    pub fn repair_forecast(&self) -> Vec<checks::RepairForecast> {
+        checks::repair_forecast(
+            &self.machines,
+            &self.machine_logs,
+            &self.repairs,
+            self.today,
+            PARK_DAYS,
+        )
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

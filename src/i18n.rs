@@ -4490,6 +4490,31 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cg_no_quotes" => ("taklif olinmagan", "предложения не запрашивались"),
         "cg_overpaid" => ("ortiqcha to'langan", "переплата"),
         "cg_pay_overdue" => ("to'lov muddati o'tgan", "срок оплаты истёк"),
+        // XVI.8, 21, 26, 42, 48. Texnika zanjiri
+        "mch_tab_chain" => ("Zanjir", "Цепочка"),
+        "mch_chain_hint" => (
+            "Ariza → biriktirish → smena → yoqilg'i → ta'mir → tannarx. Ballga narx kirmaydi: qimmat, lekin doim ishlaydigan texnika yomon ko'rinib qolmasin.",
+            "Заявка → закрепление → смена → топливо → ремонт → себестоимость. Цена не входит в балл: дорогая, но постоянно работающая техника не должна выглядеть плохой.",
+        ),
+        "mch_ch_requests" => ("Ariza", "Заявок"),
+        "mch_ch_fuel" => ("Yoqilg'i", "Топливо"),
+        "mch_ch_repairs" => ("Ta'mir", "Ремонтов"),
+        "mch_ch_cost" => ("Jami xarajat", "Всего затрат"),
+        "mch_ch_per_hour" => ("Soatiga", "За час"),
+        "mch_ch_score" => ("Ball", "Балл"),
+        "mch_forecast" => ("Ta'mir prognozi", "Прогноз ремонта"),
+        "mch_forecast_hint" => (
+            "Tarixga tayanadi: ta'mirlar orasidagi o'rtacha motosoat. Ikkitadan kam ta'miri bor texnikaga prognoz berilmaydi — bitta hodisadan qonuniyat chiqmaydi.",
+            "Опирается на историю: средняя наработка между ремонтами. Технике с менее чем двумя ремонтами прогноз не даётся — по одному случаю закономерности нет.",
+        ),
+        "mch_forecast_none" => (
+            "Prognoz uchun ta'mir tarixi yetarli emas.",
+            "Истории ремонтов для прогноза недостаточно.",
+        ),
+        "mch_fc_mtbf" => ("o'rtacha oraliq", "средний интервал"),
+        "mch_fc_left" => ("qoldi", "осталось"),
+        "mch_fc_based" => ("Ta'mirlar soni", "Число ремонтов"),
+        "mch_fc_since" => ("Oxirgi ta'mirdan beri", "С последнего ремонта"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

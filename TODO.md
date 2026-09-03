@@ -26,20 +26,20 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 30 | 5 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
-| IX. Arizalar | 42 | 37 | 4 | 1 | 1 |
+| IX. Arizalar | 42 | 38 | 3 | 1 | 1 |
 | X. Xaridlar | 48 | 43 | 3 | 2 | 2 |
 | XI. Ombor | 48 | 45 | 2 | 1 | 1 |
 | XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
 | XIII. Tabel | 44 | 34 | 4 | 6 | 6 |
 | XIV. Sifat | 41 | 33 | 6 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
-| XVI. Mashinalar | 50 | 42 | 6 | 2 | 2 |
+| XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 47 | 4 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **552** | **102** | **46** | **46** |
+| **Jami** | **700** | **558** | **96** | **46** | **46** |
 
-Ya'ni **~79 % to'liq**, **~15 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~80 % to'liq**, **~14 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -349,7 +349,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 19. Ariza → ombor
 - [x] 20. Qisman yetkazish
 - [x] 21. Muddati o'tgan arizalarni nazorat qilish
-- [~] 22. Texnikaga ariza — *tur bor, jarayon yo'q*
+- [x] 22. Texnikaga ariza — *zanjirda ko'rinadi*
 - [x] 23. Transportga ariza — *ariza turi*
 - [x] 24. Ta'mirga ariza — *ariza turi*
 - [x] 25. Pulga ariza — *ariza turi*
@@ -675,7 +675,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 5. Texnika toifalari
 - [ ] 🔒 6. Texnika qayerda — *GPS*
 - [x] 7. Holatlar
-- [~] 8. Texnikaga ariza — *ariza turi bor*
+- [x] 8. Texnikaga ariza — *zanjirda arizalar soni ko'rinadi*
 - [x] 9. Texnikani taqsimlash — *bandlik rejasi: qaysi texnika qaysi ishda*
 - [x] 10. GPR bilan bog'lanish — *bandlik ishga bog'lanadi*
 - [x] 11. Texnikani rejalashtirish — *muddat va kunlik smena soni*
@@ -688,12 +688,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 18. Yoqilg'i tahlili — *fakt / norma, 10% dan oshgani qizil*
 - [x] 19. **Yo'l varaqalari** — *raqam, haydovchi, marshrut, spidometr*
 - [x] 20. Mashinaga topshiriq — *smena ishga bog'lanadi*
-- [~] 21. Bajarilishni nazorat qilish — *soat, masofa, reys*
+- [x] 21. Bajarilishni nazorat qilish — *soat, bo'sh turish, yoqilg'i va tannarx*
 - [x] 22. Tashishni nazorat qilish — *reys soni va yuk*
 - [x] 23. Ta'mir — *rejali, nosozlik, TX, texnik ko'rik; xarajat va bo'sh turgan kun*
 - [x] 24. Ta'mirga ariza — *ariza turi (IX) va ta'mir yozuvi*
 - [x] 25. Rejali TX — *motosoat oralig'i, qolgani*
-- [~] 26. Ta'mir prognozi — *nosozliklar soni va xarajati ko'rinadi; prognoz formulasi yo'q*
+- [x] 26. Ta'mir prognozi — *ta'mirlar orasidagi o'rtacha motosoat*
 - [x] 27. Ekspluatatsiyani taqiqlash — *ko'rik, TX, ta'mir*
 - [x] 28. Kunlik ko'rik
 - [x] 29. Xavfsizlik bilan bog'lanish — *AN-R1 qoidasi*
@@ -709,13 +709,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 39. AI parkni optimallashtirishi — *foydalanish koeffitsiyenti va tavsiya*
 - [ ] 🔒 40. Texnika xaritasi
 - [x] 41. Mashina tarixi — *yo'l varaqalari*
-- [~] 42. Samaradorlik tahlili — *bo'sh turish, ta'mir xarajati va foydalanish koeffitsiyenti; umumiy ball yo'q*
+- [x] 42. Samaradorlik tahlili — *foydalanish, ishonchlilik va yoqilg'i intizomi*
 - [x] 43. «Ta'mirlash yoki almashtirish» — *ta'mir qiymati balansning 40 % idan oshsa belgilanadi*
 - [x] 44. Mashina hujjatlari — *texnik ko'rik va kunlik ko'rik yozuvlari*
 - [~] 45. Bildirishnomalar — *TX muddati markazga chiqadi; push tashqi omil*
 - [x] 46. Mexanik kabineti
 - [x] 47. Direktor kabineti — *«Rahbar» ekranida*
-- [~] 48. XVI ning bosh zanjiri
+- [x] 48. XVI ning bosh zanjiri
 - [x] 49. Boshqa modullar bilan bog'lanish
 - [x] 50. Eng kuchli funksiya
 

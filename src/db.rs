@@ -9997,6 +9997,120 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(rows.len() <= app.purchases.len());
     }
 
+    /// TZ XVI.26: prognoz ikkitadan kam ta'mirga berilmaydi va o'rtacha
+    /// oraliq tarixdan hisoblanadi.
+    #[test]
+    fn repair_forecast_needs_history() {
+        use crate::checks::repair_forecast;
+        use crate::domain::{MachineLog, MachineRepair, RepairKind};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let m = t.db.machines(pid).into_iter().next().expect("texnika");
+
+        let repair = |days_ago: i64| MachineRepair {
+            id: 0,
+            project_id: pid,
+            machine_id: m.id,
+            kind: RepairKind::Fault,
+            started: today - chrono::Duration::days(days_ago),
+            finished: Some(today - chrono::Duration::days(days_ago - 1)),
+            reason: String::new(),
+            cost: 100.0,
+            hours_at: 0.0,
+            note: String::new(),
+        };
+        // Har kuni 10 soat ishlagan.
+        let logs: Vec<MachineLog> = (0..60)
+            .map(|i| MachineLog {
+                id: i + 1,
+                project_id: pid,
+                machine_id: m.id,
+                date: today - chrono::Duration::days(i),
+                hours: 10.0,
+                fuel: 0.0,
+                task_id: None,
+                number: String::new(),
+                driver: String::new(),
+                route: String::new(),
+                odo_start: 0.0,
+                odo_end: 0.0,
+                trips: 0,
+                cargo: 0.0,
+                note: String::new(),
+            })
+            .collect();
+
+        // Bitta ta'mir — prognoz yo'q.
+        let one = repair_forecast(std::slice::from_ref(&m), &logs, &[repair(40)], today, 30);
+        assert!(one.is_empty(), "bitta hodisadan prognoz chiqdi");
+
+        // Ikkita ta'mir: oraliq 20 kun × 10 soat = 200 soat.
+        let two = repair_forecast(
+            std::slice::from_ref(&m),
+            &logs,
+            &[repair(40), repair(20)],
+            today,
+            30,
+        );
+        let f = two.first().expect("prognoz yo'q");
+        assert_eq!(f.based_on, 2);
+        assert!(
+            (f.mtbf_hours - 200.0).abs() < 0.001,
+            "mtbf: {}",
+            f.mtbf_hours
+        );
+        // Oxirgi ta'mirdan beri 20 kun × 10 = 200 soat -> qolgan 0.
+        assert!((f.since_last - 200.0).abs() < 0.001);
+        assert!(f.hours_left.abs() < 0.001);
+        assert!(f.soon());
+        assert!(f.when.is_some());
+    }
+
+    /// TZ XVI.42: samaradorlik balliga narx kirmaydi va norma yo'q
+    /// bo'lsa yoqilg'i qismi ballni tushirmaydi.
+    #[test]
+    fn machine_score_ignores_price() {
+        use crate::checks::MachineChain;
+
+        let base = MachineChain {
+            machine_id: 1,
+            name: "Kran".into(),
+            rented: false,
+            requests: 0,
+            hours: 240.0, // 30 kun × 8 soat = to'liq foydalanish
+            idle_days: 0,
+            fuel_used: 0.0,
+            fuel_norm: 0.0,
+            repairs: 0,
+            repair_cost: 0.0,
+            work_cost: 1000.0,
+        };
+        assert!((base.score(30) - 100.0).abs() < 0.001);
+        // Norma yo'q — yoqilg'i qismi to'liq ball.
+        assert!(base.fuel_deviation().is_none());
+
+        // Narx o'n barobar oshsa ham ball o'zgarmaydi.
+        let mut pricey = base.clone();
+        pricey.work_cost = 10_000.0;
+        assert!((pricey.score(30) - base.score(30)).abs() < 0.001);
+        // Lekin soatning qiymati o'zgaradi.
+        assert!(pricey.cost_per_hour().unwrap() > base.cost_per_hour().unwrap());
+
+        // Ta'mir ballni tushiradi.
+        let mut broken = base.clone();
+        broken.repairs = 2;
+        assert!((broken.score(30) - (100.0 + 60.0 + 100.0) / 3.0).abs() < 0.001);
+
+        // Yoqilg'i normadan chetlanishi ham.
+        let mut thirsty = base.clone();
+        thirsty.fuel_norm = 100.0;
+        thirsty.fuel_used = 130.0;
+        assert!((thirsty.fuel_deviation().unwrap() - 30.0).abs() < 0.001);
+        assert!(thirsty.score(30) < base.score(30));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
