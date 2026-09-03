@@ -15,7 +15,10 @@
 //!    faqat kim imzolashi kerakligi yoziladi.
 
 use crate::checks::{ConsumptionLine, CostSummary};
-use crate::domain::{ExecDoc, Material, MaterialNorm, MoveKind, StockMove};
+use crate::domain::{
+    ExecDoc, Material, MaterialNorm, MoveKind, Purchase, PurchaseStatus, Request, RequestKind,
+    RequestStatus, StockMove,
+};
 use crate::i18n::t;
 use crate::model::{Party, PartyRole, Project, Task};
 use chrono::NaiveDate;
@@ -388,6 +391,107 @@ pub fn write_ks3(
 // ================================================================ M-29
 
 /// M-29 — material sarfi hisoboti: normativ va haqiqiy sarf.
+/// Buxgalteriya uchun to'lov reyestri (TZ IX.39).
+///
+/// Reyestrga **tasdiqlangan** pul arizalari va ular bo'yicha xaridlar
+/// tushadi: qaror chiqmagan ariza to'lovga qo'yilmaydi. Yig'indi shu
+/// sababli faqat tasdiqlanganlar bo'yicha chiqadi va u to'lovga
+/// tayyor summani ko'rsatadi.
+pub fn write_pay_register(
+    path: &Path,
+    inp: &DocInput,
+    requests: &[Request],
+    purchases: &[Purchase],
+) -> Result<(), XlsxError> {
+    let st = Styles::new();
+    let mut wb = Workbook::new();
+    let sh = wb.add_worksheet();
+    sh.set_name(t("doc_pay_short"))?;
+    widths(sh, &[8.0, 14.0, 12.0, 16.0, 34.0, 24.0, 14.0, 18.0, 20.0])?;
+
+    let mut r = header(
+        sh,
+        &st,
+        inp,
+        t("doc_pay_register"),
+        &next_number(inp, "REG"),
+        9,
+    )?;
+
+    for (i, h) in [
+        t("doc_pos"),
+        t("col_number"),
+        t("col_date"),
+        t("col_kind"),
+        t("col_item"),
+        t("col_supplier"),
+        t("col_status"),
+        t("col_sum"),
+        t("col_requester"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        sh.write_string_with_format(r, i as u16, *h, &st.head)?;
+    }
+    sh.set_row_height(r, 30.0)?;
+    r += 1;
+
+    let mut pos = 0usize;
+    let mut total = 0.0;
+
+    // Pul arizalari: summasi arizaning miqdorida yoziladi.
+    for q in requests.iter().filter(|q| {
+        q.kind == RequestKind::Money
+            && q.date >= inp.from
+            && q.date <= inp.to
+            && q.status == RequestStatus::Approved
+    }) {
+        pos += 1;
+        total += q.qty;
+        sh.write_number_with_format(r, 0, pos as f64, &st.cell_num)?;
+        sh.write_string_with_format(r, 1, &q.number, &st.cell)?;
+        sh.write_string_with_format(r, 2, q.date.format("%d.%m.%Y").to_string(), &st.cell)?;
+        sh.write_string_with_format(r, 3, q.kind.label(), &st.cell)?;
+        sh.write_string_with_format(r, 4, &q.title, &st.cell)?;
+        sh.write_string_with_format(r, 5, "", &st.cell)?;
+        sh.write_string_with_format(r, 6, q.status.label(), &st.cell)?;
+        sh.write_number_with_format(r, 7, q.qty, &st.cell_money)?;
+        sh.write_string_with_format(r, 8, &q.requester, &st.cell)?;
+        r += 1;
+    }
+
+    // To'lovga qo'yilgan xaridlar: buyurtma berilgan va to'langanlari.
+    for p in purchases.iter().filter(|p| {
+        p.date >= inp.from
+            && p.date <= inp.to
+            && matches!(
+                p.status,
+                PurchaseStatus::Ordered | PurchaseStatus::Paid | PurchaseStatus::Delivered
+            )
+    }) {
+        pos += 1;
+        total += p.amount();
+        sh.write_number_with_format(r, 0, pos as f64, &st.cell_num)?;
+        sh.write_string_with_format(r, 1, &p.number, &st.cell)?;
+        sh.write_string_with_format(r, 2, p.date.format("%d.%m.%Y").to_string(), &st.cell)?;
+        sh.write_string_with_format(r, 3, t("nt_purchase"), &st.cell)?;
+        sh.write_string_with_format(r, 4, &p.title, &st.cell)?;
+        sh.write_string_with_format(r, 5, &p.supplier, &st.cell)?;
+        sh.write_string_with_format(r, 6, p.status.label(), &st.cell)?;
+        sh.write_number_with_format(r, 7, p.amount(), &st.cell_money)?;
+        sh.write_string_with_format(r, 8, &p.buyer, &st.cell)?;
+        r += 1;
+    }
+
+    sh.write_string_with_format(r, 4, t("col_total"), &st.total)?;
+    sh.write_number_with_format(r, 7, total, &st.total_money)?;
+
+    signatures(sh, &st, inp, r + 1, &[PartyRole::Contractor])?;
+    wb.save(path)?;
+    Ok(())
+}
+
 /// Buxgalteriya uchun aylanma qaydnoma (TZ XI.37).
 ///
 /// Qaydnoma **hisob yuritmaydi**, faqat ombor yozuvlarini buxgalteriya

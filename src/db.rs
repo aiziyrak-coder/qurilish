@@ -5561,7 +5561,18 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let r = req(10, 1, 5.0, RequestStatus::New);
 
         // Ish ko'rsatilmagan — savol bor.
-        let out = request_issues(&r, std::slice::from_ref(&r), &materials, &[], &[], &[], &[]);
+        let out = request_issues(
+            &r,
+            std::slice::from_ref(&r),
+            &materials,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+        );
         assert!(out.contains(&RequestIssue::NoTask));
 
         // Ochiq dublikat topiladi, yopilgani esa yo'q.
@@ -5575,6 +5586,9 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             &[],
             &[],
             &[],
+            &[],
+            &[],
+            None,
         );
         assert_eq!(
             out.iter()
@@ -5586,7 +5600,18 @@ ENDSEC;\nEND-ISO-10303-21;\n";
 
         // Taqiqlangan material sababi bilan aytiladi.
         let banned = vec![mat(1, "Sement M400", 1_000.0, true)];
-        let out = request_issues(&r, std::slice::from_ref(&r), &banned, &[], &[], &[], &[]);
+        let out = request_issues(
+            &r,
+            std::slice::from_ref(&r),
+            &banned,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+        );
         assert!(out
             .iter()
             .any(|i| matches!(i, RequestIssue::Banned { reason } if !reason.is_empty())));
@@ -5632,7 +5657,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             reject_reason: String::new(),
             note: String::new(),
         };
-        let out = request_issues(&r, &[], &materials, &alts, &[], &[], &[]);
+        let out = request_issues(&r, &[], &materials, &alts, &[], &[], &[], &[], &[], None);
         let found = out.iter().find_map(|i| match i {
             RequestIssue::Cheaper { name, saving } => Some((name.clone(), *saving)),
             _ => None,
@@ -8612,6 +8637,260 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         // Nosozlik topilgan, lekin bartaraf etilgan yozuv ham bor.
         assert!(checks.iter().any(|c| !c.fault.trim().is_empty()));
         assert!(checks.iter().any(|c| c.complete()));
+    }
+
+    /// TZ III.9: bir xil rasenka kodi turli narxda bo'lsa ko'rsatiladi.
+    #[test]
+    fn same_code_must_have_one_price() {
+        use crate::checks::{estimate_deep, DeepIssue as D};
+
+        let item = |pos: i64, code: &str, name: &str, price: f64| crate::domain::EstimateItem {
+            id: pos,
+            estimate_id: 1,
+            pos,
+            section: crate::model::Section::Kj,
+            code: code.into(),
+            name: name.into(),
+            unit: "m3".into(),
+            qty: 10.0,
+            price,
+            cost: 10.0 * price,
+            task_id: None,
+            note: String::new(),
+        };
+
+        // Bir kod, ikki narx.
+        let out = estimate_deep(
+            &[
+                item(1, "E-11-1", "B25 beton quyish plita", 100.0),
+                item(2, "E-11-1", "B25 beton quyish ustun", 130.0),
+            ],
+            &[],
+            &[],
+            &[],
+        );
+        let found = out
+            .iter()
+            .find(|i| matches!(i, D::SamePriceCode { .. }))
+            .expect("kod e'tirozi yo'q");
+        assert!(found.money());
+        if let D::SamePriceCode { low, high, .. } = found {
+            assert!((low - 100.0).abs() < 1e-9);
+            assert!((high - 130.0).abs() < 1e-9);
+        }
+
+        // Bir kod, bir narx — e'tiroz yo'q.
+        let same = estimate_deep(
+            &[
+                item(1, "E-11-1", "B25 beton quyish plita", 100.0),
+                item(2, "E-11-1", "B25 beton quyish ustun", 100.0),
+            ],
+            &[],
+            &[],
+            &[],
+        );
+        assert!(!same.iter().any(|i| matches!(i, D::SamePriceCode { .. })));
+    }
+
+    /// TZ III.13: konstruksiya ishida marka yoki standart bo'lishi shart;
+    /// arxitektura pozitsiyasidan bu talab qilinmaydi.
+    #[test]
+    fn structural_items_need_a_mark() {
+        use crate::checks::{estimate_deep, DeepIssue as D};
+
+        let item = |section: crate::model::Section, name: &str| crate::domain::EstimateItem {
+            id: 1,
+            estimate_id: 1,
+            pos: 1,
+            section,
+            code: "E-1".into(),
+            name: name.into(),
+            unit: "m3".into(),
+            qty: 1.0,
+            price: 1.0,
+            cost: 1.0,
+            task_id: None,
+            note: String::new(),
+        };
+        let has_mark = |it: crate::domain::EstimateItem| {
+            !estimate_deep(std::slice::from_ref(&it), &[], &[], &[])
+                .iter()
+                .any(|i| matches!(i, D::NoMark { .. }))
+        };
+
+        // Markasiz konstruksiya ishi — e'tiroz.
+        assert!(!has_mark(item(crate::model::Section::Kj, "Beton quyish")));
+        // Marka bor — e'tiroz yo'q.
+        assert!(has_mark(item(
+            crate::model::Section::Kj,
+            "B25 beton quyish"
+        )));
+        // Standart havolasi ham yetadi.
+        assert!(has_mark(item(
+            crate::model::Section::Km,
+            "Metall konstruksiya GOST bo'yicha"
+        )));
+        // Arxitektura pozitsiyasidan marka talab qilinmaydi.
+        assert!(has_mark(item(crate::model::Section::Ar, "Bo'yash")));
+    }
+
+    /// TZ III.16: smeta narxi tijorat taklifidan chegaradan ko'p farq
+    /// qilsa ko'rsatiladi.
+    #[test]
+    fn estimate_price_is_compared_with_quotes() {
+        use crate::checks::{estimate_deep, DeepIssue as D, QUOTE_GAP_PCT};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let quote = t.db.quotes(pid).into_iter().next().expect("taklif");
+
+        let item = |price: f64| crate::domain::EstimateItem {
+            id: 1,
+            estimate_id: 1,
+            pos: 5,
+            section: crate::model::Section::Kj,
+            code: "E-1".into(),
+            // Nom taklif nomiga mos bo'lishi kerak.
+            name: quote.title.clone(),
+            unit: quote.unit.clone(),
+            qty: 1.0,
+            price,
+            cost: price,
+            task_id: None,
+            note: String::new(),
+        };
+
+        // Chegara ichida — e'tiroz yo'q.
+        let near = item(quote.price * (1.0 + QUOTE_GAP_PCT / 200.0));
+        assert!(!estimate_deep(
+            std::slice::from_ref(&near),
+            &[],
+            &[],
+            std::slice::from_ref(&quote)
+        )
+        .iter()
+        .any(|i| matches!(i, D::QuoteGap { .. })));
+
+        // Ikki barobar qimmat — e'tiroz.
+        let pricey = item(quote.price * 2.0);
+        let out = estimate_deep(
+            std::slice::from_ref(&pricey),
+            &[],
+            &[],
+            std::slice::from_ref(&quote),
+        );
+        let found = out
+            .iter()
+            .find(|i| matches!(i, D::QuoteGap { .. }))
+            .expect("narx farqi topilmadi");
+        if let D::QuoteGap { pct, .. } = found {
+            assert!((pct - 100.0).abs() < 0.001);
+        }
+    }
+
+    /// TZ IX.13, 27: ariza tekshiruvi loyihaga muvofiqlikni va xodim
+    /// ehtiyojini ham ko'radi.
+    #[test]
+    fn request_check_covers_spec_and_staff() {
+        use crate::checks::{request_issues, RequestIssue as I, StaffForecast};
+        use crate::domain::{RequestKind, RequestStatus};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Spetsifikatsiya havolasi bo'sh material.
+        let mut material = app.materials[0].clone();
+        material.spec_ref = String::new();
+        let mut r = app.requests[0].clone();
+        r.material_id = Some(material.id);
+        r.kind = RequestKind::Material;
+        r.status = RequestStatus::New;
+
+        let out = request_issues(
+            &r,
+            &[],
+            std::slice::from_ref(&material),
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+        );
+        assert!(out.contains(&I::NoSpecRef));
+
+        // Havola to'ldirilgach — bu e'tiroz yo'qoladi.
+        material.spec_ref = "AR-04, poz. 12".into();
+        let out = request_issues(
+            &r,
+            &[],
+            std::slice::from_ref(&material),
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+        );
+        assert!(!out.contains(&I::NoSpecRef));
+
+        // Xodimga ariza: kasb ko'rsatilmagan va brigada yetarli.
+        let mut labor = r.clone();
+        labor.kind = RequestKind::Labor;
+        labor.title = "—".into();
+        labor.material_id = None;
+        let enough = StaffForecast {
+            have: 12,
+            needed_hours: 100.0,
+            needed_workers: 8,
+            gap: -4,
+            tasks: 3,
+        };
+        let out = request_issues(
+            &labor,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            Some(&enough),
+        );
+        assert!(out.contains(&I::NoProfession));
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, I::StaffEnough { have: 12, need: 8 })));
+
+        // Yetishmovchilik bo'lsa — bu savol berilmaydi.
+        let short = StaffForecast {
+            gap: 5,
+            ..enough.clone()
+        };
+        let out = request_issues(&labor, &[], &[], &[], &[], &[], &[], &[], &[], Some(&short));
+        assert!(!out.iter().any(|i| matches!(i, I::StaffEnough { .. })));
+    }
+
+    /// Xodim ehtiyoji bitta chaqiruv nuqtasidan chiqadi.
+    #[test]
+    fn staff_forecast_has_one_source() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let a = app.staff_forecast();
+        let b = app.staff_forecast();
+        assert_eq!(a.have, b.have);
+        assert_eq!(a.needed_workers, b.needed_workers);
+        assert_eq!(a.gap, b.gap);
+        // Ishchi soni faol ishchilar soniga teng.
+        assert_eq!(a.have, app.workers.iter().filter(|w| w.active).count());
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

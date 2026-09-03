@@ -26,6 +26,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let mut add = false;
     let mut from_stock = false;
+    let mut register = false;
     ui.horizontal(|ui| {
         if ui.button(t("add_request")).clicked() {
             add = true;
@@ -39,6 +40,14 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         {
             from_stock = true;
         }
+        // Buxgalteriya uchun to'lov reyestri (TZ IX.39).
+        if ui
+            .button(t("rq_register"))
+            .on_hover_text(t("rq_register_hint"))
+            .clicked()
+        {
+            register = true;
+        }
         ui.label(
             RichText::new(t("requests_hint"))
                 .size(11.0)
@@ -46,6 +55,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         );
     });
     ui.add_space(8.0);
+
+    if register {
+        save_register(app);
+    }
 
     let supply = app.supply();
     kpi_row(ui, app, &supply);
@@ -253,6 +266,9 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
     let tasks = app.tasks.clone();
     // Tekshiruvlar bir marta hisoblanadi: har qator uchun qayta bajarish
     // o'nlab keraksiz taqqoslash bo'lardi.
+    // Xodim ehtiyoji bir marta hisoblanadi: har ariza uchun qayta
+    // hisoblash bir xil natijani beradi, lekin sekinroq.
+    let staff = Some(app.staff_forecast());
     let checks: Vec<(i64, Vec<crate::checks::RequestIssue>)> = app
         .requests
         .iter()
@@ -267,6 +283,9 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                     &app.estimate_items,
                     &app.purchase_budgets,
                     &app.purchases,
+                    &app.material_norms,
+                    &app.tasks,
+                    staff.as_ref(),
                 ),
             )
         })
@@ -909,6 +928,35 @@ pub fn request_label(app: &App, id: i64) -> String {
         .unwrap_or_else(|| t("dash").to_string())
 }
 
+/// To'lov reyestrini faylga yozadi (TZ IX.39).
+fn save_register(app: &mut App) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let file = format!("REG-{}.xlsx", to.format("%Y-%m"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    match crate::docgen::write_pay_register(&path, &inp, &app.requests, &app.purchases) {
+        Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
+    }
+}
+
 /// Ariza tekshiruvidagi savolning matni.
 fn issue_text(i: &crate::checks::RequestIssue) -> String {
     use crate::checks::RequestIssue as I;
@@ -926,6 +974,17 @@ fn issue_text(i: &crate::checks::RequestIssue) -> String {
             } else {
                 format!("{}: {reason}", t("rq_i_banned"))
             }
+        }
+        I::NoSpecRef => t("rq_i_no_spec").to_string(),
+        I::OverNorm { need, by_norm } => format!(
+            "{}: {} > {}",
+            t("rq_i_over_norm"),
+            super::materials::trim_num(*need),
+            super::materials::trim_num(*by_norm)
+        ),
+        I::NoProfession => t("rq_i_no_profession").to_string(),
+        I::StaffEnough { have, need } => {
+            format!("{}: {have} / {need}", t("rq_i_staff_enough"))
         }
     }
 }

@@ -38,6 +38,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (2, t("tab_issues")),
             (3, t("tab_structure")),
             (4, t("tab_chain")),
+            (5, t("tab_deep")),
         ];
         for (i, label) in tabs {
             if ui.selectable_label(tab == i, label).clicked() {
@@ -53,7 +54,124 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         2 => issues_tab(ui, app),
         3 => structure_tab(ui, app),
         4 => chain_tab(ui, app),
+        5 => deep_tab(ui, app),
         _ => items(ui, app),
+    }
+}
+
+// ================================================================ Chuqur tekshiruv
+
+/// Kompleks rasenka, ketma-ketlik, marka va tijorat taklifi
+/// (TZ III.9, 11, 13, 16).
+fn deep_tab(ui: &mut egui::Ui, app: &mut App) {
+    let list = app.estimate_deep();
+    let money = list.iter().filter(|i| i.money()).count();
+
+    ui.label(
+        RichText::new(t("es_deep_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("es_deep_money"),
+                money.to_string(),
+                t("es_deep_money_hint"),
+                if money == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("es_deep_total"),
+                list.len().to_string(),
+                t("es_deep_total_hint"),
+                theme::text(),
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if list.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("es_deep_none"))
+                    .color(theme::ok())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for i in &list {
+                ui.label(
+                    RichText::new(format!("· {}", deep_text(i)))
+                        .size(12.0)
+                        .color(if i.money() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        }),
+                );
+            }
+            ui.add_space(12.0);
+        });
+}
+
+/// Chuqur tekshiruv e'tirozini gapga aylantiradi.
+fn deep_text(i: &crate::checks::DeepIssue) -> String {
+    use crate::checks::DeepIssue as D;
+    match i {
+        D::DoubleCount {
+            pos,
+            inside,
+            amount,
+        } => format!(
+            "{} {} ← {} ({})",
+            t("ed_double"),
+            pos,
+            inside,
+            money(*amount)
+        ),
+        D::SamePriceCode { code, low, high } => format!(
+            "{} {}: {} … {}",
+            t("ed_same_code"),
+            code,
+            money(*low),
+            money(*high)
+        ),
+        D::MissingPredecessor { pos, task } => {
+            format!("{} {} — {}", t("ed_predecessor"), pos, task)
+        }
+        D::NoMark { pos, name } => format!(
+            "{} {} — {}",
+            t("ed_no_mark"),
+            pos,
+            super::issues::truncate(name, 40)
+        ),
+        D::QuoteGap {
+            pos,
+            estimate,
+            quote,
+            pct,
+        } => format!(
+            "{} {}: {} / {} ({}{:.0}%)",
+            t("ed_quote_gap"),
+            pos,
+            money(*estimate),
+            money(*quote),
+            if *pct > 0.0 { "+" } else { "" },
+            pct
+        ),
     }
 }
 

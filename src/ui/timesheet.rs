@@ -1096,13 +1096,7 @@ fn periods_tab(ui: &mut egui::Ui, app: &mut App) {
 /// Anomaliyalar va xodim ehtiyoji (TZ XIII.20-21, 26-27).
 fn staff_tab(ui: &mut egui::Ui, app: &mut App) {
     let anomalies = crate::checks::timesheet_anomalies(&app.timesheet);
-    let forecast = crate::checks::staff_forecast(
-        &app.tasks,
-        &app.productivity(),
-        &app.workers,
-        app.today,
-        STAFF_HORIZON,
-    );
+    let forecast = app.staff_forecast();
 
     stat_row(
         ui,
@@ -1186,9 +1180,6 @@ fn staff_tab(ui: &mut egui::Ui, app: &mut App) {
             }
         });
 }
-
-/// Xodim ehtiyoji shuncha kun oldinga qaraydi.
-const STAFF_HORIZON: i64 = 30;
 
 /// Anomaliya matni: kim, nima va qanday rangda.
 fn anomaly_text(app: &App, a: &crate::checks::TimesheetAnomaly) -> (String, String, egui::Color32) {

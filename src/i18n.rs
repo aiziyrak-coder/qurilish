@@ -4086,6 +4086,43 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Ijara texnikasi doim ishda — o'zini olish arzonroq bo'lishi mumkin",
             "Арендованная техника постоянно в работе — своя может выйти дешевле",
         ),
+        // III.9, 11, 13, 16. Smetaning chuqur tekshiruvi
+        "tab_deep" => ("Chuqur tekshiruv", "Глубокая проверка"),
+        "es_deep_hint" => (
+            "To'rt savol: kompleks rasenka ichidagi ish alohida hisoblanmadimi, ketma-ketlik buzilmadimi, marka ko'rsatilganmi, narx taklifdan uzoqlashmadimi.",
+            "Четыре вопроса: не посчитана ли отдельно работа внутри комплексной расценки, не нарушена ли последовательность, указана ли марка, не ушла ли цена от предложения.",
+        ),
+        "es_deep_money" => ("Pulga tegishli", "Касается денег"),
+        "es_deep_money_hint" => ("ikki marta to'lash yoki narx farqi", "двойная оплата или разница цены"),
+        "es_deep_total" => ("Jami e'tiroz", "Всего замечаний"),
+        "es_deep_total_hint" => ("smeta pozitsiyalari bo'yicha", "по позициям сметы"),
+        "es_deep_none" => ("Chuqur tekshiruvda e'tiroz topilmadi.", "Глубокая проверка замечаний не нашла."),
+        "ed_double" => ("Pozitsiya ichida takror hisob:", "Двойной счёт внутри позиции:"),
+        "ed_same_code" => ("Bir xil rasenka turli narxda:", "Одна расценка по разным ценам:"),
+        "ed_predecessor" => ("Oldingi ish smetada yo'q — pozitsiya", "Предшествующая работа не в смете — позиция"),
+        "ed_no_mark" => ("Marka yoki standart ko'rsatilmagan — pozitsiya", "Не указана марка или стандарт — позиция"),
+        "ed_quote_gap" => ("Narx tijorat taklifidan farq qiladi — pozitsiya", "Цена расходится с коммерческим предложением — позиция"),
+        // IX.13, 27, 39. Ariza tekshiruvi va reyestr
+        "rq_i_no_spec" => (
+            "Loyiha spetsifikatsiyasiga havola yo'q — material loyihada ko'zda tutilganini tekshirib bo'lmaydi",
+            "Нет ссылки на спецификацию проекта — нельзя проверить, предусмотрен ли материал",
+        ),
+        "rq_i_over_norm" => ("So'ralgan miqdor normadan ko'p", "Запрошено больше нормы"),
+        "rq_i_no_profession" => (
+            "Kasb ko'rsatilmagan: «odam kerak» degan ariza bo'yicha hech kimni topib bo'lmaydi",
+            "Не указана профессия: по заявке «нужны люди» никого не найти",
+        ),
+        "rq_i_staff_enough" => (
+            "Xodim ehtiyoji hisobda ko'rinmaydi (bor / kerak)",
+            "Потребность в людях по расчёту не видна (есть / нужно)",
+        ),
+        "rq_register" => ("To'lov reyestri", "Реестр платежей"),
+        "rq_register_hint" => (
+            "Buxgalteriya uchun: tasdiqlangan pul arizalari va to'lovga qo'yilgan xaridlar.",
+            "Для бухгалтерии: утверждённые денежные заявки и закупки, поставленные к оплате.",
+        ),
+        "doc_pay_register" => ("To'lovlar reyestri", "Реестр платежей"),
+        "doc_pay_short" => ("Reyestr", "Реестр"),
         "ct_tab_contracts" => ("Shartnomalar", "Договоры"),
         "ct_tab_changes" => ("O'zgarishlar", "Изменения"),
         "ct_tab_stages" => ("To'lov jadvali", "График платежей"),

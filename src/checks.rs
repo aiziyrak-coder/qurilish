@@ -5724,6 +5724,15 @@ pub enum RequestIssue {
     NoTask,
     /// Material taqiqlangan.
     Banned { reason: String },
+    /// Loyiha spetsifikatsiyasiga havola yo'q — material loyihada
+    /// ko'zda tutilganini tekshirib bo'lmaydi (TZ IX.13).
+    NoSpecRef,
+    /// So'ralgan miqdor ish uchun normadan sezilarli ko'p (TZ IX.13).
+    OverNorm { need: f64, by_norm: f64 },
+    /// Xodimga arizada kasb ko'rsatilmagan (TZ IX.27).
+    NoProfession,
+    /// Xodim ehtiyoji hisobda ko'rinmaydi: brigada yetarli (TZ IX.27).
+    StaffEnough { have: usize, need: usize },
 }
 
 /// Arizani tasdiqlashdan oldin tekshiradi (TZ IX.11-14).
@@ -5739,6 +5748,9 @@ pub fn request_issues(
     estimate_items: &[EstimateItem],
     budgets: &[PurchaseBudget],
     purchases: &[Purchase],
+    norms: &[MaterialNorm],
+    tasks: &[Task],
+    staff: Option<&StaffForecast>,
 ) -> Vec<RequestIssue> {
     let mut out = Vec::new();
 
@@ -5821,6 +5833,51 @@ pub fn request_issues(
     // 6. Ish ko'rsatilmagan.
     if r.task_id.is_none() && r.kind == RequestKind::Material {
         out.push(RequestIssue::NoTask);
+    }
+
+    // 7. Loyihaga muvofiqlik (TZ IX.13).
+    if let Some(m) = material {
+        if m.spec_ref.trim().is_empty() {
+            out.push(RequestIssue::NoSpecRef);
+        }
+        // Norma bo'yicha kerak bo'lgan miqdor bilan solishtirish: ish va
+        // norma ma'lum bo'lsagina. Norma yo'q joyda «ko'p so'ragan» deb
+        // aytish mumkin emas.
+        if let (Some(tid), Some(task)) = (
+            r.task_id,
+            r.task_id.and_then(|id| tasks.iter().find(|t| t.id == id)),
+        ) {
+            if let Some(n) = norms
+                .iter()
+                .find(|n| n.task_id == tid && n.material_id == m.id)
+            {
+                let by_norm = n.per_unit * task.volume * (1.0 + n.tolerance / 100.0);
+                if by_norm > 0.0 && r.qty > by_norm {
+                    out.push(RequestIssue::OverNorm {
+                        need: r.qty,
+                        by_norm,
+                    });
+                }
+            }
+        }
+    }
+
+    // 8. Xodimga ariza (TZ IX.27).
+    if r.kind == RequestKind::Labor {
+        // Kasb nomi arizaning sarlavhasida bo'lishi kerak: «odam kerak»
+        // degan ariza bo'yicha hech kimni topib bo'lmaydi.
+        if r.title.trim().chars().count() < 4 {
+            out.push(RequestIssue::NoProfession);
+        }
+        // Ehtiyoj hisobi kishilar yetarli deb ko'rsatsa — savol beriladi.
+        if let Some(f) = staff {
+            if f.gap <= 0 {
+                out.push(RequestIssue::StaffEnough {
+                    have: f.have,
+                    need: f.needed_workers,
+                });
+            }
+        }
     }
 
     out
@@ -9259,4 +9316,181 @@ pub fn park_review(
     // Eng kam ishlatilgani oldinda.
     lines.sort_by(|a, b| a.usage_pct.total_cmp(&b.usage_pct));
     (lines, advice)
+}
+
+// ================= III.9, 11, 13, 16. Smetaning chuqur tekshiruvi =================
+
+/// Smeta bo'yicha chuqur tekshiruv e'tirozi (TZ III.9, 11, 13, 16).
+#[derive(Debug, Clone, PartialEq)]
+pub enum DeepIssue {
+    /// Kompleks rasenka ichidagi ish alohida ham hisoblangan — ikki marta
+    /// to'lash xavfi.
+    DoubleCount { pos: i64, inside: i64, amount: f64 },
+    /// Bir xil rasenka kodi turli narxda.
+    SamePriceCode { code: String, low: f64, high: f64 },
+    /// Texnologik ketma-ketlik: bu ish smetada bor, undan oldin
+    /// bajarilishi kerak bo'lgan ish esa yo'q.
+    MissingPredecessor { pos: i64, task: String },
+    /// Marka yoki standart ko'rsatilmagan.
+    NoMark { pos: i64, name: String },
+    /// Smetadagi narx tijorat taklifidan sezilarli farq qiladi.
+    QuoteGap {
+        pos: i64,
+        estimate: f64,
+        quote: f64,
+        pct: f64,
+    },
+}
+
+impl DeepIssue {
+    /// Pulga bevosita ta'sir qiladigan e'tirozmi.
+    pub fn money(&self) -> bool {
+        matches!(
+            self,
+            DeepIssue::DoubleCount { .. }
+                | DeepIssue::SamePriceCode { .. }
+                | DeepIssue::QuoteGap { .. }
+        )
+    }
+}
+
+/// Smeta narxi tijorat taklifidan shu foizdan ko'p farq qilsa ko'rsatiladi.
+///
+/// Chegara kichik bo'lsa har pozitsiya ogohlantirishga aylanadi: narxlar
+/// hech qachon aynan bir xil bo'lmaydi.
+pub const QUOTE_GAP_PCT: f64 = 15.0;
+
+/// TZ III.9, 11, 13, 16: smetani chuqur tekshiradi.
+///
+/// To'rt savol: kompleks rasenka ichidagi ish alohida hisoblanmadimi,
+/// texnologik ketma-ketlik buzilmadimi, marka ko'rsatilganmi va narx
+/// tijorat taklifidan uzoqlashib ketmadimi.
+pub fn estimate_deep(
+    items: &[EstimateItem],
+    tasks: &[Task],
+    links: &[crate::model::Link],
+    quotes: &[Quote],
+) -> Vec<DeepIssue> {
+    let norm = |s: &str| s.trim().to_lowercase();
+    let mut out = Vec::new();
+
+    // ---------- III.9: kompleks rasenka ichidagi takror ----------
+    // Agar bir pozitsiya nomi ikkinchisining nomini to'liq o'z ichiga olsa
+    // va ikkalasi bir bo'limda bo'lsa — kichigi kattasi ichida hisoblangan
+    // bo'lishi mumkin. Bu **savol**, hukm emas: nomlar tasodifan ham
+    // ustma-ust tushadi, shuning uchun uzunligi yetarli nomlar olinadi.
+    for big in items {
+        let bn = norm(&big.name);
+        if bn.chars().count() < 12 {
+            continue;
+        }
+        for small in items {
+            if small.id == big.id || small.section != big.section {
+                continue;
+            }
+            let sn = norm(&small.name);
+            if sn.chars().count() < 8 || sn.chars().count() >= bn.chars().count() {
+                continue;
+            }
+            if bn.contains(&sn) {
+                out.push(DeepIssue::DoubleCount {
+                    pos: big.pos,
+                    inside: small.pos,
+                    amount: small.computed(),
+                });
+            }
+        }
+    }
+
+    // Bir xil kod turli narxda: rasenka bitta bo'lsa narx ham bitta bo'ladi.
+    let mut codes: Vec<(String, f64, f64)> = Vec::new();
+    for i in items
+        .iter()
+        .filter(|i| !i.code.trim().is_empty() && i.price > 0.0)
+    {
+        match codes.iter_mut().find(|(c, _, _)| norm(c) == norm(&i.code)) {
+            Some(e) => {
+                e.1 = e.1.min(i.price);
+                e.2 = e.2.max(i.price);
+            }
+            None => codes.push((i.code.clone(), i.price, i.price)),
+        }
+    }
+    for (code, low, high) in codes {
+        if low > 0.0 && (high - low) / low > 0.001 {
+            out.push(DeepIssue::SamePriceCode { code, low, high });
+        }
+    }
+
+    // ---------- III.11: texnologik ketma-ketlik ----------
+    // Ish smetada bor, undan oldin turishi kerak bo'lgan ish esa yo'q.
+    let priced = |task_id: i64| items.iter().any(|i| i.task_id == Some(task_id));
+    for i in items {
+        let Some(tid) = i.task_id else { continue };
+        for l in links.iter().filter(|l| l.succ == tid) {
+            if priced(l.pred) {
+                continue;
+            }
+            // Oldingi ish umuman GPR da bo'lmasa — bu boshqa muammo va u
+            // grafik tekshiruvida ko'rinadi.
+            let Some(pred) = tasks.iter().find(|t| t.id == l.pred) else {
+                continue;
+            };
+            out.push(DeepIssue::MissingPredecessor {
+                pos: i.pos,
+                task: format!("{} {}", pred.wbs, pred.name),
+            });
+        }
+    }
+
+    // ---------- III.13: marka va xarakteristika ----------
+    // Konstruksiya va tarmoq ishlarida marka yoki standart bo'lishi shart:
+    // «beton quyish» degan pozitsiyaga narx qo'yib bo'lmaydi, «B25 beton
+    // quyish» ga esa bo'ladi.
+    for i in items {
+        let needs_mark = matches!(
+            i.section,
+            Section::Kj | Section::Km | Section::Vk | Section::Ov | Section::Eom | Section::Ss
+        );
+        if !needs_mark {
+            continue;
+        }
+        let n = i.name.clone();
+        let has_digit = n.chars().any(|c| c.is_ascii_digit());
+        let lower = norm(&n);
+        let has_standard = ["gost", "гост", "shnq", "шнк", "sn", "din", "iso"]
+            .iter()
+            .any(|k| lower.contains(k));
+        if !has_digit && !has_standard {
+            out.push(DeepIssue::NoMark {
+                pos: i.pos,
+                name: n,
+            });
+        }
+    }
+
+    // ---------- III.16: tijorat taklifi bilan solishtirish ----------
+    for i in items.iter().filter(|i| i.price > 0.0) {
+        let best = quotes
+            .iter()
+            .filter(|q| q.price > 0.0 && norm(&q.title) == norm(&i.name))
+            .map(|q| q.price)
+            .fold(f64::INFINITY, f64::min);
+        if !best.is_finite() || best <= 0.0 {
+            continue;
+        }
+        let pct = (i.price - best) * 100.0 / best;
+        if pct.abs() > QUOTE_GAP_PCT {
+            out.push(DeepIssue::QuoteGap {
+                pos: i.pos,
+                estimate: i.price,
+                quote: best,
+                pct,
+            });
+        }
+    }
+
+    // Pulga tegishlilari oldinda.
+    out.sort_by_key(|i| !i.money());
+    out
 }

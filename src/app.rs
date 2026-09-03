@@ -401,6 +401,9 @@ const READINESS_DAYS: i64 = 14;
 /// Bir chorak esa juda uzun: mavsum o'zgarishi yo'qolib ketardi.
 const PARK_DAYS: i64 = 30;
 
+/// Xodim ehtiyoji shuncha kun oldinga qarab hisoblanadi (TZ XIII.26-27).
+const STAFF_HORIZON: i64 = 30;
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -2189,6 +2192,25 @@ impl App {
     /// Yashirin ish yopilmagani uchun to'silgan ishlar (TZ IV.16).
     pub fn hidden_blocks(&self) -> Vec<checks::HiddenBlock> {
         checks::hidden_blocks(&self.tasks, &self.links, &self.exec_docs)
+    }
+
+    /// Xodim ehtiyoji prognozi (TZ XIII.26-27).
+    ///
+    /// Bitta chaqiruv nuqtasi: tabel ekrani ham, ariza tekshiruvi ham
+    /// shundan oladi — ikki joyda turli son bo'lishi mumkin emas.
+    pub fn staff_forecast(&self) -> checks::StaffForecast {
+        checks::staff_forecast(
+            &self.tasks,
+            &self.productivity(),
+            &self.workers,
+            self.today,
+            STAFF_HORIZON,
+        )
+    }
+
+    /// Smetaning chuqur tekshiruvi (TZ III.9, 11, 13, 16).
+    pub fn estimate_deep(&self) -> Vec<checks::DeepIssue> {
+        checks::estimate_deep(&self.estimate_items, &self.tasks, &self.links, &self.quotes)
     }
 
     /// Smetadan faktgacha bo'lgan zanjir (TZ III.33).

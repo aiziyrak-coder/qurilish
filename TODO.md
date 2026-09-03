@@ -20,13 +20,13 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 11 | 7 | 4 | 2 |
-| III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
+| III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 16 | 8 | 6 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 22 | 4 | 8 | 6 |
 | VI. Prorab ilovasi | 37 | 21 | 9 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 26 | 6 | 6 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
-| IX. Arizalar | 42 | 32 | 6 | 4 | 1 |
+| IX. Arizalar | 42 | 35 | 6 | 1 | 1 |
 | X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
 | XI. Ombor | 48 | 41 | 6 | 1 | 1 |
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **481** | **151** | **68** | **46** |
+| **Jami** | **700** | **490** | **149** | **61** | **46** |
 
-Ya'ni **~69 % to'liq**, **~22 % qisman**, **~10 % hali yo'q**.
+Ya'ni **~70 % to'liq**, **~21 % qisman**, **~9 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -92,15 +92,15 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 6. Hajmlarni tekshirish — *loyiha bilan solishtirish*
 - [~] 7. Loyiha bo'yicha hajmni avtomatik hisoblash — *elementdan oddiy hisob; to'liq emas*
 - [x] 8. Dublikatlarni tekshirish
-- [ ] 9. Kompleks rasrenkalarni tekshirish
+- [x] 9. Kompleks rasrenkalarni tekshirish — *takror hisob va bir kod ikki narx*
 - [~] 10. Tushib qolgan ishlarni tekshirish — *loyihada bor, smetada yo'q holati*
-- [ ] 11. Texnologik ketma-ketlikni tekshirish
-- [~] 12. Materiallarni tekshirish — *nom bo'yicha; katalog bilan bog'lanish yo'q*
-- [ ] 13. Marka va xarakteristikani tekshirish
-- [~] 14. Narxlarni tekshirish — *bir xil ish uchun narx farqi topiladi*
+- [x] 11. Texnologik ketma-ketlikni tekshirish
+- [x] 12. Materiallarni tekshirish — *marka va standart talab qilinadi*
+- [x] 13. Marka va xarakteristikani tekshirish
+- [x] 14. Narxlarni tekshirish — *narx farqi va tijorat taklifi bilan solishtirish*
 - [ ] 🔒 14.1–14.4. Tarixiy narx, taklif narxi, bozor diapazoni bilan solishtirish
 - [ ] 🔒 15. **Narxlar bazasi (PRICE DATABASE)**
-- [ ] 16. Tijorat takliflari (KP)
+- [x] 16. Tijorat takliflari (KP) — *smeta narxi taklif bilan solishtiriladi*
 - [x] 17. Koeffitsiyentlarni tekshirish — *ko'rsatilmagani va haddan tashqarisi*
 - [x] 18. Ustama xarajatlarni tekshirish — *to'g'ridan-to'g'ri xarajatdan foizda*
 - [x] 19. Foydani tekshirish — *ustama bilan birga summadan*
@@ -340,7 +340,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 10. Byudjetni tekshirish — *bo'lim byudjeti bilan*
 - [x] 11. Dublikatni tekshirish — *shu material bo'yicha ochiq ariza raqami bilan ko'rsatiladi*
 - [x] 12. Smetani tekshirish — *material smetada bormi, kod yoki nom bo'yicha*
-- [ ] 13. Loyihaga muvofiqlikni tekshirish
+- [x] 13. Loyihaga muvofiqlikni tekshirish — *spetsifikatsiya havolasi va norma*
 - [x] 14. Materialni almashtirish — *arzonroq analog tejash summasi bilan taklif qilinadi*
 - [x] 15. Tijorat takliflari
 - [x] 16. AI yetkazib beruvchilarni solishtirishi
@@ -354,7 +354,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 24. Ta'mirga ariza — *ariza turi*
 - [x] 25. Pulga ariza — *ariza turi*
 - [x] 26. Xizmatga ariza — *ariza turi*
-- [ ] 27. Xodimga ariza
+- [x] 27. Xodimga ariza — *kasb va ehtiyoj hisobi*
 - [x] 28. Foto va hujjatlar
 - [ ] 🔒 29. Ovozli arizalar
 - [x] 30. Ijroni nazorat qilish — *qoplanish*
@@ -366,7 +366,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 36. GPR bilan bog'lanish — *ariza ishga bog'lanadi; bog'lanmagani tekshiruvda aytiladi*
 - [x] 37. Ombor bilan bog'lanish
 - [x] 38. Smeta bilan bog'lanish — *smetada yo'q material belgilanadi*
-- [ ] 39. Buxgalteriya bilan bog'lanish
+- [x] 39. Buxgalteriya bilan bog'lanish — *to'lov reyestri `.xlsx`*
 - [~] 40. Yakuniy nazorat
 - [x] 41. Modulning bosh ekrani
 - [~] 42. Tizim prediktiv bo'lishi
