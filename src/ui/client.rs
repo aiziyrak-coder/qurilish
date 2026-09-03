@@ -530,17 +530,7 @@ fn acceptance_block(ui: &mut egui::Ui, app: &App) {
 
 /// Haftalik hisobot (TZ VIII.33): oxirgi yetti kunda nima bo'ldi.
 fn week_block(ui: &mut egui::Ui, app: &App) {
-    let r = crate::checks::week_report(
-        app.today,
-        &app.tasks,
-        &app.journal,
-        &app.inspections,
-        &app.issues,
-        &app.exec_docs,
-        &app.payment_stages,
-        &app.contract_changes,
-        &app.acceptances,
-    );
+    let r = app.week_report();
     block(ui, t("cl_week"), |ui| {
         ui.label(
             RichText::new(format!(

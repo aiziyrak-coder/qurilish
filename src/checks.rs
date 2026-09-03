@@ -8248,3 +8248,576 @@ pub fn supply_control(
     out.sort_by_key(|i| !i.severe());
     out
 }
+
+// ================= XVII.23-25, 35, 49. Kesimlar bo'yicha tahlil =================
+
+/// Mas'ul (pudratchi) bo'yicha yakun (TZ XVII.23).
+#[derive(Debug, Clone)]
+pub struct ContractorReport {
+    pub name: String,
+    /// Shu mas'ulga biriktirilgan ishlar.
+    pub tasks: usize,
+    pub done: usize,
+    /// Muddati o'tgan va tugallanmagan ishlar.
+    pub overdue: usize,
+    /// Muddatida tugatilgan ishlar ulushi, foizda.
+    pub on_time_pct: f64,
+    /// O'rtacha kechikish, kunlarda (faqat kechikkanlari bo'yicha).
+    pub avg_delay: f64,
+    /// Sifat balli — [`contractor_quality`] dan olinadi, qayta hisoblanmaydi.
+    pub quality: f64,
+    /// Ochiq nuqsonlar.
+    pub defects: usize,
+    /// Yopilmagan xavfsizlik holatlari.
+    pub safety: usize,
+}
+
+impl ContractorReport {
+    /// E'tibor talab qiladigan mas'ul.
+    pub fn attention(&self) -> bool {
+        self.overdue > 0 || self.defects > 0 || self.safety > 0
+    }
+}
+
+/// TZ XVII.23: mas'ullar kesimida ish, sifat va xavfsizlik bir jadvalda.
+///
+/// Sifat balli [`contractor_quality`] dan olinadi — bu yerda qayta
+/// hisoblanmaydi, shuning uchun sifat ekranidagi ball bilan bir xil bo'ladi.
+pub fn contractor_report(
+    tasks: &[Task],
+    quality: &[QualityCheck],
+    safety: &[SafetyEvent],
+    today: NaiveDate,
+) -> Vec<ContractorReport> {
+    let key = |s: &str| s.trim().to_lowercase();
+    let by_quality = contractor_quality(quality, today);
+
+    let mut names: Vec<String> = Vec::new();
+    for t in tasks {
+        if t.responsible.trim().is_empty() {
+            continue;
+        }
+        if !names.iter().any(|n| key(n) == key(&t.responsible)) {
+            names.push(t.responsible.clone());
+        }
+    }
+
+    let mut out = Vec::new();
+    for name in names {
+        let mine: Vec<&Task> = tasks
+            .iter()
+            .filter(|t| key(&t.responsible) == key(&name))
+            .collect();
+        let done = mine
+            .iter()
+            .filter(|t| t.progress >= 99.999 || t.fact_end.is_some())
+            .count();
+        let overdue = mine
+            .iter()
+            .filter(|t| {
+                t.progress < 99.999
+                    && t.fact_end.is_none()
+                    && t.plan_start + chrono::Duration::days(t.duration.max(0)) < today
+            })
+            .count();
+
+        // Muddatida tugatilganlar: haqiqiy tugash sanasi rejadan keyin emas.
+        let finished: Vec<&&Task> = mine.iter().filter(|t| t.fact_end.is_some()).collect();
+        let mut on_time = 0usize;
+        let mut delays: Vec<i64> = Vec::new();
+        for t in &finished {
+            let plan_end = t.plan_start + chrono::Duration::days(t.duration.max(0));
+            let end = t.fact_end.unwrap();
+            if end <= plan_end {
+                on_time += 1;
+            } else {
+                delays.push((end - plan_end).num_days());
+            }
+        }
+
+        let q = by_quality.iter().find(|c| key(&c.name) == key(&name));
+        out.push(ContractorReport {
+            tasks: mine.len(),
+            done,
+            overdue,
+            on_time_pct: if finished.is_empty() {
+                // Tugatilgan ishi yo'q — ulush ham yo'q, nolga tenglashtirish
+                // yolg'on baho berardi.
+                100.0
+            } else {
+                on_time as f64 * 100.0 / finished.len() as f64
+            },
+            avg_delay: if delays.is_empty() {
+                0.0
+            } else {
+                delays.iter().sum::<i64>() as f64 / delays.len() as f64
+            },
+            quality: q.map(|c| c.score).unwrap_or(100.0),
+            defects: q.map(|c| c.open_defects).unwrap_or(0),
+            safety: safety
+                .iter()
+                .filter(|s| {
+                    key(&s.responsible) == key(&name)
+                        && matches!(s.status, IssueStatus::Open | IssueStatus::InWork)
+                })
+                .count(),
+            name,
+        });
+    }
+    // E'tibor talab qiladiganlar oldinda, keyin sifat balli bo'yicha.
+    out.sort_by(|a, b| {
+        b.attention()
+            .cmp(&a.attention())
+            .then(a.quality.total_cmp(&b.quality))
+    });
+    out
+}
+
+/// Yetkazib beruvchi bo'yicha yakun (TZ XVII.24).
+#[derive(Debug, Clone)]
+pub struct SupplierReport {
+    pub name: String,
+    pub deals: usize,
+    pub amount: f64,
+    /// To'liq yetkazilgan buyurtmalar ulushi, foizda.
+    pub complete_pct: f64,
+    /// Muddatida yetkazilganlar ulushi, foizda.
+    pub on_time_pct: f64,
+    /// O'rtacha kechikish, kunlarda.
+    pub avg_delay: f64,
+    /// Shu ta'minotchining takliflari eng arzonidan qancha qimmat, foizda.
+    pub price_over_pct: f64,
+    /// Kirish nazoratida rad etilgan partiyalar.
+    pub rejected: usize,
+}
+
+impl SupplierReport {
+    /// Ishonchlilik balli, 0-100.
+    ///
+    /// Uch ulush teng vaznda: to'liq yetkazish, muddat va sifat. Narx
+    /// **ballga kirmaydi** — arzon lekin kechikadigan ta'minotchini yaxshi
+    /// deb ko'rsatib qo'ymaslik uchun; narx alohida ustunda turadi.
+    pub fn score(&self) -> f64 {
+        let quality = if self.deals == 0 {
+            100.0
+        } else {
+            (1.0 - self.rejected as f64 / self.deals as f64) * 100.0
+        };
+        ((self.complete_pct + self.on_time_pct + quality) / 3.0).clamp(0.0, 100.0)
+    }
+}
+
+/// TZ XVII.24: yetkazib beruvchilarni bir jadvalda solishtiradi.
+///
+/// Narx ballga kiritilmaydi: arzon, lekin kechikadigan ta'minotchi yaxshi
+/// ko'rinib qolardi. Narx alohida ustunda turadi va qaror odamniki.
+pub fn supplier_report(
+    purchases: &[Purchase],
+    quotes: &[Quote],
+    quality: &[QualityCheck],
+    today: NaiveDate,
+) -> Vec<SupplierReport> {
+    let key = |s: &str| s.trim().to_lowercase();
+    let mut names: Vec<String> = Vec::new();
+    for p in purchases {
+        if p.supplier.trim().is_empty() {
+            continue;
+        }
+        if !names.iter().any(|n| key(n) == key(&p.supplier)) {
+            names.push(p.supplier.clone());
+        }
+    }
+
+    // Har material bo'yicha eng arzon taklif — narx ustunini hisoblash uchun.
+    let best_for = |title: &str| -> f64 {
+        quotes
+            .iter()
+            .filter(|q| key(&q.title) == key(title) && q.price > 0.0)
+            .map(|q| q.price)
+            .fold(f64::INFINITY, f64::min)
+    };
+
+    let mut out = Vec::new();
+    for name in names {
+        let mine: Vec<&Purchase> = purchases
+            .iter()
+            .filter(|p| key(&p.supplier) == key(&name) && p.status != PurchaseStatus::Draft)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let complete = mine
+            .iter()
+            .filter(|p| p.delivered_qty + 0.0001 >= p.qty)
+            .count();
+
+        // Muddat: yetkazilganlar bo'yicha rejadagi sana bilan solishtiriladi.
+        let mut on_time = 0usize;
+        let mut late = 0usize;
+        let mut delays: Vec<i64> = Vec::new();
+        for p in &mine {
+            let arrived = p.delivered_qty > 0.0;
+            if arrived && p.delivery_date >= today {
+                on_time += 1;
+            } else if !arrived && p.delivery_date < today {
+                late += 1;
+                delays.push((today - p.delivery_date).num_days());
+            } else {
+                on_time += 1;
+            }
+        }
+
+        // Narx: shu ta'minotchining takliflari eng arzonidan qancha qimmat.
+        let mut over: Vec<f64> = Vec::new();
+        for q in quotes.iter().filter(|q| key(&q.supplier) == key(&name)) {
+            let best = best_for(&q.title);
+            if best.is_finite() && best > 0.0 {
+                over.push((q.price - best) * 100.0 / best);
+            }
+        }
+
+        out.push(SupplierReport {
+            deals: mine.len(),
+            amount: mine.iter().map(|p| p.amount()).sum(),
+            complete_pct: complete as f64 * 100.0 / mine.len() as f64,
+            on_time_pct: on_time as f64 * 100.0 / mine.len() as f64,
+            avg_delay: if delays.is_empty() {
+                0.0
+            } else {
+                delays.iter().sum::<i64>() as f64 / delays.len() as f64
+            },
+            price_over_pct: if over.is_empty() {
+                0.0
+            } else {
+                over.iter().sum::<f64>() / over.len() as f64
+            },
+            // Kirish nazorati: shu ta'minotchidan kelgan material bo'yicha
+            // salbiy tekshiruv. Bog'lanish tekshiruv mavzusi bilan xarid
+            // nomi ustma-ust tushishiga qarab topiladi — sifat yozuvida
+            // ta'minotchi maydoni yo'q, shuning uchun bu eng ishonchli
+            // mavjud bog'lanish.
+            rejected: quality
+                .iter()
+                .filter(|q| {
+                    q.kind == QualityKind::Input
+                        && q.result == QualityResult::Fail
+                        && mine.iter().any(|p| {
+                            !p.title.trim().is_empty() && key(&q.subject).contains(&key(&p.title))
+                        })
+                })
+                .count(),
+            name,
+        });
+        let _ = late;
+    }
+    // Ishonchsizlari oldinda.
+    out.sort_by(|a, b| a.score().total_cmp(&b.score()));
+    out
+}
+
+/// Ikki ko'rsatkich orasidagi bog'liqlik (TZ XVII.25).
+#[derive(Debug, Clone)]
+pub struct Correlation {
+    /// Nima bilan nima solishtirilgani — i18n kaliti.
+    pub key: &'static str,
+    /// Pirson koeffitsiyenti, -1 dan 1 gacha.
+    pub r: f64,
+    /// Nechta juftlik bo'yicha hisoblangan.
+    pub points: usize,
+}
+
+impl Correlation {
+    /// Bog'liqlik e'tiborga arziydimi.
+    ///
+    /// Ikki shart birga: koeffitsiyent yetarlicha katta **va** juftliklar
+    /// soni yetarli. Uch nuqtadan chiqqan «kuchli bog'liqlik» — tasodif.
+    pub fn meaningful(&self) -> bool {
+        self.r.abs() >= CORR_LIMIT && self.points >= CORR_MIN_POINTS
+    }
+}
+
+/// Bog'liqlik shu qiymatdan kuchli bo'lsa ko'rsatiladi.
+pub const CORR_LIMIT: f64 = 0.5;
+
+/// Bog'liqlik shuncha juftlikdan kam bo'lsa ko'rsatilmaydi.
+pub const CORR_MIN_POINTS: usize = 8;
+
+/// Pirson korrelyatsiya koeffitsiyenti.
+///
+/// Qiymatlar bir xil bo'lsa (dispersiya nol) koeffitsiyent aniqlanmaydi —
+/// bunda nol qaytariladi, chunki «bog'liqlik yo'q» halolroq javob.
+pub fn pearson(xs: &[f64], ys: &[f64]) -> f64 {
+    let n = xs.len().min(ys.len());
+    if n < 2 {
+        return 0.0;
+    }
+    let mx = xs.iter().take(n).sum::<f64>() / n as f64;
+    let my = ys.iter().take(n).sum::<f64>() / n as f64;
+    let mut num = 0.0;
+    let mut dx = 0.0;
+    let mut dy = 0.0;
+    for i in 0..n {
+        let a = xs[i] - mx;
+        let b = ys[i] - my;
+        num += a * b;
+        dx += a * a;
+        dy += b * b;
+    }
+    if dx <= f64::EPSILON || dy <= f64::EPSILON {
+        return 0.0;
+    }
+    (num / (dx * dy).sqrt()).clamp(-1.0, 1.0)
+}
+
+/// TZ XVII.25: oldindan tanlangan juftliklar bo'yicha bog'liqlikni o'lchaydi.
+///
+/// Bu **sabab emas, birgalikda o'zgarish**: ikki son birga o'zgargani
+/// birinchisi ikkinchisini keltirib chiqargan degani emas. Ekranda buni
+/// ochiq aytish shart, aks holda tasodifiy bog'liqlik qaror asosiga
+/// aylanib qoladi.
+pub fn correlations(
+    tasks: &[Task],
+    journal: &[JournalEntry],
+    timesheet: &[TimesheetEntry],
+    costs: &[TaskCost],
+    today: NaiveDate,
+) -> Vec<Correlation> {
+    let mut out = Vec::new();
+
+    // 1. Brigada kattaligi va kunlik hajm.
+    let mut crew = Vec::new();
+    let mut volume = Vec::new();
+    for j in journal.iter().filter(|j| j.volume > 0.0 && j.workers > 0) {
+        crew.push(j.workers as f64);
+        volume.push(j.volume);
+    }
+    out.push(Correlation {
+        key: "corr_crew_volume",
+        r: pearson(&crew, &volume),
+        points: crew.len(),
+    });
+
+    // 2. Ish hajmi va tannarx.
+    let mut vol = Vec::new();
+    let mut cost = Vec::new();
+    for c in costs {
+        if let Some(t) = tasks.iter().find(|t| t.id == c.task_id) {
+            if t.volume > 0.0 && c.total > 0.0 {
+                vol.push(t.volume);
+                cost.push(c.total);
+            }
+        }
+    }
+    out.push(Correlation {
+        key: "corr_volume_cost",
+        r: pearson(&vol, &cost),
+        points: vol.len(),
+    });
+
+    // 3. Kunlik soat va kunlik hajm.
+    let mut hours = Vec::new();
+    let mut day_volume = Vec::new();
+    let mut days: Vec<NaiveDate> = journal
+        .iter()
+        .filter(|j| j.date <= today && j.volume > 0.0)
+        .map(|j| j.date)
+        .collect();
+    days.sort_unstable();
+    days.dedup();
+    for d in days {
+        let h: f64 = timesheet
+            .iter()
+            .filter(|e| e.date == d)
+            .map(|e| e.hours)
+            .sum();
+        let v: f64 = journal
+            .iter()
+            .filter(|j| j.date == d)
+            .map(|j| j.volume)
+            .sum();
+        if h > 0.0 && v > 0.0 {
+            hours.push(h);
+            day_volume.push(v);
+        }
+    }
+    out.push(Correlation {
+        key: "corr_hours_volume",
+        r: pearson(&hours, &day_volume),
+        points: hours.len(),
+    });
+
+    // Kuchlilari oldinda.
+    out.sort_by(|a, b| b.r.abs().total_cmp(&a.r.abs()));
+    out
+}
+
+/// Loyiha o'zgarishlari bo'yicha yakun (TZ XVII.35).
+#[derive(Debug, Clone, Default)]
+pub struct ChangeReport {
+    pub total: usize,
+    pub approved: usize,
+    pub pending: usize,
+    pub rejected: usize,
+    /// Tasdiqlangan o'zgarishlarning summasi.
+    pub approved_sum: f64,
+    /// Qaror kutayotganlarning summasi — bu hali pul emas.
+    pub pending_sum: f64,
+    /// Tasdiqlangan o'zgarishlar qo'shgan kunlar.
+    pub added_days: i64,
+    /// Qaror qabul qilishgacha o'rtacha kun.
+    pub avg_decision_days: f64,
+    /// Turlar bo'yicha soni.
+    pub by_kind: Vec<(ChangeKind, usize, f64)>,
+}
+
+/// TZ XVII.35: shartnoma o'zgarishlarini bir joyda ko'rsatadi.
+///
+/// Tasdiqlangan va qaror kutayotgan summalar **alohida** turadi: qaror
+/// kutayotgani hali pul emas va uni jamiga qo'shish byudjetni yolg'on
+/// ko'rsatardi.
+pub fn change_report(changes: &[ContractChange]) -> ChangeReport {
+    let mut r = ChangeReport {
+        total: changes.len(),
+        ..Default::default()
+    };
+    let mut decision_days: Vec<i64> = Vec::new();
+
+    for c in changes {
+        match c.status {
+            ChangeStatus::Approved => {
+                r.approved += 1;
+                r.approved_sum += c.amount;
+                r.added_days += c.days;
+            }
+            ChangeStatus::Rejected => r.rejected += 1,
+            _ => {
+                r.pending += 1;
+                r.pending_sum += c.amount;
+            }
+        }
+        if let Some(at) = c.decided_at {
+            decision_days.push((at - c.date).num_days().max(0));
+        }
+
+        match r.by_kind.iter_mut().find(|(k, _, _)| *k == c.kind) {
+            Some(e) => {
+                e.1 += 1;
+                e.2 += c.amount;
+            }
+            None => r.by_kind.push((c.kind, 1, c.amount)),
+        }
+    }
+
+    r.avg_decision_days = if decision_days.is_empty() {
+        0.0
+    } else {
+        decision_days.iter().sum::<i64>() as f64 / decision_days.len() as f64
+    };
+    // Eng katta summali tur oldinda.
+    r.by_kind.sort_by(|a, b| b.2.total_cmp(&a.2));
+    r
+}
+
+/// Rahbar uchun umumiy ball (TZ XVII.49).
+#[derive(Debug, Clone, Default)]
+pub struct ExecutiveScore {
+    /// Muddat: rejadan orqada qolish va muddati o'tgan ishlar.
+    pub schedule: f64,
+    /// Pul: smeta va bajarilgan ish qiymati farqi.
+    pub money: f64,
+    /// Sifat balli — sifat modulidan.
+    pub quality: f64,
+    /// Xavfsizlik balli — xavfsizlik modulidan.
+    pub safety: f64,
+    /// Ta'minot: kechikkan arizalar ulushi.
+    pub supply: f64,
+    /// Hujjatlar: imzolangan ijro hujjatlari ulushi.
+    pub docs: f64,
+    /// Umumiy ball, 0-100.
+    pub total: f64,
+}
+
+/// Umumiy ball uchun manba.
+pub struct ExecCtx<'a> {
+    /// Rejadan orqada qolish, kunlarda.
+    pub delay_days: i64,
+    /// Muddati o'tgan ishlar soni va jami ishlar.
+    pub overdue: usize,
+    pub tasks: usize,
+    /// Bajarilgan ish qiymati va shu ishga ketgan haqiqiy sarf.
+    pub earned: f64,
+    pub actual: f64,
+    /// Sifat va xavfsizlik ballari — o'z modullaridan.
+    pub quality_score: f64,
+    pub safety_score: f64,
+    /// Ta'minot qatorlari.
+    pub supply: &'a [SupplyLine],
+    /// Talab qilinadigan hujjatlar.
+    pub required_docs: &'a [RequiredDoc],
+}
+
+/// TZ XVII.49: rahbar uchun bitta ko'rsatkich.
+///
+/// Ball **yangi hisob qilmaydi**: sifat va xavfsizlik ballari o'z
+/// modullaridan olinadi, qolgan uchtasi esa shu ekranlardagi sonlardan
+/// chiqadi. Shuning uchun umumiy ball pasayganda sababini har doim aniq
+/// bo'limdan topish mumkin.
+///
+/// Vaznlar teng emas: xavfsizlik va sifat og'irroq, chunki ularni keyin
+/// tuzatib bo'lmaydi — muddat va pulni esa qayta rejalashtirish mumkin.
+pub fn executive_score(ctx: &ExecCtx) -> ExecutiveScore {
+    // Muddat: har kun kechikish uchun bir ball, muddati o'tgan ish ulushi
+    // esa yarim vazn bilan.
+    let overdue_share = if ctx.tasks == 0 {
+        0.0
+    } else {
+        ctx.overdue as f64 * 100.0 / ctx.tasks as f64
+    };
+    let schedule = (100.0 - ctx.delay_days.max(0) as f64 - overdue_share * 0.5).clamp(0.0, 100.0);
+
+    // Pul: bajarilgan ish qiymatidan qancha oshib ketilgani.
+    let money = if ctx.earned <= 0.0 {
+        100.0
+    } else {
+        let over = (ctx.actual - ctx.earned) * 100.0 / ctx.earned;
+        (100.0 - over.max(0.0)).clamp(0.0, 100.0)
+    };
+
+    // Ta'minot: kechikkan arizalar ulushi.
+    let supply = if ctx.supply.is_empty() {
+        100.0
+    } else {
+        let late = ctx.supply.iter().filter(|s| s.late).count();
+        (100.0 - late as f64 * 100.0 / ctx.supply.len() as f64).clamp(0.0, 100.0)
+    };
+
+    // Hujjatlar: imzolanganlari ulushi.
+    let docs = if ctx.required_docs.is_empty() {
+        100.0
+    } else {
+        let signed = ctx.required_docs.iter().filter(|d| d.signed).count();
+        signed as f64 * 100.0 / ctx.required_docs.len() as f64
+    };
+
+    let quality = ctx.quality_score.clamp(0.0, 100.0);
+    let safety = ctx.safety_score.clamp(0.0, 100.0);
+
+    // Vaznlar: xavfsizlik 25, sifat 25, muddat 20, pul 15, ta'minot 10,
+    // hujjat 5. Yig'indisi 100.
+    let total = safety * 0.25
+        + quality * 0.25
+        + schedule * 0.20
+        + money * 0.15
+        + supply * 0.10
+        + docs * 0.05;
+
+    ExecutiveScore {
+        schedule,
+        money,
+        quality,
+        safety,
+        supply,
+        docs,
+        total: total.clamp(0.0, 100.0),
+    }
+}

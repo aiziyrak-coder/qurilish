@@ -72,6 +72,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (3, t("an_tab_forecast")),
             (4, t("an_tab_scenario")),
             (5, t("an_tab_losses")),
+            (6, t("an_tab_cuts")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -108,6 +109,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         if let Some(screen) = losses_tab(ui, app) {
             app.screen = screen;
         }
+        return;
+    }
+    if tab == 6 {
+        cuts_tab(ui, app);
         return;
     }
 
@@ -848,6 +853,407 @@ fn scenario_tab(ui: &mut egui::Ui, app: &mut App) {
             .size(11.0)
             .color(theme::muted()),
     );
+}
+
+// ================================================================ Kesimlar
+
+/// Pudratchi, ta'minotchi, bog'liqlik, o'zgarish va umumiy ball
+/// (TZ XVII.23-25, 35, 49).
+fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let score = app.executive_score();
+    let contractors = app.contractor_report();
+    let suppliers = app.supplier_report();
+    let corr = app.correlations();
+    let changes = app.change_report();
+
+    // ---------- Umumiy ball (TZ XVII.49) ----------
+    ui.label(
+        RichText::new(t("an_exec_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    let colour = |v: f64| {
+        if v >= 80.0 {
+            theme::ok()
+        } else if v >= 60.0 {
+            theme::warn()
+        } else {
+            theme::danger()
+        }
+    };
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("an_exec_total"),
+                format!("{:.0}", score.total),
+                t("an_exec_total_hint"),
+                colour(score.total),
+            ),
+            stat(
+                t("an_exec_safety"),
+                format!("{:.0}", score.safety),
+                t("an_exec_weight_25"),
+                colour(score.safety),
+            ),
+            stat(
+                t("an_exec_quality"),
+                format!("{:.0}", score.quality),
+                t("an_exec_weight_25"),
+                colour(score.quality),
+            ),
+            stat(
+                t("an_exec_schedule"),
+                format!("{:.0}", score.schedule),
+                t("an_exec_weight_20"),
+                colour(score.schedule),
+            ),
+            stat(
+                t("an_exec_money"),
+                format!("{:.0}", score.money),
+                t("an_exec_weight_15"),
+                colour(score.money),
+            ),
+            stat(
+                t("an_exec_supply"),
+                format!("{:.0}", score.supply),
+                t("an_exec_weight_10"),
+                colour(score.supply),
+            ),
+            stat(
+                t("an_exec_docs"),
+                format!("{:.0}", score.docs),
+                t("an_exec_weight_5"),
+                colour(score.docs),
+            ),
+        ],
+    );
+    ui.add_space(14.0);
+
+    let week = app.week_report();
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Haftalik boshqaruv hisoboti (TZ XVII.38) ----------
+            ui.label(RichText::new(t("an_week")).size(14.0).strong());
+            ui.label(
+                RichText::new(format!(
+                    "{} — {}",
+                    week.from.format("%d.%m.%Y"),
+                    week.to.format("%d.%m.%Y")
+                ))
+                .size(11.0)
+                .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(format!(
+                    "{}: {:.1}% → {:.1}% · {}: {} · {}: {}",
+                    t("an_w_progress"),
+                    week.progress_start,
+                    week.progress_end,
+                    t("an_w_done"),
+                    week.tasks_done,
+                    t("an_w_started"),
+                    week.tasks_started
+                ))
+                .size(12.0),
+            );
+            ui.label(
+                RichText::new(format!(
+                    "{}: {} ({} {}) · {}: {} · {}: {}",
+                    t("an_w_inspections"),
+                    week.inspections,
+                    week.inspections_failed,
+                    t("an_w_failed"),
+                    t("an_w_issues"),
+                    week.issues_opened,
+                    t("an_w_docs"),
+                    week.docs_signed
+                ))
+                .size(12.0),
+            );
+            ui.label(
+                RichText::new(format!(
+                    "{}: {} · {}: {} {} · {}: {} / {}",
+                    t("an_w_journal"),
+                    week.journal_days,
+                    t("an_w_paid"),
+                    money(week.paid),
+                    "",
+                    t("an_w_waiting"),
+                    week.changes_pending,
+                    week.acceptances_pending
+                ))
+                .size(12.0)
+                .color(theme::muted()),
+            );
+            ui.add_space(16.0);
+
+            // ---------- Pudratchilar (TZ XVII.23) ----------
+            ui.label(RichText::new(t("an_contractors")).size(14.0).strong());
+            ui.add_space(6.0);
+            if contractors.is_empty() {
+                ui.label(
+                    RichText::new(t("an_no_data"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+            } else {
+                egui::Grid::new("an_contractors")
+                    .num_columns(8)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("col_responsible"));
+                        head_r(ui, 80.0, t("an_c_tasks"));
+                        head_r(ui, 80.0, t("an_c_done"));
+                        head_r(ui, 90.0, t("an_c_overdue"));
+                        head_r(ui, 100.0, t("an_c_on_time"));
+                        head_r(ui, 110.0, t("an_c_delay"));
+                        head_r(ui, 90.0, t("an_c_quality"));
+                        head_r(ui, 90.0, t("an_c_issues"));
+                        ui.end_row();
+
+                        for c in &contractors {
+                            cell_l(
+                                ui,
+                                200.0,
+                                RichText::new(super::issues::truncate(&c.name, 26))
+                                    .size(12.5)
+                                    .color(if c.attention() {
+                                        theme::text()
+                                    } else {
+                                        theme::muted()
+                                    }),
+                            );
+                            cell_r(ui, 80.0, RichText::new(c.tasks.to_string()).size(12.0));
+                            cell_r(ui, 80.0, RichText::new(c.done.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(c.overdue.to_string()).size(12.0).color(
+                                    if c.overdue == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                100.0,
+                                RichText::new(format!("{:.0}%", c.on_time_pct)).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(if c.avg_delay > 0.0 {
+                                    format!("{:.0} {}", c.avg_delay, t("days"))
+                                } else {
+                                    t("dash").to_string()
+                                })
+                                .size(12.0)
+                                .color(theme::muted()),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{:.0}", c.quality))
+                                    .size(12.5)
+                                    .color(colour(c.quality)),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{} / {}", c.defects, c.safety))
+                                    .size(12.0)
+                                    .color(if c.defects + c.safety == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::warn()
+                                    }),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            // ---------- Yetkazib beruvchilar (TZ XVII.24) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("an_suppliers")).size(14.0).strong());
+            ui.label(
+                RichText::new(t("an_suppliers_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if suppliers.is_empty() {
+                ui.label(
+                    RichText::new(t("an_no_data"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+            } else {
+                egui::Grid::new("an_suppliers")
+                    .num_columns(8)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("col_supplier"));
+                        head_r(ui, 80.0, t("an_s_deals"));
+                        head_r(ui, 140.0, t("col_sum"));
+                        head_r(ui, 100.0, t("an_s_complete"));
+                        head_r(ui, 100.0, t("an_s_on_time"));
+                        head_r(ui, 90.0, t("an_s_rejected"));
+                        head_r(ui, 100.0, t("an_s_price"));
+                        head_r(ui, 90.0, t("an_s_score"));
+                        ui.end_row();
+
+                        for s in &suppliers {
+                            cell_l(
+                                ui,
+                                200.0,
+                                RichText::new(super::issues::truncate(&s.name, 26)).size(12.5),
+                            );
+                            cell_r(ui, 80.0, RichText::new(s.deals.to_string()).size(12.0));
+                            cell_r(ui, 140.0, RichText::new(money(s.amount)).size(12.0));
+                            cell_r(
+                                ui,
+                                100.0,
+                                RichText::new(format!("{:.0}%", s.complete_pct)).size(12.0),
+                            );
+                            // Muddat ustunida ulush bilan birga o'rtacha
+                            // kechikish ham turadi: 90% yaxshi ko'rinadi,
+                            // lekin kechikish 30 kun bo'lsa gap boshqacha.
+                            cell_r(
+                                ui,
+                                100.0,
+                                RichText::new(if s.avg_delay > 0.0 {
+                                    format!(
+                                        "{:.0}% · {:.0}{}",
+                                        s.on_time_pct,
+                                        s.avg_delay,
+                                        t("day_short")
+                                    )
+                                } else {
+                                    format!("{:.0}%", s.on_time_pct)
+                                })
+                                .size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(s.rejected.to_string()).size(12.0).color(
+                                    if s.rejected == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                100.0,
+                                RichText::new(if s.price_over_pct.abs() < 0.01 {
+                                    t("dash").to_string()
+                                } else {
+                                    format!("+{:.0}%", s.price_over_pct)
+                                })
+                                .size(12.0)
+                                .color(theme::muted()),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{:.0}", s.score()))
+                                    .size(12.5)
+                                    .color(colour(s.score())),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            // ---------- Bog'liqlik (TZ XVII.25) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("an_corr")).size(14.0).strong());
+            ui.label(
+                RichText::new(t("an_corr_hint"))
+                    .size(11.0)
+                    .color(theme::warn()),
+            );
+            ui.add_space(6.0);
+            for c in &corr {
+                ui.label(
+                    RichText::new(format!(
+                        "{}: r = {:.2} ({} {})",
+                        t(c.key),
+                        c.r,
+                        c.points,
+                        t("an_corr_points")
+                    ))
+                    .size(12.0)
+                    .color(if c.meaningful() {
+                        theme::text()
+                    } else {
+                        theme::muted()
+                    }),
+                );
+            }
+
+            // ---------- O'zgarishlar (TZ XVII.35) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("an_changes")).size(14.0).strong());
+            ui.add_space(6.0);
+            if changes.total == 0 {
+                ui.label(
+                    RichText::new(t("an_no_data"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+            } else {
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {} · {}: {} ({}) · {}: {} ({})",
+                        t("an_ch_total"),
+                        changes.total,
+                        t("an_ch_approved"),
+                        changes.approved,
+                        money(changes.approved_sum),
+                        t("an_ch_pending"),
+                        changes.pending,
+                        money(changes.pending_sum)
+                    ))
+                    .size(12.0),
+                );
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {} {} · {}: {:.0} {}",
+                        t("an_ch_days"),
+                        changes.added_days,
+                        t("days"),
+                        t("an_ch_decision"),
+                        changes.avg_decision_days,
+                        t("days")
+                    ))
+                    .size(12.0)
+                    .color(theme::muted()),
+                );
+                for (kind, count, sum) in &changes.by_kind {
+                    ui.label(
+                        RichText::new(format!("· {}: {} — {}", kind.label(), count, money(*sum)))
+                            .size(11.5)
+                            .color(theme::muted()),
+                    );
+                }
+            }
+            ui.add_space(20.0);
+        });
 }
 
 // ================================================================ Yo'qotishlar

@@ -7831,6 +7831,254 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(!control.is_empty(), "nazorat ekrani bo'sh");
     }
 
+    /// TZ XVII.49: umumiy ball o'z modullaridagi ballardan yig'iladi va
+    /// vaznlar yig'indisi 100 ni beradi.
+    #[test]
+    fn executive_score_is_a_weighted_sum() {
+        use crate::checks::{executive_score, ExecCtx, RequiredDoc};
+
+        let ctx = |quality: f64, safety: f64| ExecCtx {
+            delay_days: 0,
+            overdue: 0,
+            tasks: 10,
+            earned: 100.0,
+            actual: 100.0,
+            quality_score: quality,
+            safety_score: safety,
+            supply: &[],
+            required_docs: &[],
+        };
+
+        // Hammasi ideal — ball 100.
+        let best = executive_score(&ctx(100.0, 100.0));
+        assert!((best.total - 100.0).abs() < 0.001);
+        assert!((best.schedule - 100.0).abs() < 0.001);
+        assert!((best.docs - 100.0).abs() < 0.001);
+
+        // Sifat va xavfsizlik ballari o'z modulidan olinadi — qayta
+        // hisoblanmaydi.
+        let mid = executive_score(&ctx(60.0, 40.0));
+        assert!((mid.quality - 60.0).abs() < 0.001);
+        assert!((mid.safety - 40.0).abs() < 0.001);
+        // 40×0.25 + 60×0.25 + 100×0.20 + 100×0.15 + 100×0.10 + 100×0.05
+        //  = 10 + 15 + 20 + 15 + 10 + 5 = 75.
+        assert!(
+            (mid.total - 75.0).abs() < 0.001,
+            "vazn buzilgan: {}",
+            mid.total
+        );
+
+        // Kechikish muddat ballini pasaytiradi.
+        let mut late = ctx(100.0, 100.0);
+        late.delay_days = 30;
+        late.overdue = 4;
+        let r = executive_score(&late);
+        assert!(
+            (r.schedule - 50.0).abs() < 0.001,
+            "muddat balli: {}",
+            r.schedule
+        );
+
+        // Ortiqcha sarf pul ballini pasaytiradi.
+        let mut over = ctx(100.0, 100.0);
+        over.actual = 130.0;
+        assert!((executive_score(&over).money - 70.0).abs() < 0.001);
+
+        // Hujjatlar ulushi imzolanganlariga qarab.
+        let docs = vec![
+            RequiredDoc {
+                task_id: 1,
+                task_name: String::new(),
+                section: crate::model::Section::Kj,
+                kind: crate::domain::ExecDocKind::Hidden,
+                task_done: true,
+                exists: true,
+                signed: true,
+            },
+            RequiredDoc {
+                task_id: 2,
+                task_name: String::new(),
+                section: crate::model::Section::Kj,
+                kind: crate::domain::ExecDocKind::Hidden,
+                task_done: true,
+                exists: false,
+                signed: false,
+            },
+        ];
+        let mut with_docs = ctx(100.0, 100.0);
+        with_docs.required_docs = &docs;
+        assert!((executive_score(&with_docs).docs - 50.0).abs() < 0.001);
+    }
+
+    /// TZ XVII.23: mas'ul bo'yicha sifat balli sifat modulidagi bilan
+    /// bir xil bo'ladi.
+    #[test]
+    fn contractor_report_reuses_the_quality_score() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.contractor_report();
+        assert!(!rows.is_empty(), "mas'ullar topilmadi");
+        let by_quality = crate::checks::contractor_quality(&app.quality, app.today);
+
+        for c in &rows {
+            assert!(c.tasks > 0);
+            assert!(c.done <= c.tasks);
+            assert!(c.on_time_pct >= 0.0 && c.on_time_pct <= 100.0);
+            if let Some(q) = by_quality
+                .iter()
+                .find(|x| x.name.trim().to_lowercase() == c.name.trim().to_lowercase())
+            {
+                assert!((c.quality - q.score).abs() < 0.001, "ball mos kelmadi");
+                assert_eq!(c.defects, q.open_defects);
+            } else {
+                // Sifat yozuvi yo'q mas'ul — ball tushirilmaydi.
+                assert!((c.quality - 100.0).abs() < 0.001);
+            }
+        }
+
+        // E'tibor talab qiladiganlar oldinda.
+        let mut seen_calm = false;
+        for c in &rows {
+            if c.attention() {
+                assert!(!seen_calm, "e'tibor talab qiladigan mas'ul pastga tushgan");
+            } else {
+                seen_calm = true;
+            }
+        }
+    }
+
+    /// TZ XVII.24: ta'minotchi balliga narx kirmaydi — arzon, lekin
+    /// kechikadigan ta'minotchi yaxshi ko'rinib qolmasligi kerak.
+    #[test]
+    fn supplier_score_ignores_price() {
+        use crate::checks::SupplierReport;
+
+        let base = SupplierReport {
+            name: "A".into(),
+            deals: 4,
+            amount: 100.0,
+            complete_pct: 100.0,
+            on_time_pct: 100.0,
+            avg_delay: 0.0,
+            price_over_pct: 0.0,
+            rejected: 0,
+        };
+        assert!((base.score() - 100.0).abs() < 0.001);
+
+        // Narx ikki barobar qimmat bo'lsa ham ball o'zgarmaydi.
+        let mut pricey = base.clone();
+        pricey.price_over_pct = 100.0;
+        assert!((pricey.score() - base.score()).abs() < 0.001);
+
+        // Kechikish esa ballni tushiradi.
+        let mut late = base.clone();
+        late.on_time_pct = 40.0;
+        assert!(late.score() < base.score());
+
+        // Rad etilgan partiya ham.
+        let mut bad = base.clone();
+        bad.rejected = 2;
+        assert!((bad.score() - (100.0 + 100.0 + 50.0) / 3.0).abs() < 0.001);
+    }
+
+    /// TZ XVII.25: bog'liqlik faqat yetarli juftlik va yetarli kuchda
+    /// e'tiborga olinadi.
+    #[test]
+    fn correlation_needs_strength_and_points() {
+        use crate::checks::{pearson, Correlation, CORR_LIMIT, CORR_MIN_POINTS};
+
+        // To'g'ri chiziqli bog'liqlik.
+        let xs: Vec<f64> = (1..=12).map(|i| i as f64).collect();
+        let ys: Vec<f64> = xs.iter().map(|x| x * 3.0 + 1.0).collect();
+        assert!((pearson(&xs, &ys) - 1.0).abs() < 1e-9);
+
+        // Teskari bog'liqlik.
+        let inv: Vec<f64> = xs.iter().map(|x| -x).collect();
+        assert!((pearson(&xs, &inv) + 1.0).abs() < 1e-9);
+
+        // Dispersiya nol — bog'liqlik aniqlanmaydi.
+        let flat = vec![5.0; 12];
+        assert_eq!(pearson(&xs, &flat), 0.0);
+        // Ikki nuqtadan kam — hisoblanmaydi.
+        assert_eq!(pearson(&[1.0], &[2.0]), 0.0);
+
+        // Kuchli, lekin juftlik kam — e'tiborga olinmaydi.
+        let weak_points = Correlation {
+            key: "corr_crew_volume",
+            r: 0.99,
+            points: CORR_MIN_POINTS - 1,
+        };
+        assert!(!weak_points.meaningful());
+        // Juftlik ko'p, lekin kuchsiz — ham olinmaydi.
+        let weak_r = Correlation {
+            key: "corr_crew_volume",
+            r: CORR_LIMIT - 0.01,
+            points: 50,
+        };
+        assert!(!weak_r.meaningful());
+        // Ikkalasi ham yetarli.
+        let good = Correlation {
+            key: "corr_crew_volume",
+            r: -0.8,
+            points: 20,
+        };
+        assert!(good.meaningful());
+    }
+
+    /// TZ XVII.35: tasdiqlangan va qaror kutayotgan summalar alohida
+    /// turadi — qaror kutayotgani hali pul emas.
+    #[test]
+    fn change_report_separates_approved_from_pending() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let r = app.change_report();
+        assert_eq!(r.total, app.contract_changes.len());
+        assert_eq!(r.approved + r.pending + r.rejected, r.total);
+
+        let expected_approved: f64 = app
+            .contract_changes
+            .iter()
+            .filter(|c| c.status == crate::domain::ChangeStatus::Approved)
+            .map(|c| c.amount)
+            .sum();
+        assert!((r.approved_sum - expected_approved).abs() < 0.01);
+        // Qaror kutayotgani tasdiqlangan summaga qo'shilmaydi.
+        assert!(r.pending_sum >= 0.0);
+        assert!((r.approved_sum + r.pending_sum) >= r.approved_sum);
+
+        // Turlar bo'yicha yig'indi jamiga teng.
+        let by_kind: usize = r.by_kind.iter().map(|(_, n, _)| n).sum();
+        assert_eq!(by_kind, r.total);
+        // Eng katta summali tur oldinda.
+        for w in r.by_kind.windows(2) {
+            assert!(w[0].2 >= w[1].2);
+        }
+    }
+
+    /// Haftalik hisobot bitta chaqiruv nuqtasidan chiqadi: buyurtmachi
+    /// kabineti va analitika bir xil sonni ko'rsatadi.
+    #[test]
+    fn week_report_has_one_source() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let a = app.week_report();
+        let b = app.week_report();
+        assert_eq!(a.from, b.from);
+        assert_eq!(a.tasks_done, b.tasks_done);
+        assert_eq!(a.docs_signed, b.docs_signed);
+        assert_eq!(a.to, app.today);
+        assert_eq!((a.to - a.from).num_days(), 7);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

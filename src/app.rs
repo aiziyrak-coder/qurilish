@@ -2028,6 +2028,79 @@ impl App {
         )
     }
 
+    // ---------- XVII. Kesimlar bo'yicha tahlil ----------
+
+    /// Haftalik hisobot (TZ VIII.31, XVII.38).
+    ///
+    /// Bitta chaqiruv nuqtasi: buyurtmachi kabineti ham, analitika ham
+    /// shundan oladi — ikki ekranda turli son bo'lishi mumkin emas.
+    pub fn week_report(&self) -> checks::WeekReport {
+        checks::week_report(
+            self.today,
+            &self.tasks,
+            &self.journal,
+            &self.inspections,
+            &self.issues,
+            &self.exec_docs,
+            &self.payment_stages,
+            &self.contract_changes,
+            &self.acceptances,
+        )
+    }
+
+    /// Mas'ullar kesimida ish, sifat va xavfsizlik (TZ XVII.23).
+    pub fn contractor_report(&self) -> Vec<checks::ContractorReport> {
+        checks::contractor_report(&self.tasks, &self.quality, &self.safety, self.today)
+    }
+
+    /// Yetkazib beruvchilar kesimida ishonchlilik (TZ XVII.24).
+    pub fn supplier_report(&self) -> Vec<checks::SupplierReport> {
+        checks::supplier_report(&self.purchases, &self.quotes, &self.quality, self.today)
+    }
+
+    /// Ko'rsatkichlar orasidagi bog'liqlik (TZ XVII.25).
+    pub fn correlations(&self) -> Vec<checks::Correlation> {
+        checks::correlations(
+            &self.tasks,
+            &self.journal,
+            &self.timesheet,
+            &self.task_costs(),
+            self.today,
+        )
+    }
+
+    /// Shartnoma o'zgarishlari bo'yicha yakun (TZ XVII.35).
+    pub fn change_report(&self) -> checks::ChangeReport {
+        checks::change_report(&self.contract_changes)
+    }
+
+    /// Rahbar uchun umumiy ball (TZ XVII.49).
+    ///
+    /// Ball yangi hisob qilmaydi: sifat va xavfsizlik ballari o'z
+    /// modullaridan, qolganlari esa shu ekranlardagi sonlardan olinadi.
+    pub fn executive_score(&self) -> checks::ExecutiveScore {
+        let chain = self.estimate_chain();
+        let earned: f64 = chain.iter().map(|l| l.earned).sum();
+        let actual: f64 = chain.iter().map(|l| l.actual).sum();
+        checks::executive_score(&checks::ExecCtx {
+            delay_days: self.progress.delay_days,
+            overdue: self.progress.overdue.len(),
+            tasks: self.tasks.len(),
+            earned,
+            actual,
+            quality_score: checks::quality_score(&self.quality, self.today).score,
+            safety_score: checks::safety_score(
+                &self.safety,
+                &self.worker_safety(),
+                &self.work_permits,
+                self.today,
+            )
+            .score,
+            supply: &self.supply(),
+            required_docs: &checks::required_docs(&self.tasks, &self.exec_docs, false),
+        })
+    }
+
     /// Xaridlar tartibi: texnik kelishuv, almashtirish, shartnoma
     /// (TZ X.18-19, 22).
     pub fn supply_control(&self) -> Vec<checks::SupplyIssue> {

@@ -34,12 +34,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XIV. Sifat | 41 | 30 | 8 | 3 | 2 |
 | XV. Xavfsizlik | 41 | 33 | 4 | 4 | 3 |
 | XVI. Mashinalar | 50 | 35 | 9 | 6 | 2 |
-| XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
+| XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **458** | **156** | **86** | **46** |
+| **Jami** | **700** | **464** | **156** | **80** | **46** |
 
-Ya'ni **~65 % to'liq**, **~22 % qisman**, **~12 % hali yo'q**.
+Ya'ni **~66 % to'liq**, **~22 % qisman**, **~11 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -745,9 +745,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 20. Texnika tahlili
 - [x] 21. Sifat tahlili
 - [x] 22. Xavfsizlik tahlili
-- [ ] 23. Pudratchilar tahlili
-- [ ] 24. Yetkazib beruvchilar tahlili
-- [ ] 25. Korrelyatsion tahlil
+- [x] 23. Pudratchilar tahlili
+- [x] 24. Yetkazib beruvchilar tahlili
+- [x] 25. Korrelyatsion tahlil — *Pirson koeffitsiyenti, sabab emasligi ochiq aytiladi*
 - [x] 26. Unumdorlik tahlili — *bir birlik ish: soat va pul, o'rtacha bilan solishtirish*
 - [~] 27. Benchmarking — *ishlar o'rtacha bilan solishtiriladi; obyektlar orasida hali yo'q*
 - [~] 28. Loyihalar tahlili
@@ -757,10 +757,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 32. Debitorlik qarzi tahlili — *to'lov jadvalidan: qoldiq va muddati o'tgani*
 - [x] 33. Tushum prognozi — *yaqin 90 kun, to'lov jadvali bo'yicha*
 - [x] 34. Shartnomalar tahlili — *amaldagi summa kelishilgan o'zgarishlar bilan*
-- [ ] 35. Loyiha o'zgarishlari tahlili
+- [x] 35. Loyiha o'zgarishlari tahlili
 - [x] 36. «Nima bo'ladi, agar?» — *muddat, material narxi va ish haqi bo'yicha ssenariy*
 - [x] 37. **Kunlik xulosa** — *faqat bugungi muddat, yetkazish, hodisa*
-- [ ] 38. **AI Weekly Management Report**
+- [x] 38. **AI Weekly Management Report**
 - [~] 39. AI sonlarni tushuntirishi — *fakt/hisob/tavsiya*
 - [x] 40. Ogohlantirishlar tizimi
 - [x] 41. Imkoniyatlarni topish — *har biri pulda o'lchanadi va manba ekraniga bog'langan*
@@ -771,7 +771,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 46. Yagona AI chat — *o'n uch savol, har biri manba ekraniga bog'langan*
 - [~] 47. Darajalar bo'yicha analitika — *ko'rsatkich → bo'lim*
 - [x] 48. **Drill-down** — *kartochka, topilma va oqim qatoridan bo'limga*
-- [ ] 49. **AI Executive Score** — *sog'lomlik indeksi qisman*
+- [x] 49. **AI Executive Score** — *olti ko'rsatkich, vaznlangan*
 - [~] 50. XVII ning bosh arxitekturasi
 - [x] 51. Eng muhim funksiya
 
