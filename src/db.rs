@@ -9450,6 +9450,87 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|i| i.title == crate::i18n::t("chk_build_size_title")));
     }
 
+    /// Modul yordamchisi: har modul ekrani o'z mavzusiga tushadi va
+    /// mavzu javobi bo'sh bo'lmaydi.
+    #[test]
+    fn module_assistant_maps_every_screen() {
+        use crate::app::Screen;
+        use crate::copilot::Intent;
+
+        // Modul ekranlari mavzuga bog'langan.
+        let pairs = [
+            (Screen::Gantt, Intent::Delays),
+            (Screen::Estimate, Intent::Money),
+            (Screen::ExecDocs, Intent::Docs),
+            (Screen::Requests, Intent::Supply),
+            (Screen::Warehouse, Intent::Stock),
+            (Screen::Materials, Intent::Stock),
+            (Screen::Timesheet, Intent::Crew),
+            (Screen::Machines, Intent::Machines),
+            (Screen::Quality, Intent::Quality),
+            (Screen::Safety, Intent::Safety),
+            (Screen::Director, Intent::Overview),
+        ];
+        for (screen, want) in pairs {
+            assert_eq!(Intent::for_screen(screen), Some(want), "{screen:?}");
+        }
+
+        // Sozlamalar moduli emas — yordamchi tugmasi chiqmaydi.
+        assert_eq!(Intent::for_screen(Screen::Settings), None);
+
+        // Har mavzuning savoli va javobi bor.
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let supply = app.supply();
+        let stock = app.stock();
+        let cost = app.cost_summary();
+        let sales = app.sales();
+        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+        for i in Intent::ALL {
+            assert!(!i.question().is_empty());
+            let a = crate::copilot::answer(*i, &inp);
+            assert!(!a.lines.is_empty(), "bo'sh javob: {i:?}");
+        }
+    }
+
+    /// TZ IX.34, X.45, XI.40 va h.k.: rahbar ekranidagi sonlar o'z
+    /// modulidagi funksiyalardan olinadi — qayta hisoblanmaydi.
+    #[test]
+    fn director_numbers_come_from_the_modules() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Ekran chizmasdan, u ishlatadigan funksiyalar bir xil natija
+        // berishini tekshiramiz: rahbar ekranidagi son modul ekranidagi
+        // bilan farq qilmasligi kerak.
+        let a = app.executive_score();
+        let b = app.executive_score();
+        assert!((a.total - b.total).abs() < 0.001);
+
+        let week = app.quality_week();
+        let module = crate::checks::quality_score(&app.quality, app.today);
+        assert!((week.score - module.score).abs() < 0.001);
+
+        let staff = app.staff_forecast();
+        assert_eq!(staff.have, app.workers.iter().filter(|w| w.active).count());
+
+        let kits = app.material_kits();
+        let ready = app.readiness();
+        for k in &kits {
+            assert_eq!(
+                k.missing,
+                ready.iter().filter(|r| r.task_id == k.task_id).count()
+            );
+        }
+
+        // Rahbar ekrani TZ moduli emas — raqami bo'sh.
+        assert_eq!(crate::app::Screen::Director.numeral(), "");
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

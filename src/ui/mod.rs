@@ -7,6 +7,7 @@ mod contracts;
 mod copilot;
 mod dashboard;
 mod deals;
+mod director;
 mod documents;
 mod estimate;
 mod execdocs;
@@ -124,6 +125,26 @@ pub fn install_theme(ctx: &Context) {
     ctx.set_style(style);
 }
 
+/// Modul yordamchisi tugmasi (TZ VI.30, VII.33, VIII.32, IX.35, XI.45-46,
+/// XII.39, XIII.40, XIV.38, XV.38).
+///
+/// Tugma yangi yordamchi ochmaydi — mavjud yordamchini shu modulning
+/// savoli bilan ochadi. Shuning uchun javob har doim bitta joyda
+/// hisoblanadi va ekranlar orasida farq qilmaydi.
+pub fn assistant_button(ui: &mut egui::Ui, app: &mut App) {
+    let Some(intent) = crate::copilot::Intent::for_screen(app.screen) else {
+        return;
+    };
+    if ui
+        .button(t("assist_open"))
+        .on_hover_text(intent.question())
+        .clicked()
+    {
+        app.copilot_intent = Some(intent);
+        app.screen = Screen::Copilot;
+    }
+}
+
 pub fn draw(ctx: &Context, app: &mut App) {
     // Til, mavzu yoki masshtab o'zgargan bo'lsa, uslubni qayta quramiz.
     if app.restyle {
@@ -151,6 +172,7 @@ pub fn draw(ctx: &Context, app: &mut App) {
             Screen::Dashboard => dashboard::show(ui, app),
             Screen::Portfolio => portfolio::show(ui, app),
             Screen::Notices => notices::show(ui, app),
+            Screen::Director => director::show(ui, app),
             Screen::Inspections => inspections::show(ui, app),
             Screen::Contracts => contracts::show(ui, app),
             Screen::Passport => passport::show(ui, app),

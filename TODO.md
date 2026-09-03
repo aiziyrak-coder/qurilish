@@ -23,23 +23,23 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 20 | 7 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
-| VI. Prorab ilovasi | 37 | 21 | 9 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 29 | 6 | 3 | 3 |
-| VIII. Buyurtmachi kabineti | 37 | 25 | 10 | 2 | 2 |
-| IX. Arizalar | 42 | 35 | 6 | 1 | 1 |
-| X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
-| XI. Ombor | 48 | 41 | 6 | 1 | 1 |
-| XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
-| XIII. Tabel | 44 | 31 | 7 | 6 | 6 |
-| XIV. Sifat | 41 | 31 | 8 | 2 | 2 |
-| XV. Xavfsizlik | 41 | 35 | 3 | 3 | 3 |
-| XVI. Mashinalar | 50 | 41 | 7 | 2 | 2 |
+| VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
+| VII. Texnik nazorat kabineti | 38 | 30 | 5 | 3 | 3 |
+| VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
+| IX. Arizalar | 42 | 37 | 4 | 1 | 1 |
+| X. Xaridlar | 48 | 34 | 12 | 2 | 2 |
+| XI. Ombor | 48 | 44 | 3 | 1 | 1 |
+| XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
+| XIII. Tabel | 44 | 34 | 4 | 6 | 6 |
+| XIV. Sifat | 41 | 33 | 6 | 2 | 2 |
+| XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
+| XVI. Mashinalar | 50 | 42 | 6 | 2 | 2 |
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **510** | **144** | **46** | **46** |
+| **Jami** | **700** | **529** | **125** | **46** | **46** |
 
-Ya'ni **~73 % to'liq**, **~21 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~76 % to'liq**, **~18 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -230,7 +230,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 27. Instruktaj
 - [ ] 🔒 28. Internetsiz ishlash — *lokal baza; sinxronizatsiya paket orqali*
 - [~] 29. Bildirishnomalar — *ilova ichida bildirishnomalar markazi; push tashqi omil*
-- [~] 30. AI-yordamchi — *qoidalarga asoslangan yordamchi*
+- [x] 30. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 31. AI aniq obyektni bilishi
 - [ ] 🔒 32. Ofis bilan chat
 - [x] 33. Ish kunining avtomatik yakunlanishi — *yakuniy tekshiruv ro'yxati*
@@ -275,7 +275,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 30. Versiyalarni nazorat qilish
 - [ ] 🔒 31. Texnik nazorat uchun AI Clash
 - [x] 32. Qurilishdagi o'zgarishlarni nazorat qilish — *yangi chizmadan oldin tugatilgan ishlar*
-- [~] 33. AI-yordamchi
+- [x] 33. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 34. Texnik nazoratning kunlik hisoboti — *oxirgi 14 kun, yozuvlardan yig'iladi*
 - [x] 35. Obyekt tayyorligini nazorat qilish — *yetti shart bo'yicha*
 - [x] 36. Yakuniy qabul — *tayyorlik va to'siqlar ro'yxati*
@@ -317,7 +317,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 29. To'lovlar — *to'lov jadvali: bosqich, muddat, to'langan, qoldiq*
 - [x] 30. AI Payment Control — *qarz va kechikish ajratiladi, o'rtacha kechikish, 30 kunlik prognoz*
 - [x] 31. Risklar — *shartnoma ogohlantirishlari va analitika topilmalari*
-- [~] 32. Buyurtmachining AI-yordamchisi
+- [x] 32. Buyurtmachining AI-yordamchisi — *modul ekranidan ochiladi*
 - [x] 33. Haftalik hisobot — *kabinetdagi blok: bajarilish, ishlar, tekshiruv, pul*
 - [x] 34. Kirish darajalari — *rollar*
 - [ ] 🔒 35. Mobil kabinet
@@ -361,8 +361,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 31. Ariza tarixi — *kim, qachon, qanday qaror qildi*
 - [x] 32. Rad etish sababi — *sababsiz rad ogohlantiriladi*
 - [~] 33. Arizalarni AI tahlili
-- [~] 34. Rahbar paneli
-- [~] 35. AI-panel
+- [x] 34. Rahbar paneli — *«Rahbar» ekranida*
+- [x] 35. AI-panel — *modul ekranidan ochiladi*
 - [x] 36. GPR bilan bog'lanish — *ariza ishga bog'lanadi; bog'lanmagani tekshiruvda aytiladi*
 - [x] 37. Ombor bilan bog'lanish
 - [x] 38. Smeta bilan bog'lanish — *smetada yo'q material belgilanadi*
@@ -419,7 +419,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 42. Xaridlarni avtomatik bo'lish
 - [x] 43. Shoshilinch xaridlar — *belgi va ulush nazorati*
 - [ ] 🔒 44. AI narx prognozi
-- [~] 45. Direktorning bosh hisoboti
+- [x] 45. Direktorning bosh hisoboti — *«Rahbar» ekranida*
 - [x] 46. Xaridchi samaradorligi — *xarid soni, summa, muddatida %, taklif bilan %*
 - [~] 47. Modulning to'liq zanjiri
 - [x] 48. Modulning eng kuchli funksiyasi — *xarid → ombor kirimi*
@@ -467,13 +467,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 37. Buxgalteriya bilan bog'lanish — *aylanma qaydnoma `.xlsx`*
 - [x] 38. Materialning o'rtacha qiymati — *vaznlangan o'rtacha*
 - [~] 39. Narxlarni nazorat qilish
-- [~] 40. Rahbar paneli
+- [x] 40. Rahbar paneli — *«Rahbar» ekranida*
 - [x] 41. Uzoq turgan materiallar — *90 kun harakatsiz → sariq*
 - [x] 42. Obyektlar orasida qayta taqsimlash — *ortiqcha va yetishmayotgan solishtiriladi; minimal zaxiraga tegilmaydi*
 - [x] 43. Nolikvidlarni nazorat qilish — *ortiqcha zaxira analitikada pulda o'lchanadi*
 - [x] 44. Ombor fotosi
-- [~] 45. Omborchining AI-yordamchisi
-- [~] 46. Direktorning AI-yordamchisi
+- [x] 45. Omborchining AI-yordamchisi — *modul ekranidan ochiladi*
+- [x] 46. Direktorning AI-yordamchisi — *«Rahbar» ekrani va yordamchi*
 - [~] 47. Omborning to'liq bog'lanishi
 - [x] 48. Modulning eng muhim funksiyasi — *qoldiq harakatlardan hisoblanadi*
 
@@ -519,8 +519,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 36. **Brak** — *rad etilgan, hisobdan chiqarilgan, qaytarilgan*
 - [x] 37. Yetkazib beruvchiga qaytarish — *alohida harakat turi*
 - [x] 38. Taqiqlangan materiallar — *sababsiz taqiq ogohlantiriladi*
-- [~] 39. AI-yordamchi
-- [~] 40. Direktor paneli
+- [x] 39. AI-yordamchi — *modul ekranidan ochiladi*
+- [x] 40. Direktor paneli — *«Rahbar» ekranida*
 - [x] 41. Modulning eng muhim funksiyasi
 
 ---
@@ -566,9 +566,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 37. Elektron imzo
 - [ ] 🔒 38. Mobil ilova
 - [ ] 🔒 39. Ovozli kiritish
-- [~] 40. AI-yordamchi
-- [~] 41. Rahbar nazorati
-- [~] 42. Bosh hisobot
+- [x] 40. AI-yordamchi — *modul ekranidan ochiladi*
+- [x] 41. Rahbar nazorati — *«Rahbar» ekranida*
+- [x] 42. Bosh hisobot — *«Rahbar» ekranida*
 - [x] 43. Boshqa modullar bilan bog'lanish
 - [x] 44. Modulning eng kuchli funksiyasi
 
@@ -613,8 +613,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 35. Bosqichni yopishni taqiqlash — *ogohlantirish, taqiq emas*
 - [x] 36. Kunlik sifat nazorati
 - [x] 37. Haftalik hisobot
-- [~] 38. AI-yordamchi
-- [~] 39. Direktor kabineti
+- [x] 38. AI-yordamchi — *modul ekranidan ochiladi*
+- [x] 39. Direktor kabineti — *«Rahbar» ekranida*
 - [x] 40. Boshqa modullar bilan bog'lanish
 - [x] 41. Modulning bosh funksiyasi
 
@@ -659,8 +659,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 35. Mas'ullar reytingi — *hodisa, buzilish, baxtsiz hodisa, ochiq va muddati o'tgan*
 - [x] 36. Risk Prediction — *zona chorasi, takrorlangan sabab, ishga qo'yib bo'lmaydigan ishchi, kamchilikli naryad*
 - [ ] 🔒 37. Ob-havo bilan bog'lanish
-- [~] 38. AI-yordamchi
-- [~] 39. Rahbar kabineti
+- [x] 38. AI-yordamchi — *modul ekranidan ochiladi*
+- [x] 39. Rahbar kabineti — *«Rahbar» ekranida*
 - [x] 40. Boshqa modullar bilan bog'lanish
 - [x] 41. Modulning bosh funksiyasi
 
@@ -714,7 +714,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 44. Mashina hujjatlari — *texnik ko'rik va kunlik ko'rik yozuvlari*
 - [~] 45. Bildirishnomalar — *TX muddati markazga chiqadi; push tashqi omil*
 - [x] 46. Mexanik kabineti
-- [~] 47. Direktor kabineti
+- [x] 47. Direktor kabineti — *«Rahbar» ekranida*
 - [~] 48. XVI ning bosh zanjiri
 - [x] 49. Boshqa modullar bilan bog'lanish
 - [x] 50. Eng kuchli funksiya

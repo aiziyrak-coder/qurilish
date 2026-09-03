@@ -12,6 +12,11 @@
 use super::*;
 use crate::copilot::{self, Answer, Intent};
 
+/// Savol-javob tabining kaliti: modul ekranidan kelganda shu tab ochiladi.
+fn tab_key_early() -> egui::Id {
+    egui::Id::new("cp_tab")
+}
+
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.current.is_none() {
         ui.vertical_centered(|ui| {
@@ -33,6 +38,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut intent = ui
         .data(|d| d.get_temp::<Option<Intent>>(intent_key))
         .flatten();
+    // Modul ekranidan kelgan savol (TZ VI.30 va h.k.) — bir marta olinadi.
+    if let Some(from_module) = app.copilot_intent.take() {
+        intent = Some(from_module);
+        ui.data_mut(|d| d.insert_temp(tab_key_early(), 0u8));
+    }
     // Savol yozilmagan bo'lsa — birinchi savol namuna sifatida ochiladi.
     let mut unknown = false;
 

@@ -92,6 +92,31 @@ impl Intent {
         }
     }
 
+    /// Ekranga mos niyat: modul yordamchisi shu orqali ochiladi.
+    ///
+    /// TZ har modul uchun «AI-yordamchi» talab qiladi (VI.30, VII.33,
+    /// VIII.32, IX.35, XI.45-46, XII.39, XIII.40, XIV.38, XV.38). Har
+    /// modulga alohida yordamchi yozish o'rniga bittasi ishlatiladi:
+    /// modul ekranidan kelgan savol o'sha modulning javobiga tushadi.
+    pub fn for_screen(screen: Screen) -> Option<Intent> {
+        Some(match screen {
+            Screen::Gantt | Screen::Ppr => Intent::Delays,
+            Screen::Estimate => Intent::Money,
+            Screen::ExecDocs | Screen::Inspections => Intent::Docs,
+            Screen::Requests | Screen::Purchases => Intent::Supply,
+            Screen::Warehouse | Screen::Materials => Intent::Stock,
+            Screen::Timesheet => Intent::Crew,
+            Screen::Machines => Intent::Machines,
+            Screen::Quality => Intent::Quality,
+            Screen::Safety => Intent::Safety,
+            Screen::Sales | Screen::Deals => Intent::Sales,
+            Screen::Client | Screen::Contracts => Intent::Cash,
+            Screen::Foreman | Screen::Journal => Intent::Attention,
+            Screen::Dashboard | Screen::Director | Screen::Portfolio => Intent::Overview,
+            _ => return None,
+        })
+    }
+
     /// Savolni tanish uchun kalit so'zlar (o'zbekcha va ruscha).
     fn keywords(self) -> &'static [&'static str] {
         match self {

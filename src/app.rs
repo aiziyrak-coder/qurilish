@@ -58,6 +58,7 @@ pub enum Screen {
     // XVII-XVIII. Analitika
     Analytics,
     Copilot,
+    Director,
     // XIX-XX. Sotuv
     Sales,
     Deals,
@@ -81,6 +82,7 @@ impl Screen {
             Screen::Dashboard => t("screen_dashboard"),
             Screen::Portfolio => t("screen_portfolio"),
             Screen::Notices => t("screen_notices"),
+            Screen::Director => t("screen_director"),
             Screen::Inspections => t("screen_inspections"),
             Screen::Contracts => t("screen_contracts"),
             Screen::Passport => t("screen_passport"),
@@ -112,7 +114,11 @@ impl Screen {
     /// TZ dagi bo'lim raqami. Umumiy ko'rinish va sozlamalar TZ moduli emas.
     pub fn numeral(self) -> &'static str {
         match self {
-            Screen::Dashboard | Screen::Portfolio | Screen::Notices | Screen::Settings => "",
+            Screen::Dashboard
+            | Screen::Portfolio
+            | Screen::Notices
+            | Screen::Director
+            | Screen::Settings => "",
             Screen::Passport => "I.1",
             Screen::Gantt => "I.2",
             Screen::Ppr => "I.3",
@@ -143,6 +149,7 @@ impl Screen {
             Screen::Dashboard
             | Screen::Portfolio
             | Screen::Notices
+            | Screen::Director
             | Screen::Inspections
             | Screen::Contracts
             | Screen::Passport
@@ -180,6 +187,7 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
             Screen::Dashboard,
             Screen::Portfolio,
             Screen::Notices,
+            Screen::Director,
             Screen::Passport,
             Screen::Gantt,
             Screen::Ppr,
@@ -529,6 +537,8 @@ pub struct App {
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
     /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
     pub llm: crate::llm::Config,
+    /// Modul ekranidan yordamchiga uzatilgan savol (TZ VI.30 va h.k.).
+    pub copilot_intent: Option<crate::copilot::Intent>,
     /// Ish grafigi: qaysi kunlar ish kuni (TZ XIII.12).
     pub work_schedule: checks::WorkSchedule,
     /// Texnikaning kunlik ko'rigi (TZ XVI.28, XV.18).
@@ -608,6 +618,7 @@ impl App {
             screen: match std::env::var("QURAI_SCREEN").as_deref() {
                 Ok("portfolio") => Screen::Portfolio,
                 Ok("notices") => Screen::Notices,
+                Ok("director") => Screen::Director,
                 Ok("inspections") => Screen::Inspections,
                 Ok("contracts") => Screen::Contracts,
                 Ok("passport") => Screen::Passport,
@@ -707,6 +718,7 @@ impl App {
             geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
+            copilot_intent: None,
             work_schedule: checks::WorkSchedule::default(),
             machine_checks: Vec::new(),
             notes: Vec::new(),
