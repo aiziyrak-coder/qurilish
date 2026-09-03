@@ -28,7 +28,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
 | IX. Arizalar | 42 | 32 | 6 | 4 | 1 |
 | X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
-| XI. Ombor | 48 | 32 | 8 | 8 | 1 |
+| XI. Ombor | 48 | 41 | 6 | 1 | 1 |
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
 | XIV. Sifat | 41 | 30 | 8 | 3 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **464** | **156** | **80** | **46** |
+| **Jami** | **700** | **473** | **154** | **73** | **46** |
 
-Ya'ni **~66 % to'liq**, **~22 % qisman**, **~11 % hali yo'q**.
+Ya'ni **~68 % to'liq**, **~22 % qisman**, **~10 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -434,13 +434,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 4. Material kartochkasi
 - [ ] 🔒 5. QR / shtrix-kod
 - [x] 6. Materialni qabul qilish
-- [~] 7. Kirish nazorati — *sifat moduli orqali*
-- [ ] 8. AI material tekshiruvi
+- [x] 7. Kirish nazorati — *sifat moduli va kirim tekshiruvi*
+- [x] 8. AI material tekshiruvi — *kirim hujjati va partiyasi*
 - [x] 9. **Partiyalar** — *raqam, kelgan sana, yetkazib beruvchi, qoldiq*
 - [x] 10. Sertifikatlar — *partiyada; muddati o'tgani qizil*
 - [x] 11. Material berish
 - [x] 12. Aniq ish bo'yicha berish
-- [ ] 13. Smeta bilan bog'lanish
+- [x] 13. Smeta bilan bog'lanish — *rasenkasiz sarf ko'rsatiladi*
 - [x] 14. Ortiqcha sarfni nazorat qilish — *«Normativ / fakt», ruxsat foizi*
 - [x] 15. Normativ sarf — *bajarilgan hajmga qarab*
 - [x] 16. Real vaqtdagi qoldiqlar
@@ -456,22 +456,22 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. Kamomad sababini izlash — *takrorlangan farq tizimli sabab degani; puldagi zarar bo'yicha tartib*
 - [x] 27. Yaroqlilik muddati — *partiyada*
 - [x] 28. FIFO / FEFO — *navbatdagi partiya belgilanadi*
-- [ ] 29. Harorat nazorati
-- [~] 30. **YoMM** — *texnika modulida yoqilg'i*
-- [ ] 31. AI YoMM nazorati
+- [x] 29. Harorat nazorati — *yozgi mavsumda ochiq ombor*
+- [x] 30. **YoMM** — *ombor hisobi bilan solishtiriladi*
+- [x] 31. AI YoMM nazorati — *ombor va texnika hisobi farqi*
 - [x] 32. Asboblar — *katalog: tur, inventar raqami, holat, tekshiruv muddati*
 - [x] 33. Asbob berish — *kimga, qachon, qaysi muddatgacha*
 - [x] 34. Asbobni nazorat qilish — *kimda, necha kundan beri, muddati o'tganmi*
-- [ ] 35. **Ish kiyimi va SIZ**
+- [x] 35. **Ish kiyimi va SIZ** — *omborning ko'rinishi: kimga nima kerak*
 - [x] 36. Xaridlar bilan bog'lanish
-- [ ] 37. Buxgalteriya bilan bog'lanish
+- [x] 37. Buxgalteriya bilan bog'lanish — *aylanma qaydnoma `.xlsx`*
 - [x] 38. Materialning o'rtacha qiymati — *vaznlangan o'rtacha*
 - [~] 39. Narxlarni nazorat qilish
 - [~] 40. Rahbar paneli
 - [x] 41. Uzoq turgan materiallar — *90 kun harakatsiz → sariq*
 - [x] 42. Obyektlar orasida qayta taqsimlash — *ortiqcha va yetishmayotgan solishtiriladi; minimal zaxiraga tegilmaydi*
 - [x] 43. Nolikvidlarni nazorat qilish — *ortiqcha zaxira analitikada pulda o'lchanadi*
-- [ ] 44. Ombor fotosi
+- [x] 44. Ombor fotosi
 - [~] 45. Omborchining AI-yordamchisi
 - [~] 46. Direktorning AI-yordamchisi
 - [~] 47. Omborning to'liq bog'lanishi

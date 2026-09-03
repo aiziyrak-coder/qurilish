@@ -8079,6 +8079,306 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!((a.to - a.from).num_days(), 7);
     }
 
+    /// TZ XI.8: kirim hujjatsiz yoki partiyasiz bo'lsa e'tiroz beriladi,
+    /// chiqim esa bu qoidaga tushmaydi.
+    #[test]
+    fn intake_needs_document_and_batch() {
+        use crate::checks::{stock_control, StockCtx, StockIssue as S};
+        use crate::domain::{Material, MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
+        let material = Material {
+            id: 4,
+            project_id: 1,
+            code: "M-4".into(),
+            name: "Sement".into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: "PC 400".into(),
+            cert_no: "SS-1".into(),
+            cert_until: Some(today + chrono::Duration::days(200)),
+            min_stock: 0.0,
+            price: 100.0,
+            estimate_code: "E-1".into(),
+            spec_ref: "S-1".into(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let mv = |kind: MoveKind, doc: &str, batch: Option<i64>| StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 4,
+            warehouse_id: None,
+            batch_id: batch,
+            date: today,
+            kind,
+            qty: 5.0,
+            price: 100.0,
+            document: doc.into(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+        };
+        let run = |moves: &[StockMove]| {
+            stock_control(&StockCtx {
+                moves,
+                materials: std::slice::from_ref(&material),
+                purchases: &[],
+                warehouses: &[],
+                machine_logs: &[],
+                today,
+            })
+        };
+
+        // Hujjatsiz va partiyasiz kirim — ikkita e'tiroz.
+        let bad = run(&[mv(MoveKind::In, "", None)]);
+        assert!(bad.iter().any(|i| matches!(i, S::IntakeNoDocument { .. })));
+        assert!(bad.iter().any(|i| matches!(i, S::IntakeNoBatch { .. })));
+
+        // To'g'ri kirim — e'tiroz yo'q.
+        assert!(run(&[mv(MoveKind::In, "TTN-15", Some(2))]).is_empty());
+
+        // Chiqim hujjatsiz bo'lsa ham kirim qoidasi qo'llanmaydi.
+        let out = run(&[mv(MoveKind::Out, "", None)]);
+        assert!(!out.iter().any(|i| matches!(i, S::IntakeNoDocument { .. })));
+    }
+
+    /// TZ XI.13: smeta rasenkasiga bog'lanmagan material chiqimi ko'rinadi.
+    #[test]
+    fn issued_material_without_estimate_code_is_flagged() {
+        use crate::checks::{stock_control, StockCtx, StockIssue as S};
+        use crate::domain::{Material, MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
+        let mut material = Material {
+            id: 9,
+            project_id: 1,
+            code: "M-9".into(),
+            name: "Qum".into(),
+            unit: "m3".into(),
+            section: crate::model::Section::Kj,
+            spec: "yirik".into(),
+            cert_no: "SS-9".into(),
+            cert_until: None,
+            min_stock: 0.0,
+            price: 50.0,
+            estimate_code: String::new(),
+            spec_ref: "S-9".into(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let out = StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 9,
+            warehouse_id: None,
+            batch_id: None,
+            date: today,
+            kind: MoveKind::Out,
+            qty: 4.0,
+            price: 50.0,
+            document: "TN-1".into(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+        };
+        let run = |m: &Material| {
+            stock_control(&StockCtx {
+                moves: std::slice::from_ref(&out),
+                materials: std::slice::from_ref(m),
+                purchases: &[],
+                warehouses: &[],
+                machine_logs: &[],
+                today,
+            })
+        };
+
+        let flagged = run(&material);
+        // Summa chiqim qiymatidan olinadi: 4 × 50 = 200.
+        assert!(flagged.iter().any(
+            |i| matches!(i, S::NoEstimateLink { amount, .. } if (*amount - 200.0).abs() < 1e-9)
+        ));
+
+        // Rasenka to'ldirilgach e'tiroz yo'qoladi.
+        material.estimate_code = "E-9".into();
+        assert!(!run(&material)
+            .iter()
+            .any(|i| matches!(i, S::NoEstimateLink { .. })));
+    }
+
+    /// TZ XI.31: omborda berilgan va texnikaga yozilgan yoqilg'i farqi
+    /// chegaradan oshsa ko'rsatiladi.
+    #[test]
+    fn fuel_gap_is_reported_beyond_the_limit() {
+        use crate::checks::{stock_control, StockCtx, StockIssue as S, FUEL_GAP_PCT};
+        use crate::domain::{MachineLog, Material, MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 3, 10).unwrap();
+        let fuel = Material {
+            id: 2,
+            project_id: 1,
+            code: "F-1".into(),
+            name: "Dizel yoqilg'isi".into(),
+            unit: "l".into(),
+            section: crate::model::Section::None,
+            spec: "DT".into(),
+            cert_no: "SS-2".into(),
+            cert_until: None,
+            min_stock: 0.0,
+            price: 10.0,
+            estimate_code: "E-2".into(),
+            spec_ref: "S-2".into(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let issue = StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 2,
+            warehouse_id: None,
+            batch_id: None,
+            date: today,
+            kind: MoveKind::Out,
+            qty: 1000.0,
+            price: 10.0,
+            document: "TN-2".into(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+        };
+        let log = |fuel: f64| MachineLog {
+            id: 1,
+            project_id: 1,
+            machine_id: 1,
+            date: today,
+            hours: 8.0,
+            fuel,
+            task_id: None,
+            number: String::new(),
+            driver: String::new(),
+            route: String::new(),
+            odo_start: 0.0,
+            odo_end: 0.0,
+            trips: 0,
+            cargo: 0.0,
+            note: String::new(),
+        };
+        let run = |logs: &[MachineLog]| {
+            stock_control(&StockCtx {
+                moves: std::slice::from_ref(&issue),
+                materials: std::slice::from_ref(&fuel),
+                purchases: &[],
+                warehouses: &[],
+                machine_logs: logs,
+                today,
+            })
+        };
+
+        // Chegara ichidagi farq — e'tiroz yo'q.
+        let ok = run(&[log(1000.0 * (1.0 - FUEL_GAP_PCT / 100.0) + 1.0)]);
+        assert!(!ok.iter().any(|i| matches!(i, S::FuelGap { .. })));
+
+        // Yarmi yozilmagan — e'tiroz.
+        let gap = run(&[log(500.0)]);
+        let found = gap
+            .iter()
+            .find(|i| matches!(i, S::FuelGap { .. }))
+            .expect("yoqilg'i farqi topilmadi");
+        assert!(found.severe());
+        if let S::FuelGap { issued, used, diff } = found {
+            assert!((issued - 1000.0).abs() < 1e-9);
+            assert!((used - 500.0).abs() < 1e-9);
+            assert!((diff - 500.0).abs() < 1e-9);
+        }
+    }
+
+    /// TZ XI.29: harorat talabi faqat yozgi oylarda va ochiq omborda
+    /// tekshiriladi — qishda bu e'tiroz o'rinsiz.
+    #[test]
+    fn temperature_check_only_in_hot_months() {
+        use crate::checks::{stock_control, StockCtx, StockIssue as S};
+        use crate::domain::{Material, MoveKind, StockMove, Warehouse, WarehouseKind};
+
+        let material = Material {
+            id: 3,
+            project_id: 1,
+            code: "M-3".into(),
+            name: "Gidroizolyatsiya".into(),
+            unit: "m2".into(),
+            section: crate::model::Section::Kj,
+            spec: "rulon".into(),
+            cert_no: "SS-3".into(),
+            cert_until: None,
+            min_stock: 0.0,
+            price: 20.0,
+            estimate_code: "E-3".into(),
+            spec_ref: "S-3".into(),
+            special: "saqlash harorati +5..+30".into(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let open = Warehouse {
+            id: 7,
+            project_id: 1,
+            name: "Ochiq maydon".into(),
+            kind: WarehouseKind::Open,
+            responsible: String::new(),
+            note: String::new(),
+        };
+        let mv = |date: chrono::NaiveDate| StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 3,
+            warehouse_id: Some(7),
+            batch_id: None,
+            date,
+            kind: MoveKind::In,
+            qty: 100.0,
+            price: 20.0,
+            document: "TTN-3".into(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+        };
+        let run = |today: chrono::NaiveDate, wh: &[Warehouse]| {
+            let m = mv(today);
+            stock_control(&StockCtx {
+                moves: std::slice::from_ref(&m),
+                materials: std::slice::from_ref(&material),
+                purchases: &[],
+                warehouses: wh,
+                machine_logs: &[],
+                today,
+            })
+        };
+
+        // Iyul — ochiq omborda xavf bor.
+        let july = chrono::NaiveDate::from_ymd_opt(2026, 7, 15).unwrap();
+        assert!(run(july, std::slice::from_ref(&open))
+            .iter()
+            .any(|i| matches!(i, S::TemperatureRisk { .. })));
+
+        // Yanvar — bu e'tiroz o'rinsiz.
+        let january = chrono::NaiveDate::from_ymd_opt(2026, 1, 15).unwrap();
+        assert!(!run(january, std::slice::from_ref(&open))
+            .iter()
+            .any(|i| matches!(i, S::TemperatureRisk { .. })));
+
+        // Yopiq ombor — xavf yo'q.
+        let mut closed = open.clone();
+        closed.kind = WarehouseKind::Central;
+        assert!(!run(july, std::slice::from_ref(&closed))
+            .iter()
+            .any(|i| matches!(i, S::TemperatureRisk { .. })));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

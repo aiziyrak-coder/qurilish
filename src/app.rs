@@ -2028,6 +2028,19 @@ impl App {
         )
     }
 
+    /// Ombor nazorati: kirim, smeta bog'lanishi, harorat, yoqilg'i
+    /// (TZ XI.8, 13, 29, 31).
+    pub fn stock_control(&self) -> Vec<checks::StockIssue> {
+        checks::stock_control(&checks::StockCtx {
+            moves: &self.stock_moves,
+            materials: &self.materials,
+            purchases: &self.purchases,
+            warehouses: &self.warehouses,
+            machine_logs: &self.machine_logs,
+            today: self.today,
+        })
+    }
+
     // ---------- XVII. Kesimlar bo'yicha tahlil ----------
 
     /// Haftalik hisobot (TZ VIII.31, XVII.38).

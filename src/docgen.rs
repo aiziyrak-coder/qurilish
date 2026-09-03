@@ -388,6 +388,142 @@ pub fn write_ks3(
 // ================================================================ M-29
 
 /// M-29 — material sarfi hisoboti: normativ va haqiqiy sarf.
+/// Buxgalteriya uchun aylanma qaydnoma (TZ XI.37).
+///
+/// Qaydnoma **hisob yuritmaydi**, faqat ombor yozuvlarini buxgalteriya
+/// o'qiydigan shaklga o'giradi: boshlang'ich qoldiq, davr kirimi va chiqimi,
+/// oxirgi qoldiq — miqdorda va summada. Qoldiqlar harakatlardan chiqadi,
+/// shuning uchun ular ombor ekranidagi bilan bir xil bo'ladi.
+pub fn write_turnover(
+    path: &Path,
+    inp: &DocInput,
+    materials: &[Material],
+    moves: &[StockMove],
+) -> Result<(), XlsxError> {
+    let st = Styles::new();
+    let mut wb = Workbook::new();
+    let sh = wb.add_worksheet();
+    sh.set_name(t("doc_turnover_short"))?;
+    widths(
+        sh,
+        &[
+            8.0, 14.0, 34.0, 10.0, 12.0, 14.0, 12.0, 14.0, 12.0, 14.0, 12.0, 14.0,
+        ],
+    )?;
+
+    let mut r = header(
+        sh,
+        &st,
+        inp,
+        t("doc_turnover"),
+        &next_number(inp, "OSV"),
+        12,
+    )?;
+
+    for (i, h) in [
+        t("doc_pos"),
+        t("col_code"),
+        t("col_material"),
+        t("col_unit"),
+        t("doc_tv_open_qty"),
+        t("doc_tv_open_sum"),
+        t("doc_tv_in_qty"),
+        t("doc_tv_in_sum"),
+        t("doc_tv_out_qty"),
+        t("doc_tv_out_sum"),
+        t("doc_tv_close_qty"),
+        t("doc_tv_close_sum"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        sh.write_string_with_format(r, i as u16, *h, &st.head)?;
+    }
+    sh.set_row_height(r, 30.0)?;
+    r += 1;
+
+    // Harakat yo'nalishi: kirim va qaytarish qoldiqni oshiradi.
+    let sign = |k: MoveKind| match k {
+        MoveKind::In | MoveKind::Return => 1.0,
+        _ => -1.0,
+    };
+
+    let mut totals = [0.0_f64; 6];
+    let mut pos = 0usize;
+    for m in materials {
+        let mine: Vec<&StockMove> = moves.iter().filter(|x| x.material_id == m.id).collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let price = |x: &StockMove| if x.price > 0.0 { x.price } else { m.price };
+
+        // Boshlang'ich qoldiq: davr boshigacha bo'lgan barcha harakat.
+        let open_qty: f64 = mine
+            .iter()
+            .filter(|x| x.date < inp.from)
+            .map(|x| sign(x.kind) * x.qty)
+            .sum();
+        let open_sum: f64 = mine
+            .iter()
+            .filter(|x| x.date < inp.from)
+            .map(|x| sign(x.kind) * x.qty * price(x))
+            .sum();
+
+        let period = |dir: f64| -> (f64, f64) {
+            let rows: Vec<&&StockMove> = mine
+                .iter()
+                .filter(|x| x.date >= inp.from && x.date <= inp.to && sign(x.kind) == dir)
+                .collect();
+            (
+                rows.iter().map(|x| x.qty).sum(),
+                rows.iter().map(|x| x.qty * price(x)).sum(),
+            )
+        };
+        let (in_qty, in_sum) = period(1.0);
+        let (out_qty, out_sum) = period(-1.0);
+
+        // Davrda harakat bo'lmagan va qoldig'i nol material qatorga
+        // tushmaydi: bo'sh qator qaydnomani o'qishni qiyinlashtiradi.
+        if in_qty == 0.0 && out_qty == 0.0 && open_qty.abs() < 1e-9 {
+            continue;
+        }
+
+        pos += 1;
+        let close_qty = open_qty + in_qty - out_qty;
+        let close_sum = open_sum + in_sum - out_sum;
+        let row = [open_qty, open_sum, in_qty, in_sum, out_qty, out_sum];
+        for (i, v) in row.iter().enumerate() {
+            totals[i] += v;
+        }
+
+        sh.write_number_with_format(r, 0, pos as f64, &st.cell_num)?;
+        sh.write_string_with_format(r, 1, &m.code, &st.cell)?;
+        sh.write_string_with_format(r, 2, &m.name, &st.cell)?;
+        sh.write_string_with_format(r, 3, &m.unit, &st.cell)?;
+        sh.write_number_with_format(r, 4, open_qty, &st.cell_num)?;
+        sh.write_number_with_format(r, 5, open_sum, &st.cell_money)?;
+        sh.write_number_with_format(r, 6, in_qty, &st.cell_num)?;
+        sh.write_number_with_format(r, 7, in_sum, &st.cell_money)?;
+        sh.write_number_with_format(r, 8, out_qty, &st.cell_num)?;
+        sh.write_number_with_format(r, 9, out_sum, &st.cell_money)?;
+        sh.write_number_with_format(r, 10, close_qty, &st.cell_num)?;
+        sh.write_number_with_format(r, 11, close_sum, &st.cell_money)?;
+        r += 1;
+    }
+
+    // Yakun: faqat summalar qo'shiladi — turli birlikdagi miqdorni
+    // qo'shish ma'nosiz bo'lardi.
+    sh.write_string_with_format(r, 2, t("col_total"), &st.total)?;
+    sh.write_number_with_format(r, 5, totals[1], &st.total_money)?;
+    sh.write_number_with_format(r, 7, totals[3], &st.total_money)?;
+    sh.write_number_with_format(r, 9, totals[5], &st.total_money)?;
+    sh.write_number_with_format(r, 11, totals[1] + totals[3] - totals[5], &st.total_money)?;
+
+    signatures(sh, &st, inp, r + 1, &[PartyRole::Contractor])?;
+    wb.save(path)?;
+    Ok(())
+}
+
 pub fn write_m29(
     path: &Path,
     inp: &DocInput,

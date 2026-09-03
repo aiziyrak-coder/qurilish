@@ -8821,3 +8821,198 @@ pub fn executive_score(ctx: &ExecCtx) -> ExecutiveScore {
         total: total.clamp(0.0, 100.0),
     }
 }
+
+// ================= XI.8, 13, 29, 31. Ombor nazorati =================
+
+/// Ombor bo'yicha bitta e'tiroz (TZ XI.8, 13, 29, 31).
+#[derive(Debug, Clone, PartialEq)]
+pub enum StockIssue {
+    /// Kirim hujjatsiz qilingan.
+    IntakeNoDocument { material: String, qty: f64 },
+    /// Sertifikatli material partiyasiz kirim qilingan — sertifikat
+    /// partiyaga bog'lanadi, partiya bo'lmasa u qaysi materialga tegishli
+    /// ekani noma'lum qoladi.
+    IntakeNoBatch { material: String },
+    /// Kirim buyurtmadagi miqdordan oshgan.
+    IntakeOverOrder { material: String, over: f64 },
+    /// Ishga berilgan material smeta rasenkasiga bog'lanmagan — sarf
+    /// tannarxga tushmaydi.
+    NoEstimateLink { material: String, amount: f64 },
+    /// Harorat talabi bor material issiq mavsumda ochiq omborda.
+    TemperatureRisk { material: String, place: String },
+    /// Omborga kirgan va texnikaga berilgan yoqilg'i mos kelmaydi.
+    FuelGap { issued: f64, used: f64, diff: f64 },
+}
+
+impl StockIssue {
+    /// Hisobni buzadigan darajadagi e'tirozmi.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            StockIssue::IntakeOverOrder { .. }
+                | StockIssue::FuelGap { .. }
+                | StockIssue::TemperatureRisk { .. }
+        )
+    }
+}
+
+/// Yoqilg'i hisobidagi farq shu foizdan oshsa e'tiroz beriladi.
+///
+/// Nol chegara qo'yish mumkin emas: bakdagi qoldiq va o'lchov aniqligi
+/// tufayli kichik farq har doim bo'ladi.
+pub const FUEL_GAP_PCT: f64 = 10.0;
+
+/// Harorat talabi tekshiriladigan oy oralig'i (yozgi mavsum).
+pub const HOT_MONTHS: (u32, u32) = (6, 8);
+
+/// Ombor nazorati uchun manba.
+pub struct StockCtx<'a> {
+    pub moves: &'a [StockMove],
+    pub materials: &'a [Material],
+    pub purchases: &'a [Purchase],
+    pub warehouses: &'a [Warehouse],
+    pub machine_logs: &'a [MachineLog],
+    pub today: NaiveDate,
+}
+
+/// TZ XI.8, 13, 29, 31: ombor yozuvlarini tekshiradi.
+///
+/// To'rt savol: kirim hujjatlanganmi, sarf smetaga bog'langanmi, harorat
+/// talabi buzilmayaptimi va yoqilg'i hisobi to'g'ri kelayaptimi.
+pub fn stock_control(ctx: &StockCtx) -> Vec<StockIssue> {
+    let mut out = Vec::new();
+    let name_of = |id: i64| {
+        ctx.materials
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.name.clone())
+            .unwrap_or_default()
+    };
+
+    // ---------- Kirim nazorati (TZ XI.8) ----------
+    for m in ctx.moves.iter().filter(|m| matches!(m.kind, MoveKind::In)) {
+        let material = ctx.materials.iter().find(|x| x.id == m.material_id);
+        if m.document.trim().is_empty() {
+            out.push(StockIssue::IntakeNoDocument {
+                material: name_of(m.material_id),
+                qty: m.qty,
+            });
+        }
+        // Sertifikat muddati yuritiladigan material partiyasiz kelmasligi kerak.
+        if m.batch_id.is_none() && material.is_some_and(|x| x.cert_until.is_some()) {
+            out.push(StockIssue::IntakeNoBatch {
+                material: name_of(m.material_id),
+            });
+        }
+    }
+
+    // Buyurtmadan oshgan kirim: hujjat raqami bo'yicha bog'lanadi.
+    for p in ctx.purchases.iter().filter(|p| p.qty > 0.0) {
+        let got: f64 = ctx
+            .moves
+            .iter()
+            .filter(|m| {
+                matches!(m.kind, MoveKind::In)
+                    && !p.number.trim().is_empty()
+                    && m.document.contains(p.number.trim())
+            })
+            .map(|m| m.qty)
+            .sum();
+        if got > p.qty * 1.001 {
+            out.push(StockIssue::IntakeOverOrder {
+                material: p.title.clone(),
+                over: got - p.qty,
+            });
+        }
+    }
+
+    // ---------- Smeta bilan bog'lanish (TZ XI.13) ----------
+    for material in ctx.materials {
+        if !material.estimate_code.trim().is_empty() {
+            continue;
+        }
+        let issued: f64 = ctx
+            .moves
+            .iter()
+            .filter(|m| m.material_id == material.id && matches!(m.kind, MoveKind::Out))
+            .map(|m| {
+                m.qty
+                    * if m.price > 0.0 {
+                        m.price
+                    } else {
+                        material.price
+                    }
+            })
+            .sum();
+        if issued > 0.0 {
+            out.push(StockIssue::NoEstimateLink {
+                material: material.name.clone(),
+                amount: issued,
+            });
+        }
+    }
+
+    // ---------- Harorat nazorati (TZ XI.29) ----------
+    let month = ctx.today.month();
+    if month >= HOT_MONTHS.0 && month <= HOT_MONTHS.1 {
+        for material in ctx.materials {
+            let special = material.special.to_lowercase();
+            let needs = ["harorat", "sovuq", "темпер", "холод", "muzlash"]
+                .iter()
+                .any(|k| special.contains(k));
+            if !needs {
+                continue;
+            }
+            // Qaysi omborda turgani oxirgi kirimdan aniqlanadi.
+            let place = ctx
+                .moves
+                .iter()
+                .filter(|m| m.material_id == material.id && matches!(m.kind, MoveKind::In))
+                .max_by_key(|m| m.date)
+                .and_then(|m| m.warehouse_id)
+                .and_then(|id| ctx.warehouses.iter().find(|w| w.id == id))
+                .filter(|w| w.kind == WarehouseKind::Open);
+            if let Some(w) = place {
+                out.push(StockIssue::TemperatureRisk {
+                    material: material.name.clone(),
+                    place: w.name.clone(),
+                });
+            }
+        }
+    }
+
+    // ---------- Yoqilg'i hisobi (TZ XI.31) ----------
+    // Omborga kirgan yoqilg'i va texnikaga yozilgani solishtiriladi.
+    let fuel_ids: Vec<i64> = ctx
+        .materials
+        .iter()
+        .filter(|m| {
+            let n = m.name.to_lowercase();
+            ["dizel", "benzin", "yoqilg", "дизел", "бензин", "топлив"]
+                .iter()
+                .any(|k| n.contains(k))
+        })
+        .map(|m| m.id)
+        .collect();
+    if !fuel_ids.is_empty() {
+        let issued: f64 = ctx
+            .moves
+            .iter()
+            .filter(|m| fuel_ids.contains(&m.material_id) && matches!(m.kind, MoveKind::Out))
+            .map(|m| m.qty)
+            .sum();
+        let used: f64 = ctx.machine_logs.iter().map(|l| l.fuel).sum();
+        let base = issued.max(used);
+        if base > 0.0 && (issued - used).abs() * 100.0 / base > FUEL_GAP_PCT {
+            out.push(StockIssue::FuelGap {
+                issued,
+                used,
+                diff: issued - used,
+            });
+        }
+    }
+
+    // Jiddiylari oldinda.
+    out.sort_by_key(|i| !i.severe());
+    out
+}

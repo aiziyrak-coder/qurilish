@@ -10,6 +10,7 @@
 
 use super::materials::{material_label, material_picker, stock_bar, trim_num};
 use super::*;
+use crate::domain::NoteTarget;
 use crate::domain::{
     Batch, Inventory, InventoryLine, MoveKind, Reservation, StockMove, Warehouse, WarehouseKind,
 };
@@ -64,6 +65,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (4, t("wh_tab_inventory")),
             (5, t("wh_tab_tools")),
             (6, t("wh_tab_shortage")),
+            (7, t("wh_tab_control")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -80,7 +82,236 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         4 => inventory_tab(ui, app),
         5 => tools_tab(ui, app),
         6 => shortage_tab(ui, app),
+        7 => control_tab(ui, app),
         _ => balance_tab(ui, app),
+    }
+}
+
+// ================================================================ Nazorat
+
+/// Ombor nazorati va ish kiyimi (TZ XI.8, 13, 29, 31, 35).
+///
+/// To'rt savol: kirim hujjatlanganmi, sarf smetaga bog'langanmi, harorat
+/// talabi buzilmayaptimi va yoqilg'i hisobi to'g'ri kelayaptimi. Ostida —
+/// ish kiyimi va SIZ holati: kimga nima berilgan va muddati o'tganlari.
+fn control_tab(ui: &mut egui::Ui, app: &mut App) {
+    let issues = app.stock_control();
+    let severe = issues.iter().filter(|i| i.severe()).count();
+    let safety = app.worker_safety();
+
+    ui.label(
+        RichText::new(t("wh_control_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("wh_control_severe"),
+                severe.to_string(),
+                t("wh_control_severe_hint"),
+                if severe == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("wh_control_total"),
+                issues.len().to_string(),
+                t("wh_control_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("wh_ppe_missing"),
+                safety
+                    .iter()
+                    .filter(|w| !w.ppe_missing.is_empty())
+                    .count()
+                    .to_string(),
+                t("wh_ppe_missing_hint"),
+                if safety.iter().all(|w| w.ppe_missing.is_empty()) {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(t("wh_control_title")).size(13.5).strong());
+                // Buxgalteriya uchun aylanma qaydnoma (TZ XI.37).
+                if ui
+                    .button(t("wh_turnover"))
+                    .on_hover_text(t("wh_turnover_hint"))
+                    .clicked()
+                {
+                    save_turnover(app);
+                }
+            });
+            ui.add_space(6.0);
+            if issues.is_empty() {
+                ui.label(
+                    RichText::new(t("wh_control_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for i in &issues {
+                ui.label(
+                    RichText::new(format!("· {}", stock_issue_text(i)))
+                        .size(12.0)
+                        .color(if i.severe() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        }),
+                );
+            }
+
+            // ---------- Ish kiyimi va SIZ (TZ XI.35) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("wh_ppe")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("wh_ppe_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+
+            let issues_count = app.ppe_issues.len();
+            ui.label(
+                RichText::new(format!("{}: {}", t("wh_ppe_issued"), issues_count))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(4.0);
+
+            let mut shown = 0;
+            for w in &safety {
+                if w.ppe_missing.is_empty() && w.ppe_expired.is_empty() {
+                    continue;
+                }
+                shown += 1;
+                let name = app
+                    .workers
+                    .iter()
+                    .find(|x| x.id == w.worker_id)
+                    .map(|x| x.name.clone())
+                    .unwrap_or_default();
+                let mut parts: Vec<String> = Vec::new();
+                if !w.ppe_missing.is_empty() {
+                    parts.push(format!(
+                        "{}: {}",
+                        t("wh_ppe_need"),
+                        w.ppe_missing
+                            .iter()
+                            .map(|i| i.label())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                if !w.ppe_expired.is_empty() {
+                    parts.push(format!(
+                        "{}: {}",
+                        t("wh_ppe_expired"),
+                        w.ppe_expired
+                            .iter()
+                            .map(|i| i.label())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                ui.label(
+                    RichText::new(format!(
+                        "· {} — {}",
+                        super::issues::truncate(&name, 26),
+                        parts.join(" · ")
+                    ))
+                    .size(12.0)
+                    .color(theme::warn()),
+                );
+            }
+            if shown == 0 {
+                ui.label(RichText::new(t("wh_ppe_ok")).size(12.5).color(theme::ok()));
+            }
+            ui.add_space(16.0);
+        });
+}
+
+/// Ombor e'tirozini odam o'qiydigan gapga aylantiradi.
+fn stock_issue_text(i: &crate::checks::StockIssue) -> String {
+    use crate::checks::StockIssue as S;
+    match i {
+        S::IntakeNoDocument { material, qty } => format!(
+            "{} — {} ({})",
+            t("wh_si_no_doc"),
+            material,
+            super::materials::trim_num(*qty)
+        ),
+        S::IntakeNoBatch { material } => format!("{} — {}", t("wh_si_no_batch"), material),
+        S::IntakeOverOrder { material, over } => format!(
+            "{} — {} (+{})",
+            t("wh_si_over"),
+            material,
+            super::materials::trim_num(*over)
+        ),
+        S::NoEstimateLink { material, amount } => {
+            format!(
+                "{} — {} ({})",
+                t("wh_si_no_estimate"),
+                material,
+                money(*amount)
+            )
+        }
+        S::TemperatureRisk { material, place } => {
+            format!("{} — {} ({})", t("wh_si_temp"), material, place)
+        }
+        S::FuelGap { issued, used, diff } => format!(
+            "{}: {} / {} ({}{})",
+            t("wh_si_fuel"),
+            super::materials::trim_num(*issued),
+            super::materials::trim_num(*used),
+            if *diff > 0.0 { "+" } else { "" },
+            super::materials::trim_num(*diff)
+        ),
+    }
+}
+
+/// Aylanma qaydnomani faylga yozadi (TZ XI.37).
+fn save_turnover(app: &mut App) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let file = format!("OSV-{}.xlsx", to.format("%Y-%m"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    match crate::docgen::write_turnover(&path, &inp, &app.materials, &app.stock_moves) {
+        Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
     }
 }
 
@@ -947,6 +1178,7 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
 
     let mut edited: Option<StockMove> = None;
     let mut removed: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
@@ -1035,6 +1267,12 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                             .changed();
                         changed |= task_picker(ui, app, ("wh_task", m.id), &mut m.task_id, 200.0);
 
+                        // Ombor fotosi va izohi (TZ XI.44): kirim va chiqim
+                        // yozuvi ostiga surat biriktiriladi.
+                        if super::notes::badge(ui, app, NoteTarget::Material, m.id) {
+                            open_notes = Some(m.id);
+                        }
+
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -1060,6 +1298,7 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
         app.db.del("stock_move", id);
         app.reload_modules();
     }
+    super::notes::below_table(ui, app, NoteTarget::Material, open_notes);
 }
 
 /// Ombor tanlash. O'zgargan bo'lsa `true`.
