@@ -2208,6 +2208,11 @@ impl App {
         )
     }
 
+    /// Loyiha hujjatlari versiyalari nazorati (TZ VII.30, 32).
+    pub fn version_issues(&self) -> Vec<checks::VersionIssue> {
+        checks::version_issues(&self.documents, &self.tasks, self.today)
+    }
+
     /// Smetaning chuqur tekshiruvi (TZ III.9, 11, 13, 16).
     pub fn estimate_deep(&self) -> Vec<checks::DeepIssue> {
         checks::estimate_deep(&self.estimate_items, &self.tasks, &self.links, &self.quotes)

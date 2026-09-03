@@ -59,6 +59,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 payments_block(ui, app);
                 acceptance_block(ui, app);
                 ui.add_space(12.0);
+                versions_block(ui, app);
+                ui.add_space(12.0);
                 purchases_block(ui, app);
                 ui.add_space(12.0);
                 remarks_block(ui, app);
@@ -620,6 +622,78 @@ fn week_block(ui: &mut egui::Ui, app: &App) {
 ///
 /// Har birida son bor: foiz, kun yoki summa. «Diqqat qiling» degan
 /// xabar buyurtmachiga hech narsa bermaydi.
+/// Loyiha versiyalari va ular orasidagi farq (TZ VIII.24).
+///
+/// Dastur chizmaning **ichini** o'qimaydi: PDF va DWG ni tanish tashqi
+/// kutubxonani talab qiladi. Shuning uchun solishtirish kartochkadagi
+/// ma'lumotga tayanadi — varaq soni, o'zgartirish belgisi va loyihachi
+/// yozgan izoh. Bu kam, lekin haqiqiy.
+fn versions_block(ui: &mut egui::Ui, app: &App) {
+    // Faqat yangi versiyasi chiqqan hujjatlar solishtiriladi.
+    let pairs: Vec<(&crate::domain::Document, &crate::domain::Document)> = app
+        .documents
+        .iter()
+        .filter_map(|new| {
+            let old = app.documents.iter().find(|d| Some(d.id) == new.replaces)?;
+            Some((old, new))
+        })
+        .collect();
+    if pairs.is_empty() {
+        return;
+    }
+
+    block(ui, t("cl_versions"), |ui| {
+        ui.label(
+            RichText::new(t("cl_versions_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        for (old, new) in &pairs {
+            let d = crate::checks::version_diff(old, new, &app.tasks);
+            ui.label(
+                RichText::new(format!(
+                    "{} — {} → {}",
+                    super::issues::truncate(&new.name, 40),
+                    d.from_label,
+                    d.to_label
+                ))
+                .size(12.5)
+                .strong(),
+            );
+            ui.label(
+                RichText::new(format!(
+                    "{}: {} → {} · {}: {}",
+                    t("col_sheets"),
+                    d.sheets_from,
+                    d.sheets_to,
+                    t("doc_issued"),
+                    d.issued
+                        .map(|x| x.format("%d.%m.%Y").to_string())
+                        .unwrap_or_else(|| t("dv_not_issued_short").to_string())
+                ))
+                .size(11.5)
+                .color(theme::muted()),
+            );
+            if !d.note.trim().is_empty() {
+                ui.label(RichText::new(&d.note).size(12.0));
+            }
+            if !d.tasks_before.is_empty() {
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {}",
+                        t("cl_versions_before"),
+                        d.tasks_before.len()
+                    ))
+                    .size(11.5)
+                    .color(theme::warn()),
+                );
+            }
+            ui.add_space(6.0);
+        }
+    });
+}
+
 fn alerts_block(ui: &mut egui::Ui, app: &App) {
     let alerts = crate::checks::contract_alerts(
         &app.contracts,

@@ -21,11 +21,11 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 11 | 7 | 4 | 2 |
 | III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 16 | 8 | 6 | 3 |
+| IV. Ijro hujjatlari | 30 | 17 | 7 | 6 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 22 | 4 | 8 | 6 |
 | VI. Prorab ilovasi | 37 | 21 | 9 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 26 | 6 | 6 | 3 |
-| VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
+| VII. Texnik nazorat kabineti | 38 | 28 | 6 | 4 | 3 |
+| VIII. Buyurtmachi kabineti | 37 | 25 | 10 | 2 | 2 |
 | IX. Arizalar | 42 | 35 | 6 | 1 | 1 |
 | X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
 | XI. Ombor | 48 | 41 | 6 | 1 | 1 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **490** | **149** | **61** | **46** |
+| **Jami** | **700** | **495** | **147** | **58** | **46** |
 
-Ya'ni **~70 % to'liq**, **~21 % qisman**, **~9 % hali yo'q**.
+Ya'ni **~71 % to'liq**, **~21 % qisman**, **~8 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -143,7 +143,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 18. Elektron imzo
 - [x] 19. Versiyalilik
 - [x] 20. Imzolashdan oldin AI tekshiruvi
-- [~] 21. Loyiha bilan solishtirish
+- [x] 21. Loyiha bilan solishtirish — *versiya va topshirish sanasi bo'yicha*
 - [~] 22. Haqiqiy qurilish bilan solishtirish — *AN-D1 qoidasi*
 - [x] 23. Texnik nazorat kabineti
 - [ ] 24. Mualliflik nazorati kabineti
@@ -272,9 +272,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 27. PPR nazorati
 - [~] 28. Ishlar ketma-ketligini nazorat qilish
 - [~] 29. Loyihani nazorat qilish
-- [ ] 30. Versiyalarni nazorat qilish
+- [x] 30. Versiyalarni nazorat qilish
 - [ ] 🔒 31. Texnik nazorat uchun AI Clash
-- [ ] 32. Qurilishdagi o'zgarishlarni nazorat qilish
+- [x] 32. Qurilishdagi o'zgarishlarni nazorat qilish — *yangi chizmadan oldin tugatilgan ishlar*
 - [~] 33. AI-yordamchi
 - [x] 34. Texnik nazoratning kunlik hisoboti — *oxirgi 14 kun, yozuvlardan yig'iladi*
 - [x] 35. Obyekt tayyorligini nazorat qilish — *yetti shart bo'yicha*
@@ -308,8 +308,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 20. Ijro hujjatlarini AI tekshiruvi
 - [x] 21. Ishlarni qabul qilish — *topshirildi → qabul/rad etildi, sabab bilan*
 - [~] 22. Elektron kelishuv — *ilova ichidagi qaror: kim va qachon; ERI tashqi omil*
-- [~] 23. Loyiha hujjatlari
-- [ ] 24. Loyiha versiyalarini AI solishtirishi
+- [x] 23. Loyiha hujjatlari — *versiya va o'zgartirish belgisi bilan*
+- [x] 24. Loyiha versiyalarini AI solishtirishi — *kartochka ma'lumoti bo'yicha*
 - [~] 25. Loyiha xatolarini nazorat qilish
 - [x] 26. Xavfsizlik
 - [x] 27. Shartnomalar — *bosh pudrat, subpudrat, yetkazib berish; avans va kafolat ushlanmasi*

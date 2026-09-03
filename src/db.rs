@@ -8893,6 +8893,115 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert_eq!(a.have, app.workers.iter().filter(|w| w.active).count());
     }
 
+    /// TZ VII.30: yangi versiya kelganda eskisi arxivda qoladi va
+    /// undan hech narsa talab qilinmaydi.
+    #[test]
+    fn document_versions_are_archived_not_deleted() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let docs = t.db.documents(pid);
+
+        let new = docs
+            .iter()
+            .find(|d| d.version == 2)
+            .expect("namunada ikkinchi versiya yo'q");
+        let old_id = new.replaces.expect("yangi versiya eskisiga bog'lanmagan");
+        let old = docs
+            .iter()
+            .find(|d| d.id == old_id)
+            .expect("eski versiya o'chib ketgan");
+
+        assert!(old.superseded(&docs));
+        assert!(!new.superseded(&docs));
+        assert_eq!(old.section, new.section);
+        assert!(!new.revision.trim().is_empty());
+        assert!(new.label().contains("v2"));
+        // Eski versiya ham topshirilgan bo'lgan — u ishlatilgan.
+        assert!(old.issued.is_some());
+    }
+
+    /// TZ VII.32: yangi chizma topshirilgach, undan oldin tugatilgan
+    /// ishlar ogohlantirish sifatida ko'rsatiladi.
+    #[test]
+    fn work_finished_before_a_new_drawing_is_flagged() {
+        use crate::checks::VersionIssue as V;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let issues = app.version_issues();
+        for i in &issues {
+            match i {
+                V::WorkDoneBefore { tasks, .. } => assert!(*tasks > 0),
+                V::NotIssued { revision, .. } => assert!(!revision.is_empty()),
+                _ => {}
+            }
+        }
+
+        // Xavflilari oldinda.
+        let mut seen_soft = false;
+        for i in &issues {
+            if i.risky() {
+                assert!(!seen_soft, "xavfli e'tiroz pastga tushib qolgan");
+            } else {
+                seen_soft = true;
+            }
+        }
+
+        // Topshirilmagan versiya — xavf.
+        let mut doc = app
+            .documents
+            .iter()
+            .find(|d| d.version == 2)
+            .cloned()
+            .expect("ikkinchi versiya");
+        doc.issued = None;
+        assert!(app.db.update_document(&doc));
+        app.reload_modules();
+        let after = app.version_issues();
+        let found = after
+            .iter()
+            .find(|i| matches!(i, V::NotIssued { .. }))
+            .expect("topshirilmagan versiya ko'rsatilmadi");
+        assert!(found.risky());
+    }
+
+    /// TZ VIII.24: solishtirish kartochkadagi ma'lumotga tayanadi —
+    /// varaq soni, belgi va loyihachi izohi.
+    #[test]
+    fn version_diff_uses_the_card_data() {
+        use crate::checks::version_diff;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let docs = t.db.documents(pid);
+        let tasks = t.db.tasks(pid).unwrap_or_default();
+
+        let new = docs.iter().find(|d| d.version == 2).expect("versiya");
+        let old = docs
+            .iter()
+            .find(|d| Some(d.id) == new.replaces)
+            .expect("eski versiya");
+
+        let d = version_diff(old, new, &tasks);
+        assert_eq!(d.from_label, old.label());
+        assert_eq!(d.to_label, new.label());
+        assert_eq!(d.sheets_from, old.sheets);
+        assert_eq!(d.sheets_to, new.sheets);
+        assert!(d.sheets_to > d.sheets_from, "namunada varaq qo'shilgan");
+        assert!(!d.note.trim().is_empty(), "o'zgartirish izohi yo'q");
+        assert_eq!(d.issued, new.issued);
+
+        // Oldin tugatilgan ishlar aynan shu bo'limdan olinadi.
+        for id in &d.tasks_before {
+            let task = tasks.iter().find(|x| x.id == *id).expect("ish");
+            assert_eq!(task.section, new.section);
+            assert!(task.fact_end.is_some_and(|e| e < new.issued.unwrap()));
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

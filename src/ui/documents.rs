@@ -16,10 +16,40 @@ fn is_photo(format: &str) -> bool {
 }
 
 /// Pasport ekranidagi «Hujjatlar va foto» kartochkasi.
+/// Versiya e'tirozini odam o'qiydigan gapga aylantiradi.
+fn version_text(i: &crate::checks::VersionIssue) -> String {
+    use crate::checks::VersionIssue as V;
+    match i {
+        V::NotIssued { name, revision } => {
+            format!("{} — {} ({})", t("dv_not_issued"), name, revision)
+        }
+        V::WorkDoneBefore {
+            name,
+            revision,
+            tasks,
+        } => format!(
+            "{} — {} ({}): {} {}",
+            t("dv_work_before"),
+            name,
+            revision,
+            tasks,
+            t("dv_tasks")
+        ),
+        V::NoChangeNote { name, revision } => {
+            format!("{} — {} ({})", t("dv_no_note"), name, revision)
+        }
+        V::NoRevision { name } => format!("{} — {}", t("dv_no_revision"), name),
+        V::TwoActive { name, count } => {
+            format!("{} — {} ({})", t("dv_two_active"), name, count)
+        }
+    }
+}
+
 pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
     let mut added: Vec<std::path::PathBuf> = Vec::new();
     let mut removed: Option<i64> = None;
     let mut edited: Option<Document> = None;
+    let mut new_version: Option<i64> = None;
 
     card_frame(ui, t("card_documents"), w, |ui| {
         ui.horizontal(|ui| {
@@ -111,6 +141,8 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
             head(ui, 300.0, t("col_name"));
             head(ui, 60.0, t("col_format"));
             head(ui, 90.0, t("col_section_short"));
+            head(ui, 90.0, t("doc_revision"));
+            head(ui, 100.0, t("doc_issued"));
             head(ui, 100.0, t("col_added"));
         });
 
@@ -139,6 +171,37 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                             changed |= ui.selectable_value(&mut d.section, s, s.label()).changed();
                         }
                     });
+                // O'zgartirish belgisi (TZ VII.30): «Izm. 2» ni loyihachi
+                // qo'yadi, dastur uni o'ylab topmaydi.
+                changed |= ui
+                    .add_sized(
+                        [90.0, 22.0],
+                        egui::TextEdit::singleline(&mut d.revision).hint_text("Izm."),
+                    )
+                    .on_hover_text(t("doc_revision_hint"))
+                    .changed();
+
+                // Qurilishga topshirilgan sana: bo'sh bo'lsa chizma hali
+                // obyektda ishlatilmayapti.
+                match d.issued {
+                    Some(mut day) => {
+                        if super::passport::date_edit(ui, &format!("docis{}", d.id), &mut day) {
+                            d.issued = Some(day);
+                            changed = true;
+                        }
+                    }
+                    None => {
+                        if ui
+                            .add_sized([100.0, 22.0], egui::Button::new(t("doc_issue")))
+                            .on_hover_text(t("doc_issue_hint"))
+                            .clicked()
+                        {
+                            d.issued = Some(app.today);
+                            changed = true;
+                        }
+                    }
+                }
+
                 ui.add_sized(
                     [100.0, 22.0],
                     egui::Label::new(RichText::new(&d.added_at).size(11.0).color(theme::muted())),
@@ -157,6 +220,22 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                             .color(theme::danger()),
                     );
                 }
+                // Arxivga tushgan versiya alohida belgilanadi: u endi
+                // ishlatilmaydi, lekin o'chirilmaydi ham.
+                if d.superseded(&app.documents) {
+                    ui.label(
+                        RichText::new(t("doc_superseded"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                } else if ui
+                    .small_button(t("doc_new_version"))
+                    .on_hover_text(t("doc_new_version_hint"))
+                    .clicked()
+                {
+                    new_version = Some(d.id);
+                }
+
                 if ui
                     .small_button(RichText::new("x").color(theme::danger()))
                     .on_hover_text(t("remove_from_list"))
@@ -165,8 +244,45 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                     removed = Some(d.id);
                 }
             });
+            // O'zgartirish izohi ikkinchi qatorda: u uzun bo'ladi.
+            if d.version > 1 {
+                ui.horizontal(|ui| {
+                    ui.add_space(8.0);
+                    changed |= ui
+                        .add_sized(
+                            [420.0, 20.0],
+                            egui::TextEdit::singleline(&mut d.change_note)
+                                .hint_text(t("doc_change_note")),
+                        )
+                        .changed();
+                });
+            }
             if changed {
                 edited = Some(d);
+            }
+        }
+
+        // --- Versiya nazorati (TZ VII.30, 32) ---
+        let issues = app.version_issues();
+        if !issues.is_empty() {
+            ui.add_space(10.0);
+            ui.label(RichText::new(t("doc_ver_title")).size(12.5).strong());
+            ui.label(
+                RichText::new(t("doc_ver_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(4.0);
+            for i in &issues {
+                ui.label(
+                    RichText::new(format!("· {}", version_text(i)))
+                        .size(12.0)
+                        .color(if i.risky() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        }),
+                );
             }
         }
     });
@@ -191,8 +307,28 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                     path: path.to_string_lossy().to_string(),
                     sheets: 0,
                     added_at: String::new(),
+                    revision: String::new(),
+                    version: 1,
+                    replaces: None,
+                    change_note: String::new(),
+                    issued: None,
                 });
             }
+            app.reload_modules();
+        }
+    }
+    // Yangi versiya: eskisi arxivda qoladi va unga bog'lanadi (TZ VII.30).
+    if let Some(id) = new_version {
+        if let Some(old) = app.documents.iter().find(|d| d.id == id).cloned() {
+            let mut fresh = old.clone();
+            fresh.id = 0;
+            fresh.version = old.version + 1;
+            fresh.replaces = Some(old.id);
+            fresh.change_note = String::new();
+            // Yangi versiya avtomatik topshirilmaydi: uni qurilishga berish
+            // alohida qaror.
+            fresh.issued = None;
+            app.db.insert_document(&fresh);
             app.reload_modules();
         }
     }

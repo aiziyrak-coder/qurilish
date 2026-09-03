@@ -9494,3 +9494,161 @@ pub fn estimate_deep(
     out.sort_by_key(|i| !i.money());
     out
 }
+
+// ================= VII.30, 32, VIII.24, IV.7. Loyiha versiyalari =================
+
+/// Loyiha hujjati versiyasi bo'yicha e'tiroz (TZ VII.30, 32, VIII.24).
+#[derive(Debug, Clone, PartialEq)]
+pub enum VersionIssue {
+    /// Yangi versiya kelgan, lekin qurilishga topshirilmagan — obyektda
+    /// hali eski chizma bo'yicha ishlanyapti.
+    NotIssued { name: String, revision: String },
+    /// Yangi versiya topshirilgach, unga tegishli ish allaqachon
+    /// bajarilgan: qurilishdagi holat yangi chizmaga mos kelmasligi mumkin.
+    WorkDoneBefore {
+        name: String,
+        revision: String,
+        tasks: usize,
+    },
+    /// O'zgartirish izohi yozilmagan — nima o'zgargani noma'lum.
+    NoChangeNote { name: String, revision: String },
+    /// O'zgartirish belgisi ko'rsatilmagan.
+    NoRevision { name: String },
+    /// Eski versiya arxivga tushmagan: bir bo'limda ikkita amaldagi
+    /// hujjat turibdi va qaysi biri to'g'ri ekani noma'lum.
+    TwoActive { name: String, count: usize },
+}
+
+impl VersionIssue {
+    /// Obyektda noto'g'ri chizma bo'yicha ishlash xavfi bormi.
+    pub fn risky(&self) -> bool {
+        matches!(
+            self,
+            VersionIssue::NotIssued { .. }
+                | VersionIssue::WorkDoneBefore { .. }
+                | VersionIssue::TwoActive { .. }
+        )
+    }
+}
+
+/// TZ VII.30, 32: loyiha hujjatlari versiyalarini nazorat qiladi.
+///
+/// Asosiy xavf bitta: **obyektda eski chizma bo'yicha ishlash**. Shuning
+/// uchun tekshiruv ikki tomonga qaraydi — yangi versiya ishga
+/// berilganmi va berilgan bo'lsa, unga tegishli ish undan **oldin**
+/// bajarilib ketmaganmi.
+pub fn version_issues(docs: &[Document], tasks: &[Task], today: NaiveDate) -> Vec<VersionIssue> {
+    let mut out = Vec::new();
+
+    for d in docs {
+        // Arxivga tushgan versiyadan hech narsa talab qilinmaydi.
+        if d.superseded(docs) {
+            continue;
+        }
+
+        if d.version > 1 {
+            if d.issued.is_none() {
+                out.push(VersionIssue::NotIssued {
+                    name: d.name.clone(),
+                    revision: d.label(),
+                });
+            } else if d.change_note.trim().is_empty() {
+                out.push(VersionIssue::NoChangeNote {
+                    name: d.name.clone(),
+                    revision: d.label(),
+                });
+            }
+            if d.revision.trim().is_empty() {
+                out.push(VersionIssue::NoRevision {
+                    name: d.name.clone(),
+                });
+            }
+
+            // TZ VII.32: yangi chizma topshirilgach, shu bo'limdagi qaysi
+            // ishlar undan oldin tugatilgan. Ular qayta ko'rilishi kerak
+            // bo'lishi mumkin — bu ogohlantirish, taqiq emas.
+            if let Some(issued) = d.issued {
+                let done_before = tasks
+                    .iter()
+                    .filter(|t| t.section == d.section)
+                    .filter(|t| t.fact_end.is_some_and(|e| e < issued))
+                    .count();
+                if done_before > 0 && issued <= today {
+                    out.push(VersionIssue::WorkDoneBefore {
+                        name: d.name.clone(),
+                        revision: d.label(),
+                        tasks: done_before,
+                    });
+                }
+            }
+        }
+    }
+
+    // Bir nomdagi ikkita amaldagi hujjat: eskisi arxivga tushmagan.
+    let key = |s: &str| s.trim().to_lowercase();
+    let mut names: Vec<String> = Vec::new();
+    for d in docs {
+        if !names.iter().any(|n| key(n) == key(&d.name)) {
+            names.push(d.name.clone());
+        }
+    }
+    for name in names {
+        let active = docs
+            .iter()
+            .filter(|d| key(&d.name) == key(&name) && !d.superseded(docs))
+            .count();
+        if active > 1 {
+            out.push(VersionIssue::TwoActive {
+                name,
+                count: active,
+            });
+        }
+    }
+
+    // Xavflilari oldinda.
+    out.sort_by_key(|i| !i.risky());
+    out
+}
+
+/// Ikki versiya orasidagi farq (TZ VIII.24).
+#[derive(Debug, Clone, Default)]
+pub struct VersionDiff {
+    pub from_label: String,
+    pub to_label: String,
+    /// Varaq soni o'zgarishi.
+    pub sheets_from: i64,
+    pub sheets_to: i64,
+    /// Loyihachi yozgan o'zgartirish izohi.
+    pub note: String,
+    /// Yangi versiya topshirilgan sana.
+    pub issued: Option<NaiveDate>,
+    /// Shu bo'limda yangi versiyagacha tugatilgan ishlar.
+    pub tasks_before: Vec<i64>,
+}
+
+/// TZ VIII.24: ikki versiyani solishtiradi.
+///
+/// Dastur chizmaning **ichini** o'qimaydi: PDF va DWG ni tanish tashqi
+/// kutubxonani talab qiladi. Shuning uchun solishtirish hujjat
+/// kartochkasidagi ma'lumotga tayanadi — varaq soni, o'zgartirish belgisi
+/// va loyihachi yozgan izoh. Bu kam, lekin **haqiqiy**: o'ylab topilgan
+/// «farqlar ro'yxati» dan ko'ra foydali.
+pub fn version_diff(old: &Document, new: &Document, tasks: &[Task]) -> VersionDiff {
+    VersionDiff {
+        from_label: old.label(),
+        to_label: new.label(),
+        sheets_from: old.sheets,
+        sheets_to: new.sheets,
+        note: new.change_note.clone(),
+        issued: new.issued,
+        tasks_before: match new.issued {
+            None => Vec::new(),
+            Some(issued) => tasks
+                .iter()
+                .filter(|t| t.section == new.section)
+                .filter(|t| t.fact_end.is_some_and(|e| e < issued))
+                .map(|t| t.id)
+                .collect(),
+        },
+    }
+}

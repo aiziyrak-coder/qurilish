@@ -4123,6 +4123,56 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "doc_pay_register" => ("To'lovlar reyestri", "Реестр платежей"),
         "doc_pay_short" => ("Reyestr", "Реестр"),
+        // VII.30, 32, VIII.24. Loyiha hujjati versiyalari
+        "col_sheets" => ("Varaq", "Листов"),
+        "doc_revision" => ("O'zgartirish", "Изменение"),
+        "doc_revision_hint" => (
+            "Chizmadagi o'zgartirish belgisi: «Izm. 2», «Rev. B». Uni loyihachi qo'yadi.",
+            "Отметка об изменении на чертеже: «Изм. 2», «Rev. B». Её ставит проектировщик.",
+        ),
+        "doc_issued" => ("Topshirilgan", "Передан в работу"),
+        "doc_issue" => ("Topshirish", "Передать"),
+        "doc_issue_hint" => (
+            "Chizmani qurilishga topshirish sanasi. Bo'sh bo'lsa obyektda hali eski versiya ishlatilyapti.",
+            "Дата передачи чертежа на стройку. Пока пусто — на объекте работают по прежней версии.",
+        ),
+        "doc_new_version" => ("Yangi versiya", "Новая версия"),
+        "doc_new_version_hint" => (
+            "Eskisi arxivda qoladi va yangisiga bog'lanadi; yangi versiya avtomatik topshirilmaydi.",
+            "Прежняя останется в архиве и свяжется с новой; новая версия не передаётся автоматически.",
+        ),
+        "doc_superseded" => ("arxivda", "в архиве"),
+        "doc_change_note" => ("Nima o'zgardi", "Что изменилось"),
+        "doc_ver_title" => ("Versiya nazorati", "Контроль версий"),
+        "doc_ver_hint" => (
+            "Asosiy xavf bitta: obyektda eski chizma bo'yicha ishlash.",
+            "Главный риск один: работа на объекте по устаревшему чертежу.",
+        ),
+        "dv_not_issued" => (
+            "Yangi versiya qurilishga topshirilmagan",
+            "Новая версия не передана на стройку",
+        ),
+        "dv_not_issued_short" => ("topshirilmagan", "не передан"),
+        "dv_work_before" => (
+            "Yangi versiyadan oldin tugatilgan ish bor",
+            "Есть работы, завершённые до новой версии",
+        ),
+        "dv_tasks" => ("ish", "работ"),
+        "dv_no_note" => ("O'zgartirish izohi yozilmagan", "Не записано, что изменилось"),
+        "dv_no_revision" => ("O'zgartirish belgisi ko'rsatilmagan", "Не указана отметка об изменении"),
+        "dv_two_active" => (
+            "Bir nomda ikkita amaldagi hujjat — qaysi biri to'g'ri ekani noma'lum",
+            "Два действующих документа с одним именем — неясно, какой верный",
+        ),
+        "cl_versions" => ("Loyiha versiyalari", "Версии проекта"),
+        "cl_versions_hint" => (
+            "Dastur chizmaning ichini o'qimaydi: solishtirish kartochkadagi ma'lumotga tayanadi — varaq soni, belgi va loyihachi izohi.",
+            "Программа не читает содержимое чертежа: сравнение опирается на данные карточки — число листов, отметку и примечание проектировщика.",
+        ),
+        "cl_versions_before" => (
+            "Yangi versiyadan oldin tugatilgan ishlar",
+            "Работ, завершённых до новой версии",
+        ),
         "ct_tab_contracts" => ("Shartnomalar", "Договоры"),
         "ct_tab_changes" => ("O'zgarishlar", "Изменения"),
         "ct_tab_stages" => ("To'lov jadvali", "График платежей"),

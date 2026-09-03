@@ -187,6 +187,32 @@ pub struct Document {
     pub path: String,
     pub sheets: i64,
     pub added_at: String,
+    /// Chizmaning o'zgartirish belgisi: «Izm. 2», «Rev. B» (TZ VII.30).
+    pub revision: String,
+    /// Versiya raqami. Yangi versiya kelganda eskisi arxivda qoladi.
+    pub version: i64,
+    /// Qaysi hujjatning o'rniga kelgani.
+    pub replaces: Option<i64>,
+    /// Loyihachi bergan o'zgartirish izohi — nima o'zgardi.
+    pub change_note: String,
+    /// Qurilishga topshirilgan sana. Bo'sh — hali ishga berilmagan.
+    pub issued: Option<NaiveDate>,
+}
+
+impl Document {
+    /// Bu hujjat o'rniga yangi versiya chiqarilganmi.
+    pub fn superseded(&self, all: &[Document]) -> bool {
+        all.iter().any(|d| d.replaces == Some(self.id))
+    }
+
+    /// Ekranda ko'rinadigan belgi: «Izm. 2 · v3».
+    pub fn label(&self) -> String {
+        if self.revision.trim().is_empty() {
+            format!("v{}", self.version)
+        } else {
+            format!("{} · v{}", self.revision.trim(), self.version)
+        }
+    }
 }
 
 // ---------- III. Smeta ----------

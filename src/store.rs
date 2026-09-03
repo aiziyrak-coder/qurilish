@@ -106,7 +106,12 @@ impl Db {
                 format TEXT NOT NULL DEFAULT '',
                 path TEXT NOT NULL DEFAULT '',
                 sheets INTEGER NOT NULL DEFAULT 0,
-                added_at TEXT NOT NULL DEFAULT (date('now'))
+                added_at TEXT NOT NULL DEFAULT (date('now')),
+                revision TEXT NOT NULL DEFAULT '',
+                version INTEGER NOT NULL DEFAULT 1,
+                replaces INTEGER,
+                change_note TEXT NOT NULL DEFAULT '',
+                issued TEXT
             );
 
             CREATE TABLE IF NOT EXISTS estimate (
@@ -892,6 +897,11 @@ impl Db {
             "ALTER TABLE purchase ADD COLUMN substitute_for INTEGER",
             "ALTER TABLE purchase ADD COLUMN tech_ok INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE purchase ADD COLUMN tech_by TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE document ADD COLUMN revision TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE document ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
+            "ALTER TABLE document ADD COLUMN replaces INTEGER",
+            "ALTER TABLE document ADD COLUMN change_note TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE document ADD COLUMN issued TEXT",
             "ALTER TABLE exec_doc ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE exec_doc ADD COLUMN replaces INTEGER",
             "ALTER TABLE machine_log ADD COLUMN number TEXT NOT NULL DEFAULT ''",
@@ -2473,7 +2483,8 @@ impl Db {
 
     pub fn documents(&self, pid: i64) -> Vec<Document> {
         self.list(
-            "SELECT id,project_id,section,name,format,path,sheets,added_at
+            "SELECT id,project_id,section,name,format,path,sheets,added_at,
+                    revision,version,replaces,change_note,issued
              FROM document WHERE project_id=?1 ORDER BY id",
             pid,
             |r| {
@@ -2486,6 +2497,11 @@ impl Db {
                     path: r.get(5)?,
                     sheets: r.get(6)?,
                     added_at: r.get(7)?,
+                    revision: r.get(8)?,
+                    version: r.get(9)?,
+                    replaces: r.get(10)?,
+                    change_note: r.get(11)?,
+                    issued: r.get::<_, Option<String>>(12)?.as_deref().map(date),
                 })
             },
         )
@@ -2493,15 +2509,42 @@ impl Db {
 
     pub fn insert_document(&self, d: &Document) -> i64 {
         self.ins(
-            "INSERT INTO document (project_id,section,name,format,path,sheets) VALUES (?1,?2,?3,?4,?5,?6)",
-            params![d.project_id, d.section.code(), d.name, d.format, d.path, d.sheets],
+            "INSERT INTO document (project_id,section,name,format,path,sheets,revision,version,
+                                   replaces,change_note,issued)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                d.project_id,
+                d.section.code(),
+                d.name,
+                d.format,
+                d.path,
+                d.sheets,
+                d.revision,
+                d.version,
+                d.replaces,
+                d.change_note,
+                ods(d.issued)
+            ],
         )
     }
 
     pub fn update_document(&self, d: &Document) -> bool {
         self.upd(
-            "UPDATE document SET section=?2,name=?3,format=?4,path=?5,sheets=?6 WHERE id=?1",
-            params![d.id, d.section.code(), d.name, d.format, d.path, d.sheets],
+            "UPDATE document SET section=?2,name=?3,format=?4,path=?5,sheets=?6,revision=?7,
+                    version=?8,replaces=?9,change_note=?10,issued=?11 WHERE id=?1",
+            params![
+                d.id,
+                d.section.code(),
+                d.name,
+                d.format,
+                d.path,
+                d.sheets,
+                d.revision,
+                d.version,
+                d.replaces,
+                d.change_note,
+                ods(d.issued)
+            ],
         )
     }
 
@@ -5898,6 +5941,45 @@ impl Db {
                 path: String::new(),
                 sheets,
                 added_at: stamp(back),
+                // Birinchi versiya loyihaning boshida topshirilgan.
+                revision: String::new(),
+                version: 1,
+                replaces: None,
+                change_note: String::new(),
+                issued: Some(d(back)),
+            });
+        }
+
+        // KJ chizmasining ikkinchi versiyasi (TZ VII.30, 32): u
+        // qurilishga topshirilgan va undan **oldin** tugatilgan ishlar
+        // bor — versiya nazorati aynan shu holatni ko'rsatishi kerak.
+        if let Some(kj) = self
+            .documents(pid)
+            .into_iter()
+            .find(|x| x.section == Section::Kj)
+        {
+            self.insert_document(&Document {
+                id: 0,
+                project_id: pid,
+                section: Section::Kj,
+                name: kj.name.clone(),
+                format: kj.format.clone(),
+                path: String::new(),
+                sheets: kj.sheets + 3,
+                added_at: stamp(20),
+                revision: if ru {
+                    "Изм. 2".into()
+                } else {
+                    "Izm. 2".to_string()
+                },
+                version: 2,
+                replaces: Some(kj.id),
+                change_note: if ru {
+                    "Изменено армирование плиты 3 этажа, добавлены 3 листа".into()
+                } else {
+                    "3-qavat plitasi armaturasi o'zgardi, 3 varaq qo'shildi".to_string()
+                },
+                issued: Some(d(18)),
             });
         }
 
