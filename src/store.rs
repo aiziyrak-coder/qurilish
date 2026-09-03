@@ -893,6 +893,8 @@ impl Db {
             "ALTER TABLE machine ADD COLUMN rented INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN price REAL NOT NULL DEFAULT 0",
             "ALTER TABLE safety_event ADD COLUMN root_cause TEXT NOT NULL DEFAULT 'unknown'",
+            "ALTER TABLE purchase ADD COLUMN paid REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE purchase ADD COLUMN pay_due TEXT",
             "ALTER TABLE purchase ADD COLUMN material_id INTEGER",
             "ALTER TABLE purchase ADD COLUMN substitute_for INTEGER",
             "ALTER TABLE purchase ADD COLUMN tech_ok INTEGER NOT NULL DEFAULT 0",
@@ -3078,7 +3080,7 @@ impl Db {
         self.list(
             "SELECT id,project_id,request_id,number,date,supplier,title,qty,unit,price,currency,
                     delivery_date,status,delivered_qty,section,task_id,contract_id,urgent,buyer,
-                    material_id,substitute_for,tech_ok,tech_by,note
+                    material_id,substitute_for,tech_ok,tech_by,paid,pay_due,note
              FROM purchase WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -3106,7 +3108,9 @@ impl Db {
                     substitute_for: r.get(20)?,
                     tech_ok: r.get::<_, i64>(21)? != 0,
                     tech_by: r.get(22)?,
-                    note: r.get(23)?,
+                    paid: r.get(23)?,
+                    pay_due: r.get::<_, Option<String>>(24)?.as_deref().map(date),
+                    note: r.get(25)?,
                 })
             },
         )
@@ -3117,9 +3121,9 @@ impl Db {
             "INSERT INTO purchase (project_id,request_id,number,date,supplier,title,qty,unit,price,
                                    currency,delivery_date,status,delivered_qty,section,task_id,
                                    contract_id,urgent,buyer,material_id,substitute_for,
-                                   tech_ok,tech_by,note)
+                                   tech_ok,tech_by,paid,pay_due,note)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,
-                     ?22,?23)",
+                     ?22,?23,?24,?25)",
             params![
                 p.project_id,
                 p.request_id,
@@ -3143,6 +3147,8 @@ impl Db {
                 p.substitute_for,
                 p.tech_ok as i64,
                 p.tech_by,
+                p.paid,
+                ods(p.pay_due),
                 p.note
             ],
         )
@@ -3153,7 +3159,8 @@ impl Db {
             "UPDATE purchase SET request_id=?2,number=?3,date=?4,supplier=?5,title=?6,qty=?7,
                     unit=?8,price=?9,currency=?10,delivery_date=?11,status=?12,delivered_qty=?13,
                     section=?14,task_id=?15,contract_id=?16,urgent=?17,buyer=?18,
-                    material_id=?19,substitute_for=?20,tech_ok=?21,tech_by=?22,note=?23
+                    material_id=?19,substitute_for=?20,tech_ok=?21,tech_by=?22,paid=?23,
+                    pay_due=?24,note=?25
              WHERE id=?1",
             params![
                 p.id,
@@ -3178,6 +3185,8 @@ impl Db {
                 p.substitute_for,
                 p.tech_ok as i64,
                 p.tech_by,
+                p.paid,
+                ods(p.pay_due),
                 p.note
             ],
         )
@@ -7591,6 +7600,19 @@ impl Db {
                 } else {
                     "Sobirov R.X.".to_string()
                 },
+                // To'lov holati namunada har xil: to'liq to'langan,
+                // qisman to'langan va muddati o'tgan qarz — to'lov
+                // intizomi ekrani bo'sh ko'rinmasin (TZ X.23).
+                paid: match status {
+                    PurchaseStatus::Paid | PurchaseStatus::Delivered => qty * price,
+                    PurchaseStatus::Ordered => qty * price * 0.3,
+                    _ => 0.0,
+                },
+                pay_due: match status {
+                    PurchaseStatus::Ordered => Some(d(back) + chrono::Duration::days(10)),
+                    PurchaseStatus::Draft => None,
+                    _ => Some(d(back) + chrono::Duration::days(20)),
+                },
                 note: String::new(),
             });
         }
@@ -9567,6 +9589,8 @@ impl Db {
                 buyer: String::new(),
                 material_id: None,
                 substitute_for: None,
+                paid: 0.0,
+                pay_due: None,
                 tech_ok: false,
                 tech_by: String::new(),
                 note: String::new(),

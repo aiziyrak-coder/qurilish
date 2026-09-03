@@ -27,8 +27,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VII. Texnik nazorat kabineti | 38 | 30 | 5 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
 | IX. Arizalar | 42 | 37 | 4 | 1 | 1 |
-| X. Xaridlar | 48 | 34 | 12 | 2 | 2 |
-| XI. Ombor | 48 | 44 | 3 | 1 | 1 |
+| X. Xaridlar | 48 | 43 | 3 | 2 | 2 |
+| XI. Ombor | 48 | 45 | 2 | 1 | 1 |
 | XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
 | XIII. Tabel | 44 | 34 | 4 | 6 | 6 |
 | XIV. Sifat | 41 | 33 | 6 | 2 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 47 | 4 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **542** | **112** | **46** | **46** |
+| **Jami** | **700** | **552** | **102** | **46** | **46** |
 
-Ya'ni **~77 % to'liq**, **~16 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~79 % to'liq**, **~15 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -383,24 +383,24 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 6. Xariddan oldin tekshirish — *reja arizasi bor-yo'qligini ko'rsatadi, takrorlashni oldini oladi*
 - [~] 7. Yetkazib beruvchilarni izlash — *kartochka va ro'yxat*
 - [x] 8. Yetkazib beruvchi tarixi — *xaridlardan hisoblanadi*
-- [~] 9. Tijorat taklifini so'rash — *taklif yozuvi*
+- [x] 9. Tijorat taklifini so'rash — *taklif yozuvi va zanjirda nazorat*
 - [x] 10. KP qabul qilish
 - [x] 11. AI KP larni solishtirishi — *narx va muddat bo'yicha*
-- [~] 12. AI eng yaxshi variantni tanlashi — *eng arzoni va eng tezi belgilanadi, tanlov odamniki*
+- [x] 12. AI eng yaxshi variantni tanlashi — *narx, muddat va ishonchlilik balli*
 - [x] 13. Narx anomaliyasi — *katalogdan 20% farq*
-- [~] 14. Narx o'zgarishini nazorat qilish — *takliflar taqqoslanadi*
+- [x] 14. Narx o'zgarishini nazorat qilish — *takliflar va obyektlar kesimi*
 - [x] 15. Muqobil yetkazib beruvchi izlash — *bir arizaga bir necha taklif*
 - [~] 16. Yetkazib beruvchini tekshirish — *STIR, taqiq belgisi*
 - [~] 17. Materialni tekshirish
 - [x] 18. Texnik kelishuv
 - [x] 19. Materialni almashtirish — *tasdiqlangan analog talab qilinadi*
-- [~] 20. Buyurtma shakllantirish — *xarid yozuvi*
+- [x] 20. Buyurtma shakllantirish — *xarid, to'lov va zanjir*
 - [x] 21. Shartnoma — *ta'minot shartnomasi va xaridga bog'lanish*
 - [x] 22. Yetkazib beruvchi shartnomasini AI tekshiruvi — *summa va muddat*
-- [~] 23. To'lovni nazorat qilish — *holat bor, to'lov grafigi yo'q*
+- [x] 23. To'lovni nazorat qilish — *to'langan summa va muddat*
 - [x] 24. Yetkazishni nazorat qilish
-- [~] 25. Obyektda qabul qilish
-- [~] 26. Kirish nazorati — *sifat moduli orqali*
+- [x] 25. Obyektda qabul qilish — *zanjirda yetkazish va kirim*
+- [x] 26. Kirish nazorati — *zanjirda nazoratsiz yetkazish ko'rinadi*
 - [ ] 🔒 27. AI sertifikatni tekshiradi
 - [x] 28. Qabulda foto
 - [x] 29. Ombor bilan bog'lanish — *bir bosishda kirim*
@@ -410,7 +410,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 33. Obyektlar bo'yicha xaridlarni nazorat qilish
 - [x] 34. Bo'limlar bo'yicha xaridlarni nazorat qilish
 - [x] 35. Xarid byudjetini nazorat qilish — *reja / buyurtma / qoldiq*
-- [~] 36. AI ortiqcha sarfni aniqlashi
+- [x] 36. AI ortiqcha sarfni aniqlashi — *zanjirdagi uzilishlar*
 - [x] 37. Markazlashtirilgan xaridlar
 - [x] 38. Turli obyektlar xaridlarini solishtirish
 - [x] 39. Sarfni nazorat qilish — *byudjet, xaridchi va risk kesimlari*
@@ -421,7 +421,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 44. AI narx prognozi
 - [x] 45. Direktorning bosh hisoboti — *«Rahbar» ekranida*
 - [x] 46. Xaridchi samaradorligi — *xarid soni, summa, muddatida %, taklif bilan %*
-- [~] 47. Modulning to'liq zanjiri
+- [x] 47. Modulning to'liq zanjiri
 - [x] 48. Modulning eng kuchli funksiyasi — *xarid → ombor kirimi*
 
 ---
@@ -474,7 +474,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 44. Ombor fotosi
 - [x] 45. Omborchining AI-yordamchisi — *modul ekranidan ochiladi*
 - [x] 46. Direktorning AI-yordamchisi — *«Rahbar» ekrani va yordamchi*
-- [~] 47. Omborning to'liq bog'lanishi
+- [x] 47. Omborning to'liq bog'lanishi — *ta'minot zanjirida*
 - [x] 48. Modulning eng muhim funksiyasi — *qoldiq harakatlardan hisoblanadi*
 
 ---

@@ -423,6 +423,8 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
                 buyer: String::new(),
                 material_id: None,
                 substitute_for: None,
+                paid: 0.0,
+                pay_due: None,
                 tech_ok: false,
                 tech_by: String::new(),
                 note: t("ac_from_copilot").to_string(),

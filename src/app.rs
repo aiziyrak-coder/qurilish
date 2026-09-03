@@ -2272,6 +2272,25 @@ impl App {
         )
     }
 
+    /// Ta'minot zanjiri: ariza → taklif → xarid → ombor → to'lov
+    /// (TZ X.47, XI.47).
+    pub fn supply_chain(
+        &self,
+    ) -> (
+        Vec<(checks::SupplyChain, Vec<checks::ChainGap>)>,
+        checks::ChainSummary,
+    ) {
+        checks::supply_chain(
+            &self.purchases,
+            &self.requests,
+            &self.quotes,
+            &self.stock_moves,
+            &self.quality,
+            &self.materials,
+            self.today,
+        )
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

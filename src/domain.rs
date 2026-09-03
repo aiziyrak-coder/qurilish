@@ -524,6 +524,11 @@ pub struct Purchase {
     /// Qaysi materialning o'rniga olinyapti (TZ X.19). To'ldirilgan bo'lsa —
     /// bu almashtirish va u tasdiqlangan analog bo'lishi kerak.
     pub substitute_for: Option<i64>,
+    /// To'langan summa (TZ X.23). Xarid summasidan kam bo'lishi mumkin:
+    /// avans, qisman to'lov yoki kechiktirilgan to'lov.
+    pub paid: f64,
+    /// To'lov muddati. Bo'sh — muddat kelishilmagan.
+    pub pay_due: Option<NaiveDate>,
     /// Texnik kelishuv olingan (TZ X.18): xarid loyihaga mos ekanini
     /// muhandis tasdiqlagan.
     pub tech_ok: bool,
@@ -533,6 +538,16 @@ pub struct Purchase {
 }
 
 impl Purchase {
+    /// To'lanmagan qism.
+    pub fn unpaid(&self) -> f64 {
+        (self.amount() - self.paid).max(0.0)
+    }
+
+    /// To'lov muddati o'tganmi va qarz qolganmi (TZ X.23).
+    pub fn payment_overdue(&self, today: NaiveDate) -> bool {
+        self.unpaid() > 0.01 && self.pay_due.is_some_and(|d| d < today)
+    }
+
     pub fn amount(&self) -> f64 {
         self.qty * self.price
     }

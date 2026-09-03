@@ -2809,6 +2809,8 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             buyer: String::new(),
             material_id: None,
             substitute_for: None,
+            paid: 0.0,
+            pay_due: None,
             tech_ok: true,
             tech_by: "Test".into(),
             note: String::new(),
@@ -9880,6 +9882,119 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .find(|r| matches!(r.kind, K::StockOut { .. }))
             .expect("material riski yo'q");
         assert!(late.weight < near.weight);
+    }
+
+    /// TZ X.47: zanjirning har bosqichida qiymat kamaymasligi kerak;
+    /// keyingi bosqich oldingisidan katta bo'lsa — uzilish.
+    #[test]
+    fn supply_chain_finds_the_gaps() {
+        use crate::checks::{ChainGap as G, SupplyChain};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let line = |requested: f64,
+                    quotes: usize,
+                    ordered: f64,
+                    delivered: f64,
+                    checks: usize,
+                    stocked: f64,
+                    issued: f64,
+                    paid: f64| SupplyChain {
+            request_id: None,
+            material_id: None,
+            title: "Sement".into(),
+            unit: "t".into(),
+            requested,
+            quotes,
+            ordered,
+            delivered,
+            checks,
+            stocked,
+            issued,
+            amount: 1000.0,
+            paid,
+        };
+
+        // Butun zanjir: uzilish yo'q.
+        let clean = line(10.0, 2, 10.0, 10.0, 1, 10.0, 8.0, 1000.0);
+        assert!(clean.gaps(today, Some(today)).is_empty());
+
+        // Buyurtma arizadan ko'p.
+        let over = line(5.0, 2, 10.0, 10.0, 1, 10.0, 0.0, 1000.0);
+        assert!(over
+            .gaps(today, None)
+            .iter()
+            .any(|g| matches!(g, G::OrderOverRequest { .. })));
+
+        // Yetkazilgan buyurtmadan ko'p — jiddiy.
+        let much = line(10.0, 2, 10.0, 12.0, 1, 12.0, 0.0, 1000.0);
+        let gaps = much.gaps(today, None);
+        let found = gaps
+            .iter()
+            .find(|g| matches!(g, G::DeliveryOverOrder { .. }))
+            .expect("yetkazish uzilishi yo'q");
+        assert!(found.severe());
+        // Jiddiylari oldinda.
+        assert!(gaps[0].severe());
+
+        // Omborda yo'q material berilgan.
+        let ghost = line(10.0, 2, 10.0, 10.0, 1, 4.0, 9.0, 1000.0);
+        assert!(ghost
+            .gaps(today, None)
+            .iter()
+            .any(|g| matches!(g, G::IssuedOverStock { .. })));
+
+        // Kirish nazoratisiz yetkazish va taklifsiz xarid.
+        let raw = line(10.0, 0, 10.0, 10.0, 0, 10.0, 0.0, 1000.0);
+        let gaps = raw.gaps(today, None);
+        assert!(gaps.contains(&G::NoInputCheck));
+        assert!(gaps.contains(&G::NoQuotes));
+
+        // To'lov: ortiqcha va muddati o'tgan.
+        let money = line(10.0, 2, 10.0, 10.0, 1, 10.0, 0.0, 1500.0);
+        assert!(money
+            .gaps(today, None)
+            .iter()
+            .any(|g| matches!(g, G::Overpaid { .. })));
+        let debt = line(10.0, 2, 10.0, 10.0, 1, 10.0, 0.0, 400.0);
+        let late = debt.gaps(today, Some(today - chrono::Duration::days(1)));
+        assert!(late
+            .iter()
+            .any(|g| matches!(g, G::PaymentOverdue { unpaid } if (*unpaid - 600.0).abs() < 0.01)));
+        // Muddat kelmagan bo'lsa — e'tiroz yo'q.
+        assert!(!debt
+            .gaps(today, Some(today + chrono::Duration::days(5)))
+            .iter()
+            .any(|g| matches!(g, G::PaymentOverdue { .. })));
+    }
+
+    /// TZ X.23: to'lov holati namunada har xil bo'ladi — intizom ekrani
+    /// bo'sh ko'rinmasin.
+    #[test]
+    fn demo_has_mixed_payment_state() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        assert!(
+            app.purchases.iter().any(|p| p.unpaid() > 0.0),
+            "to'lanmagan xarid yo'q"
+        );
+        assert!(
+            app.purchases.iter().any(|p| p.paid > 0.0),
+            "to'langan xarid yo'q"
+        );
+
+        let (rows, sum) = app.supply_chain();
+        assert_eq!(sum.lines, rows.len());
+        assert!(sum.amount > 0.0);
+        assert!((sum.paid - rows.iter().map(|(l, _)| l.paid).sum::<f64>()).abs() < 0.01);
+        // Uzilishi ko'p qatorlar oldinda.
+        for w in rows.windows(2) {
+            assert!(w[0].1.len() >= w[1].1.len());
+        }
+        // Qoralama xaridlar zanjirga tushmaydi.
+        assert!(rows.len() <= app.purchases.len());
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

@@ -70,6 +70,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (3, t("pu_tab_suppliers")),
             (4, t("pu_tab_budget")),
             (5, t("pu_tab_risks")),
+            (6, t("pu_tab_chain")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -85,6 +86,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         3 => suppliers_tab(ui, app, pid),
         4 => budget_tab(ui, app, pid),
         5 => risks_tab(ui, app),
+        6 => chain_tab(ui, app),
         _ => {
             if app.purchases.is_empty() {
                 ui.add_space(50.0);
@@ -148,6 +150,8 @@ fn new_purchase(app: &App, pid: i64, number: String, request_id: Option<i64>) ->
         buyer: String::new(),
         material_id: None,
         substitute_for: None,
+        paid: 0.0,
+        pay_due: None,
         tech_ok: false,
         tech_by: String::new(),
         note: String::new(),
@@ -357,7 +361,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("purchases_grid")
-                .num_columns(if wide { 20 } else { 18 })
+                .num_columns(if wide { 22 } else { 20 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -375,6 +379,8 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                     head_r(ui, 110.0, t("col_price"));
                     head_l(ui, 14.0, "");
                     head_r(ui, 130.0, t("col_sum"));
+                    head_r(ui, 120.0, t("col_paid"));
+                    head_l(ui, 110.0, t("col_pay_due"));
                     head_l(ui, 110.0, t("col_delivery"));
                     head_l(ui, 120.0, t("col_status"));
                     head_l(ui, 110.0, t("col_stock_post"));
@@ -513,6 +519,29 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             ui.label("");
                         }
                         cell_r(ui, 130.0, RichText::new(money(p.amount())).size(12.5));
+
+                        // To'lov (TZ X.23): to'langan summa va muddati.
+                        // Muddati o'tib qarz qolgan bo'lsa — qizil.
+                        changed |= super::materials::num_edit(ui, 120.0, &mut p.paid, 1000.0, 1e12);
+                        ui.horizontal(|ui| match p.pay_due {
+                            Some(mut d) => {
+                                if super::passport::date_edit(ui, &format!("pupay{}", p.id), &mut d)
+                                {
+                                    p.pay_due = Some(d);
+                                    changed = true;
+                                }
+                                if p.payment_overdue(today) {
+                                    ui.label(RichText::new("!").color(theme::danger()).strong())
+                                        .on_hover_text(t("col_pay_overdue"));
+                                }
+                            }
+                            None => {
+                                if ui.small_button(t("col_pay_set")).clicked() {
+                                    p.pay_due = Some(p.delivery_date + chrono::Duration::days(14));
+                                    changed = true;
+                                }
+                            }
+                        });
 
                         ui.horizontal(|ui| {
                             changed |= super::passport::date_edit(
@@ -1614,6 +1643,205 @@ fn control_text(i: &crate::checks::SupplyIssue) -> String {
         S::NoContract { number, amount } => {
             format!("{} — {} ({})", t("si_no_contract"), number, money(*amount))
         }
+    }
+}
+
+// ================================================================ Zanjir
+
+/// Ta'minot zanjiri: ariza → taklif → xarid → yetkazish → kirish
+/// nazorati → ombor → ish → to'lov (TZ X.47, XI.47).
+///
+/// Har bosqich alohida modulda yozilgan; bu yerda ular bir qatorda
+/// turadi, shuning uchun uzilish darhol ko'rinadi.
+fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let (rows, sum) = app.supply_chain();
+
+    ui.label(
+        RichText::new(t("pu_chain_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("pu_chain_lines"),
+                sum.lines.to_string(),
+                t("pu_chain_lines_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("pu_chain_gaps"),
+                sum.with_gaps.to_string(),
+                t("pu_chain_gaps_hint"),
+                if sum.with_gaps == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("pu_chain_paid"),
+                format!("{} / {}", money(sum.paid), money(sum.amount)),
+                t("pu_chain_paid_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("pu_chain_overdue"),
+                money(sum.overdue_pay),
+                t("pu_chain_overdue_hint"),
+                if sum.overdue_pay <= 0.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if rows.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("pu_chain_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("pu_chain")
+                .num_columns(9)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 220.0, t("col_item"));
+                    head_r(ui, 90.0, t("pu_ch_request"));
+                    head_r(ui, 80.0, t("pu_ch_quotes"));
+                    head_r(ui, 90.0, t("pu_ch_order"));
+                    head_r(ui, 90.0, t("col_delivered"));
+                    head_r(ui, 80.0, t("pu_ch_checks"));
+                    head_r(ui, 90.0, t("pu_ch_stock"));
+                    head_r(ui, 90.0, t("pu_ch_issued"));
+                    head_l(ui, 260.0, t("pu_ch_gaps"));
+                    ui.end_row();
+
+                    for (line, gaps) in &rows {
+                        let name = cell_l(
+                            ui,
+                            220.0,
+                            RichText::new(super::issues::truncate(&line.title, 28)).size(12.5),
+                        );
+                        // Zanjirning boshi: qaysi ariza va qaysi material —
+                        // sichqoncha ostida, jadvalni kengaytirmasdan.
+                        name.on_hover_ui(|ui| {
+                            let request = line
+                                .request_id
+                                .and_then(|id| app.requests.iter().find(|r| r.id == id))
+                                .map(|r| r.number.clone())
+                                .unwrap_or_else(|| t("dash").to_string());
+                            ui.label(
+                                RichText::new(format!("{}: {}", t("col_request"), request))
+                                    .size(11.5),
+                            );
+                            if let Some(id) = line.material_id {
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{}: {}",
+                                        t("col_material"),
+                                        super::materials::material_label(app, id)
+                                    ))
+                                    .size(11.5),
+                                );
+                            }
+                            ui.label(
+                                RichText::new(format!("{}: {}", t("col_unit"), line.unit))
+                                    .size(11.5)
+                                    .color(theme::muted()),
+                            );
+                        });
+                        let num = |ui: &mut egui::Ui, w: f32, v: f64| {
+                            cell_r(
+                                ui,
+                                w,
+                                if v == 0.0 {
+                                    RichText::new(t("dash")).color(theme::muted())
+                                } else {
+                                    RichText::new(super::materials::trim_num(v)).size(12.0)
+                                },
+                            );
+                        };
+                        num(ui, 90.0, line.requested);
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(line.quotes.to_string()).size(12.0).color(
+                                if line.quotes == 0 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                },
+                            ),
+                        );
+                        num(ui, 90.0, line.ordered);
+                        num(ui, 90.0, line.delivered);
+                        cell_r(
+                            ui,
+                            80.0,
+                            RichText::new(line.checks.to_string()).size(12.0).color(
+                                if line.checks == 0 && line.delivered > 0.0 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                },
+                            ),
+                        );
+                        num(ui, 90.0, line.stocked);
+                        num(ui, 90.0, line.issued);
+                        cell_l(
+                            ui,
+                            260.0,
+                            RichText::new(if gaps.is_empty() {
+                                t("pu_ch_ok").to_string()
+                            } else {
+                                gaps.iter().map(gap_text).collect::<Vec<_>>().join("; ")
+                            })
+                            .size(11.5)
+                            .color(if gaps.is_empty() {
+                                theme::ok()
+                            } else if gaps.iter().any(|g| g.severe()) {
+                                theme::danger()
+                            } else {
+                                theme::warn()
+                            }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+}
+
+/// Zanjirdagi uzilishni gapga aylantiradi.
+fn gap_text(g: &crate::checks::ChainGap) -> String {
+    use crate::checks::ChainGap as G;
+    let n = super::materials::trim_num;
+    match g {
+        G::OrderOverRequest { over } => format!("{} +{}", t("cg_order_over"), n(*over)),
+        G::DeliveryOverOrder { over } => format!("{} +{}", t("cg_delivery_over"), n(*over)),
+        G::NotStocked { qty } => format!("{} {}", t("cg_not_stocked"), n(*qty)),
+        G::IssuedOverStock { over } => format!("{} +{}", t("cg_issued_over"), n(*over)),
+        G::NoInputCheck => t("cg_no_check").to_string(),
+        G::NoQuotes => t("cg_no_quotes").to_string(),
+        G::Overpaid { over } => format!("{} {}", t("cg_overpaid"), money(*over)),
+        G::PaymentOverdue { unpaid } => format!("{} {}", t("cg_pay_overdue"), money(*unpaid)),
     }
 }
 

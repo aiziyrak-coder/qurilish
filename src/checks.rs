@@ -11121,3 +11121,226 @@ pub fn risk_forecast(
     out.sort_by(|a, b| b.weight.total_cmp(&a.weight));
     out
 }
+
+// ================= X.23, 25-26, 47, XI.47. Ta'minot zanjiri =================
+
+/// Ta'minot zanjirining bitta qatori (TZ X.47, XI.47).
+///
+/// Zanjir: **ariza → taklif → xarid → yetkazish → kirish nazorati →
+/// ombor → ish → to'lov.** Har bosqich alohida modulda yozilgan; bu
+/// yerda ular bir qatorda turadi, shuning uchun uzilish darhol ko'rinadi.
+#[derive(Debug, Clone)]
+pub struct SupplyChain {
+    pub request_id: Option<i64>,
+    pub material_id: Option<i64>,
+    pub title: String,
+    pub unit: String,
+    /// Arizada so'ralgan miqdor.
+    pub requested: f64,
+    /// Olingan tijorat takliflari soni.
+    pub quotes: usize,
+    /// Buyurtma qilingan miqdor.
+    pub ordered: f64,
+    /// Yetkazilgan deb belgilangan miqdor.
+    pub delivered: f64,
+    /// Kirish nazoratidan o'tgan partiyalar soni.
+    pub checks: usize,
+    /// Omborga kirim qilingan miqdor.
+    pub stocked: f64,
+    /// Ishga berilgan miqdor.
+    pub issued: f64,
+    /// Xarid summasi va to'langan qismi.
+    pub amount: f64,
+    pub paid: f64,
+}
+
+/// Zanjirdagi uzilish (TZ X.47).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ChainGap {
+    /// Buyurtma arizadagidan ko'p.
+    OrderOverRequest { over: f64 },
+    /// Yetkazilgan miqdor buyurtmadan ko'p.
+    DeliveryOverOrder { over: f64 },
+    /// Yetkazilgan, lekin omborga kirim qilinmagan.
+    NotStocked { qty: f64 },
+    /// Omborda yo'q material ishga berilgan.
+    IssuedOverStock { over: f64 },
+    /// Yetkazilgan, lekin kirish nazoratidan o'tmagan.
+    NoInputCheck,
+    /// Taklif olinmagan: taqqoslashsiz xarid.
+    NoQuotes,
+    /// To'lov summadan oshgan.
+    Overpaid { over: f64 },
+    /// To'lov muddati o'tgan.
+    PaymentOverdue { unpaid: f64 },
+}
+
+impl ChainGap {
+    /// Hisobni buzadigan uzilish.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            ChainGap::DeliveryOverOrder { .. }
+                | ChainGap::IssuedOverStock { .. }
+                | ChainGap::Overpaid { .. }
+                | ChainGap::PaymentOverdue { .. }
+        )
+    }
+}
+
+impl SupplyChain {
+    /// Zanjirdagi barcha uzilishlar.
+    ///
+    /// Har bosqichda qiymat kamaymasligi kerak: keyingi bosqich
+    /// oldingisidan katta bo'lsa, biror yozuv hujjatsiz o'tgan.
+    pub fn gaps(&self, today: NaiveDate, pay_due: Option<NaiveDate>) -> Vec<ChainGap> {
+        let mut out = Vec::new();
+        let eps = 0.0001;
+
+        if self.requested > 0.0 && self.ordered > self.requested + eps {
+            out.push(ChainGap::OrderOverRequest {
+                over: self.ordered - self.requested,
+            });
+        }
+        if self.ordered > 0.0 && self.delivered > self.ordered + eps {
+            out.push(ChainGap::DeliveryOverOrder {
+                over: self.delivered - self.ordered,
+            });
+        }
+        if self.delivered > eps && self.stocked + eps < self.delivered {
+            out.push(ChainGap::NotStocked {
+                qty: self.delivered - self.stocked,
+            });
+        }
+        if self.issued > self.stocked + eps {
+            out.push(ChainGap::IssuedOverStock {
+                over: self.issued - self.stocked,
+            });
+        }
+        if self.delivered > eps && self.checks == 0 {
+            out.push(ChainGap::NoInputCheck);
+        }
+        if self.ordered > eps && self.quotes == 0 {
+            out.push(ChainGap::NoQuotes);
+        }
+        if self.paid > self.amount + 0.01 {
+            out.push(ChainGap::Overpaid {
+                over: self.paid - self.amount,
+            });
+        }
+        let unpaid = (self.amount - self.paid).max(0.0);
+        if unpaid > 0.01 && pay_due.is_some_and(|d| d < today) {
+            out.push(ChainGap::PaymentOverdue { unpaid });
+        }
+
+        out.sort_by_key(|g| !g.severe());
+        out
+    }
+}
+
+/// Zanjir yakuni.
+#[derive(Debug, Clone, Default)]
+pub struct ChainSummary {
+    pub lines: usize,
+    pub with_gaps: usize,
+    pub amount: f64,
+    pub paid: f64,
+    /// Muddati o'tgan to'lov summasi.
+    pub overdue_pay: f64,
+}
+
+/// TZ X.47, XI.47: ta'minot zanjirini xaridlar bo'yicha yig'adi.
+///
+/// Guruhlash **xarid bo'yicha**: zanjirning markazida xarid turadi,
+/// chunki undan oldin ariza va taklif, keyin yetkazish, ombor va to'lov
+/// bo'ladi. Arizasiz xarid ham qatorga tushadi — u ham zanjirning bir
+/// holati va ko'rinib turishi kerak.
+#[allow(clippy::too_many_arguments)]
+pub fn supply_chain(
+    purchases: &[Purchase],
+    requests: &[Request],
+    quotes: &[Quote],
+    moves: &[StockMove],
+    quality: &[QualityCheck],
+    materials: &[Material],
+    today: NaiveDate,
+) -> (Vec<(SupplyChain, Vec<ChainGap>)>, ChainSummary) {
+    let key = |s: &str| s.trim().to_lowercase();
+    let mut out = Vec::new();
+    let mut sum = ChainSummary::default();
+
+    for p in purchases
+        .iter()
+        .filter(|p| p.status != PurchaseStatus::Draft)
+    {
+        let request = p
+            .request_id
+            .and_then(|id| requests.iter().find(|r| r.id == id));
+        let material_id = p
+            .material_id
+            .or_else(|| request.and_then(|r| r.material_id));
+
+        // Ombor harakatlari: hujjat raqami xarid raqamini o'z ichiga olsa
+        // yoki material bo'yicha bog'lansa.
+        let linked = |m: &StockMove| -> bool {
+            (!p.number.trim().is_empty() && m.document.contains(p.number.trim()))
+                || material_id.is_some_and(|id| m.material_id == id)
+        };
+        let stocked: f64 = moves
+            .iter()
+            .filter(|m| matches!(m.kind, MoveKind::In) && linked(m))
+            .map(|m| m.qty)
+            .sum();
+        let issued: f64 = moves
+            .iter()
+            .filter(|m| matches!(m.kind, MoveKind::Out) && linked(m))
+            .map(|m| m.qty)
+            .sum();
+
+        let line = SupplyChain {
+            request_id: p.request_id,
+            material_id,
+            title: p.title.clone(),
+            unit: p.unit.clone(),
+            requested: request.map(|r| r.qty).unwrap_or(0.0),
+            quotes: quotes
+                .iter()
+                .filter(|q| {
+                    key(&q.title) == key(&p.title)
+                        || (q.request_id.is_some() && q.request_id == p.request_id)
+                })
+                .count(),
+            ordered: p.qty,
+            delivered: p.delivered_qty,
+            checks: quality
+                .iter()
+                .filter(|q| {
+                    q.kind == QualityKind::Input
+                        && (q.material_id == material_id && material_id.is_some()
+                            || key(&q.subject).contains(&key(&p.title)))
+                })
+                .count(),
+            stocked,
+            issued,
+            amount: p.amount(),
+            paid: p.paid,
+        };
+
+        let gaps = line.gaps(today, p.pay_due);
+        sum.amount += line.amount;
+        sum.paid += line.paid;
+        if p.payment_overdue(today) {
+            sum.overdue_pay += p.unpaid();
+        }
+        if !gaps.is_empty() {
+            sum.with_gaps += 1;
+        }
+        out.push((line, gaps));
+    }
+
+    sum.lines = out.len();
+    let _ = materials;
+    // Uzilishi ko'p qatorlar oldinda.
+    out.sort_by_key(|(_, g)| std::cmp::Reverse(g.len()));
+    (out, sum)
+}
