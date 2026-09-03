@@ -36,6 +36,8 @@ pub fn table_of(app: &App, screen: Screen) -> Option<Table> {
         Screen::Deals => deals(app),
         Screen::Sales => units(app),
         Screen::Analytics => analytics(app),
+        Screen::Notices => notices(app),
+        Screen::Director => director(app),
         _ => return None,
     };
     // Nom yon paneldagi ekran nomi bilan bir xil bo'ladi.
@@ -74,6 +76,67 @@ fn table(name: &str, headers: &[&str], rows: Vec<Vec<Cell>>) -> Table {
         headers: headers.iter().map(|h| h.to_string()).collect(),
         rows,
     }
+}
+
+// ================================================================ E'tibor va rahbar
+
+/// Barcha modullardan e'tibor talab qiladigan yozuvlar.
+///
+/// Ro'yxat `notify::collect` dan olinadi — ekranda ko'ringan bilan aynan
+/// bir xil bo'lishi uchun; eksport uchun alohida hisob yozilmaydi.
+fn notices(app: &App) -> Table {
+    let rows = crate::notify::collect(app)
+        .iter()
+        .map(|n| {
+            vec![
+                txt(n.severity.label()),
+                txt(n.source.label()),
+                txt(n.code),
+                txt(&n.title),
+                Cell::Num(n.count as f64),
+                if n.days > 0 {
+                    Cell::Num(n.days as f64)
+                } else {
+                    Cell::Empty
+                },
+                txt(&n.detail),
+            ]
+        })
+        .collect();
+    table(
+        "",
+        &[
+            t("col_severity"),
+            t("col_module"),
+            t("col_code"),
+            t("col_title"),
+            t("col_count"),
+            t("col_days"),
+            t("col_evidence"),
+        ],
+        rows,
+    )
+}
+
+/// Rahbar ekrani: modul kartalari bitta jadvalga tushadi.
+///
+/// Har qator — modulning o'z hisobidan chiqqan son; bu yerda qayta
+/// hisoblanmaydi, faqat bir joyga yig'iladi.
+fn director(app: &App) -> Table {
+    let e = app.executive_score();
+    let mut rows: Vec<Vec<Cell>> = [
+        ("an_exec_schedule", e.schedule),
+        ("an_exec_money", e.money),
+        ("an_exec_quality", e.quality),
+        ("an_exec_safety", e.safety),
+        ("an_exec_supply", e.supply),
+        ("an_exec_docs", e.docs),
+    ]
+    .iter()
+    .map(|(key, score)| vec![txt(t(key)), Cell::Num(*score)])
+    .collect();
+    rows.push(vec![txt(t("an_exec_total")), Cell::Num(e.total)]);
+    table("", &[t("col_area"), t("col_score")], rows)
 }
 
 // ================================================================ VII Tekshiruvlar

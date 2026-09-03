@@ -3860,6 +3860,8 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             Screen::Portfolio,
             Screen::Inspections,
             Screen::Contracts,
+            Screen::Notices,
+            Screen::Director,
         ];
         for s in screens {
             let table = crate::ui::export::table_of(&app, s)

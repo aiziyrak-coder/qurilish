@@ -122,8 +122,7 @@ pub fn write_table(path: &Path, table: &Table, subtitle: &str) -> Result<(), Str
         return Err(crate::i18n::t("pdf_no_font").to_string());
     };
 
-    let (doc, first_page, first_layer) =
-        PdfDocument::new(&table.name, Mm(PAGE_W), Mm(PAGE_H), "1");
+    let (doc, first_page, first_layer) = PdfDocument::new(&table.name, Mm(PAGE_W), Mm(PAGE_H), "1");
     let font = doc
         .add_external_font(&bytes[..])
         .map_err(|e| format!("{e}"))?;

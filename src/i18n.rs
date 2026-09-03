@@ -1750,6 +1750,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "search_kind_issue" => ("Nomuvofiqlik", "Несоответствие"),
         "search_kind_element" => ("Element", "Элемент"),
         "search_kind_estimate" => ("Smeta", "Смета"),
+        "col_count" => ("Soni", "Кол-во"),
+        "col_score" => ("Ball", "Балл"),
         "pdf_no_font" => (
             "PDF uchun tizim shrifti topilmadi — fayl yozilmadi",
             "Системный шрифт для PDF не найден — файл не записан",
