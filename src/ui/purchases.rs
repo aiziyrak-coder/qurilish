@@ -146,6 +146,10 @@ fn new_purchase(app: &App, pid: i64, number: String, request_id: Option<i64>) ->
         contract_id: None,
         urgent: false,
         buyer: String::new(),
+        material_id: None,
+        substitute_for: None,
+        tech_ok: false,
+        tech_by: String::new(),
         note: String::new(),
     }
 }
@@ -353,11 +357,12 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("purchases_grid")
-                .num_columns(if wide { 19 } else { 17 })
+                .num_columns(if wide { 20 } else { 18 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
                     head_l(ui, 30.0, t("col_urgent"));
+                    head_l(ui, 30.0, t("col_tech_ok"));
                     head_l(ui, 80.0, t("col_number"));
                     head_l(ui, 110.0, t("col_date"));
                     head_l(ui, 180.0, t("col_supplier"));
@@ -392,6 +397,30 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                                 .checkbox(&mut p.urgent, "")
                                 .on_hover_text(t("col_urgent"))
                                 .changed();
+                        });
+                        // Texnik kelishuv (TZ X.18): xarid loyihaga mos
+                        // ekanini muhandis tasdiqlaydi. Kim tasdiqlagani
+                        // birga yoziladi — keyin so'rash uchun.
+                        ui.horizontal(|ui| {
+                            ui.add_space(6.0);
+                            let mut ok = p.tech_ok;
+                            if ui
+                                .checkbox(&mut ok, "")
+                                .on_hover_text(if p.tech_by.trim().is_empty() {
+                                    t("col_tech_ok_hint").to_string()
+                                } else {
+                                    format!("{}: {}", t("col_tech_ok"), p.tech_by)
+                                })
+                                .changed()
+                            {
+                                p.tech_ok = ok;
+                                p.tech_by = if ok {
+                                    app.current_user_name()
+                                } else {
+                                    String::new()
+                                };
+                                changed = true;
+                            }
                         });
                         changed |= ui
                             .add_sized([80.0, 22.0], egui::TextEdit::singleline(&mut p.number))
@@ -1551,9 +1580,47 @@ fn plan_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
 // ================================================================ Risklar
 
 /// Xarid jarayonidagi shubhali joylar (TZ X.41, 46).
+/// Tartib e'tirozini odam o'qiydigan gapga aylantiradi (TZ X.18-19, 22).
+fn control_text(i: &crate::checks::SupplyIssue) -> String {
+    use crate::checks::SupplyIssue as S;
+    match i {
+        S::NoTechApproval { number, amount } => {
+            format!("{} — {} ({})", t("si_no_tech"), number, money(*amount))
+        }
+        S::UnapprovedSubstitute { number, material } => {
+            format!("{} — {} ({})", t("si_unapproved"), number, material)
+        }
+        S::SubstituteWithoutTech { number } => format!("{} — {}", t("si_sub_no_tech"), number),
+        S::ContractOverrun {
+            contract,
+            over,
+            pct,
+        } => format!(
+            "{} — {} · {} ({:.0}%)",
+            t("si_overrun"),
+            contract,
+            money(*over),
+            pct
+        ),
+        S::ContractExpired { contract, days } => {
+            format!(
+                "{} — {} ({} {})",
+                t("si_expired"),
+                contract,
+                days,
+                t("days")
+            )
+        }
+        S::NoContract { number, amount } => {
+            format!("{} — {} ({})", t("si_no_contract"), number, money(*amount))
+        }
+    }
+}
+
 fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
     let risks = crate::checks::procurement_risks(&app.purchases, &app.quotes, &app.materials);
     let buyers = crate::checks::buyer_stats(&app.purchases, &app.quotes, app.today);
+    let control = app.supply_control();
 
     ui.label(
         RichText::new(t("pu_risks_hint"))
@@ -1565,6 +1632,34 @@ fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
+            // ---------- Tartib nazorati (TZ X.18-19, 22) ----------
+            ui.label(RichText::new(t("pu_control_title")).size(14.0).strong());
+            ui.label(
+                RichText::new(t("pu_control_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if control.is_empty() {
+                ui.label(
+                    RichText::new(t("pu_control_none"))
+                        .size(12.0)
+                        .color(theme::ok()),
+                );
+            }
+            for i in &control {
+                ui.label(
+                    RichText::new(format!("· {}", control_text(i)))
+                        .size(12.0)
+                        .color(if i.severe() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        }),
+                );
+            }
+            ui.add_space(16.0);
+
             // ---------- Belgilar ----------
             ui.label(RichText::new(t("pu_risks_title")).size(14.0).strong());
             ui.add_space(6.0);

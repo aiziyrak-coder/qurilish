@@ -3855,6 +3855,52 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Ro'yxatdan olib tashlanadi; faylning o'zi o'chirilmaydi.",
             "Убирается из списка; сам файл не удаляется.",
         ),
+        // X.33, 37-38, 42. Obyektlar bo'yicha xaridlar
+        "pf_central" => ("Obyektlar bo'yicha xaridlar", "Закупки по объектам"),
+        "pf_central_hint" => (
+            "Guruhlash nom bo'yicha: har obyektning o'z katalogi bor va kodlar mos kelmasligi mumkin.",
+            "Группировка по названию: у каждого объекта свой каталог и коды могут не совпадать.",
+        ),
+        "pf_central_saving" => ("Markazlashtirishdan tejash", "Экономия от централизации"),
+        "pf_central_saving_hint" => (
+            "Bu yuqori chegara, kafolat emas: hajm va yetkazish sharti har xil bo'lishi mumkin.",
+            "Это верхняя граница, а не гарантия: объём и условия поставки могут отличаться.",
+        ),
+        "pf_central_objects" => ("Obyektlar", "Объектов"),
+        "pf_central_best" => ("Eng arzon narx", "Лучшая цена"),
+        "pf_central_save" => ("Tejash", "Экономия"),
+        "pf_central_now" => ("Hozir qanday olinyapti", "Как закупается сейчас"),
+        "pf_central_split" => ("Markazlashtirilganda bo'linishi", "Разбивка при централизации"),
+        // X.18-19, 22. Xaridlar tartibi nazorati
+        "col_tech_ok" => ("Texnik kelishuv", "Техсогласование"),
+        "col_tech_ok_hint" => (
+            "Xarid loyihaga mos ekanini muhandis tasdiqlaydi. Belgilansa — kim tasdiqlagani yoziladi.",
+            "Инженер подтверждает соответствие закупки проекту. При отметке записывается, кто согласовал.",
+        ),
+        "pu_control_title" => ("Tartib nazorati", "Контроль порядка"),
+        "pu_control_hint" => (
+            "Uch savol: buyurtma texnik kelishuvdan o'tganmi, almashtirish tasdiqlanganmi, shartnoma sharti buzilmayaptimi.",
+            "Три вопроса: прошёл ли заказ техсогласование, утверждена ли замена, не нарушены ли условия договора.",
+        ),
+        "pu_control_none" => (
+            "Xaridlar tartibi bo'yicha e'tiroz yo'q.",
+            "Замечаний по порядку закупок нет.",
+        ),
+        "si_no_tech" => ("Texnik kelishuvsiz buyurtma", "Заказ без техсогласования"),
+        "si_unapproved" => (
+            "Almashtirish tasdiqlangan analoglar ro'yxatida yo'q",
+            "Замена отсутствует в списке утверждённых аналогов",
+        ),
+        "si_sub_no_tech" => (
+            "Analog tasdiqlangan, lekin texnik kelishuv olinmagan",
+            "Аналог утверждён, но техсогласование не получено",
+        ),
+        "si_overrun" => ("Shartnoma summasidan oshib ketildi", "Превышена сумма договора"),
+        "si_expired" => (
+            "Shartnoma muddati tugagach buyurtma berilgan",
+            "Заказ размещён после окончания срока договора",
+        ),
+        "si_no_contract" => ("Yirik xarid shartnomasiz", "Крупная закупка без договора"),
         "ct_tab_contracts" => ("Shartnomalar", "Договоры"),
         "ct_tab_changes" => ("O'zgarishlar", "Изменения"),
         "ct_tab_stages" => ("To'lov jadvali", "График платежей"),

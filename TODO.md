@@ -27,7 +27,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VII. Texnik nazorat kabineti | 38 | 26 | 6 | 6 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
 | IX. Arizalar | 42 | 32 | 6 | 4 | 1 |
-| X. Xaridlar | 48 | 25 | 13 | 10 | 2 |
+| X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
 | XI. Ombor | 48 | 32 | 8 | 8 | 1 |
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **450** | **156** | **94** | **46** |
+| **Jami** | **700** | **458** | **156** | **86** | **46** |
 
-Ya'ni **~64 % to'liq**, **~22 % qisman**, **~13 % hali yo'q**.
+Ya'ni **~65 % to'liq**, **~22 % qisman**, **~12 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -392,11 +392,11 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 15. Muqobil yetkazib beruvchi izlash — *bir arizaga bir necha taklif*
 - [~] 16. Yetkazib beruvchini tekshirish — *STIR, taqiq belgisi*
 - [~] 17. Materialni tekshirish
-- [ ] 18. Texnik kelishuv
-- [ ] 19. Materialni almashtirish
+- [x] 18. Texnik kelishuv
+- [x] 19. Materialni almashtirish — *tasdiqlangan analog talab qilinadi*
 - [~] 20. Buyurtma shakllantirish — *xarid yozuvi*
-- [ ] 21. Shartnoma
-- [ ] 22. Yetkazib beruvchi shartnomasini AI tekshiruvi
+- [x] 21. Shartnoma — *ta'minot shartnomasi va xaridga bog'lanish*
+- [x] 22. Yetkazib beruvchi shartnomasini AI tekshiruvi — *summa va muddat*
 - [~] 23. To'lovni nazorat qilish — *holat bor, to'lov grafigi yo'q*
 - [x] 24. Yetkazishni nazorat qilish
 - [~] 25. Obyektda qabul qilish
@@ -407,16 +407,16 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 30. Qisman yetkazish — *kelgan miqdor, qoldiq, kirim*
 - [x] 31. Kechikishlarni nazorat qilish
 - [x] 32. GPR bilan bog'lanish — *xarid ishga bog'lanadi; ariza orqali ham*
-- [ ] 33. Obyektlar bo'yicha xaridlarni nazorat qilish
+- [x] 33. Obyektlar bo'yicha xaridlarni nazorat qilish
 - [x] 34. Bo'limlar bo'yicha xaridlarni nazorat qilish
 - [x] 35. Xarid byudjetini nazorat qilish — *reja / buyurtma / qoldiq*
 - [~] 36. AI ortiqcha sarfni aniqlashi
-- [ ] 37. Markazlashtirilgan xaridlar
-- [ ] 38. Turli obyektlar xaridlarini solishtirish
+- [x] 37. Markazlashtirilgan xaridlar
+- [x] 38. Turli obyektlar xaridlarini solishtirish
 - [x] 39. Sarfni nazorat qilish — *byudjet, xaridchi va risk kesimlari*
 - [x] 40. Yetkazib beruvchilar tahlili — *muddatida %, o'rtacha kechikish*
 - [x] 41. Korrupsiya riskini nazorat qilish — *yetkazib beruvchi ulushi, taklifsiz xarid, narx oshishi, shoshilinch ulushi*
-- [ ] 42. Xaridlarni avtomatik bo'lish
+- [x] 42. Xaridlarni avtomatik bo'lish
 - [x] 43. Shoshilinch xaridlar — *belgi va ulush nazorati*
 - [ ] 🔒 44. AI narx prognozi
 - [~] 45. Direktorning bosh hisoboti

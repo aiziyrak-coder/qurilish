@@ -874,6 +874,10 @@ impl Db {
             "ALTER TABLE machine ADD COLUMN rented INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN price REAL NOT NULL DEFAULT 0",
             "ALTER TABLE safety_event ADD COLUMN root_cause TEXT NOT NULL DEFAULT 'unknown'",
+            "ALTER TABLE purchase ADD COLUMN material_id INTEGER",
+            "ALTER TABLE purchase ADD COLUMN substitute_for INTEGER",
+            "ALTER TABLE purchase ADD COLUMN tech_ok INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE purchase ADD COLUMN tech_by TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE exec_doc ADD COLUMN version INTEGER NOT NULL DEFAULT 1",
             "ALTER TABLE exec_doc ADD COLUMN replaces INTEGER",
             "ALTER TABLE machine_log ADD COLUMN number TEXT NOT NULL DEFAULT ''",
@@ -2955,7 +2959,8 @@ impl Db {
     pub fn purchases(&self, pid: i64) -> Vec<Purchase> {
         self.list(
             "SELECT id,project_id,request_id,number,date,supplier,title,qty,unit,price,currency,
-                    delivery_date,status,delivered_qty,section,task_id,contract_id,urgent,buyer,note
+                    delivery_date,status,delivered_qty,section,task_id,contract_id,urgent,buyer,
+                    material_id,substitute_for,tech_ok,tech_by,note
              FROM purchase WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -2979,7 +2984,11 @@ impl Db {
                     contract_id: r.get(16)?,
                     urgent: r.get::<_, i64>(17)? != 0,
                     buyer: r.get(18)?,
-                    note: r.get(19)?,
+                    material_id: r.get(19)?,
+                    substitute_for: r.get(20)?,
+                    tech_ok: r.get::<_, i64>(21)? != 0,
+                    tech_by: r.get(22)?,
+                    note: r.get(23)?,
                 })
             },
         )
@@ -2989,8 +2998,10 @@ impl Db {
         self.ins(
             "INSERT INTO purchase (project_id,request_id,number,date,supplier,title,qty,unit,price,
                                    currency,delivery_date,status,delivered_qty,section,task_id,
-                                   contract_id,urgent,buyer,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
+                                   contract_id,urgent,buyer,material_id,substitute_for,
+                                   tech_ok,tech_by,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,
+                     ?22,?23)",
             params![
                 p.project_id,
                 p.request_id,
@@ -3010,6 +3021,10 @@ impl Db {
                 p.contract_id,
                 p.urgent as i64,
                 p.buyer,
+                p.material_id,
+                p.substitute_for,
+                p.tech_ok as i64,
+                p.tech_by,
                 p.note
             ],
         )
@@ -3019,7 +3034,8 @@ impl Db {
         self.upd(
             "UPDATE purchase SET request_id=?2,number=?3,date=?4,supplier=?5,title=?6,qty=?7,
                     unit=?8,price=?9,currency=?10,delivery_date=?11,status=?12,delivered_qty=?13,
-                    section=?14,task_id=?15,contract_id=?16,urgent=?17,buyer=?18,note=?19
+                    section=?14,task_id=?15,contract_id=?16,urgent=?17,buyer=?18,
+                    material_id=?19,substitute_for=?20,tech_ok=?21,tech_by=?22,note=?23
              WHERE id=?1",
             params![
                 p.id,
@@ -3040,6 +3056,10 @@ impl Db {
                 p.contract_id,
                 p.urgent as i64,
                 p.buyer,
+                p.material_id,
+                p.substitute_for,
+                p.tech_ok as i64,
+                p.tech_by,
                 p.note
             ],
         )
@@ -7388,6 +7408,19 @@ impl Db {
                 // rejadan tashqarida paydo bo'ladi.
                 urgent: req.is_empty(),
                 buyer: if ru { "Ким В.С." } else { "Kim V.S." }.into(),
+                material_id: None,
+                substitute_for: None,
+                // Arizadan kelgan xaridlar texnik kelishuvdan o'tgan;
+                // shoshilinch olinganlari esa yo'q — nazorat ekranida
+                // aynan shu holat ko'rinishi kerak (TZ X.18).
+                tech_ok: !req.is_empty(),
+                tech_by: if req.is_empty() {
+                    String::new()
+                } else if ru {
+                    "Собиров Р.Х.".into()
+                } else {
+                    "Sobirov R.X.".to_string()
+                },
                 note: String::new(),
             });
         }
@@ -9319,6 +9352,10 @@ impl Db {
                 contract_id: None,
                 urgent: false,
                 buyer: String::new(),
+                material_id: None,
+                substitute_for: None,
+                tech_ok: false,
+                tech_by: String::new(),
                 note: String::new(),
             });
         };

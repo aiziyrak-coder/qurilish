@@ -7932,3 +7932,319 @@ pub fn final_readiness(ctx: &FinalCtx) -> FinalReadiness {
         blocks,
     }
 }
+
+// ================= X.33, 37-38, 42. Obyektlar bo'yicha xaridlar =================
+
+/// Bitta obyektning bitta material bo'yicha xaridi.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectBuy {
+    pub project_id: i64,
+    pub qty: f64,
+    /// Vaznlangan o'rtacha narx: jami summa / jami miqdor.
+    pub price: f64,
+    pub amount: f64,
+    /// Nechta xarid yozuvi.
+    pub deals: usize,
+}
+
+/// Bir material bo'yicha obyektlar kesimidagi manzara (TZ X.33, 38).
+#[derive(Debug, Clone)]
+pub struct CentralLine {
+    /// Material nomi — kod bo'yicha emas, nom bo'yicha guruhlanadi, chunki
+    /// har obyektning o'z katalogi bor va kodlar mos kelmasligi mumkin.
+    pub title: String,
+    pub unit: String,
+    pub objects: Vec<ObjectBuy>,
+    pub total_qty: f64,
+    pub total_amount: f64,
+    /// Eng arzon obyektdagi narx.
+    pub best_price: f64,
+    /// Eng qimmat va eng arzon orasidagi farq, foizda.
+    pub spread_pct: f64,
+    /// Hammasi eng arzon narxda olinganda tejaladigan summa (TZ X.37).
+    pub saving: f64,
+}
+
+impl CentralLine {
+    /// Markazlashtirish ma'noli bo'ladigan holat: material bir nechta
+    /// obyektda olinadi va narxlar farq qiladi.
+    pub fn worth_central(&self) -> bool {
+        self.objects.len() > 1 && self.spread_pct > CENTRAL_SPREAD
+    }
+}
+
+/// Narx tarqoqligi shu foizdan oshsa markazlashtirish taklif qilinadi.
+pub const CENTRAL_SPREAD: f64 = 10.0;
+
+/// TZ X.33, 37-38: obyektlar bo'yicha xaridlarni bir jadvalda solishtiradi.
+///
+/// Guruhlash **nom bo'yicha**: har obyektning o'z material katalogi bor va
+/// kodlar mos kelmasligi mumkin. Bu qo'pol, lekin halol: dastur mos
+/// kelmagan kodlarni o'zicha bir xil deb e'lon qilmaydi.
+///
+/// Tejash — hammasi eng arzon narxda olinganda chiqadigan farq. Bu **yuqori
+/// chegara**, kafolat emas: hajm va yetkazish sharti har xil bo'lishi mumkin.
+pub fn central_purchases(rows: &[(i64, Vec<Purchase>)]) -> Vec<CentralLine> {
+    let key = |s: &str| s.trim().to_lowercase();
+
+    // Nom bo'yicha yig'amiz: (nom, birlik, obyektlar bo'yicha yig'indi).
+    /// Bitta obyekt bo'yicha oraliq yig'indi: id, miqdor, summa, yozuvlar soni.
+    type ObjectSum = (i64, f64, f64, usize);
+    let mut by_title: Vec<(String, String, Vec<ObjectSum>)> = Vec::new();
+    for (pid, purchases) in rows {
+        for p in purchases {
+            if p.title.trim().is_empty() || p.qty <= 0.0 {
+                continue;
+            }
+            let idx = match by_title
+                .iter()
+                .position(|(t, _, _)| key(t) == key(&p.title))
+            {
+                Some(i) => i,
+                None => {
+                    by_title.push((p.title.clone(), p.unit.clone(), Vec::new()));
+                    by_title.len() - 1
+                }
+            };
+            let slot = &mut by_title[idx].2;
+            match slot.iter_mut().find(|(id, _, _, _)| id == pid) {
+                Some(e) => {
+                    e.1 += p.qty;
+                    e.2 += p.amount();
+                    e.3 += 1;
+                }
+                None => slot.push((*pid, p.qty, p.amount(), 1)),
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    for (title, unit, entries) in by_title {
+        let mut objects: Vec<ObjectBuy> = entries
+            .into_iter()
+            .map(|(project_id, qty, amount, deals)| ObjectBuy {
+                project_id,
+                qty,
+                price: if qty > 0.0 { amount / qty } else { 0.0 },
+                amount,
+                deals,
+            })
+            .filter(|o| o.price > 0.0)
+            .collect();
+        if objects.is_empty() {
+            continue;
+        }
+        objects.sort_by(|a, b| a.price.total_cmp(&b.price));
+
+        let best_price = objects[0].price;
+        let worst_price = objects.last().map(|o| o.price).unwrap_or(best_price);
+        let total_qty: f64 = objects.iter().map(|o| o.qty).sum();
+        let total_amount: f64 = objects.iter().map(|o| o.amount).sum();
+        out.push(CentralLine {
+            title,
+            unit,
+            total_qty,
+            total_amount,
+            best_price,
+            spread_pct: if best_price > 0.0 {
+                (worst_price - best_price) * 100.0 / best_price
+            } else {
+                0.0
+            },
+            saving: total_amount - total_qty * best_price,
+            objects,
+        });
+    }
+    // Eng katta tejash imkoniyati oldinda.
+    out.sort_by(|a, b| b.saving.total_cmp(&a.saving));
+    out
+}
+
+/// Markazlashtirilgan buyurtmani obyektlar bo'yicha bo'lish (TZ X.42).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SplitLine {
+    pub project_id: i64,
+    pub qty: f64,
+    /// Umumiy hajmdagi ulushi, foizda.
+    pub share_pct: f64,
+    /// Shu ulushga to'g'ri keladigan summa.
+    pub amount: f64,
+}
+
+/// TZ X.42: bitta katta buyurtmani obyektlar ehtiyojiga qarab bo'ladi.
+///
+/// Bo'lish **ehtiyoj ulushiga** qarab: kim ko'p so'ragan bo'lsa, unga ko'p
+/// tegadi. Yaxlitlash oxirgi qatorga yig'iladi, shunda bo'laklar yig'indisi
+/// har doim jamiga teng bo'ladi — aks holda omborda hisob buzilardi.
+pub fn split_order(need: &[(i64, f64)], total_qty: f64, unit_price: f64) -> Vec<SplitLine> {
+    let sum: f64 = need.iter().map(|(_, q)| q.max(0.0)).sum();
+    if sum <= 0.0 || total_qty <= 0.0 {
+        return Vec::new();
+    }
+    let mut out: Vec<SplitLine> = Vec::new();
+    let mut given = 0.0;
+    for (i, (pid, q)) in need.iter().enumerate() {
+        let q = q.max(0.0);
+        if q <= 0.0 {
+            continue;
+        }
+        let share = q / sum;
+        // Oxirgi qatorda qoldiqni to'liq beramiz.
+        let qty = if i + 1 == need.len() {
+            total_qty - given
+        } else {
+            (total_qty * share * 1000.0).round() / 1000.0
+        };
+        given += qty;
+        out.push(SplitLine {
+            project_id: *pid,
+            qty,
+            share_pct: share * 100.0,
+            amount: qty * unit_price,
+        });
+    }
+    // Yaxlitlash tufayli oxirgi qator manfiy bo'lib qolmasin.
+    if let Some(last) = out.last_mut() {
+        if last.qty < 0.0 {
+            last.qty = 0.0;
+            last.amount = 0.0;
+        }
+    }
+    out
+}
+
+// ================= X.18-19, 21-22. Kelishuv, almashtirish, shartnoma =================
+
+/// Xarid bo'yicha nazorat e'tirozi (TZ X.18-19, 22).
+#[derive(Debug, Clone, PartialEq)]
+pub enum SupplyIssue {
+    /// Texnik kelishuvsiz buyurtma berilgan.
+    NoTechApproval { number: String, amount: f64 },
+    /// Almashtirish tasdiqlangan analoglar ro'yxatida yo'q.
+    UnapprovedSubstitute { number: String, material: String },
+    /// Almashtiruvchi tasdiqlangan, lekin texnik kelishuv olinmagan.
+    SubstituteWithoutTech { number: String },
+    /// Shartnoma summasidan oshib ketildi.
+    ContractOverrun {
+        contract: String,
+        over: f64,
+        pct: f64,
+    },
+    /// Shartnoma muddati tugagan, xarid esa davom etyapti.
+    ContractExpired { contract: String, days: i64 },
+    /// Yirik xarid shartnomasiz rasmiylashtirilgan.
+    NoContract { number: String, amount: f64 },
+}
+
+impl SupplyIssue {
+    /// To'lovni to'xtatishga arziydigan darajadagi e'tirozmi.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            SupplyIssue::UnapprovedSubstitute { .. }
+                | SupplyIssue::ContractOverrun { .. }
+                | SupplyIssue::ContractExpired { .. }
+        )
+    }
+}
+
+/// Shartnomasiz rasmiylashtirilishi mumkin bo'lgan xarid chegarasi.
+///
+/// Chegara **shartli**: har tashkilotning o'z tartibi bor. Shuning uchun u
+/// bitta joyda turadi va ekranda ochiq aytiladi.
+pub const CONTRACT_LIMIT: f64 = 50_000_000.0;
+
+/// TZ X.18-19, 22: xaridlar tartibini tekshiradi.
+///
+/// Uch savol: buyurtma texnik kelishuvdan o'tganmi, almashtirish
+/// tasdiqlanganmi va shartnoma sharti buzilmayaptimi. Almashtirishning
+/// tasdig'i [`MaterialAlt`] katalogidan olinadi — bu yerda qayta
+/// belgilanmaydi.
+pub fn supply_control(
+    purchases: &[Purchase],
+    contracts: &[Contract],
+    alts: &[MaterialAlt],
+    materials: &[Material],
+    today: NaiveDate,
+) -> Vec<SupplyIssue> {
+    let mut out = Vec::new();
+    let name_of = |id: i64| {
+        materials
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.name.clone())
+            .unwrap_or_default()
+    };
+
+    for p in purchases {
+        // Qoralama hali buyurtma emas — undan talab qilinmaydi.
+        if p.status == PurchaseStatus::Draft {
+            continue;
+        }
+
+        if let Some(orig) = p.substitute_for {
+            let approved = alts
+                .iter()
+                .any(|a| a.material_id == orig && Some(a.alt_id) == p.material_id && a.approved());
+            if !approved {
+                out.push(SupplyIssue::UnapprovedSubstitute {
+                    number: p.number.clone(),
+                    material: name_of(orig),
+                });
+            } else if !p.tech_ok {
+                // Analog tasdiqlangan bo'lsa ham, aynan shu ishga mosligini
+                // muhandis ko'rishi kerak.
+                out.push(SupplyIssue::SubstituteWithoutTech {
+                    number: p.number.clone(),
+                });
+            }
+        } else if !p.tech_ok {
+            out.push(SupplyIssue::NoTechApproval {
+                number: p.number.clone(),
+                amount: p.amount(),
+            });
+        }
+
+        if p.contract_id.is_none() && p.amount() > CONTRACT_LIMIT {
+            out.push(SupplyIssue::NoContract {
+                number: p.number.clone(),
+                amount: p.amount(),
+            });
+        }
+    }
+
+    // Shartnoma bo'yicha yakun: summa va muddat.
+    for c in contracts.iter().filter(|c| c.kind == ContractKind::Supply) {
+        let under: Vec<&Purchase> = purchases
+            .iter()
+            .filter(|p| p.contract_id == Some(c.id) && p.status != PurchaseStatus::Draft)
+            .collect();
+        if under.is_empty() {
+            continue;
+        }
+        let spent: f64 = under.iter().map(|p| p.amount()).sum();
+        if c.sum > 0.0 && spent > c.sum {
+            out.push(SupplyIssue::ContractOverrun {
+                contract: c.number.clone(),
+                over: spent - c.sum,
+                pct: (spent - c.sum) * 100.0 / c.sum,
+            });
+        }
+        // Muddati tugagach berilgan buyurtma — shartnoma tashqarisida.
+        if let Some(late) = under
+            .iter()
+            .filter(|p| p.date > c.end)
+            .max_by_key(|p| p.date)
+        {
+            out.push(SupplyIssue::ContractExpired {
+                contract: c.number.clone(),
+                days: (late.date - c.end).num_days(),
+            });
+        }
+        let _ = today;
+    }
+
+    // Jiddiylari oldinda.
+    out.sort_by_key(|i| !i.severe());
+    out
+}

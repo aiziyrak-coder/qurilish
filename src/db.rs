@@ -2807,6 +2807,10 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             contract_id: None,
             urgent: false,
             buyer: String::new(),
+            material_id: None,
+            substitute_for: None,
+            tech_ok: true,
+            tech_by: "Test".into(),
             note: String::new(),
         };
         let a = p(180.0, 120.0);
@@ -7596,6 +7600,235 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         // Obyekt o'chirilsa izohlar ham ketadi.
         t.db.delete_project(pid).expect("obyekt o'chirilmadi");
         assert!(t.db.notes(pid).is_empty());
+    }
+
+    /// TZ X.33, 37-38: obyektlar bo'yicha xaridlar nom bo'yicha guruhlanadi,
+    /// tejash esa eng arzon narxga qarab hisoblanadi.
+    #[test]
+    fn central_purchases_group_by_name() {
+        use crate::checks::{central_purchases, CENTRAL_SPREAD};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let buy = |project_id: i64, title: &str, qty: f64, price: f64| {
+            let mut p = t.db.purchases(pid).into_iter().next().expect("xarid");
+            p.id = 0;
+            p.project_id = project_id;
+            p.title = title.into();
+            p.qty = qty;
+            p.price = price;
+            p
+        };
+
+        // Ikki obyekt, bitta material, har xil narx.
+        let rows = vec![
+            (1_i64, vec![buy(1, "Sement M400", 10.0, 100.0)]),
+            (2_i64, vec![buy(2, "sement m400  ", 30.0, 130.0)]),
+        ];
+        let lines = central_purchases(&rows);
+        assert_eq!(lines.len(), 1, "nom bo'yicha guruhlanmadi");
+        let l = &lines[0];
+        assert_eq!(l.objects.len(), 2);
+        assert!((l.total_qty - 40.0).abs() < 1e-9);
+        // Eng arzoni birinchi.
+        assert!((l.best_price - 100.0).abs() < 1e-9);
+        assert!((l.spread_pct - 30.0).abs() < 1e-9);
+        // Tejash: 40 dona × 100 o'rniga hozir 10×100 + 30×130 = 4900.
+        assert!((l.saving - 900.0).abs() < 1e-6);
+        assert!(l.spread_pct > CENTRAL_SPREAD && l.worth_central());
+
+        // Bitta obyektda olingani markazlashtirishga tushmaydi.
+        let single = central_purchases(&[(1, vec![buy(1, "Gips", 5.0, 50.0)])]);
+        assert!(!single[0].worth_central());
+    }
+
+    /// TZ X.42: bo'laklar yig'indisi har doim jamiga teng bo'ladi.
+    #[test]
+    fn split_order_keeps_the_total() {
+        use crate::checks::split_order;
+
+        // Uchga bo'linmaydigan hajm: yaxlitlash qoldig'i yo'qolmasligi kerak.
+        let need = vec![(1_i64, 1.0), (2, 1.0), (3, 1.0)];
+        let out = split_order(&need, 10.0, 25.0);
+        assert_eq!(out.len(), 3);
+        let sum: f64 = out.iter().map(|s| s.qty).sum();
+        assert!((sum - 10.0).abs() < 1e-9, "yig'indi jamiga teng emas");
+        for s in &out {
+            assert!((s.amount - s.qty * 25.0).abs() < 1e-9);
+            assert!(s.share_pct > 0.0);
+        }
+
+        // Ehtiyoj ulushiga qarab bo'linadi.
+        let uneven = split_order(&[(1, 30.0), (2, 10.0)], 40.0, 1.0);
+        assert!((uneven[0].qty - 30.0).abs() < 1e-6);
+        assert!((uneven[1].qty - 10.0).abs() < 1e-6);
+        assert!((uneven[0].share_pct - 75.0).abs() < 1e-6);
+
+        // Ehtiyoj yo'q bo'lsa taklif ham yo'q.
+        assert!(split_order(&[], 10.0, 1.0).is_empty());
+        assert!(split_order(&[(1, 0.0)], 10.0, 1.0).is_empty());
+    }
+
+    /// TZ X.18-19: texnik kelishuv va tasdiqlanmagan almashtirish
+    /// nazoratga tushadi; qoralama esa tekshirilmaydi.
+    #[test]
+    fn supply_control_watches_approval_and_substitution() {
+        use crate::checks::{supply_control, SupplyIssue as S};
+        use crate::domain::PurchaseStatus;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let base = t.db.purchases(pid).into_iter().next().expect("xarid");
+
+        // Texnik kelishuvsiz buyurtma.
+        let mut plain = base.clone();
+        plain.status = PurchaseStatus::Ordered;
+        plain.tech_ok = false;
+        plain.substitute_for = None;
+        plain.contract_id = None;
+        plain.qty = 1.0;
+        plain.price = 1000.0;
+        let out = supply_control(std::slice::from_ref(&plain), &[], &[], &[], today);
+        assert!(out.iter().any(|i| matches!(i, S::NoTechApproval { .. })));
+
+        // Qoralamadan talab qilinmaydi.
+        let mut draft = plain.clone();
+        draft.status = PurchaseStatus::Draft;
+        assert!(supply_control(std::slice::from_ref(&draft), &[], &[], &[], today).is_empty());
+
+        // Tasdiqlanmagan almashtirish.
+        let mut sub = plain.clone();
+        sub.substitute_for = Some(11);
+        sub.material_id = Some(22);
+        let out = supply_control(std::slice::from_ref(&sub), &[], &[], &[], today);
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, S::UnapprovedSubstitute { .. })));
+        assert!(out[0].severe(), "jiddiy e'tiroz oldinda emas");
+
+        // Tasdiqlangan analog — endi faqat texnik kelishuv so'raladi.
+        let alt = crate::domain::MaterialAlt {
+            id: 1,
+            project_id: pid,
+            material_id: 11,
+            alt_id: 22,
+            approved_by: "Sobirov".into(),
+            approved_at: Some(today),
+            note: String::new(),
+        };
+        let out = supply_control(
+            std::slice::from_ref(&sub),
+            &[],
+            std::slice::from_ref(&alt),
+            &[],
+            today,
+        );
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, S::SubstituteWithoutTech { .. })));
+        assert!(!out
+            .iter()
+            .any(|i| matches!(i, S::UnapprovedSubstitute { .. })));
+
+        // Kelishuv olingach e'tiroz qolmaydi.
+        let mut ok = sub.clone();
+        ok.tech_ok = true;
+        assert!(supply_control(
+            std::slice::from_ref(&ok),
+            &[],
+            std::slice::from_ref(&alt),
+            &[],
+            today
+        )
+        .is_empty());
+    }
+
+    /// TZ X.22: ta'minot shartnomasi bo'yicha summa va muddat tekshiriladi.
+    #[test]
+    fn supply_contract_limits_are_checked() {
+        use crate::checks::{supply_control, SupplyIssue as S};
+        use crate::domain::{ContractKind, ContractStatus, PurchaseStatus};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let base = t.db.purchases(pid).into_iter().next().expect("xarid");
+
+        let contract = crate::domain::Contract {
+            id: 5,
+            project_id: pid,
+            number: "TA-11".into(),
+            name: "Ta'minot".into(),
+            kind: ContractKind::Supply,
+            party_id: None,
+            signed: today - chrono::Duration::days(120),
+            start: today - chrono::Duration::days(120),
+            end: today - chrono::Duration::days(10),
+            sum: 1_000.0,
+            advance_pct: 0.0,
+            retention_pct: 0.0,
+            currency: "UZS".into(),
+            status: ContractStatus::Active,
+            note: String::new(),
+        };
+
+        let mut p = base.clone();
+        p.status = PurchaseStatus::Ordered;
+        p.tech_ok = true;
+        p.substitute_for = None;
+        p.contract_id = Some(5);
+        p.qty = 1.0;
+        p.price = 1_500.0;
+        p.date = today; // shartnoma muddati tugagach
+
+        let out = supply_control(
+            std::slice::from_ref(&p),
+            std::slice::from_ref(&contract),
+            &[],
+            &[],
+            today,
+        );
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, S::ContractOverrun { over, .. } if *over > 0.0)));
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, S::ContractExpired { days, .. } if *days == 10)));
+
+        // Shartnoma chegarasi ichida va muddatida — e'tiroz yo'q.
+        let mut good = p.clone();
+        good.price = 500.0;
+        good.date = today - chrono::Duration::days(30);
+        assert!(supply_control(
+            std::slice::from_ref(&good),
+            std::slice::from_ref(&contract),
+            &[],
+            &[],
+            today
+        )
+        .is_empty());
+    }
+
+    /// Namunada texnik kelishuvsiz shoshilinch xarid bor — nazorat ekrani
+    /// bo'sh ko'rinmasin.
+    #[test]
+    fn demo_shows_a_purchase_without_approval() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        assert!(
+            app.purchases.iter().any(|p| p.tech_ok),
+            "kelishuvdan o'tgan xarid yo'q"
+        );
+        assert!(
+            app.purchases.iter().any(|p| !p.tech_ok),
+            "kelishuvsiz xarid yo'q"
+        );
+        let control = app.supply_control();
+        assert!(!control.is_empty(), "nazorat ekrani bo'sh");
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

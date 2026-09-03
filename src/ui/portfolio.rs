@@ -285,12 +285,173 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                     }
                 });
             redistribution_block(ui, app);
+            central_block(ui, app);
         });
 
     if let Some(id) = pick {
         app.select_project(id);
         app.screen = Screen::Dashboard;
     }
+}
+
+/// Obyektlar bo'yicha xaridlar va markazlashtirish imkoniyati
+/// (TZ X.33, 37-38, 42).
+///
+/// Guruhlash nom bo'yicha: har obyektning o'z katalogi bor va kodlar mos
+/// kelmasligi mumkin. Tejash — hammasi eng arzon narxda olinganda chiqadigan
+/// **yuqori chegara**, kafolat emas: hajm va yetkazish sharti har xil.
+fn central_block(ui: &mut egui::Ui, app: &App) {
+    let lines = portfolio::central_purchases(&app.db);
+    if lines.is_empty() {
+        return;
+    }
+    let worth: Vec<&crate::checks::CentralLine> =
+        lines.iter().filter(|l| l.worth_central()).collect();
+    let saving: f64 = worth.iter().map(|l| l.saving).sum();
+
+    ui.add_space(18.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(t("pf_central")).size(14.0).strong());
+        ui.label(
+            RichText::new(t("pf_central_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(4.0);
+    if saving > 0.0 {
+        ui.label(
+            RichText::new(format!("{}: {}", t("pf_central_saving"), money(saving)))
+                .size(12.5)
+                .color(theme::ok()),
+        );
+        ui.label(
+            RichText::new(t("pf_central_saving_hint"))
+                .size(10.5)
+                .color(theme::muted()),
+        );
+    }
+    ui.add_space(6.0);
+
+    egui::Grid::new("pf_central")
+        .num_columns(6)
+        .spacing([10.0, 5.0])
+        .striped(true)
+        .show(ui, |ui| {
+            head_l(ui, 260.0, t("col_material"));
+            head_r(ui, 100.0, t("pf_central_objects"));
+            head_r(ui, 110.0, t("col_qty"));
+            head_r(ui, 140.0, t("pf_central_best"));
+            head_r(ui, 100.0, t("mat_maker_spread"));
+            head_r(ui, 140.0, t("pf_central_save"));
+            ui.end_row();
+
+            for l in lines.iter().take(12) {
+                let name = super::issues::truncate(&l.title, 34);
+                let resp = super::warehouse::cell_l(
+                    ui,
+                    260.0,
+                    RichText::new(name).size(12.5).color(if l.worth_central() {
+                        theme::text()
+                    } else {
+                        theme::muted()
+                    }),
+                );
+                // Qaysi obyektda qancha olingani va markazlashtirilgan
+                // buyurtma qanday bo'linishi — sichqoncha ostida (TZ X.42).
+                let name_of = |id: i64| {
+                    app.projects
+                        .iter()
+                        .find(|p| p.id == id)
+                        .map(|p| super::issues::truncate(&p.name, 26))
+                        .unwrap_or_default()
+                };
+                resp.on_hover_ui(|ui| {
+                    ui.label(RichText::new(t("pf_central_now")).size(11.5).strong());
+                    for o in &l.objects {
+                        ui.label(
+                            RichText::new(format!(
+                                "{}: {} {} × {} = {}",
+                                name_of(o.project_id),
+                                super::materials::trim_num(o.qty),
+                                l.unit,
+                                money(o.price),
+                                money(o.amount)
+                            ))
+                            .size(11.5),
+                        );
+                    }
+                    ui.label(
+                        RichText::new(format!("{}: {}", t("col_total"), money(l.total_amount)))
+                            .size(11.5)
+                            .color(theme::muted()),
+                    );
+
+                    if l.worth_central() {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new(t("pf_central_split")).size(11.5).strong());
+                        let need: Vec<(i64, f64)> =
+                            l.objects.iter().map(|o| (o.project_id, o.qty)).collect();
+                        for sp in crate::checks::split_order(&need, l.total_qty, l.best_price) {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{}: {} {} ({:.0}%) = {}",
+                                    name_of(sp.project_id),
+                                    super::materials::trim_num(sp.qty),
+                                    l.unit,
+                                    sp.share_pct,
+                                    money(sp.amount)
+                                ))
+                                .size(11.5),
+                            );
+                        }
+                    }
+                });
+                super::warehouse::cell_r(
+                    ui,
+                    100.0,
+                    RichText::new(l.objects.len().to_string()).size(12.0),
+                );
+                super::warehouse::cell_r(
+                    ui,
+                    110.0,
+                    RichText::new(format!(
+                        "{} {}",
+                        super::materials::trim_num(l.total_qty),
+                        l.unit
+                    ))
+                    .size(12.0),
+                );
+                super::warehouse::cell_r(ui, 140.0, RichText::new(money(l.best_price)).size(12.0));
+                super::warehouse::cell_r(
+                    ui,
+                    100.0,
+                    RichText::new(format!("{:.0}%", l.spread_pct))
+                        .size(12.0)
+                        .color(if l.worth_central() {
+                            theme::warn()
+                        } else {
+                            theme::muted()
+                        }),
+                );
+                super::warehouse::cell_r(
+                    ui,
+                    140.0,
+                    RichText::new(if l.saving > 0.0 {
+                        money(l.saving)
+                    } else {
+                        t("dash").to_string()
+                    })
+                    .size(12.5)
+                    .color(if l.worth_central() {
+                        theme::ok()
+                    } else {
+                        theme::muted()
+                    }),
+                );
+                ui.end_row();
+            }
+        });
 }
 
 /// Obyektlar orasida material ko'chirish takliflari (TZ XI.42).

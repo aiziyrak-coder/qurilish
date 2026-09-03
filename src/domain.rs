@@ -492,6 +492,17 @@ pub struct Purchase {
     pub urgent: bool,
     /// Kim rasmiylashtirgan — xaridchi samaradorligi shu kesimda (TZ X.46).
     pub buyer: String,
+    /// Katalogdagi material (TZ X.17). Bog'lanmagan xarid ham bo'lishi
+    /// mumkin — masalan bir martalik xizmat.
+    pub material_id: Option<i64>,
+    /// Qaysi materialning o'rniga olinyapti (TZ X.19). To'ldirilgan bo'lsa —
+    /// bu almashtirish va u tasdiqlangan analog bo'lishi kerak.
+    pub substitute_for: Option<i64>,
+    /// Texnik kelishuv olingan (TZ X.18): xarid loyihaga mos ekanini
+    /// muhandis tasdiqlagan.
+    pub tech_ok: bool,
+    /// Kim texnik kelishuv bergan.
+    pub tech_by: String,
     pub note: String,
 }
 

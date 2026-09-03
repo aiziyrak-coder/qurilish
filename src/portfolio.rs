@@ -222,6 +222,17 @@ pub fn redistribution(db: &Db, today: NaiveDate) -> Vec<checks::Redistribution> 
     checks::redistribution(&surplus, &need)
 }
 
+/// Obyektlar bo'yicha xaridlarni bir jadvalda solishtiradi (TZ X.33, 37-38).
+pub fn central_purchases(db: &Db) -> Vec<checks::CentralLine> {
+    let rows: Vec<(i64, Vec<crate::domain::Purchase>)> = db
+        .projects()
+        .unwrap_or_default()
+        .iter()
+        .map(|p| (p.id, db.purchases(p.id)))
+        .collect();
+    checks::central_purchases(&rows)
+}
+
 /// Qayta taqsimlash rejasi shuncha kun oldinga qaraydi.
 const PLAN_HORIZON: i64 = 45;
 

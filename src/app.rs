@@ -2028,6 +2028,18 @@ impl App {
         )
     }
 
+    /// Xaridlar tartibi: texnik kelishuv, almashtirish, shartnoma
+    /// (TZ X.18-19, 22).
+    pub fn supply_control(&self) -> Vec<checks::SupplyIssue> {
+        checks::supply_control(
+            &self.purchases,
+            &self.contracts,
+            &self.material_alts,
+            &self.materials,
+            self.today,
+        )
+    }
+
     /// Materialning loyihaga mosligi (TZ XII.8, 15, 32).
     pub fn material_fit(&self) -> Vec<checks::MaterialFit> {
         checks::material_fit(&self.materials, &self.stock_moves, self.today)
