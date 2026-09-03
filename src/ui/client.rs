@@ -59,6 +59,14 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 payments_block(ui, app);
                 acceptance_block(ui, app);
                 ui.add_space(12.0);
+                estimate_block(ui, app);
+                ui.add_space(12.0);
+                docs_block(ui, app);
+                ui.add_space(12.0);
+                issues_block(ui, app);
+                ui.add_space(12.0);
+                photos_block(ui, app);
+                ui.add_space(12.0);
                 versions_block(ui, app);
                 ui.add_space(12.0);
                 purchases_block(ui, app);
@@ -622,6 +630,227 @@ fn week_block(ui: &mut egui::Ui, app: &App) {
 ///
 /// Har birida son bor: foiz, kun yoki summa. «Diqqat qiling» degan
 /// xabar buyurtmachiga hech narsa bermaydi.
+/// Smeta va tannarx nazorati buyurtmachi ko'zi bilan (TZ VIII.10, 13).
+///
+/// Buyurtmachiga **pozitsiyalar emas, yakunlar** kerak: nima kelishilgan,
+/// nima bajarilgan va farq qayerdan chiqqan. Batafsil smeta pudratchining
+/// ichki hujjati bo'lib qoladi.
+fn estimate_block(ui: &mut egui::Ui, app: &App) {
+    let cost = app.cost_summary();
+    if cost.total <= 0.0 {
+        return;
+    }
+    let chain = app.estimate_chain();
+    let earned: f64 = chain.iter().map(|l| l.earned).sum();
+    let actual: f64 = chain.iter().map(|l| l.actual).sum();
+
+    block(ui, t("cl_estimate_block"), |ui| {
+        ui.label(
+            RichText::new(t("cl_estimate_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        let row = |ui: &mut egui::Ui, label: &str, value: String, colour: Color32| {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [260.0, 18.0],
+                    egui::Label::new(RichText::new(label).size(12.0).color(theme::muted())),
+                );
+                ui.label(RichText::new(value).size(12.5).color(colour));
+            });
+        };
+        row(ui, t("cl_est_total"), money(cost.total), theme::text());
+        row(ui, t("cl_est_earned"), money(earned), theme::text());
+        row(
+            ui,
+            t("cl_est_actual"),
+            money(actual),
+            if actual <= earned {
+                theme::ok()
+            } else {
+                theme::danger()
+            },
+        );
+        if cost.price_saving > 0.0 {
+            row(
+                ui,
+                t("cl_est_saving"),
+                money(cost.price_saving),
+                theme::muted(),
+            );
+        }
+    });
+}
+
+/// Ijro hujjatlari va ularning tayyorligi (TZ VIII.19-20).
+fn docs_block(ui: &mut egui::Ui, app: &App) {
+    let required = crate::checks::required_docs(&app.tasks, &app.exec_docs, false);
+    if required.is_empty() && app.exec_docs.is_empty() {
+        return;
+    }
+    let signed = required.iter().filter(|r| r.signed).count();
+    let ready = app.final_readiness();
+
+    block(ui, t("cl_docs_block"), |ui| {
+        ui.label(
+            RichText::new(format!(
+                "{}: {} / {} · {}: {:.0}%",
+                t("cl_docs_signed"),
+                signed,
+                required.len(),
+                t("in_final_ready"),
+                ready.ready_pct
+            ))
+            .size(12.5)
+            .color(if ready.ready() {
+                theme::ok()
+            } else {
+                theme::text()
+            }),
+        );
+        // Imzolashga to'siq bo'layotgan hujjatlar — buyurtmachi buni
+        // bilishi kerak, chunki qabul shu bilan kechikadi.
+        let blocked = app.doc_readiness().iter().filter(|d| !d.ready()).count();
+        if blocked > 0 {
+            ui.label(
+                RichText::new(format!("{}: {blocked}", t("cl_docs_blocked")))
+                    .size(12.0)
+                    .color(theme::warn()),
+            );
+        }
+        // Qabulga to'siq bo'layotgan holatlar: buyurtmachiga nima
+        // qolgani ko'rinib tursin.
+        for b in ready.blocks.iter().take(4) {
+            use crate::checks::FinalBlock as B;
+            let label = match b {
+                B::TasksOpen { .. } => t("fb_tasks"),
+                B::DocsUnsigned { .. } => t("fb_docs"),
+                B::DefectsOpen { .. } => t("fb_defects"),
+                B::LabFailed { .. } => t("fb_lab"),
+                B::InspectionsOpen { .. } => t("fb_inspections"),
+                B::SafetyOpen { .. } => t("fb_safety"),
+                B::AcceptancePending { .. } => t("fb_acceptance"),
+            };
+            ui.label(
+                RichText::new(format!("· {label} ({})", b.count()))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+        }
+    });
+}
+
+/// Loyiha xatolari buyurtmachi ko'zi bilan (TZ VIII.25).
+///
+/// Buyurtmachiga **loyihaga tegishli** nomuvofiqliklar ko'rsatiladi:
+/// ular qurilishni to'xtatadi va qarorni loyihachi bilan birga qabul
+/// qilish kerak. Ichki ish tartibiga oid e'tirozlar bu yerga chiqmaydi.
+fn issues_block(ui: &mut egui::Ui, app: &App) {
+    use crate::domain::{IssueModule, IssueStatus, Severity};
+    let open: Vec<&crate::domain::Issue> = app
+        .issues
+        .iter()
+        .filter(|i| {
+            i.module == IssueModule::Project
+                && matches!(i.status, IssueStatus::Open | IssueStatus::InWork)
+        })
+        .collect();
+    if open.is_empty() {
+        return;
+    }
+    let critical = open
+        .iter()
+        .filter(|i| i.severity == Severity::Critical)
+        .count();
+
+    block(ui, t("cl_issues"), |ui| {
+        ui.label(
+            RichText::new(format!(
+                "{}: {} · {}: {}",
+                t("cl_issues_total"),
+                open.len(),
+                t("dr_critical"),
+                critical
+            ))
+            .size(12.5)
+            .color(if critical == 0 {
+                theme::text()
+            } else {
+                theme::danger()
+            }),
+        );
+        ui.add_space(4.0);
+        for i in open
+            .iter()
+            .filter(|i| i.severity == Severity::Critical)
+            .take(5)
+        {
+            ui.label(
+                RichText::new(format!(
+                    "· {} — {}",
+                    i.code,
+                    super::issues::truncate(&i.title, 46)
+                ))
+                .size(12.0),
+            );
+        }
+    });
+}
+
+/// Obyekt fotolari (TZ VIII.4).
+///
+/// Fotolar jurnaldan va yozuvlarga biriktirilganlaridan olinadi. Fayl
+/// ko'chirilmaydi — faqat soni va manbasi ko'rsatiladi, chunki
+/// buyurtmachi kompyuterida bu fayllar bo'lmasligi mumkin.
+fn photos_block(ui: &mut egui::Ui, app: &App) {
+    let journal: usize = app
+        .journal
+        .iter()
+        .map(|j| j.photos.split(';').filter(|x| !x.trim().is_empty()).count())
+        .sum();
+    let attached = app.attachments.iter().filter(|a| a.is_photo()).count();
+    let before = app
+        .attachments
+        .iter()
+        .filter(|a| a.stage == crate::domain::PhotoStage::Before)
+        .count();
+    let after = app
+        .attachments
+        .iter()
+        .filter(|a| a.stage == crate::domain::PhotoStage::After)
+        .count();
+    if journal + attached == 0 {
+        return;
+    }
+
+    block(ui, t("cl_photos"), |ui| {
+        ui.label(
+            RichText::new(format!(
+                "{}: {journal} · {}: {attached}",
+                t("cl_photos_journal"),
+                t("cl_photos_records")
+            ))
+            .size(12.5),
+        );
+        if before + after > 0 {
+            ui.label(
+                RichText::new(format!(
+                    "{}: {before} / {after}",
+                    t("cl_photos_before_after")
+                ))
+                .size(12.0)
+                .color(theme::muted()),
+            );
+        }
+        ui.label(
+            RichText::new(t("cl_photos_hint"))
+                .size(10.5)
+                .color(theme::muted()),
+        );
+    });
+}
+
 /// Loyiha versiyalari va ular orasidagi farq (TZ VIII.24).
 ///
 /// Dastur chizmaning **ichini** o'qimaydi: PDF va DWG ni tanish tashqi

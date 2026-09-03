@@ -25,7 +25,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 32 | 3 | 3 | 3 |
-| VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
+| VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
 | X. Xaridlar | 48 | 44 | 2 | 2 | 2 |
 | XI. Ombor | 48 | 46 | 1 | 1 | 1 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **584** | **70** | **46** | **46** |
+| **Jami** | **700** | **592** | **62** | **46** | **46** |
 
-Ya'ni **~83 % to'liq**, **~10 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~85 % to'liq**, **~9 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -289,28 +289,28 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Asosiy maqsad
 - [x] 2. Buyurtmachining bosh paneli
 - [x] 3. Obyekt holati
-- [~] 4. Obyekt foto va videosi — *jurnal fotolari*
-- [~] 5. Obyekt tarixi — *oxirgi ish kunlari*
+- [x] 4. Obyekt foto va videosi — *jurnal va yozuvlarga biriktirilgan fotolar*
+- [x] 5. Obyekt tarixi — *oxirgi ish kunlari va versiyalar*
 - [ ] 🔒 6. 3D / BIM
-- [~] 7. Ishlar grafigi — *bo'limlar kesimida bajarilish*
+- [x] 7. Ishlar grafigi — *bo'limlar kesimi va haftalik hisobot*
 - [x] 8. Grafikni AI tahlili
 - [x] 9. Moliya
-- [~] 10. AI Cost Control
+- [x] 10. AI Cost Control — *smeta, bajarilgan va haqiqiy sarf*
 - [x] 11. Qiymat o'zgarishlari — *faqat kelishilgani shartnoma summasiga qo'shiladi*
 - [x] 12. Qo'shimcha ishlarni nazorat qilish — *qo'shimcha, chiqarish, narx va muddat o'zgarishi*
-- [~] 13. Smeta
+- [x] 13. Smeta — *yakunlar bo'yicha*
 - [x] 14. Xaridlar — *kabinetda yirik xaridlar: kimdan, qancha va taklif solishtirilganmi*
 - [x] 15. Takliflarni solishtirish — *har xarid yonida nechta taklif borligi ko'rinadi*
 - [x] 16. Texnik nazorat kabineti
 - [x] 17. Izohlar — *buyurtmachi izohlari alohida modul sifatida, holati bilan*
 - [x] 18. Buyurtmachi izoh yarata olishi — *kabinetdagi yagona yozish huquqi*
-- [~] 19. Ijro hujjatlari
-- [~] 20. Ijro hujjatlarini AI tekshiruvi
+- [x] 19. Ijro hujjatlari — *imzolanganlar va qabulga tayyorlik*
+- [x] 20. Ijro hujjatlarini AI tekshiruvi — *imzoga to'siqlar*
 - [x] 21. Ishlarni qabul qilish — *topshirildi → qabul/rad etildi, sabab bilan*
 - [~] 22. Elektron kelishuv — *ilova ichidagi qaror: kim va qachon; ERI tashqi omil*
 - [x] 23. Loyiha hujjatlari — *versiya va o'zgartirish belgisi bilan*
 - [x] 24. Loyiha versiyalarini AI solishtirishi — *kartochka ma'lumoti bo'yicha*
-- [~] 25. Loyiha xatolarini nazorat qilish
+- [x] 25. Loyiha xatolarini nazorat qilish — *kritik nomuvofiqliklar*
 - [x] 26. Xavfsizlik
 - [x] 27. Shartnomalar — *bosh pudrat, subpudrat, yetkazib berish; avans va kafolat ushlanmasi*
 - [x] 28. Contract Monitor — *olti qoida: chetlanish, kutilayotgan qaror, kechikkan to'lov, muddati o'tgan shartnoma, jadval farqi, javobsiz qabul*
