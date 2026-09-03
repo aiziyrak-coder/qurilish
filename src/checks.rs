@@ -9884,3 +9884,167 @@ pub fn journal_requests(
     out.sort_by(|a, b| b.qty.total_cmp(&a.qty));
     out
 }
+
+// ================= XIII.3, 12, 28. Obyektlar, grafik, ko'chirish =================
+
+/// Bitta obyekt bo'yicha xodim yakuni (TZ XIII.3).
+#[derive(Debug, Clone)]
+pub struct ObjectStaff {
+    pub project_id: i64,
+    /// Faol ishchilar soni.
+    pub workers: usize,
+    /// Davr ichida yozilgan soat.
+    pub hours: f64,
+    /// Bo'sh turish soatlari.
+    pub idle_hours: f64,
+    /// Ish haqi fondi.
+    pub payroll: f64,
+    /// Bir ishchiga to'g'ri keladigan o'rtacha soat.
+    pub hours_per_worker: f64,
+}
+
+/// TZ XIII.3: obyektlar kesimida xodim va soat.
+///
+/// Ishchi obyektga biriktirilgan, shuning uchun «obyektlar bo'yicha»
+/// ko'rinish shunchaki guruhlash emas: bitta ishchi bir vaqtda ikki
+/// obyektda bo'la olmaydi va bu hisobda ochiq ko'rinadi.
+pub fn object_staff(
+    rows: &[(i64, Vec<Worker>, Vec<TimesheetEntry>)],
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Vec<ObjectStaff> {
+    let mut out = Vec::new();
+    for (pid, workers, timesheet) in rows {
+        let active: Vec<&Worker> = workers.iter().filter(|w| w.active).collect();
+        let period: Vec<&TimesheetEntry> = timesheet
+            .iter()
+            .filter(|e| e.date >= from && e.date <= to)
+            .collect();
+        let hours: f64 = period
+            .iter()
+            .filter(|e| e.kind == DayKind::Work)
+            .map(|e| e.hours)
+            .sum();
+        let idle: f64 = period
+            .iter()
+            .filter(|e| e.kind == DayKind::Downtime)
+            .map(|e| e.hours)
+            .sum();
+        let payroll: f64 = period
+            .iter()
+            .filter(|e| e.kind.paid())
+            .map(|e| {
+                let rate = active
+                    .iter()
+                    .find(|w| w.id == e.worker_id)
+                    .map(|w| w.hourly_rate)
+                    .unwrap_or(0.0);
+                e.hours * rate * e.shift.rate()
+            })
+            .sum();
+        out.push(ObjectStaff {
+            project_id: *pid,
+            workers: active.len(),
+            hours,
+            idle_hours: idle,
+            payroll,
+            hours_per_worker: if active.is_empty() {
+                0.0
+            } else {
+                hours / active.len() as f64
+            },
+        });
+    }
+    // Eng ko'p odam turgan obyekt oldinda.
+    out.sort_by_key(|o| std::cmp::Reverse(o.workers));
+    out
+}
+
+/// Ish grafigi: qaysi kunlar ish kuni (TZ XIII.12).
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkSchedule {
+    /// Haftaning ish kunlari: 1 — dushanba, 7 — yakshanba.
+    pub work_days: Vec<u32>,
+    /// Kunlik smena soati.
+    pub shift_hours: f64,
+}
+
+impl Default for WorkSchedule {
+    fn default() -> Self {
+        // Qurilishda odatiy grafik — olti kunlik ish haftasi.
+        WorkSchedule {
+            work_days: vec![1, 2, 3, 4, 5, 6],
+            shift_hours: 8.0,
+        }
+    }
+}
+
+impl WorkSchedule {
+    /// Shu kun grafik bo'yicha ish kunimi.
+    pub fn is_work_day(&self, day: NaiveDate) -> bool {
+        use chrono::Datelike;
+        self.work_days
+            .contains(&(day.weekday().number_from_monday()))
+    }
+
+    /// Davr ichidagi ish kunlari soni.
+    pub fn work_days_in(&self, from: NaiveDate, to: NaiveDate) -> i64 {
+        let mut n = 0;
+        let mut d = from;
+        while d <= to {
+            if self.is_work_day(d) {
+                n += 1;
+            }
+            d += chrono::Duration::days(1);
+        }
+        n
+    }
+}
+
+/// Grafik bo'yicha e'tiroz (TZ XIII.12).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ScheduleIssue {
+    /// Dam olish kunida ish yozilgan.
+    WorkOnRestDay { day: NaiveDate, workers: usize },
+    /// Ish kunida hech kim belgilanmagan.
+    EmptyWorkDay { day: NaiveDate },
+    /// Smena soati grafikdagidan sezilarli ko'p.
+    OverShift { day: NaiveDate, hours: f64 },
+}
+
+/// TZ XIII.12: tabelni ish grafigi bilan solishtiradi.
+///
+/// Dam olish kunidagi ish **taqiq emas**: qurilishda bu bo'ladi. Lekin u
+/// ko'rinib turishi kerak, chunki bunday kunga haq boshqacha to'lanadi.
+pub fn schedule_issues(
+    timesheet: &[TimesheetEntry],
+    schedule: &WorkSchedule,
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Vec<ScheduleIssue> {
+    let mut out = Vec::new();
+    let mut day = from;
+    while day <= to {
+        let rows: Vec<&TimesheetEntry> = timesheet
+            .iter()
+            .filter(|e| e.date == day && e.hours > 0.0)
+            .collect();
+        if schedule.is_work_day(day) {
+            if rows.is_empty() {
+                out.push(ScheduleIssue::EmptyWorkDay { day });
+            } else {
+                let max = rows.iter().map(|e| e.hours).fold(0.0_f64, f64::max);
+                if max > schedule.shift_hours + 2.0 {
+                    out.push(ScheduleIssue::OverShift { day, hours: max });
+                }
+            }
+        } else if !rows.is_empty() {
+            out.push(ScheduleIssue::WorkOnRestDay {
+                day,
+                workers: rows.len(),
+            });
+        }
+        day += chrono::Duration::days(1);
+    }
+    out
+}

@@ -404,6 +404,9 @@ const PARK_DAYS: i64 = 30;
 /// Xodim ehtiyoji shuncha kun oldinga qarab hisoblanadi (TZ XIII.26-27).
 const STAFF_HORIZON: i64 = 30;
 
+/// Ish grafigi shuncha kun ortga qarab tekshiriladi (TZ XIII.12).
+const SCHEDULE_DAYS: i64 = 30;
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -526,6 +529,8 @@ pub struct App {
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
     /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
     pub llm: crate::llm::Config,
+    /// Ish grafigi: qaysi kunlar ish kuni (TZ XIII.12).
+    pub work_schedule: checks::WorkSchedule,
     /// Texnikaning kunlik ko'rigi (TZ XVI.28, XV.18).
     pub machine_checks: Vec<crate::domain::MachineCheck>,
     /// Yozuvlarga qoldirilgan izohlar (umumiy mexanizm).
@@ -702,6 +707,7 @@ impl App {
             geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
+            work_schedule: checks::WorkSchedule::default(),
             machine_checks: Vec::new(),
             notes: Vec::new(),
             attachments: Vec::new(),
@@ -2206,6 +2212,33 @@ impl App {
             self.today,
             STAFF_HORIZON,
         )
+    }
+
+    /// Ish grafigi bo'yicha e'tirozlar (TZ XIII.12).
+    pub fn schedule_issues(&self) -> Vec<checks::ScheduleIssue> {
+        let to = self.today;
+        let from = to - chrono::Duration::days(SCHEDULE_DAYS);
+        checks::schedule_issues(&self.timesheet, &self.work_schedule, from, to)
+    }
+
+    /// Xodimni boshqa obyektga ko'chiradi (TZ XIII.28).
+    ///
+    /// Tabel yozuvlari **ko'chirilmaydi**: ular o'sha obyektda ishlangan
+    /// soatning yozuvi va o'z joyida qolishi kerak. Ko'chirilgandan keyin
+    /// yangi obyektda yangi yozuvlar paydo bo'ladi.
+    pub fn move_worker(&mut self, worker_id: i64, to_project: i64) -> bool {
+        let Some(w) = self.workers.iter().find(|w| w.id == worker_id).cloned() else {
+            return false;
+        };
+        if w.project_id == to_project {
+            return false;
+        }
+        // Ko'chirish alohida amal: oddiy tahrirlash obyektga tegmaydi.
+        let ok = self.db.move_worker(w.id, to_project);
+        if ok {
+            self.reload_modules();
+        }
+        ok
     }
 
     /// Haftalik sifat hisoboti (TZ XIV.37).

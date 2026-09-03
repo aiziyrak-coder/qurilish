@@ -233,6 +233,21 @@ pub fn central_purchases(db: &Db) -> Vec<checks::CentralLine> {
     checks::central_purchases(&rows)
 }
 
+/// Obyektlar kesimida xodim va soat (TZ XIII.3).
+pub fn object_staff(db: &Db, from: NaiveDate, to: NaiveDate) -> Vec<checks::ObjectStaff> {
+    let rows: Vec<(
+        i64,
+        Vec<crate::domain::Worker>,
+        Vec<crate::domain::TimesheetEntry>,
+    )> = db
+        .projects()
+        .unwrap_or_default()
+        .iter()
+        .map(|p| (p.id, db.workers(p.id), db.timesheet(p.id)))
+        .collect();
+    checks::object_staff(&rows, from, to)
+}
+
 /// Qayta taqsimlash rejasi shuncha kun oldinga qaraydi.
 const PLAN_HORIZON: i64 = 45;
 

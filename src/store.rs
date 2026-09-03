@@ -3443,6 +3443,18 @@ impl Db {
         )
     }
 
+    /// Xodimni boshqa obyektga ko'chiradi (TZ XIII.28).
+    ///
+    /// Alohida amal: `update_worker` obyektga tegmaydi, chunki oddiy
+    /// tahrirlashda xodim tasodifan boshqa obyektga o'tib ketmasligi kerak.
+    /// Brigada obyektga bog'langan, shuning uchun bog'lanish tushadi.
+    pub fn move_worker(&self, worker_id: i64, to_project: i64) -> bool {
+        self.upd(
+            "UPDATE worker SET project_id=?2, brigade_id=NULL WHERE id=?1",
+            params![worker_id, to_project],
+        )
+    }
+
     pub fn timesheet(&self, pid: i64) -> Vec<TimesheetEntry> {
         self.list(
             "SELECT id,project_id,worker_id,date,hours,task_id,kind,shift,note

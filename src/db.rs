@@ -9164,6 +9164,139 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         .is_empty());
     }
 
+    /// TZ XIII.12: dam olish kunidagi ish taqiq emas, lekin ko'rinadi;
+    /// ish kunida hech kim yo'qligi ham ko'rinadi.
+    #[test]
+    fn schedule_sees_rest_days_and_empty_days() {
+        use crate::checks::{schedule_issues, ScheduleIssue as S, WorkSchedule};
+        use crate::domain::{DayKind, Shift, TimesheetEntry};
+
+        // 2026-06-15 — dushanba, 2026-06-21 — yakshanba.
+        let monday = chrono::NaiveDate::from_ymd_opt(2026, 6, 15).unwrap();
+        let sunday = chrono::NaiveDate::from_ymd_opt(2026, 6, 21).unwrap();
+        let sch = WorkSchedule::default();
+        assert!(sch.is_work_day(monday));
+        assert!(!sch.is_work_day(sunday));
+        // Olti kunlik hafta: dushanbadan yakshanbagacha 6 ish kuni.
+        assert_eq!(sch.work_days_in(monday, sunday), 6);
+
+        let entry = |date: chrono::NaiveDate, hours: f64| TimesheetEntry {
+            id: 1,
+            project_id: 1,
+            worker_id: 1,
+            date,
+            hours,
+            task_id: None,
+            kind: DayKind::Work,
+            shift: Shift::Day,
+            note: String::new(),
+        };
+
+        // Yakshanbadagi ish — ko'rinadi.
+        let out = schedule_issues(&[entry(sunday, 8.0)], &sch, sunday, sunday);
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, S::WorkOnRestDay { workers: 1, .. })));
+
+        // Dushanba bo'sh — ko'rinadi.
+        let out = schedule_issues(&[], &sch, monday, monday);
+        assert!(out.iter().any(|i| matches!(i, S::EmptyWorkDay { .. })));
+
+        // Uzun smena — ko'rinadi.
+        let out = schedule_issues(&[entry(monday, 12.0)], &sch, monday, monday);
+        assert!(out.iter().any(|i| matches!(i, S::OverShift { .. })));
+
+        // Odatiy kun — e'tiroz yo'q.
+        let out = schedule_issues(&[entry(monday, 8.0)], &sch, monday, monday);
+        assert!(out.is_empty());
+    }
+
+    /// TZ XIII.3: obyektlar kesimidagi son har obyektning o'z
+    /// yozuvlaridan chiqadi.
+    #[test]
+    fn object_staff_counts_each_object_separately() {
+        let t = TempDb::new();
+        t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let from = today - chrono::Duration::days(30);
+
+        let rows = crate::portfolio::object_staff(&t.db, from, today);
+        assert!(!rows.is_empty(), "obyektlar topilmadi");
+
+        for o in &rows {
+            let workers = t.db.workers(o.project_id);
+            assert_eq!(o.workers, workers.iter().filter(|w| w.active).count());
+            let hours: f64 =
+                t.db.timesheet(o.project_id)
+                    .iter()
+                    .filter(|e| {
+                        e.date >= from && e.date <= today && e.kind == crate::domain::DayKind::Work
+                    })
+                    .map(|e| e.hours)
+                    .sum();
+            assert!((o.hours - hours).abs() < 0.001);
+            if o.workers > 0 {
+                assert!((o.hours_per_worker - o.hours / o.workers as f64).abs() < 0.001);
+            }
+        }
+
+        // Eng ko'p odam turgan obyekt oldinda.
+        for w in rows.windows(2) {
+            assert!(w[0].workers >= w[1].workers);
+        }
+    }
+
+    /// TZ XIII.28: ko'chirishda tabel yozuvlari o'z joyida qoladi.
+    #[test]
+    fn moving_a_worker_keeps_the_timesheet() {
+        let t = TempDb::new();
+        let first = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        let second = app
+            .projects
+            .iter()
+            .find(|p| p.id != first)
+            .map(|p| p.id)
+            .expect("ikkinchi obyekt");
+        app.select_project(first);
+
+        let worker = app
+            .workers
+            .iter()
+            .find(|w| w.active)
+            .cloned()
+            .expect("ishchi");
+        let before = app
+            .timesheet
+            .iter()
+            .filter(|e| e.worker_id == worker.id)
+            .count();
+
+        assert!(app.move_worker(worker.id, second));
+        // Xodim endi birinchi obyektda yo'q.
+        assert!(!app.workers.iter().any(|w| w.id == worker.id));
+        // Tabel yozuvlari o'z joyida qoldi.
+        let after = app
+            .timesheet
+            .iter()
+            .filter(|e| e.worker_id == worker.id)
+            .count();
+        assert_eq!(before, after, "tabel yozuvlari ko'chib ketdi");
+
+        // Ikkinchi obyektda paydo bo'ldi va brigadasiz.
+        app.select_project(second);
+        let moved = app
+            .workers
+            .iter()
+            .find(|w| w.id == worker.id)
+            .expect("ko'chirilgan xodim");
+        assert_eq!(moved.project_id, second);
+        assert!(moved.brigade_id.is_none());
+
+        // O'sha obyektga qayta ko'chirish ma'nosiz.
+        assert!(!app.move_worker(worker.id, second));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

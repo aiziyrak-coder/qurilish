@@ -87,6 +87,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (2, t("ts_tab_cost")),
             (3, t("ts_tab_periods")),
             (4, t("ts_tab_staff")),
+            (5, t("ts_tab_objects")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -101,6 +102,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         2 => cost_tab(ui, app),
         3 => periods_tab(ui, app),
         4 => staff_tab(ui, app),
+        5 => objects_tab(ui, app),
         _ => {
             if app.workers.is_empty() {
                 ui.add_space(40.0);
@@ -1092,6 +1094,203 @@ fn periods_tab(ui: &mut egui::Ui, app: &mut App) {
 }
 
 // ================================================================ Xodimlar
+
+// ================================================================ Obyektlar
+
+/// Obyektlar kesimida xodim, soat va ish grafigi (TZ XIII.3, 12, 28).
+///
+/// Ishchi obyektga biriktirilgan: bitta odam bir vaqtda ikki obyektda
+/// bo'la olmaydi. Shuning uchun boshqa obyektga o'tkazish alohida amal —
+/// tabel yozuvlari ko'chirilmaydi, ular o'sha obyektda ishlangan soatning
+/// yozuvi bo'lib qoladi.
+fn objects_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let to = app.today;
+    let from = to - chrono::Duration::days(30);
+    let rows = crate::portfolio::object_staff(&app.db, from, to);
+    let issues = app.schedule_issues();
+
+    ui.label(
+        RichText::new(t("ts_obj_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    let mut moved: Option<(i64, i64)> = None;
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Obyektlar bo'yicha (TZ XIII.3) ----------
+            egui::Grid::new("ts_objects")
+                .num_columns(6)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 240.0, t("col_object"));
+                    head_r(ui, 100.0, t("ts_obj_workers"));
+                    head_r(ui, 120.0, t("col_hours"));
+                    head_r(ui, 120.0, t("ts_obj_idle"));
+                    head_r(ui, 130.0, t("ts_obj_per_worker"));
+                    head_r(ui, 150.0, t("ts_obj_payroll"));
+                    ui.end_row();
+
+                    for o in &rows {
+                        let name = app
+                            .projects
+                            .iter()
+                            .find(|p| p.id == o.project_id)
+                            .map(|p| p.name.clone())
+                            .unwrap_or_default();
+                        cell_l(
+                            ui,
+                            240.0,
+                            RichText::new(super::issues::truncate(&name, 30))
+                                .size(12.5)
+                                .color(if Some(o.project_id) == app.current {
+                                    theme::accent()
+                                } else {
+                                    theme::text()
+                                }),
+                        );
+                        cell_r(ui, 100.0, RichText::new(o.workers.to_string()).size(12.5));
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(format!("{:.0}", o.hours)).size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(format!("{:.0}", o.idle_hours))
+                                .size(12.0)
+                                .color(if o.idle_hours > 0.0 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            130.0,
+                            RichText::new(format!("{:.0}", o.hours_per_worker))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(ui, 150.0, RichText::new(money(o.payroll)).size(12.0));
+                        ui.end_row();
+                    }
+                });
+
+            // ---------- Xodimni ko'chirish (TZ XIII.28) ----------
+            if app.projects.len() > 1 {
+                ui.add_space(16.0);
+                ui.label(RichText::new(t("ts_obj_move")).size(13.5).strong());
+                ui.label(
+                    RichText::new(t("ts_obj_move_hint"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+                let workers: Vec<(i64, String)> = app
+                    .workers
+                    .iter()
+                    .filter(|w| w.active)
+                    .map(|w| (w.id, format!("{} — {}", w.name, w.position)))
+                    .collect();
+                for (id, label) in workers {
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            [260.0, 20.0],
+                            egui::Label::new(
+                                RichText::new(super::issues::truncate(&label, 34)).size(12.0),
+                            ),
+                        );
+                        egui::ComboBox::from_id_salt(("ts_move", id))
+                            .selected_text(t("ts_obj_move_to"))
+                            .width(200.0)
+                            .show_ui(ui, |ui| {
+                                for p in &app.projects {
+                                    if Some(p.id) == app.current {
+                                        continue;
+                                    }
+                                    if ui.selectable_label(false, &p.name).clicked() {
+                                        moved = Some((id, p.id));
+                                    }
+                                }
+                            });
+                    });
+                }
+            }
+
+            // ---------- Ish grafigi (TZ XIII.12) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("ts_obj_schedule")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("ts_obj_schedule_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            // Grafik bo'yicha davrda nechta ish kuni borligi — e'tirozlarni
+            // shu songa nisbatan o'qish kerak.
+            ui.label(
+                RichText::new(format!(
+                    "{}: {}",
+                    t("ts_obj_work_days"),
+                    app.work_schedule.work_days_in(from, to)
+                ))
+                .size(11.5)
+                .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if issues.is_empty() {
+                ui.label(
+                    RichText::new(t("ts_obj_schedule_ok"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for i in issues.iter().take(15) {
+                ui.label(
+                    RichText::new(format!("· {}", schedule_text(i)))
+                        .size(12.0)
+                        .color(theme::warn()),
+                );
+            }
+            ui.add_space(16.0);
+        });
+
+    if let Some((worker, project)) = moved {
+        if app.move_worker(worker, project) {
+            app.notify(t("ts_obj_moved").to_string());
+        }
+    }
+}
+
+/// Grafik e'tirozini gapga aylantiradi.
+fn schedule_text(i: &crate::checks::ScheduleIssue) -> String {
+    use crate::checks::ScheduleIssue as S;
+    match i {
+        S::WorkOnRestDay { day, workers } => format!(
+            "{} — {} ({} {})",
+            t("ts_sch_rest"),
+            day.format("%d.%m.%Y"),
+            workers,
+            t("ts_obj_workers")
+        ),
+        S::EmptyWorkDay { day } => {
+            format!("{} — {}", t("ts_sch_empty"), day.format("%d.%m.%Y"))
+        }
+        S::OverShift { day, hours } => format!(
+            "{} — {} ({:.0} {})",
+            t("ts_sch_over"),
+            day.format("%d.%m.%Y"),
+            hours,
+            t("col_hours")
+        ),
+    }
+}
 
 /// Anomaliyalar va xodim ehtiyoji (TZ XIII.20-21, 26-27).
 fn staff_tab(ui: &mut egui::Ui, app: &mut App) {

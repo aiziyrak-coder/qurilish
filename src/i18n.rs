@@ -4220,6 +4220,33 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "jr_req_done" => ("Ariza qoralama sifatida ochildi", "Заявка создана как черновик"),
         // VII.18. Chizmadagi izoh
         "nt_document" => ("Chizma", "Чертёж"),
+        // XIII.3, 12, 28. Obyektlar, grafik, ko'chirish
+        "ts_tab_objects" => ("Obyektlar", "Объекты"),
+        "ts_obj_hint" => (
+            "Ishchi obyektga biriktirilgan: bitta odam bir vaqtda ikki obyektda bo'la olmaydi. Davr — oxirgi 30 kun.",
+            "Рабочий закреплён за объектом: один человек не может одновременно быть на двух. Период — последние 30 дней.",
+        ),
+        "ts_obj_workers" => ("Ishchi", "Рабочих"),
+        "ts_obj_idle" => ("Bo'sh turish", "Простой"),
+        "ts_obj_per_worker" => ("Bir ishchiga soat", "Часов на рабочего"),
+        "ts_obj_payroll" => ("Ish haqi fondi", "Фонд оплаты"),
+        "ts_obj_move" => ("Xodimni ko'chirish", "Перевод сотрудника"),
+        "ts_obj_move_hint" => (
+            "Tabel yozuvlari ko'chirilmaydi: ular o'sha obyektda ishlangan soatning yozuvi bo'lib qoladi. Brigada bog'lanishi tushadi.",
+            "Записи табеля не переносятся: они остаются записью отработанных часов на прежнем объекте. Привязка к бригаде снимается.",
+        ),
+        "ts_obj_move_to" => ("Boshqa obyektga", "На другой объект"),
+        "ts_obj_moved" => ("Xodim ko'chirildi", "Сотрудник переведён"),
+        "ts_obj_schedule" => ("Ish grafigi", "График работы"),
+        "ts_obj_schedule_hint" => (
+            "Dam olish kunidagi ish taqiq emas — qurilishda bu bo'ladi, lekin unga haq boshqacha to'lanadi va ko'rinib turishi kerak.",
+            "Работа в выходной не запрещена — на стройке это бывает, но оплачивается иначе и должна быть видна.",
+        ),
+        "ts_obj_work_days" => ("Grafik bo'yicha ish kunlari", "Рабочих дней по графику"),
+        "ts_obj_schedule_ok" => ("Grafik bo'yicha e'tiroz yo'q.", "Замечаний по графику нет."),
+        "ts_sch_rest" => ("Dam olish kunida ish yozilgan", "Работа записана в выходной"),
+        "ts_sch_empty" => ("Ish kunida hech kim belgilanmagan", "В рабочий день никто не отмечен"),
+        "ts_sch_over" => ("Smena grafikdagidan uzun", "Смена длиннее графика"),
         "ct_tab_contracts" => ("Shartnomalar", "Договоры"),
         "ct_tab_changes" => ("O'zgarishlar", "Изменения"),
         "ct_tab_stages" => ("To'lov jadvali", "График платежей"),

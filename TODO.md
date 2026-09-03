@@ -30,16 +30,16 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
 | XI. Ombor | 48 | 41 | 6 | 1 | 1 |
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
-| XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
+| XIII. Tabel | 44 | 31 | 7 | 6 | 6 |
 | XIV. Sifat | 41 | 31 | 8 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 35 | 3 | 3 | 3 |
 | XVI. Mashinalar | 50 | 41 | 7 | 2 | 2 |
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **500** | **146** | **54** | **46** |
+| **Jami** | **700** | **505** | **144** | **51** | **46** |
 
-Ya'ni **~71 % to'liq**, **~21 % qisman**, **~8 % hali yo'q**.
+Ya'ni **~72 % to'liq**, **~21 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -529,19 +529,19 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 - [x] 1. Modul maqsadi
 - [x] 2. Bosh ekran — *haftalik jadval*
-- [ ] 3. **Obyektlar** — *bir necha obyekt bo'yicha*
+- [x] 3. **Obyektlar** — *obyektlar kesimida xodim, soat va ish haqi*
 - [ ] 🔒 4. Kirish/chiqishni hisobga olish
 - [ ] 🔒 5. Obyekt geozonasi
 - [ ] 🔒 6. QR-kirish
 - [~] 7. Prorabning mobil tabeli — *desktop ekranida*
 - [x] 8. **Brigadalar** — *brigadir, ish, ishchilar tarkibi*
-- [~] 9. Ishchilarni obyektlar bo'yicha taqsimlash — *ishchi obyektga tegishli*
+- [x] 9. Ishchilarni obyektlar bo'yicha taqsimlash
 - [x] 10. Ish vaqtini ishlar bo'yicha taqsimlash — *katakda «Ish» rejimi*
 - [x] 11. **Smenalar** — *kunduzgi / kechki / tungi, koeffitsiyent bilan*
-- [ ] 12. Ish grafigi
+- [x] 12. Ish grafigi
 - [x] 13. Ortiqcha ish — *8 soatdan oshgani ×1.5*
 - [x] 14. Tungi soatlar — *smena bo'yicha, ×1.5*
-- [~] 15. Dam olish / bayram kuni — *sarlavhada ajratiladi*
+- [x] 15. Dam olish / bayram kuni — *grafik bo'yicha nazorat*
 - [x] 16. **Yo'qliklar** — *kun turi: ta'til, kasallik, safar, sababsiz*
 - [x] 17. Ta'tillar
 - [x] 18. Kasallik varaqasi
@@ -554,7 +554,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 25. Brigadalarni solishtirish
 - [x] 26. Xodimlar sonini rejalashtirish — *yaqin 30 kun uchun kerakli soat va ishchi soni*
 - [x] 27. Xodim ehtiyoji prognozi — *bugungi unumdorlikdan; unumdorligi noma'lum ish hisobga kirmaydi*
-- [ ] 28. Xodimlarni ko'chirish
+- [x] 28. Xodimlarni ko'chirish
 - [x] 29. Tabel → ish haqi
 - [x] 30. Tabel → tannarx
 - [x] 31. Aniq ishning tannarxi — *ish haqi + material, bir birlikka*
