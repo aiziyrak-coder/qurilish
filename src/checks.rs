@@ -7718,3 +7718,217 @@ pub fn journal_doubts(
     out.sort_by_key(|c| std::cmp::Reverse(c.date));
     out
 }
+
+// ================= VII.26, 35-36. Chek-list va yakuniy qabul =================
+
+/// Tekshiruv chek-listining bitta bandi (TZ VII.26).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChecklistItem {
+    /// Nimani tekshirish kerak — i18n kaliti.
+    pub key: &'static str,
+    /// Band majburiymi.
+    pub required: bool,
+}
+
+/// TZ VII.26: tekshiruvga chiqishdan oldin chek-list.
+///
+/// Chek-list ish **bo'limi** va tekshiruv **turi** dan chiqadi: nimani
+/// tekshirish kerakligi shu ikkisi bilan aniqlanadi. Ro'yxat qisqa —
+/// uzun ro'yxat o'qilmaydi, o'qilmagan ro'yxat esa foydasiz.
+pub fn inspection_checklist(kind: InspectionKind, section: Section) -> Vec<ChecklistItem> {
+    let item = |key: &'static str, required: bool| ChecklistItem { key, required };
+    let mut out = vec![
+        item("cl_marks", true),
+        item("cl_drawing", true),
+        item("cl_docs", true),
+    ];
+
+    // Tekshiruv turiga xos bandlar.
+    match kind {
+        InspectionKind::Hidden => {
+            out.push(item("cl_hidden_ready", true));
+            out.push(item("cl_hidden_photo", true));
+            out.push(item("cl_hidden_clean", false));
+        }
+        InspectionKind::Concrete => {
+            out.push(item("cl_concrete_sample", true));
+            out.push(item("cl_concrete_temp", true));
+            out.push(item("cl_concrete_care", false));
+        }
+        InspectionKind::Geodesy => {
+            out.push(item("cl_geo_base", true));
+            out.push(item("cl_geo_tolerance", true));
+        }
+        InspectionKind::Material => {
+            out.push(item("cl_mat_cert", true));
+            out.push(item("cl_mat_batch", true));
+            out.push(item("cl_mat_storage", false));
+        }
+        InspectionKind::Volume => {
+            out.push(item("cl_vol_measure", true));
+            out.push(item("cl_vol_journal", true));
+        }
+        InspectionKind::Final => {
+            out.push(item("cl_final_defects", true));
+            out.push(item("cl_final_docs", true));
+            out.push(item("cl_final_tests", true));
+        }
+        InspectionKind::Physical => out.push(item("cl_phys_visual", true)),
+    }
+
+    // Bo'limga xos bandlar.
+    match section {
+        Section::Kj | Section::Km => {
+            out.push(item("cl_sec_rebar", true));
+            out.push(item("cl_sec_weld", section == Section::Km));
+        }
+        Section::Vk | Section::Ov => out.push(item("cl_sec_pressure", true)),
+        Section::Eom | Section::Ss => out.push(item("cl_sec_insulation", true)),
+        Section::Pb => out.push(item("cl_sec_fire", true)),
+        Section::Ar | Section::None => {}
+    }
+    out
+}
+
+/// Yakuniy qabulga to'siq bo'layotgan holat (TZ VII.35-36).
+#[derive(Debug, Clone, PartialEq)]
+pub enum FinalBlock {
+    /// Tugallanmagan ishlar.
+    TasksOpen { count: usize },
+    /// Imzolanmagan ijro hujjatlari.
+    DocsUnsigned { count: usize },
+    /// Bartaraf etilmagan nuqsonlar.
+    DefectsOpen { count: usize },
+    /// Salbiy laboratoriya sinovlari.
+    LabFailed { count: usize },
+    /// Yopilmagan texnik nazorat tekshiruvlari.
+    InspectionsOpen { count: usize },
+    /// Yopilmagan xavfsizlik holatlari.
+    SafetyOpen { count: usize },
+    /// Qabul qilinmagan ish topshiruvlari.
+    AcceptancePending { count: usize },
+}
+
+impl FinalBlock {
+    /// Nechta yozuv haqida gap ketyapti.
+    pub fn count(&self) -> usize {
+        match self {
+            FinalBlock::TasksOpen { count }
+            | FinalBlock::DocsUnsigned { count }
+            | FinalBlock::DefectsOpen { count }
+            | FinalBlock::LabFailed { count }
+            | FinalBlock::InspectionsOpen { count }
+            | FinalBlock::SafetyOpen { count }
+            | FinalBlock::AcceptancePending { count } => *count,
+        }
+    }
+}
+
+/// Obyektning yakuniy qabulga tayyorligi.
+#[derive(Debug, Clone, Default)]
+pub struct FinalReadiness {
+    /// Tayyorlik foizi: yopilgan shartlar ulushi.
+    pub ready_pct: f64,
+    /// Tekshirilgan shartlar soni.
+    pub total_checks: usize,
+    pub blocks: Vec<FinalBlock>,
+}
+
+impl FinalReadiness {
+    /// Obyektni topshirish mumkinmi.
+    pub fn ready(&self) -> bool {
+        self.blocks.is_empty()
+    }
+}
+
+/// Yakuniy qabul tekshiruvi uchun manba.
+pub struct FinalCtx<'a> {
+    pub tasks: &'a [Task],
+    pub required: &'a [RequiredDoc],
+    pub quality: &'a [QualityCheck],
+    pub lab_tests: &'a [LabTest],
+    pub inspections: &'a [Inspection],
+    pub safety: &'a [SafetyEvent],
+    pub acceptances: &'a [WorkAcceptance],
+}
+
+/// TZ VII.35-36: obyekt yakuniy qabulga tayyormi.
+///
+/// Tayyorlik yetti shart bo'yicha o'lchanadi va har biri **o'z modulidagi**
+/// yozuvdan olinadi. Shuning uchun bu yerdagi son tegishli ekrandagi bilan
+/// bir xil bo'ladi: yakuniy qabul alohida hisob-kitob emas, mavjud
+/// holatlarning yig'indisi.
+pub fn final_readiness(ctx: &FinalCtx) -> FinalReadiness {
+    let mut blocks = Vec::new();
+
+    let open_tasks = ctx
+        .tasks
+        .iter()
+        .filter(|t| t.progress < 99.999 && t.fact_end.is_none())
+        .count();
+    if open_tasks > 0 {
+        blocks.push(FinalBlock::TasksOpen { count: open_tasks });
+    }
+
+    let unsigned = ctx.required.iter().filter(|r| !r.signed).count();
+    if unsigned > 0 {
+        blocks.push(FinalBlock::DocsUnsigned { count: unsigned });
+    }
+
+    let defects = ctx
+        .quality
+        .iter()
+        .filter(|q| !q.defect.trim().is_empty() && q.fixed_at.is_none())
+        .count();
+    if defects > 0 {
+        blocks.push(FinalBlock::DefectsOpen { count: defects });
+    }
+
+    let lab = ctx
+        .lab_tests
+        .iter()
+        .filter(|l| l.result == LabTestResult::Fail)
+        .count();
+    if lab > 0 {
+        blocks.push(FinalBlock::LabFailed { count: lab });
+    }
+
+    let insp = ctx
+        .inspections
+        .iter()
+        .filter(|i| {
+            i.done.is_none() || (i.result == InspectionResult::Fail && i.fixed_at.is_none())
+        })
+        .count();
+    if insp > 0 {
+        blocks.push(FinalBlock::InspectionsOpen { count: insp });
+    }
+
+    let safety = ctx
+        .safety
+        .iter()
+        .filter(|s| matches!(s.status, IssueStatus::Open | IssueStatus::InWork))
+        .count();
+    if safety > 0 {
+        blocks.push(FinalBlock::SafetyOpen { count: safety });
+    }
+
+    let accept = ctx
+        .acceptances
+        .iter()
+        .filter(|a| matches!(a.state, AcceptState::Submitted | AcceptState::Rejected))
+        .count();
+    if accept > 0 {
+        blocks.push(FinalBlock::AcceptancePending { count: accept });
+    }
+
+    // Eng ko'p yozuvli to'siq oldinda: ish shu yerdan boshlanadi.
+    blocks.sort_by_key(|b| std::cmp::Reverse(b.count()));
+
+    let total_checks = 7;
+    FinalReadiness {
+        ready_pct: (total_checks - blocks.len()) as f64 * 100.0 / total_checks as f64,
+        total_checks,
+        blocks,
+    }
+}

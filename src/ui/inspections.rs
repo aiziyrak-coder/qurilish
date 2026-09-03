@@ -40,6 +40,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (2, t("in_tab_concrete")),
             (3, t("in_tab_geodesy")),
             (4, t("in_tab_day")),
+            (5, t("in_tab_final")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -54,7 +55,155 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         2 => concrete_tab(ui, app, pid),
         3 => geodesy_tab(ui, app, pid),
         4 => day_tab(ui, app),
+        5 => final_tab(ui, app),
         _ => list_tab(ui, app, pid),
+    }
+}
+
+// ================================================================ Yakuniy qabul
+
+/// Obyekt yakuniy qabulga tayyormi (TZ VII.35-36).
+///
+/// Tayyorlik yetti shart bo'yicha o'lchanadi va har biri o'z modulidagi
+/// yozuvdan olinadi — bu alohida hisob-kitob emas, mavjud holatlarning
+/// yig'indisi.
+fn final_tab(ui: &mut egui::Ui, app: &mut App) {
+    let r = app.final_readiness();
+    let mut go: Option<Screen> = None;
+
+    ui.label(
+        RichText::new(t("in_final_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("in_final_ready"),
+                format!("{:.0}%", r.ready_pct),
+                t("in_final_ready_hint"),
+                if r.ready() {
+                    theme::ok()
+                } else if r.ready_pct >= 70.0 {
+                    theme::warn()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("in_final_blocks"),
+                r.blocks.len().to_string(),
+                &format!("{} {}", r.total_checks, t("in_final_of")),
+                if r.blocks.is_empty() {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(14.0);
+
+    if r.ready() {
+        ui.vertical_centered(|ui| {
+            ui.add_space(30.0);
+            ui.label(
+                RichText::new(t("in_final_all_clear"))
+                    .color(theme::ok())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for b in &r.blocks {
+                egui::Frame::new()
+                    .fill(theme::card())
+                    .inner_margin(10.0)
+                    .corner_radius(6.0)
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(
+                                RichText::new(b.count().to_string())
+                                    .size(15.0)
+                                    .strong()
+                                    .color(theme::danger()),
+                            );
+                            ui.label(RichText::new(final_text(b)).size(12.5));
+                            if ui.small_button(t("an_open")).clicked() {
+                                go = Some(final_screen(b));
+                            }
+                        });
+                    });
+                ui.add_space(6.0);
+            }
+        });
+
+    if let Some(s) = go {
+        app.screen = s;
+    }
+}
+
+/// To'siqni odam o'qiydigan gapga aylantiradi.
+fn final_text(b: &crate::checks::FinalBlock) -> &'static str {
+    use crate::checks::FinalBlock as B;
+    match b {
+        B::TasksOpen { .. } => t("fb_tasks"),
+        B::DocsUnsigned { .. } => t("fb_docs"),
+        B::DefectsOpen { .. } => t("fb_defects"),
+        B::LabFailed { .. } => t("fb_lab"),
+        B::InspectionsOpen { .. } => t("fb_inspections"),
+        B::SafetyOpen { .. } => t("fb_safety"),
+        B::AcceptancePending { .. } => t("fb_acceptance"),
+    }
+}
+
+/// To'siq qaysi ekranda yopiladi.
+fn final_screen(b: &crate::checks::FinalBlock) -> Screen {
+    use crate::checks::FinalBlock as B;
+    match b {
+        B::TasksOpen { .. } => Screen::Gantt,
+        B::DocsUnsigned { .. } => Screen::ExecDocs,
+        B::DefectsOpen { .. } | B::LabFailed { .. } => Screen::Quality,
+        B::InspectionsOpen { .. } => Screen::Inspections,
+        B::SafetyOpen { .. } => Screen::Safety,
+        B::AcceptancePending { .. } => Screen::Contracts,
+    }
+}
+
+/// Tekshiruvga chiqishdan oldingi chek-list (TZ VII.26).
+///
+/// Ro'yxat qisqa: uzun ro'yxat o'qilmaydi, o'qilmagan ro'yxat esa foydasiz.
+fn checklist_popup(ui: &mut egui::Ui, app: &App, inspection: &Inspection) {
+    let section = inspection
+        .task_id
+        .and_then(|id| app.task(id))
+        .map(|t| t.section)
+        .unwrap_or(crate::model::Section::None);
+    let items = crate::checks::inspection_checklist(inspection.kind, section);
+
+    ui.label(RichText::new(t("in_checklist")).size(12.5).strong());
+    ui.add_space(4.0);
+    for i in &items {
+        ui.label(
+            RichText::new(format!(
+                "{} {}",
+                if i.required { "•" } else { "◦" },
+                t(i.key)
+            ))
+            .size(12.0)
+            .color(if i.required {
+                theme::text()
+            } else {
+                theme::muted()
+            }),
+        );
     }
 }
 
@@ -351,6 +500,11 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                         {
                             removed = Some(x.id);
                         }
+                        // Chek-list tekshiruvga chiqishdan oldin kerak —
+                        // shuning uchun u qatorning o'zida turadi (TZ VII.26).
+                        ui.label(RichText::new(t("in_checklist_short")).size(11.0))
+                            .on_hover_ui(|ui| checklist_popup(ui, app, &x));
+
                         ui.end_row();
 
                         if changed && can {

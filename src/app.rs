@@ -1769,6 +1769,19 @@ impl App {
         checks::task_blocks(&self.tasks, &self.quality, &self.check_points, self.today)
     }
 
+    /// Obyektning yakuniy qabulga tayyorligi (TZ VII.35-36).
+    pub fn final_readiness(&self) -> checks::FinalReadiness {
+        checks::final_readiness(&checks::FinalCtx {
+            tasks: &self.tasks,
+            required: &checks::required_docs(&self.tasks, &self.exec_docs, false),
+            quality: &self.quality,
+            lab_tests: &self.lab_tests,
+            inspections: &self.inspections,
+            safety: &self.safety,
+            acceptances: &self.acceptances,
+        })
+    }
+
     /// Bugun ketayotgan ishlar: grafik bo'yicha bugunni qamragan va
     /// hali tugallanmaganlari.
     ///

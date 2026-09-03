@@ -24,7 +24,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | IV. Ijro hujjatlari | 30 | 15 | 9 | 6 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 21 | 5 | 8 | 6 |
 | VI. Prorab ilovasi | 37 | 20 | 10 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 24 | 7 | 7 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 23 | 11 | 3 | 2 |
 | IX. Arizalar | 42 | 31 | 6 | 5 | 1 |
 | X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **435** | **158** | **107** | **53** |
+| **Jami** | **700** | **438** | **156** | **106** | **53** |
 
-Ya'ni **~62 % to'liq**, **~23 % qisman**, **~15 % hali yo'q**.
+Ya'ni **~63 % to'liq**, **~22 % qisman**, **~15 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -268,7 +268,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 23. Ijro hujjatlari
 - [x] 24. AOSR ni tekshirish — *imzolash/rad etish*
 - [x] 25. Sifat nazorati
-- [ ] 26. AI chek-list yaratadi
+- [x] 26. AI chek-list yaratadi
 - [~] 27. PPR nazorati
 - [~] 28. Ishlar ketma-ketligini nazorat qilish
 - [~] 29. Loyihani nazorat qilish
@@ -277,8 +277,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 32. Qurilishdagi o'zgarishlarni nazorat qilish
 - [~] 33. AI-yordamchi
 - [x] 34. Texnik nazoratning kunlik hisoboti — *oxirgi 14 kun, yozuvlardan yig'iladi*
-- [~] 35. Obyekt tayyorligini nazorat qilish
-- [~] 36. Yakuniy qabul — *tekshiruv turi bor; yakuniy qabul dalolatnomasi shakli yo'q*
+- [x] 35. Obyekt tayyorligini nazorat qilish — *yetti shart bo'yicha*
+- [x] 36. Yakuniy qabul — *tayyorlik va to'siqlar ro'yxati*
 - [x] 37. Boshqa modullar bilan bog'lanish
 - [x] 38. Eng muhim funksiya
 

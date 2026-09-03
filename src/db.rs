@@ -7214,6 +7214,106 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|i| i.title == crate::i18n::t("chk_ss_place_title")));
     }
 
+    /// TZ VII.26: chek-list tekshiruv turi va ish bo'limidan chiqadi,
+    /// har bandi tarjimaga ega va ro'yxat qisqa qoladi.
+    #[test]
+    fn checklist_follows_kind_and_section() {
+        use crate::checks::inspection_checklist;
+        use crate::domain::InspectionKind;
+        use crate::model::Section;
+
+        for kind in InspectionKind::ALL {
+            for section in Section::ALL {
+                let items = inspection_checklist(*kind, section);
+                assert!(items.len() >= 3, "chek-list juda qisqa");
+                assert!(items.len() <= 10, "uzun ro'yxat o'qilmaydi");
+                for i in &items {
+                    // Har band tarjimaga ega bo'lishi shart.
+                    assert_ne!(crate::i18n::t(i.key), i.key, "tarjima yo'q: {}", i.key);
+                }
+                // Bandlar takrorlanmaydi.
+                let mut keys: Vec<&str> = items.iter().map(|i| i.key).collect();
+                keys.sort_unstable();
+                let before = keys.len();
+                keys.dedup();
+                assert_eq!(before, keys.len(), "chek-listda takror band bor");
+            }
+        }
+
+        // Beton tekshiruvida namuna bandi bor, geodeziyada yo'q.
+        let concrete = inspection_checklist(InspectionKind::Concrete, Section::Kj);
+        assert!(concrete.iter().any(|i| i.key == "cl_concrete_sample"));
+        let geodesy = inspection_checklist(InspectionKind::Geodesy, Section::Kj);
+        assert!(!geodesy.iter().any(|i| i.key == "cl_concrete_sample"));
+
+        // Payvand bandi faqat metall konstruksiyada majburiy.
+        let km = inspection_checklist(InspectionKind::Hidden, Section::Km);
+        assert!(km.iter().any(|i| i.key == "cl_sec_weld" && i.required));
+        let kj = inspection_checklist(InspectionKind::Hidden, Section::Kj);
+        assert!(kj.iter().any(|i| i.key == "cl_sec_weld" && !i.required));
+    }
+
+    /// TZ VII.35-36: yakuniy qabul tayyorligi mavjud modullardagi yozuvlardan
+    /// yig'iladi — alohida hisob-kitob emas.
+    #[test]
+    fn final_readiness_sums_up_the_modules() {
+        use crate::checks::FinalBlock as B;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let r = app.final_readiness();
+        assert_eq!(r.total_checks, 7);
+        assert!(
+            !r.ready(),
+            "namunadagi obyekt hali topshirishga tayyor emas"
+        );
+        assert!(
+            (r.ready_pct
+                - (r.total_checks - r.blocks.len()) as f64 * 100.0 / r.total_checks as f64)
+                .abs()
+                < 0.001
+        );
+
+        for b in &r.blocks {
+            assert!(b.count() > 0);
+            match b {
+                B::TasksOpen { count } => assert_eq!(
+                    *count,
+                    app.tasks
+                        .iter()
+                        .filter(|t| t.progress < 99.999 && t.fact_end.is_none())
+                        .count()
+                ),
+                B::SafetyOpen { count } => assert_eq!(
+                    *count,
+                    app.safety
+                        .iter()
+                        .filter(|s| matches!(
+                            s.status,
+                            crate::domain::IssueStatus::Open | crate::domain::IssueStatus::InWork
+                        ))
+                        .count()
+                ),
+                B::LabFailed { count } => assert_eq!(
+                    *count,
+                    app.lab_tests
+                        .iter()
+                        .filter(|l| l.result == crate::domain::LabTestResult::Fail)
+                        .count()
+                ),
+                _ => {}
+            }
+        }
+
+        // Eng ko'p yozuvli to'siq oldinda.
+        for w in r.blocks.windows(2) {
+            assert!(w[0].count() >= w[1].count());
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
