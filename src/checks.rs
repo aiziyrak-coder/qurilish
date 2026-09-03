@@ -6257,3 +6257,98 @@ pub fn safety_risks(
 
     out
 }
+
+// ================================================================ VIII.28. Shartnoma monitoringi
+
+/// Shartnoma bo'yicha ogohlantirish (TZ VIII.28).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContractAlert {
+    /// Qiymat dastlabkidan sezilarli chetga chiqdi.
+    SumDeviation { contract_id: i64, pct: f64 },
+    /// Kelishuvda turgan o'zgarish uzoq qoldi.
+    ChangePending { number: String, days: i64 },
+    /// Muddati o'tgan to'lov.
+    PaymentOverdue {
+        number: String,
+        days: i64,
+        amount: f64,
+    },
+    /// Shartnoma muddati o'tgan, lekin yopilmagan.
+    ContractOverdue { contract_id: i64, days: i64 },
+    /// To'lov jadvali amaldagi summani qoplamaydi.
+    ScheduleGap { contract_id: i64, gap: f64 },
+    /// Qabul hujjati uzoq javobsiz turibdi.
+    AcceptancePending { number: String, days: i64 },
+}
+
+/// Shartnoma summasi shundan ko'p chetga chiqsa — ogohlantiramiz.
+pub const SUM_DEVIATION_LIMIT: f64 = 5.0;
+/// Qaror shuncha kundan ko'p kutilsa — ogohlantiramiz.
+pub const DECISION_LIMIT_DAYS: i64 = 10;
+
+/// Shartnomalar bo'yicha nimalarga e'tibor berish kerakligini yig'adi.
+///
+/// Har bir ogohlantirishda **son** bor: foiz, kun yoki summa. «Diqqat
+/// qiling» degan xabar buyurtmachiga hech narsa bermaydi.
+pub fn contract_alerts(
+    contracts: &[Contract],
+    changes: &[ContractChange],
+    stages: &[PaymentStage],
+    acceptances: &[WorkAcceptance],
+    today: NaiveDate,
+) -> Vec<ContractAlert> {
+    let mut out = Vec::new();
+
+    for c in contracts {
+        let st = contract_state(c, changes, stages, today);
+        if st.change_pct().abs() > SUM_DEVIATION_LIMIT {
+            out.push(ContractAlert::SumDeviation {
+                contract_id: c.id,
+                pct: st.change_pct(),
+            });
+        }
+        if c.overdue(today) {
+            out.push(ContractAlert::ContractOverdue {
+                contract_id: c.id,
+                days: (today - c.end).num_days(),
+            });
+        }
+        // Jadval amaldagi summadan sezilarli kam bo'lsa — u eskirgan.
+        if st.planned > 0.0 && st.schedule_gap() > st.current * 0.05 {
+            out.push(ContractAlert::ScheduleGap {
+                contract_id: c.id,
+                gap: st.schedule_gap(),
+            });
+        }
+    }
+
+    for x in changes.iter().filter(|x| x.pending()) {
+        let days = (today - x.date).num_days();
+        if days > DECISION_LIMIT_DAYS {
+            out.push(ContractAlert::ChangePending {
+                number: x.number.clone(),
+                days,
+            });
+        }
+    }
+
+    for s in stages.iter().filter(|s| s.overdue(today)) {
+        out.push(ContractAlert::PaymentOverdue {
+            number: s.number.clone(),
+            days: s.delay_days(today),
+            amount: s.left(),
+        });
+    }
+
+    for a in acceptances.iter().filter(|a| a.pending()) {
+        let days = (today - a.date).num_days();
+        if days > DECISION_LIMIT_DAYS {
+            out.push(ContractAlert::AcceptancePending {
+                number: a.number.clone(),
+                days,
+            });
+        }
+    }
+
+    out
+}

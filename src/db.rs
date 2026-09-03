@@ -6192,6 +6192,90 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         );
     }
 
+    /// TZ VIII.28: har bir ogohlantirishda son bor — foiz, kun yoki summa.
+    #[test]
+    fn contract_alerts_carry_numbers() {
+        use crate::checks::{contract_alerts, ContractAlert, DECISION_LIMIT_DAYS};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let alerts = contract_alerts(
+            &t.db.contracts(pid),
+            &t.db.contract_changes(pid),
+            &t.db.payment_stages(pid),
+            &t.db.work_acceptances(pid),
+            today,
+        );
+        assert!(!alerts.is_empty(), "namunada ogohlantirish yo'q");
+
+        for a in &alerts {
+            match a {
+                ContractAlert::SumDeviation { pct, .. } => {
+                    assert!(pct.abs() > crate::checks::SUM_DEVIATION_LIMIT);
+                }
+                ContractAlert::ChangePending { number, days } => {
+                    assert!(!number.is_empty());
+                    assert!(*days > DECISION_LIMIT_DAYS);
+                }
+                ContractAlert::PaymentOverdue {
+                    number,
+                    days,
+                    amount,
+                } => {
+                    assert!(!number.is_empty());
+                    assert!(*days > 0);
+                    assert!(*amount > 0.0);
+                }
+                ContractAlert::ContractOverdue { days, .. } => assert!(*days > 0),
+                ContractAlert::ScheduleGap { gap, .. } => assert!(*gap > 0.0),
+                ContractAlert::AcceptancePending { number, days } => {
+                    assert!(!number.is_empty());
+                    assert!(*days > DECISION_LIMIT_DAYS);
+                }
+            }
+        }
+        // Muddati o'tgan to'lov namunada bor.
+        assert!(alerts
+            .iter()
+            .any(|a| matches!(a, ContractAlert::PaymentOverdue { .. })));
+    }
+
+    /// Yangi qaror kutayotgan o'zgarish darhol ogohlantirishga aylanmaydi.
+    #[test]
+    fn fresh_pending_change_is_not_an_alert_yet() {
+        use crate::checks::{contract_alerts, ContractAlert, DECISION_LIMIT_DAYS};
+        use crate::domain::{ChangeKind, ChangeStatus, ContractChange};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let change = |days_ago: i64| ContractChange {
+            id: 0,
+            project_id: 1,
+            contract_id: None,
+            number: "DS-9".into(),
+            kind: ChangeKind::Extra,
+            date: today - chrono::Duration::days(days_ago),
+            description: String::new(),
+            amount: 100.0,
+            days: 0,
+            reason: String::new(),
+            status: ChangeStatus::Sent,
+            decided_at: None,
+            decided_by: String::new(),
+            note: String::new(),
+        };
+
+        // Kecha yuborilgan — hali savol yo'q.
+        let fresh = contract_alerts(&[], &[change(1)], &[], &[], today);
+        assert!(fresh.is_empty());
+
+        // Chegaradan oshgan — ogohlantirish.
+        let old = contract_alerts(&[], &[change(DECISION_LIMIT_DAYS + 2)], &[], &[], today);
+        assert!(old
+            .iter()
+            .any(|a| matches!(a, ContractAlert::ChangePending { .. })));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

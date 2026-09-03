@@ -2843,6 +2843,28 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pf_move_to" => ("Qayerga", "Куда"),
         "pf_move_value" => ("Qiymati", "Стоимость"),
 
+        // ---------- VIII. Kabinet: ogohlantirish, xarid, izoh ----------
+        "cl_alerts" => ("Shartnoma bo'yicha ogohlantirishlar", "Предупреждения по договорам"),
+        "cl_a_deviation" => ("qiymat dastlabkidan chetga chiqdi:", "стоимость отклонилась от первоначальной на"),
+        "cl_a_pending" => ("kelishuvda turibdi,", "на согласовании уже"),
+        "cl_a_overdue" => ("to'lov kechikdi,", "платёж просрочен на"),
+        "cl_a_contract_overdue" => ("shartnoma muddati o'tdi,", "срок договора истёк"),
+        "cl_a_gap" => ("to'lov jadvali summani qoplamaydi:", "график платежей не покрывает сумму:"),
+        "cl_a_accept_pending" => ("qabul hujjati javobsiz,", "акт приёмки без ответа уже"),
+
+        "cl_purchases" => ("Yirik xaridlar", "Крупные закупки"),
+        "cl_quotes" => ("taklif solishtirilgan", "предложения сравнивались"),
+        "cl_no_quotes" => ("taklif solishtirilmagan", "предложения не сравнивались"),
+
+        "cl_remarks" => ("Mening izohlarim", "Мои замечания"),
+        "cl_remarks_hint" => (
+            "Bu kabinetdagi yagona yozish huquqi: ko'rgan narsangizni shu yerda qayd eting.",
+            "Единственное право записи в кабинете: зафиксируйте здесь то, что увидели.",
+        ),
+        "cl_remarks_empty" => ("Hozircha izoh yo'q", "Замечаний пока нет"),
+        "cl_remark_add" => ("Qo'shish", "Добавить"),
+        "cl_remark_added" => ("Izoh qo'shildi", "Замечание добавлено"),
+
         // ---------- XV. Zonalar, inventar va sabab tahlili ----------
         "sf_tab_zones" => ("Zonalar va inventar", "Зоны и инвентарь"),
         "sf_tab_analysis" => ("Tahlil", "Анализ"),

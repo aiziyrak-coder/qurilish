@@ -49,6 +49,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 finance_block(ui, app, &project);
                 ui.add_space(12.0);
                 week_block(ui, app);
+                ui.add_space(12.0);
+                alerts_block(ui, app);
                 if !app.contracts.is_empty() {
                     ui.add_space(12.0);
                     contracts_block(ui, app);
@@ -56,6 +58,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(12.0);
                 payments_block(ui, app);
                 acceptance_block(ui, app);
+                ui.add_space(12.0);
+                purchases_block(ui, app);
+                ui.add_space(12.0);
+                remarks_block(ui, app);
                 ui.add_space(12.0);
                 recent_block(ui, app);
                 if !app.units.is_empty() {
@@ -618,4 +624,271 @@ fn week_block(ui: &mut egui::Ui, app: &App) {
             );
         }
     });
+}
+
+/// Shartnoma bo'yicha ogohlantirishlar (TZ VIII.28).
+///
+/// Har birida son bor: foiz, kun yoki summa. «Diqqat qiling» degan
+/// xabar buyurtmachiga hech narsa bermaydi.
+fn alerts_block(ui: &mut egui::Ui, app: &App) {
+    let alerts = crate::checks::contract_alerts(
+        &app.contracts,
+        &app.contract_changes,
+        &app.payment_stages,
+        &app.acceptances,
+        app.today,
+    );
+    if alerts.is_empty() {
+        return;
+    }
+    block(ui, t("cl_alerts"), |ui| {
+        for a in &alerts {
+            let (text, color) = alert_line(app, a);
+            ui.horizontal(|ui| {
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(3.0, 16.0), Sense::hover());
+                ui.painter().rect_filled(rect, 1.5, color);
+                ui.add_space(6.0);
+                ui.label(RichText::new(text).size(12.0).color(color));
+            });
+            ui.add_space(3.0);
+        }
+    });
+}
+
+/// Ogohlantirish matni va rangi.
+fn alert_line(app: &App, a: &crate::checks::ContractAlert) -> (String, Color32) {
+    use crate::checks::ContractAlert as A;
+    let contract = |id: i64| {
+        app.contracts
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.number.clone())
+            .unwrap_or_default()
+    };
+    match a {
+        A::SumDeviation { contract_id, pct } => (
+            format!(
+                "{} — {} {:+.1}%",
+                contract(*contract_id),
+                t("cl_a_deviation"),
+                pct
+            ),
+            theme::warn(),
+        ),
+        A::ChangePending { number, days } => (
+            format!("{number} — {} {days} {}", t("cl_a_pending"), t("cl_days")),
+            theme::accent(),
+        ),
+        A::PaymentOverdue {
+            number,
+            days,
+            amount,
+        } => (
+            format!(
+                "{number} — {} {days} {}, {}",
+                t("cl_a_overdue"),
+                t("cl_days"),
+                money(*amount)
+            ),
+            theme::danger(),
+        ),
+        A::ContractOverdue { contract_id, days } => (
+            format!(
+                "{} — {} {days} {}",
+                contract(*contract_id),
+                t("cl_a_contract_overdue"),
+                t("cl_days")
+            ),
+            theme::danger(),
+        ),
+        A::ScheduleGap { contract_id, gap } => (
+            format!(
+                "{} — {} {}",
+                contract(*contract_id),
+                t("cl_a_gap"),
+                money(*gap)
+            ),
+            theme::warn(),
+        ),
+        A::AcceptancePending { number, days } => (
+            format!(
+                "{number} — {} {days} {}",
+                t("cl_a_accept_pending"),
+                t("cl_days")
+            ),
+            theme::accent(),
+        ),
+    }
+}
+
+/// Yirik xaridlar va takliflar solishtiruvi (TZ VIII.14-15).
+///
+/// Buyurtmachi xaridlarni boshqarmaydi, lekin pul uning puli: qayerga
+/// ketayotgani va arzonrog'i tanlanganmi — ko'rinishi kerak.
+fn purchases_block(ui: &mut egui::Ui, app: &App) {
+    if app.purchases.is_empty() {
+        return;
+    }
+    let mut top: Vec<&crate::domain::Purchase> = app.purchases.iter().collect();
+    top.sort_by(|a, b| b.amount().total_cmp(&a.amount()));
+
+    block(ui, t("cl_purchases"), |ui| {
+        egui::Grid::new("cl_pu_grid")
+            .num_columns(5)
+            .spacing([10.0, 5.0])
+            .striped(true)
+            .show(ui, |ui| {
+                for p in top.iter().take(6) {
+                    ui.label(RichText::new(&p.number).size(12.0).color(theme::muted()));
+                    ui.add_sized(
+                        [220.0, 18.0],
+                        egui::Label::new(
+                            RichText::new(super::issues::truncate(&p.title, 28)).size(12.5),
+                        ),
+                    );
+                    ui.add_sized(
+                        [180.0, 18.0],
+                        egui::Label::new(
+                            RichText::new(super::issues::truncate(&p.supplier, 22))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        ),
+                    );
+                    ui.add_sized(
+                        [140.0, 18.0],
+                        egui::Label::new(RichText::new(money(p.amount())).size(12.5)),
+                    );
+                    // Taklif solishtirilganmi: buyurtmachi uchun asosiy savol.
+                    let quotes = p
+                        .request_id
+                        .map(|rid| {
+                            app.quotes
+                                .iter()
+                                .filter(|q| q.request_id == Some(rid))
+                                .count()
+                        })
+                        .unwrap_or(0);
+                    ui.label(
+                        RichText::new(if quotes > 1 {
+                            format!("{quotes} {}", t("cl_quotes"))
+                        } else {
+                            t("cl_no_quotes").to_string()
+                        })
+                        .size(11.5)
+                        .color(if quotes > 1 {
+                            theme::ok()
+                        } else {
+                            theme::warn()
+                        }),
+                    );
+                    ui.end_row();
+                }
+            });
+    });
+}
+
+/// Buyurtmachi izohlari (TZ VIII.17-18).
+///
+/// Kabinet faqat o'qish uchun edi, lekin izoh — buyurtmachining yagona
+/// **yozish** huquqi: u ko'rgan narsasini shu yerda qayd etadi.
+fn remarks_block(ui: &mut egui::Ui, app: &mut App) {
+    let Some(pid) = app.current else { return };
+    let mine: Vec<&crate::domain::Issue> = app
+        .issues
+        .iter()
+        .filter(|i| i.module == crate::domain::IssueModule::Client)
+        .collect();
+
+    let key = egui::Id::new("cl_remark");
+    let mut draft = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
+    let mut send = false;
+
+    block(ui, t("cl_remarks"), |ui| {
+        ui.label(
+            RichText::new(t("cl_remarks_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            let w = (ui.available_width() - 140.0).clamp(200.0, 620.0);
+            ui.add_sized([w, 24.0], egui::TextEdit::singleline(&mut draft));
+            if ui
+                .add_enabled(
+                    !draft.trim().is_empty(),
+                    egui::Button::new(t("cl_remark_add")),
+                )
+                .clicked()
+            {
+                send = true;
+            }
+        });
+
+        if mine.is_empty() {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("cl_remarks_empty"))
+                    .size(12.0)
+                    .color(theme::muted()),
+            );
+            return;
+        }
+        ui.add_space(8.0);
+        for i in mine.iter().take(8) {
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [104.0, 18.0],
+                    egui::Label::new(
+                        RichText::new(i.created_at.get(..10).unwrap_or_default())
+                            .size(11.5)
+                            .color(theme::muted()),
+                    ),
+                );
+                ui.add_sized(
+                    [420.0, 18.0],
+                    egui::Label::new(RichText::new(&i.title).size(12.5)),
+                );
+                ui.label(
+                    RichText::new(i.status.label())
+                        .size(11.5)
+                        .color(match i.status {
+                            crate::domain::IssueStatus::Fixed => theme::ok(),
+                            crate::domain::IssueStatus::Rejected => theme::muted(),
+                            _ => theme::warn(),
+                        }),
+                );
+            });
+        }
+    });
+
+    if send {
+        let text = draft.trim().to_string();
+        app.db.insert_issue(&crate::domain::Issue {
+            id: 0,
+            project_id: pid,
+            module: crate::domain::IssueModule::Client,
+            section: crate::model::Section::None,
+            code: format!("BZ-{:05}", app.issues.len() + 1),
+            sheet: String::new(),
+            location: String::new(),
+            element: String::new(),
+            title: text,
+            description: String::new(),
+            severity: crate::domain::Severity::Warning,
+            norm_doc: String::new(),
+            norm_clause: String::new(),
+            norm_text: String::new(),
+            recommendation: String::new(),
+            responsible: String::new(),
+            deadline: Some(app.today + chrono::Duration::days(7)),
+            status: crate::domain::IssueStatus::Open,
+            // Buyurtmachi qo'lda yozgan: avtomatik tekshiruv uni o'chirmaydi.
+            auto: false,
+            created_at: format!("{} 00:00:00", app.today),
+        });
+        app.reload_modules();
+        draft.clear();
+        app.notify(t("cl_remark_added").to_string());
+    }
+    ui.data_mut(|d| d.insert_temp(key, draft));
 }
