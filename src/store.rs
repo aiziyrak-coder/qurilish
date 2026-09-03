@@ -736,6 +736,21 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_repair_pid ON machine_repair(project_id);
 
+            CREATE TABLE IF NOT EXISTS safety_zone (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL DEFAULT 'danger',
+                name TEXT NOT NULL DEFAULT '',
+                place TEXT NOT NULL DEFAULT '',
+                measure TEXT NOT NULL DEFAULT '',
+                responsible TEXT NOT NULL DEFAULT '',
+                check_due TEXT,
+                checked_at TEXT,
+                ready INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_zone_pid ON safety_zone(project_id);
+
             CREATE TABLE IF NOT EXISTS contract (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -830,6 +845,7 @@ impl Db {
             "ALTER TABLE machine ADD COLUMN service_done REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN rented INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE machine ADD COLUMN price REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE safety_event ADD COLUMN root_cause TEXT NOT NULL DEFAULT 'unknown'",
             "ALTER TABLE machine_log ADD COLUMN number TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine_log ADD COLUMN driver TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE machine_log ADD COLUMN route TEXT NOT NULL DEFAULT ''",
@@ -3954,6 +3970,75 @@ impl Db {
         self.del("machine_repair", id)
     }
 
+    // ---------- XV.15, 22-24. Xavfli zonalar va inventar ----------
+
+    pub fn safety_zones(&self, pid: i64) -> Vec<SafetyZone> {
+        self.list(
+            "SELECT id,project_id,kind,name,place,measure,responsible,check_due,checked_at,
+                    ready,note
+             FROM safety_zone WHERE project_id=?1 ORDER BY kind,id",
+            pid,
+            |r| {
+                Ok(SafetyZone {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    kind: ZoneKind::parse(&r.get::<_, String>(2)?),
+                    name: r.get(3)?,
+                    place: r.get(4)?,
+                    measure: r.get(5)?,
+                    responsible: r.get(6)?,
+                    check_due: odate(r.get(7)?),
+                    checked_at: odate(r.get(8)?),
+                    ready: r.get::<_, i64>(9)? != 0,
+                    note: r.get(10)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_safety_zone(&self, x: &SafetyZone) -> i64 {
+        self.ins(
+            "INSERT INTO safety_zone (project_id,kind,name,place,measure,responsible,check_due,
+                                      checked_at,ready,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            params![
+                x.project_id,
+                x.kind.code(),
+                x.name,
+                x.place,
+                x.measure,
+                x.responsible,
+                ods(x.check_due),
+                ods(x.checked_at),
+                x.ready as i64,
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_safety_zone(&self, x: &SafetyZone) -> bool {
+        self.upd(
+            "UPDATE safety_zone SET kind=?2,name=?3,place=?4,measure=?5,responsible=?6,
+                    check_due=?7,checked_at=?8,ready=?9,note=?10 WHERE id=?1",
+            params![
+                x.id,
+                x.kind.code(),
+                x.name,
+                x.place,
+                x.measure,
+                x.responsible,
+                ods(x.check_due),
+                ods(x.checked_at),
+                x.ready as i64,
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_safety_zone(&self, id: i64) -> bool {
+        self.del("safety_zone", id)
+    }
+
     // ---------- VIII. Buyurtmachi: shartnomalar va to'lovlar ----------
 
     pub fn contracts(&self, pid: i64) -> Vec<Contract> {
@@ -4250,7 +4335,8 @@ impl Db {
 
     pub fn safety_events(&self, pid: i64) -> Vec<SafetyEvent> {
         self.list(
-            "SELECT id,project_id,date,kind,severity,place,description,responsible,measure,deadline,status
+            "SELECT id,project_id,date,kind,severity,place,description,responsible,measure,deadline,
+                    status,root_cause
              FROM safety_event WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -4266,6 +4352,7 @@ impl Db {
                     measure: r.get(8)?,
                     deadline: odate(r.get(9)?),
                     status: IssueStatus::parse(&r.get::<_, String>(10)?),
+                    root_cause: RootCause::parse(&r.get::<_, String>(11)?),
                 })
             },
         )
@@ -4273,11 +4360,21 @@ impl Db {
 
     pub fn insert_safety(&self, s: &SafetyEvent) -> i64 {
         self.ins(
-            "INSERT INTO safety_event (project_id,date,kind,severity,place,description,responsible,measure,deadline,status)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)",
+            "INSERT INTO safety_event (project_id,date,kind,severity,place,description,responsible,
+                                       measure,deadline,status,root_cause)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
             params![
-                s.project_id, s.date.to_string(), s.kind.code(), s.severity.code(), s.place,
-                s.description, s.responsible, s.measure, ods(s.deadline), s.status.code()
+                s.project_id,
+                s.date.to_string(),
+                s.kind.code(),
+                s.severity.code(),
+                s.place,
+                s.description,
+                s.responsible,
+                s.measure,
+                ods(s.deadline),
+                s.status.code(),
+                s.root_cause.code()
             ],
         )
     }
@@ -4285,7 +4382,8 @@ impl Db {
     pub fn update_safety(&self, s: &SafetyEvent) -> bool {
         self.upd(
             "UPDATE safety_event SET date=?2,kind=?3,severity=?4,place=?5,description=?6,
-                    responsible=?7,measure=?8,deadline=?9,status=?10 WHERE id=?1",
+                    responsible=?7,measure=?8,deadline=?9,status=?10,root_cause=?11
+             WHERE id=?1",
             params![
                 s.id,
                 s.date.to_string(),
@@ -4296,7 +4394,8 @@ impl Db {
                 s.responsible,
                 s.measure,
                 ods(s.deadline),
-                s.status.code()
+                s.status.code(),
+                s.root_cause.code()
             ],
         )
     }
@@ -4848,6 +4947,7 @@ impl Db {
         self.seed_demo_tools(pid, ru);
         self.seed_demo_lab(pid, ru);
         self.seed_demo_machine_plan(pid, ru);
+        self.seed_demo_zones(pid, ru);
         self.seed_demo_estimate_alt(pid, ru);
     }
 
@@ -6349,6 +6449,7 @@ impl Db {
                 "",
                 "",
                 IssueStatus::Fixed,
+                RootCause::Unknown,
             ),
             (
                 SafetyKind::Inspection,
@@ -6361,6 +6462,7 @@ impl Db {
                 "",
                 "",
                 IssueStatus::Fixed,
+                RootCause::Unknown,
             ),
             (
                 SafetyKind::Training,
@@ -6373,6 +6475,7 @@ impl Db {
                 "",
                 "",
                 IssueStatus::Fixed,
+                RootCause::NoTraining,
             ),
             (
                 SafetyKind::NearMiss,
@@ -6385,6 +6488,7 @@ impl Db {
                 "Zona to'sildi, signalchi tayinlandi",
                 "Зона ограждена, назначен сигнальщик",
                 IssueStatus::Fixed,
+                RootCause::NoBarrier,
             ),
             (
                 SafetyKind::Training,
@@ -6397,6 +6501,7 @@ impl Db {
                 "",
                 "",
                 IssueStatus::Fixed,
+                RootCause::Unknown,
             ),
             (
                 SafetyKind::Inspection,
@@ -6409,6 +6514,7 @@ impl Db {
                 "Kamchilik topilmadi",
                 "Замечаний не выявлено",
                 IssueStatus::Fixed,
+                RootCause::Unknown,
             ),
             (
                 SafetyKind::Inspection,
@@ -6421,6 +6527,7 @@ impl Db {
                 "",
                 "",
                 IssueStatus::Fixed,
+                RootCause::Unknown,
             ),
             (
                 SafetyKind::Violation,
@@ -6433,6 +6540,7 @@ impl Db {
                 "Yangisiga almashtirildi",
                 "Заменён на новый",
                 IssueStatus::Fixed,
+                RootCause::Organisation,
             ),
             (
                 SafetyKind::NearMiss,
@@ -6445,6 +6553,7 @@ impl Db {
                 "Kabel osildi",
                 "Кабель подвешен",
                 IssueStatus::Fixed,
+                RootCause::NoBarrier,
             ),
             (
                 SafetyKind::Violation,
@@ -6457,9 +6566,12 @@ impl Db {
                 "Ish to'xtatildi, SIZ berildi",
                 "Работы остановлены, выданы СИЗ",
                 IssueStatus::Open,
+                RootCause::NoPpe,
             ),
         ];
-        for (kind, severity, back, pl_uz, pl_ru, de_uz, de_ru, me_uz, me_ru, status) in events {
+        for (kind, severity, back, pl_uz, pl_ru, de_uz, de_ru, me_uz, me_ru, status, cause) in
+            events
+        {
             self.insert_safety(&SafetyEvent {
                 id: 0,
                 project_id: pid,
@@ -6477,6 +6589,7 @@ impl Db {
                 measure: if ru { me_ru } else { me_uz }.into(),
                 deadline: (status != IssueStatus::Fixed).then(|| d(back - 10)),
                 status,
+                root_cause: cause,
             });
         }
     }
@@ -7526,6 +7639,138 @@ impl Db {
         }
     }
 
+    /// Xavfli zonalar va xavfsizlik inventari namunasi (TZ XV.15, 22-24).
+    pub fn seed_demo_zones(&self, pid: i64, ru: bool) {
+        if !self.safety_zones(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let boss = if ru {
+            "Юсупов Б.Р."
+        } else {
+            "Yusupov B.R."
+        };
+
+        // (tur, nomi uz/ru, joy uz/ru, chora uz/ru, tekshiruv kuni, chora ko'rilgan)
+        let zones: [ZoneDef; 9] = [
+            (
+                ZoneKind::Lifting,
+                "Kran ish zonasi",
+                "Зона работы крана",
+                "A-D o'qlari",
+                "Оси А-Д",
+                "To'siq va signalchi",
+                "Ограждение и сигнальщик",
+                -14,
+                true,
+            ),
+            (
+                ZoneKind::Danger,
+                "Chekka kontur, 6-qavat",
+                "Край перекрытия, 6 этаж",
+                "6-qavat",
+                "6 этаж",
+                "Muhofaza to'sig'i",
+                "Защитное ограждение",
+                -7,
+                true,
+            ),
+            (
+                ZoneKind::Excavation,
+                "Kotlovan, shimoliy tomon",
+                "Котлован, северная сторона",
+                "Bosh reja",
+                "Генплан",
+                "To'siq va belgilar",
+                "Ограждение и знаки",
+                4,
+                false,
+            ),
+            (
+                ZoneKind::Electric,
+                "Vaqtinchalik elektr shchiti",
+                "Временный электрощит",
+                "1-qavat",
+                "1 этаж",
+                "Qulf va ogohlantirish belgisi",
+                "Замок и предупреждающий знак",
+                -21,
+                true,
+            ),
+            (
+                ZoneKind::Fire,
+                "Yong'in o'chirgichlar, 1-3 qavat",
+                "Огнетушители, 1-3 этаж",
+                "Zinapoyalar",
+                "Лестничные клетки",
+                "12 ta OP-5, tekshirilgan",
+                "12 шт. ОП-5, проверены",
+                -30,
+                true,
+            ),
+            (
+                ZoneKind::Fire,
+                "Yong'in o'chirgichlar, 4-6 qavat",
+                "Огнетушители, 4-6 этаж",
+                "Zinapoyalar",
+                "Лестничные клетки",
+                "9 ta OP-5",
+                "9 шт. ОП-5",
+                12,
+                true,
+            ),
+            (
+                ZoneKind::Evacuation,
+                "Evakuatsiya rejasi va belgilar",
+                "План эвакуации и знаки",
+                "Har qavatda",
+                "На каждом этаже",
+                "Rejalar osilgan, belgilar o'rnatilgan",
+                "Планы вывешены, знаки установлены",
+                -60,
+                true,
+            ),
+            (
+                ZoneKind::Evacuation,
+                "Evakuatsiya yo'li, 5-qavat",
+                "Путь эвакуации, 5 этаж",
+                "5-qavat",
+                "5 этаж",
+                "Yo'l materialdan tozalanishi kerak",
+                "Проход нужно освободить от материалов",
+                2,
+                false,
+            ),
+            (
+                ZoneKind::Emergency,
+                "Favqulodda vaziyat aloqasi",
+                "Связь при ЧС",
+                "Prorab vagonchasi",
+                "Прорабская",
+                "Telefonlar ro'yxati va aptechka",
+                "Список телефонов и аптечка",
+                -45,
+                true,
+            ),
+        ];
+        for (kind, uz, rux, pl_uz, pl_ru, m_uz, m_ru, check, ready) in zones {
+            self.insert_safety_zone(&SafetyZone {
+                id: 0,
+                project_id: pid,
+                kind,
+                name: if ru { rux } else { uz }.into(),
+                place: if ru { pl_ru } else { pl_uz }.into(),
+                measure: if ru { m_ru } else { m_uz }.into(),
+                responsible: boss.into(),
+                check_due: Some(d(check)),
+                checked_at: ready.then(|| d(check + 30)),
+                ready,
+                note: String::new(),
+            });
+        }
+    }
+
     pub fn seed_demo_resources(&self, pid: i64, ru: bool) {
         if !self.workers(pid).is_empty() {
             return;
@@ -8090,6 +8335,7 @@ impl Db {
                 measure: measure.into(),
                 deadline: deadline_in.map(|d| today + chrono::Duration::days(d)),
                 status,
+                root_cause: RootCause::Unknown,
             });
         };
         se(
@@ -10280,6 +10526,7 @@ type SafetyDef = (
     &'static str,
     &'static str,
     IssueStatus,
+    RootCause,
 );
 
 /// Namunaviy ishchi: ism (uz/ru), lavozim (uz/ru), soatlik stavka, brigada.
@@ -10384,4 +10631,18 @@ type MachineRepairDef = (
     &'static str,
     &'static str,
     f64,
+);
+
+/// Namunaviy xavfsizlik zonasi: tur, nomi (uz/ru), joy (uz/ru),
+/// chora (uz/ru), tekshiruv kuni (orqaga), chora ko'rilganmi.
+type ZoneDef = (
+    ZoneKind,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    i64,
+    bool,
 );

@@ -8,8 +8,8 @@ use crate::domain::{
     ElementLink, Estimate, EstimateItem, ExecDoc, GeodesyPoint, Inspection, Inventory,
     InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, LabTest, Machine, MachineBooking,
     MachineLog, MachineRepair, Material, Payment, PaymentStage, PprDoc, Purchase, QualityCheck,
-    Request, Reservation, SafetyEvent, Severity, Shift, StockMove, TimesheetEntry, Tool, ToolIssue,
-    Unit, Warehouse, WorkAcceptance, Worker,
+    Request, Reservation, SafetyEvent, SafetyZone, Severity, Shift, StockMove, TimesheetEntry,
+    Tool, ToolIssue, Unit, Warehouse, WorkAcceptance, Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -493,6 +493,8 @@ pub struct App {
     /// XIV.22-25. Laboratoriya va maydon sinovlari.
     pub lab_tests: Vec<LabTest>,
     /// XVI.10-12, 23-24. Texnika bandligi va ta'miri.
+    /// XV.15, 22-24. Xavfli zonalar va xavfsizlik inventari.
+    pub zones: Vec<SafetyZone>,
     pub bookings: Vec<MachineBooking>,
     pub repairs: Vec<MachineRepair>,
     pub tool_issues: Vec<ToolIssue>,
@@ -659,6 +661,7 @@ impl App {
             inspections: Vec::new(),
             tools: Vec::new(),
             lab_tests: Vec::new(),
+            zones: Vec::new(),
             bookings: Vec::new(),
             repairs: Vec::new(),
             tool_issues: Vec::new(),
@@ -847,6 +850,7 @@ impl App {
         self.inspections.clear();
         self.tools.clear();
         self.lab_tests.clear();
+        self.zones.clear();
         self.bookings.clear();
         self.repairs.clear();
         self.tool_issues.clear();
@@ -908,6 +912,7 @@ impl App {
         self.inspections = self.db.inspections(id);
         self.tools = self.db.tools(id);
         self.lab_tests = self.db.lab_tests(id);
+        self.zones = self.db.safety_zones(id);
         self.bookings = self.db.machine_bookings(id);
         self.repairs = self.db.machine_repairs(id);
         self.tool_issues = self.db.tool_issues(id);
@@ -1515,6 +1520,7 @@ impl App {
                     responsible: m.get("responsible").copied().unwrap_or("").into(),
                     measure: m.get("measure").copied().unwrap_or("").into(),
                     deadline: None,
+                    root_cause: crate::domain::RootCause::Unknown,
                     status: crate::domain::IssueStatus::parse(
                         m.get("status").copied().unwrap_or(""),
                     ),
@@ -1756,6 +1762,17 @@ impl App {
     /// Asboblarning hozirgi holati (TZ XI.34).
     pub fn tool_status(&self) -> Vec<checks::ToolStatus> {
         checks::tool_status(&self.tools, &self.tool_issues, self.today)
+    }
+
+    /// Xavfsizlik bo'yicha ogohlantirishlar (TZ XV.36).
+    pub fn safety_risks(&self) -> Vec<checks::SafetyRisk> {
+        checks::safety_risks(
+            &self.zones,
+            &self.safety,
+            &self.worker_safety(),
+            &self.work_permits,
+            self.today,
+        )
     }
 
     /// Nuqson ehtimoli yuqori ishlar (TZ XIV.32).

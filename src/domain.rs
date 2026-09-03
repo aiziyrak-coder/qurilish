@@ -1107,6 +1107,9 @@ pub struct SafetyEvent {
     pub measure: String,
     pub deadline: Option<NaiveDate>,
     pub status: IssueStatus,
+    /// Ildiz sabab (TZ XV.28): hodisa nima uchun bo'lgani. Chora simptomga
+    /// emas, shu sababga qaratilishi kerak.
+    pub root_cause: RootCause,
 }
 
 enum_kind!(PermitKind {
@@ -1959,3 +1962,62 @@ impl MachineRepair {
         (self.finished.unwrap_or(today) - self.started).num_days() + 1
     }
 }
+
+// ================================================================ XV.15, 22-24. Zonalar va inventar
+
+enum_kind!(ZoneKind {
+    Danger    => "danger",    "zk_danger";
+    Lifting   => "lifting",   "zk_lifting";
+    Electric  => "electric",  "zk_electric";
+    Excavation => "excavation", "zk_excavation";
+    Fire      => "fire",      "zk_fire";
+    Evacuation => "evacuation", "zk_evacuation";
+    Emergency => "emergency", "zk_emergency";
+});
+
+/// Xavfli zona yoki xavfsizlik inventari (TZ XV.15, 22-24).
+///
+/// Bitta ro'yxatda: xavfli zona ham, yong'in o'chirgich ham, evakuatsiya
+/// belgisi ham — ularning hammasida bir xil savol bor: **joyida turibdimi
+/// va muddati o'tmaganmi**.
+#[derive(Debug, Clone)]
+pub struct SafetyZone {
+    pub id: i64,
+    pub project_id: i64,
+    pub kind: ZoneKind,
+    pub name: String,
+    pub place: String,
+    /// Chora: to'siq, belgi, yorug'lik, navbatchi.
+    pub measure: String,
+    pub responsible: String,
+    /// Keyingi tekshiruv sanasi.
+    pub check_due: Option<NaiveDate>,
+    /// Oxirgi tekshirilgan sana.
+    pub checked_at: Option<NaiveDate>,
+    /// Chora ko'rilganmi.
+    pub ready: bool,
+    pub note: String,
+}
+
+impl SafetyZone {
+    /// Tekshiruv muddati o'tgan.
+    pub fn overdue(&self, today: NaiveDate) -> bool {
+        self.check_due.is_some_and(|d| d < today)
+    }
+
+    /// E'tibor talab qiladi: chora ko'rilmagan yoki muddati o'tgan.
+    pub fn needs_action(&self, today: NaiveDate) -> bool {
+        !self.ready || self.overdue(today)
+    }
+}
+
+enum_kind!(RootCause {
+    Unknown    => "unknown",    "rc_unknown";
+    NoTraining => "no_training", "rc_no_training";
+    NoPpe      => "no_ppe",     "rc_no_ppe";
+    BadEquip   => "bad_equip",  "rc_bad_equip";
+    NoBarrier  => "no_barrier", "rc_no_barrier";
+    Rush       => "rush",       "rc_rush";
+    Weather    => "weather",    "rc_weather";
+    Organisation => "organisation", "rc_organisation";
+});

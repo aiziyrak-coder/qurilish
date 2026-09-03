@@ -6068,3 +6068,192 @@ pub fn repair_summary(
         })
         .collect()
 }
+
+// ================================================================ XV.28, 34-36. Xavfsizlik tahlili
+
+/// Ildiz sabab bo'yicha yakun (TZ XV.28).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CauseLine {
+    pub cause: RootCause,
+    pub count: usize,
+    /// Shundan jiddiy va kritiklari.
+    pub serious: usize,
+    /// Barcha hodisalarning necha foizi.
+    pub pct: f64,
+}
+
+/// Hodisalar qaysi sabab bo'yicha takrorlanayotganini ko'rsatadi.
+///
+/// Chora **simptomga** emas, shu sababga qaratilishi kerak: bitta hodisa
+/// tasodif bo'lishi mumkin, bir xil sababdagi uchtasi esa tizim nuqsoni.
+pub fn root_causes(events: &[SafetyEvent]) -> Vec<CauseLine> {
+    // Faqat haqiqiy hodisalar: instruktaj va tekshiruv sabab talab qilmaydi.
+    let real: Vec<&SafetyEvent> = events
+        .iter()
+        .filter(|e| {
+            matches!(
+                e.kind,
+                SafetyKind::Violation | SafetyKind::NearMiss | SafetyKind::Incident
+            )
+        })
+        .collect();
+    if real.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out: Vec<CauseLine> = Vec::new();
+    for e in &real {
+        match out.iter_mut().find(|c| c.cause == e.root_cause) {
+            Some(c) => {
+                c.count += 1;
+                if matches!(e.severity, Severity::Critical | Severity::Major) {
+                    c.serious += 1;
+                }
+            }
+            None => out.push(CauseLine {
+                cause: e.root_cause,
+                count: 1,
+                serious: usize::from(matches!(e.severity, Severity::Critical | Severity::Major)),
+                pct: 0.0,
+            }),
+        }
+    }
+    let total = real.len() as f64;
+    for c in &mut out {
+        c.pct = c.count as f64 / total * 100.0;
+    }
+    // Ko'p uchraydigan sabab oldinda: chora shu yerdan boshlanadi.
+    out.sort_by_key(|c| std::cmp::Reverse(c.count));
+    out
+}
+
+/// Mas'ul bo'yicha xavfsizlik yakuni (TZ XV.35).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SafetyRating {
+    pub name: String,
+    pub events: usize,
+    /// Buzilish va baxtsiz hodisalar.
+    pub violations: usize,
+    pub incidents: usize,
+    /// Yopilmagan yozuvlar.
+    pub open: usize,
+    /// Muddati o'tganlari.
+    pub overdue: usize,
+}
+
+/// Mas'ullar kesimida xavfsizlik yozuvlari.
+pub fn safety_rating(events: &[SafetyEvent], today: NaiveDate) -> Vec<SafetyRating> {
+    let mut names: Vec<String> = events
+        .iter()
+        .map(|e| e.responsible.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+
+    let mut out: Vec<SafetyRating> = names
+        .into_iter()
+        .map(|name| {
+            let mine: Vec<&SafetyEvent> = events
+                .iter()
+                .filter(|e| e.responsible.trim() == name)
+                .collect();
+            let open = mine
+                .iter()
+                .filter(|e| matches!(e.status, IssueStatus::Open | IssueStatus::InWork))
+                .count();
+            SafetyRating {
+                events: mine.len(),
+                violations: mine
+                    .iter()
+                    .filter(|e| e.kind == SafetyKind::Violation)
+                    .count(),
+                incidents: mine
+                    .iter()
+                    .filter(|e| e.kind == SafetyKind::Incident)
+                    .count(),
+                open,
+                overdue: mine
+                    .iter()
+                    .filter(|e| {
+                        matches!(e.status, IssueStatus::Open | IssueStatus::InWork)
+                            && e.deadline.is_some_and(|d| d < today)
+                    })
+                    .count(),
+                name,
+            }
+        })
+        .collect();
+    // Ko'p hodisali oldinda: e'tibor shu yerga kerak.
+    out.sort_by_key(|r| std::cmp::Reverse(r.events));
+    out
+}
+
+/// Xavfsizlik bo'yicha ogohlantirish (TZ XV.36).
+#[derive(Debug, Clone, PartialEq)]
+pub enum SafetyRisk {
+    /// Xavfli zonada chora ko'rilmagan.
+    ZoneNotReady { zone_id: i64 },
+    /// Zona tekshiruvi muddati o'tgan.
+    ZoneOverdue { zone_id: i64, days: i64 },
+    /// Bir xil sabab uch va undan ko'p marta takrorlangan.
+    RepeatedCause { cause: RootCause, count: usize },
+    /// Ishga qo'yib bo'lmaydigan ishchi bor.
+    BlockedWorkers { count: usize },
+    /// Naryadi kamchilik bilan ochiq.
+    BadPermits { count: usize },
+}
+
+/// Bir xil sabab shuncha marta takrorlansa — tizim nuqsoni.
+pub const CAUSE_REPEAT_LIMIT: usize = 3;
+
+/// Xavfsizlik bo'yicha nimalarga e'tibor berish kerakligini yig'adi.
+///
+/// Bashorat emas: har bir belgi bugungi yozuvlardan chiqadi va uni
+/// tekshirib ko'rish mumkin.
+pub fn safety_risks(
+    zones: &[SafetyZone],
+    events: &[SafetyEvent],
+    workers: &[WorkerSafety],
+    permits: &[WorkPermit],
+    today: NaiveDate,
+) -> Vec<SafetyRisk> {
+    let mut out = Vec::new();
+
+    for z in zones {
+        if !z.ready {
+            out.push(SafetyRisk::ZoneNotReady { zone_id: z.id });
+        } else if z.overdue(today) {
+            let days = z.check_due.map(|d| (today - d).num_days()).unwrap_or(0);
+            out.push(SafetyRisk::ZoneOverdue {
+                zone_id: z.id,
+                days,
+            });
+        }
+    }
+
+    for c in root_causes(events) {
+        if c.cause != RootCause::Unknown && c.count >= CAUSE_REPEAT_LIMIT {
+            out.push(SafetyRisk::RepeatedCause {
+                cause: c.cause,
+                count: c.count,
+            });
+        }
+    }
+
+    let blocked = workers.iter().filter(|w| w.blocked()).count();
+    if blocked > 0 {
+        out.push(SafetyRisk::BlockedWorkers { count: blocked });
+    }
+
+    let bad = permits
+        .iter()
+        .filter(|p| p.status == PermitStatus::Open)
+        .filter(|p| !permit_issues(p, workers, today).is_empty())
+        .count();
+    if bad > 0 {
+        out.push(SafetyRisk::BadPermits { count: bad });
+    }
+
+    out
+}

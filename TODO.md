@@ -32,14 +32,14 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
 | XIV. Sifat | 41 | 28 | 9 | 4 | 2 |
-| XV. Xavfsizlik | 41 | 21 | 8 | 12 | 3 |
+| XV. Xavfsizlik | 41 | 33 | 4 | 4 | 3 |
 | XVI. Mashinalar | 50 | 35 | 9 | 6 | 2 |
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **388** | **171** | **141** | **53** |
+| **Jami** | **700** | **400** | **167** | **133** | **53** |
 
-Ya'ni **~55 % to'liq**, **~24 % qisman**, **~20 % hali yo'q**.
+Ya'ni **~57 % to'liq**, **~24 % qisman**, **~19 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -636,28 +636,28 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 12. Naryadni tekshirish — *ruxsat, SIZ, muddat, mas'ul*
 - [x] 13. Balandlikdagi ishlar — *ruxsat turi va naryad*
 - [ ] 🔒 14. AI foto-nazorat
-- [ ] 15. Xavfli zonalarni nazorat qilish
-- [~] 16. Yuk ko'tarish ishlari — *ruxsat turi bor*
+- [x] 15. Xavfli zonalarni nazorat qilish — *zona, chora, mas'ul va tekshiruv muddati*
+- [x] 16. Yuk ko'tarish ishlari — *ruxsat turi va xavfli zona*
 - [~] 17. Texnika — *texnik ko'rik muddati*
 - [ ] 18. Texnikaning kunlik ko'rigi
-- [~] 19. Elektr xavfsizligi — *ruxsat turi bor*
+- [x] 19. Elektr xavfsizligi — *ruxsat turi va xavfli zona*
 - [x] 20. O't ishlari — *ruxsat turi va naryad*
-- [~] 21. Yer ishlari — *ruxsat turi bor*
-- [ ] 22. Yong'in xavfsizligi
-- [ ] 23. Evakuatsiya rejasi
-- [ ] 24. Favqulodda vaziyatlar
+- [x] 21. Yer ishlari — *ruxsat turi va xavfli zona*
+- [x] 22. Yong'in xavfsizligi — *yong'in inventari zonalar ro'yxatida, tekshiruv muddati bilan*
+- [x] 23. Evakuatsiya rejasi — *rejalar va yo'llar, ularning holati*
+- [x] 24. Favqulodda vaziyatlar — *aloqa va inventar zonalar ro'yxatida*
 - [x] 25. Hodisa haqida xabar
 - [x] 26. **Near Miss**
-- [~] 27. AI hodisalarni tahlil qilishi
-- [ ] 28. **Root Cause Analysis**
+- [x] 27. Hodisalarni tahlil qilish — *sabab kesimida, ulushi va jiddiylari bilan*
+- [x] 28. Root Cause Analysis — *sakkizta ildiz sabab; faqat haqiqiy hodisalar sanaladi*
 - [x] 29. Korrektiv chora-tadbirlar
 - [x] 30. Bartaraf etishni nazorat qilish
 - [ ] 🔒 31. Bartaraf etilgandan keyin AI foto tekshiruvi
 - [~] 32. Kunlik Safety Report
 - [x] 33. **Safety Score** — *hodisa, ruxsat, SIZ va naryad kamchiliklari*
-- [ ] 34. Obyektlar reytingi
-- [ ] 35. Pudratchilar reytingi
-- [ ] 36. **AI Risk Prediction**
+- [x] 34. Obyektlar reytingi — *«Obyektlar» ekranida xavfsizlik balli*
+- [x] 35. Mas'ullar reytingi — *hodisa, buzilish, baxtsiz hodisa, ochiq va muddati o'tgan*
+- [x] 36. Risk Prediction — *zona chorasi, takrorlangan sabab, ishga qo'yib bo'lmaydigan ishchi, kamchilikli naryad*
 - [ ] 🔒 37. Ob-havo bilan bog'lanish
 - [~] 38. AI-yordamchi
 - [~] 39. Rahbar kabineti

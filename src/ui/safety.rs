@@ -50,6 +50,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (1, t("sf_tab_permits")),
             (2, t("sf_tab_ppe")),
             (3, t("sf_tab_work_permits")),
+            (4, t("sf_tab_zones")),
+            (5, t("sf_tab_analysis")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -63,6 +65,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         1 => permits_tab(ui, app, pid),
         2 => ppe_tab(ui, app, pid),
         3 => work_permits_tab(ui, app, pid),
+        4 => zones_tab(ui, app, pid),
+        5 => analysis_tab(ui, app),
         _ => {
             if app.safety.is_empty() {
                 ui.add_space(40.0);
@@ -97,6 +101,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             measure: String::new(),
             deadline: None,
             status: IssueStatus::Open,
+            root_cause: crate::domain::RootCause::Unknown,
         });
         app.reload_modules();
     }
@@ -897,6 +902,421 @@ fn issue_label(app: &App, i: &crate::checks::PermitIssue) -> String {
         PermitIssue::Overdue => t("pi_overdue").to_string(),
         PermitIssue::WorkerNotAllowed(id) => format!("{}: {}", who(*id), t("pi_not_allowed")),
         PermitIssue::WorkerNoPpe(id) => format!("{}: {}", who(*id), t("pi_no_ppe")),
+    }
+}
+
+// ================================================================ Zonalar va inventar
+
+/// Xavfli zonalar va xavfsizlik inventari (TZ XV.15, 22-24).
+///
+/// Bitta ro'yxatda: xavfli zona ham, yong'in o'chirgich ham, evakuatsiya
+/// belgisi ham. Ularning hammasida bir xil savol — **joyida turibdimi va
+/// muddati o'tmaganmi**.
+fn zones_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let can = app.can_edit(Screen::Safety);
+    let today = app.today;
+
+    let mut add: Option<crate::domain::ZoneKind> = None;
+    ui.horizontal_wrapped(|ui| {
+        if can {
+            for k in crate::domain::ZoneKind::ALL {
+                if ui.button(format!("+ {}", k.label())).clicked() {
+                    add = Some(*k);
+                }
+            }
+        }
+        ui.label(
+            RichText::new(t("sf_zones_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    let attention = app.zones.iter().filter(|z| z.needs_action(today)).count();
+    let overdue = app.zones.iter().filter(|z| z.overdue(today)).count();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("sf_zones_total"),
+                app.zones.len().to_string(),
+                t("sf_zones_total_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("sf_zones_attention"),
+                attention.to_string(),
+                t("sf_zones_attention_hint"),
+                if attention == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("sf_zones_overdue"),
+                overdue.to_string(),
+                t("sf_zones_overdue_hint"),
+                if overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+
+    if app.zones.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("sf_zones_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let mut edited: Option<crate::domain::SafetyZone> = None;
+        let mut removed: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("sf_zones_grid")
+                    .num_columns(9)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 150.0, t("col_kind"));
+                        head_l(ui, 210.0, t("col_name"));
+                        head_l(ui, 170.0, t("col_place"));
+                        head_l(ui, 230.0, t("col_measure"));
+                        head_l(ui, 140.0, t("col_responsible"));
+                        head_l(ui, 140.0, t("sf_zone_check"));
+                        head_l(ui, 90.0, t("sf_zone_ready"));
+                        head_l(ui, 140.0, t("col_status"));
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.zones {
+                            let mut z = src.clone();
+                            let mut changed = false;
+
+                            egui::ComboBox::from_id_salt(("sz_k", z.id))
+                                .selected_text(z.kind.label())
+                                .width(150.0)
+                                .show_ui(ui, |ui| {
+                                    for k in crate::domain::ZoneKind::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut z.kind, *k, k.label())
+                                            .changed();
+                                    }
+                                });
+                            changed |= ui
+                                .add_sized([210.0, 22.0], egui::TextEdit::singleline(&mut z.name))
+                                .changed();
+                            changed |= ui
+                                .add_sized([170.0, 22.0], egui::TextEdit::singleline(&mut z.place))
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [230.0, 22.0],
+                                    egui::TextEdit::singleline(&mut z.measure),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [140.0, 22.0],
+                                    egui::TextEdit::singleline(&mut z.responsible),
+                                )
+                                .changed();
+
+                            ui.horizontal(|ui| {
+                                let mut has = z.check_due.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    z.check_due = has.then(|| today + chrono::Duration::days(30));
+                                    changed = true;
+                                }
+                                if let Some(mut d) = z.check_due {
+                                    if super::passport::date_edit(
+                                        ui,
+                                        &format!("szc{}", z.id),
+                                        &mut d,
+                                    ) {
+                                        z.check_due = Some(d);
+                                        changed = true;
+                                    }
+                                    if d < today {
+                                        ui.label(
+                                            RichText::new("!").color(theme::danger()).strong(),
+                                        );
+                                    }
+                                }
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.add_space(24.0);
+                                if ui.checkbox(&mut z.ready, "").changed() {
+                                    // Chora ko'rilgan deb belgilangan kun ham
+                                    // yoziladi: keyin «qachon?» degan savol
+                                    // javobsiz qolmasin.
+                                    z.checked_at = z.ready.then_some(today);
+                                    changed = true;
+                                }
+                            });
+
+                            cell_l(
+                                ui,
+                                140.0,
+                                if !z.ready {
+                                    RichText::new(t("sf_zone_not_ready"))
+                                        .size(11.5)
+                                        .color(theme::danger())
+                                } else if z.overdue(today) {
+                                    RichText::new(t("sf_zone_check_due"))
+                                        .size(11.5)
+                                        .color(theme::warn())
+                                } else {
+                                    RichText::new(t("sf_zone_ok")).size(11.5).color(theme::ok())
+                                },
+                            );
+
+                            if can
+                                && ui
+                                    .small_button(RichText::new("x").color(theme::danger()))
+                                    .clicked()
+                            {
+                                removed = Some(z.id);
+                            }
+                            ui.end_row();
+
+                            if changed && can {
+                                edited = Some(z);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(z) = edited {
+            app.db.update_safety_zone(&z);
+            if let Some(slot) = app.zones.iter_mut().find(|y| y.id == z.id) {
+                *slot = z;
+            }
+        }
+        if let Some(id) = removed {
+            app.db.delete_safety_zone(id);
+            app.reload_modules();
+        }
+    }
+
+    if let Some(kind) = add {
+        app.db.insert_safety_zone(&crate::domain::SafetyZone {
+            id: 0,
+            project_id: pid,
+            kind,
+            name: String::new(),
+            place: String::new(),
+            measure: String::new(),
+            responsible: String::new(),
+            check_due: Some(today + chrono::Duration::days(30)),
+            checked_at: None,
+            ready: false,
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+// ================================================================ Tahlil
+
+/// Sabab tahlili, ogohlantirishlar va mas'ullar (TZ XV.28, 35-36).
+fn analysis_tab(ui: &mut egui::Ui, app: &mut App) {
+    let causes = crate::checks::root_causes(&app.safety);
+    let risks = app.safety_risks();
+    let rating = crate::checks::safety_rating(&app.safety, app.today);
+
+    ui.label(
+        RichText::new(t("sf_analysis_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Ogohlantirishlar ----------
+            ui.label(RichText::new(t("sf_risks_title")).size(13.5).strong());
+            ui.add_space(4.0);
+            if risks.is_empty() {
+                ui.label(
+                    RichText::new(t("sf_risks_none"))
+                        .size(12.0)
+                        .color(theme::ok()),
+                );
+            }
+            for r in &risks {
+                let (text, color) = risk_line(app, r);
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(3.0, 16.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 1.5, color);
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(text).size(12.0).color(color));
+                });
+                ui.add_space(3.0);
+            }
+
+            // ---------- Ildiz sabablar ----------
+            if !causes.is_empty() {
+                ui.add_space(16.0);
+                ui.label(RichText::new(t("sf_causes_title")).size(13.5).strong());
+                ui.label(
+                    RichText::new(t("sf_causes_hint"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+                egui::Grid::new("sf_causes_grid")
+                    .num_columns(4)
+                    .spacing([12.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 240.0, t("sf_cause"));
+                        head_r(ui, 90.0, t("sf_cause_count"));
+                        head_r(ui, 110.0, t("sf_cause_serious"));
+                        head_r(ui, 90.0, t("sf_cause_pct"));
+                        ui.end_row();
+                        for c in &causes {
+                            let repeated = c.count >= crate::checks::CAUSE_REPEAT_LIMIT
+                                && c.cause != crate::domain::RootCause::Unknown;
+                            cell_l(
+                                ui,
+                                240.0,
+                                RichText::new(c.cause.label())
+                                    .size(12.5)
+                                    .color(if repeated {
+                                        theme::danger()
+                                    } else {
+                                        theme::text()
+                                    }),
+                            );
+                            cell_r(ui, 90.0, RichText::new(c.count.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(c.serious.to_string()).size(12.0).color(
+                                    if c.serious == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(ui, 90.0, RichText::new(format!("{:.0}%", c.pct)).size(12.0));
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            // ---------- Mas'ullar ----------
+            if !rating.is_empty() {
+                ui.add_space(16.0);
+                ui.label(RichText::new(t("sf_rating_title")).size(13.5).strong());
+                ui.add_space(6.0);
+                egui::Grid::new("sf_rating_grid")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("col_responsible"));
+                        head_r(ui, 90.0, t("sf_r_events"));
+                        head_r(ui, 110.0, t("sf_r_violations"));
+                        head_r(ui, 110.0, t("sf_r_incidents"));
+                        head_r(ui, 90.0, t("sf_r_open"));
+                        head_r(ui, 110.0, t("sf_r_overdue"));
+                        ui.end_row();
+                        for r in &rating {
+                            cell_l(ui, 200.0, RichText::new(&r.name).size(12.5));
+                            cell_r(ui, 90.0, RichText::new(r.events.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(r.violations.to_string()).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(r.incidents.to_string()).size(12.0).color(
+                                    if r.incidents == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(ui, 90.0, RichText::new(r.open.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(r.overdue.to_string()).size(12.0).color(
+                                    if r.overdue == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+            ui.add_space(14.0);
+        });
+}
+
+/// Ogohlantirish matni va rangi.
+fn risk_line(app: &App, r: &crate::checks::SafetyRisk) -> (String, egui::Color32) {
+    use crate::checks::SafetyRisk as R;
+    let zone = |id: i64| {
+        app.zones
+            .iter()
+            .find(|z| z.id == id)
+            .map(|z| {
+                if z.name.trim().is_empty() {
+                    z.kind.label().to_string()
+                } else {
+                    z.name.clone()
+                }
+            })
+            .unwrap_or_default()
+    };
+    match r {
+        R::ZoneNotReady { zone_id } => (
+            format!("{} — {}", zone(*zone_id), t("sf_risk_not_ready")),
+            theme::danger(),
+        ),
+        R::ZoneOverdue { zone_id, days } => (
+            format!(
+                "{} — {} {} {}",
+                zone(*zone_id),
+                t("sf_risk_overdue"),
+                days,
+                t("sf_risk_days")
+            ),
+            theme::warn(),
+        ),
+        R::RepeatedCause { cause, count } => (
+            format!("{} — {count} {}", cause.label(), t("sf_risk_repeated")),
+            theme::danger(),
+        ),
+        R::BlockedWorkers { count } => {
+            (format!("{count} {}", t("sf_risk_blocked")), theme::danger())
+        }
+        R::BadPermits { count } => (format!("{count} {}", t("sf_risk_permits")), theme::warn()),
     }
 }
 

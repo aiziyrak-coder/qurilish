@@ -3427,6 +3427,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             measure: String::new(),
             deadline: None,
             status: IssueStatus::Fixed,
+            root_cause: crate::domain::RootCause::Unknown,
         };
 
         // Hech narsa yo'q — to'liq ball.
@@ -6019,6 +6020,176 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let sum = crate::checks::repair_summary(&t.db.machines(pid), &repairs, today);
         assert!(sum.iter().any(|s| s.in_repair));
         assert!(sum.iter().map(|s| s.cost).sum::<f64>() > 0.0);
+    }
+
+    /// TZ XV.28: sabab tahlili faqat haqiqiy hodisalarni sanaydi.
+    #[test]
+    fn root_causes_count_only_real_events() {
+        use crate::checks::root_causes;
+        use crate::domain::{RootCause, SafetyEvent, SafetyKind};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let ev = |kind: SafetyKind, severity: Severity, cause: RootCause| SafetyEvent {
+            id: 0,
+            project_id: 1,
+            date: today,
+            kind,
+            severity,
+            place: String::new(),
+            description: String::new(),
+            responsible: "A".into(),
+            measure: String::new(),
+            deadline: None,
+            status: crate::domain::IssueStatus::Fixed,
+            root_cause: cause,
+        };
+
+        let events = vec![
+            // Instruktaj va tekshiruv sabab talab qilmaydi — sanalmaydi.
+            ev(SafetyKind::Training, Severity::Info, RootCause::Unknown),
+            ev(SafetyKind::Inspection, Severity::Info, RootCause::Unknown),
+            // Haqiqiy hodisalar.
+            ev(SafetyKind::Violation, Severity::Major, RootCause::NoPpe),
+            ev(SafetyKind::Violation, Severity::Warning, RootCause::NoPpe),
+            ev(
+                SafetyKind::NearMiss,
+                Severity::Warning,
+                RootCause::NoBarrier,
+            ),
+        ];
+        let out = root_causes(&events);
+        let total: usize = out.iter().map(|c| c.count).sum();
+        assert_eq!(total, 3, "instruktaj va tekshiruv sanalib ketdi");
+
+        let ppe = out.iter().find(|c| c.cause == RootCause::NoPpe).unwrap();
+        assert_eq!(ppe.count, 2);
+        assert_eq!(ppe.serious, 1, "faqat jiddiy va kritiklari");
+        assert!((ppe.pct - 66.666).abs() < 0.01);
+
+        // Ko'p uchraydigan sabab oldinda.
+        assert_eq!(out[0].cause, RootCause::NoPpe);
+
+        // Hodisasiz ro'yxat bo'sh.
+        assert!(root_causes(&[]).is_empty());
+    }
+
+    /// TZ XV.36: bir xil sabab uch marta takrorlansa — tizim nuqsoni.
+    #[test]
+    fn repeated_cause_becomes_a_risk() {
+        use crate::checks::{safety_risks, SafetyRisk, CAUSE_REPEAT_LIMIT};
+        use crate::domain::{RootCause, SafetyEvent, SafetyKind};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let ev = |cause: RootCause| SafetyEvent {
+            id: 0,
+            project_id: 1,
+            date: today,
+            kind: SafetyKind::Violation,
+            severity: Severity::Warning,
+            place: String::new(),
+            description: String::new(),
+            responsible: String::new(),
+            measure: String::new(),
+            deadline: None,
+            status: crate::domain::IssueStatus::Fixed,
+            root_cause: cause,
+        };
+
+        // Ikkitasi hali tizim nuqsoni emas.
+        let two = vec![ev(RootCause::Rush), ev(RootCause::Rush)];
+        assert!(!safety_risks(&[], &two, &[], &[], today)
+            .iter()
+            .any(|r| matches!(r, SafetyRisk::RepeatedCause { .. })));
+
+        // Uchtasi — belgilanadi.
+        let three: Vec<_> = (0..CAUSE_REPEAT_LIMIT)
+            .map(|_| ev(RootCause::Rush))
+            .collect();
+        let found = safety_risks(&[], &three, &[], &[], today);
+        assert!(found
+            .iter()
+            .any(|r| matches!(r, SafetyRisk::RepeatedCause { cause, count }
+                if *cause == RootCause::Rush && *count == CAUSE_REPEAT_LIMIT)));
+
+        // Aniqlanmagan sabab takrorlansa ham belgilanmaydi: u sabab emas.
+        let unknown: Vec<_> = (0..5).map(|_| ev(RootCause::Unknown)).collect();
+        assert!(!safety_risks(&[], &unknown, &[], &[], today)
+            .iter()
+            .any(|r| matches!(r, SafetyRisk::RepeatedCause { .. })));
+    }
+
+    /// Zonada chora ko'rilmagani va tekshiruv muddati alohida belgilanadi.
+    #[test]
+    fn zone_states_are_separated() {
+        use crate::checks::{safety_risks, SafetyRisk};
+        use crate::domain::{SafetyZone, ZoneKind};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let zone = |id: i64, ready: bool, due: i64| SafetyZone {
+            id,
+            project_id: 1,
+            kind: ZoneKind::Danger,
+            name: format!("Z-{id}"),
+            place: String::new(),
+            measure: String::new(),
+            responsible: String::new(),
+            check_due: Some(today + chrono::Duration::days(due)),
+            checked_at: None,
+            ready,
+            note: String::new(),
+        };
+
+        // Chora ko'rilmagan — muddatdan qat'i nazar birinchi savol shu.
+        let not_ready = zone(1, false, 10);
+        assert!(not_ready.needs_action(today));
+        let out = safety_risks(std::slice::from_ref(&not_ready), &[], &[], &[], today);
+        assert!(out
+            .iter()
+            .any(|r| matches!(r, SafetyRisk::ZoneNotReady { zone_id } if *zone_id == 1)));
+
+        // Chora ko'rilgan, lekin tekshiruv muddati o'tgan.
+        let overdue = zone(2, true, -5);
+        assert!(overdue.overdue(today));
+        let out = safety_risks(std::slice::from_ref(&overdue), &[], &[], &[], today);
+        assert!(out.iter().any(
+            |r| matches!(r, SafetyRisk::ZoneOverdue { zone_id, days } if *zone_id == 2 && *days == 5)
+        ));
+
+        // Hammasi joyida — savol yo'q.
+        let fine = zone(3, true, 20);
+        assert!(!fine.needs_action(today));
+        assert!(safety_risks(std::slice::from_ref(&fine), &[], &[], &[], today).is_empty());
+    }
+
+    /// Namunada zonalar va sabablar to'ldirilgan.
+    #[test]
+    fn demo_has_zones_and_causes() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+
+        let zones = t.db.safety_zones(pid);
+        assert!(!zones.is_empty(), "namunada zona yo'q");
+        assert!(
+            zones.iter().any(|z| z.needs_action(today)),
+            "e'tibor talab qiladigan zona yo'q"
+        );
+        // Yong'in inventari va evakuatsiya ham bor.
+        assert!(zones
+            .iter()
+            .any(|z| z.kind == crate::domain::ZoneKind::Fire));
+        assert!(zones
+            .iter()
+            .any(|z| z.kind == crate::domain::ZoneKind::Evacuation));
+
+        let causes = crate::checks::root_causes(&t.db.safety_events(pid));
+        assert!(!causes.is_empty(), "sabab tahlili bo'sh");
+        assert!(
+            causes
+                .iter()
+                .any(|c| c.cause != crate::domain::RootCause::Unknown),
+            "namunada aniq sabab ko'rsatilmagan"
+        );
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
