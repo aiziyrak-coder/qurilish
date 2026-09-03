@@ -26,7 +26,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VI. Prorab ilovasi | 37 | 16 | 10 | 11 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 17 | 14 | 6 | 2 |
-| IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
+| IX. Arizalar | 42 | 31 | 6 | 5 | 1 |
 | X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
 | XI. Ombor | 48 | 32 | 8 | 8 | 1 |
 | XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **354** | **174** | **172** | **53** |
+| **Jami** | **700** | **364** | **172** | **164** | **53** |
 
-Ya'ni **~51 % to'liq**, **~25 % qisman**, **~25 % hali yo'q**.
+Ya'ni **~52 % to'liq**, **~25 % qisman**, **~23 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -330,7 +330,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 
 - [x] 1. Modul maqsadi
 - [x] 2. Kim ariza yarata oladi — *rollar*
-- [~] 3. Ariza turlari — *material, texnika, ishchi kuchi, hujjat, boshqa*
+- [x] 3. Ariza turlari — *material, texnika, transport, ta'mir, ishchi kuchi, xizmat, pul, hujjat, boshqa*
 - [x] 4. Materialga ariza
 - [x] 5. AI o'zi ariza taklif qilishi — *zaxira bo'yicha*
 - [x] 6. Ariza muddatni hisobga olishi
@@ -338,10 +338,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. Kelishuv marshruti — *bosqichlar tartib bilan, rol bo'yicha*
 - [x] 9. Avtomatik limitlar — *summa marshrut uzunligini belgilaydi*
 - [x] 10. Byudjetni tekshirish — *bo'lim byudjeti bilan*
-- [~] 11. Dublikatni tekshirish — *ochiq ariza bo'lsa takrorlamaydi*
-- [ ] 12. Smetani tekshirish
+- [x] 11. Dublikatni tekshirish — *shu material bo'yicha ochiq ariza raqami bilan ko'rsatiladi*
+- [x] 12. Smetani tekshirish — *material smetada bormi, kod yoki nom bo'yicha*
 - [ ] 13. Loyihaga muvofiqlikni tekshirish
-- [ ] 14. Materialni almashtirish
+- [x] 14. Materialni almashtirish — *arzonroq analog tejash summasi bilan taklif qilinadi*
 - [x] 15. Tijorat takliflari
 - [x] 16. AI yetkazib beruvchilarni solishtirishi
 - [x] 17. Ariza → xarid
@@ -350,10 +350,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 20. Qisman yetkazish
 - [x] 21. Muddati o'tgan arizalarni nazorat qilish
 - [~] 22. Texnikaga ariza — *tur bor, jarayon yo'q*
-- [ ] 23. Transportga ariza
-- [ ] 24. Ta'mirga ariza
-- [ ] 25. Pulga ariza
-- [ ] 26. Xizmatga ariza
+- [x] 23. Transportga ariza — *ariza turi*
+- [x] 24. Ta'mirga ariza — *ariza turi*
+- [x] 25. Pulga ariza — *ariza turi*
+- [x] 26. Xizmatga ariza — *ariza turi*
 - [ ] 27. Xodimga ariza
 - [ ] 28. Foto va hujjatlar
 - [ ] 🔒 29. Ovozli arizalar
@@ -363,9 +363,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 33. Arizalarni AI tahlili
 - [~] 34. Rahbar paneli
 - [~] 35. AI-panel
-- [ ] 36. GPR bilan bog'lanish
+- [x] 36. GPR bilan bog'lanish — *ariza ishga bog'lanadi; bog'lanmagani tekshiruvda aytiladi*
 - [x] 37. Ombor bilan bog'lanish
-- [ ] 38. Smeta bilan bog'lanish
+- [x] 38. Smeta bilan bog'lanish — *smetada yo'q material belgilanadi*
 - [ ] 39. Buxgalteriya bilan bog'lanish
 - [~] 40. Yakuniy nazorat
 - [x] 41. Modulning bosh ekrani

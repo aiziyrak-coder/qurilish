@@ -5,6 +5,7 @@
 //! ko'rsatiladi, shunda «so'radim» va «keldi» orasidagi farq ko'rinib turadi.
 
 use super::materials::{material_label, trim_num};
+use super::warehouse::cell_l;
 use super::*;
 use crate::checks::SupplyLine;
 use crate::domain::{Priority, Request, RequestKind, RequestStatus};
@@ -243,12 +244,36 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
     let mut removed: Option<i64> = None;
     let mut open_route: Option<i64> = None;
     let today = app.today;
+    // Tor ekranda ish ustuni yashiriladi: u bir marta to'ldiriladi,
+    // kunlik ish esa holat va miqdor ustunlarida.
+    let wide = ui.available_width() > 1650.0;
+    let tasks = app.tasks.clone();
+    // Tekshiruvlar bir marta hisoblanadi: har qator uchun qayta bajarish
+    // o'nlab keraksiz taqqoslash bo'lardi.
+    let checks: Vec<(i64, Vec<crate::checks::RequestIssue>)> = app
+        .requests
+        .iter()
+        .map(|r| {
+            (
+                r.id,
+                crate::checks::request_issues(
+                    r,
+                    &app.requests,
+                    &app.materials,
+                    &app.material_alts,
+                    &app.estimate_items,
+                    &app.purchase_budgets,
+                    &app.purchases,
+                ),
+            )
+        })
+        .collect();
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("requests_grid")
-                .num_columns(14)
+                .num_columns(if wide { 16 } else { 15 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -258,6 +283,7 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                     head_l(ui, 104.0, t("col_date"));
                     head_l(ui, 124.0, t("col_status"));
                     head_l(ui, 150.0, t("col_route"));
+                    head_l(ui, 40.0, t("col_check"));
                     head_l(ui, 96.0, t("col_priority"));
                     head_l(ui, 150.0, t("col_coverage"));
                     head_l(ui, 100.0, t("col_kind"));
@@ -267,6 +293,9 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                     head_l(ui, 56.0, t("col_unit"));
                     head_l(ui, 110.0, t("col_need_date"));
                     head_l(ui, 120.0, t("col_requester"));
+                    if wide {
+                        head_l(ui, 120.0, t("col_task"));
+                    }
                     head_l(ui, 24.0, "");
                     ui.end_row();
 
@@ -303,6 +332,36 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                             .clicked()
                         {
                             open_route = Some(q.id);
+                        }
+
+                        // Tekshiruv belgisi: savollar bo'lsa ularning
+                        // hammasi hover matnida ko'rinadi.
+                        let issues = checks
+                            .iter()
+                            .find(|(id, _)| *id == q.id)
+                            .map(|(_, v)| v.as_slice())
+                            .unwrap_or(&[]);
+                        let resp = cell_l(
+                            ui,
+                            40.0,
+                            if issues.is_empty() {
+                                RichText::new("✓").size(13.0).color(theme::ok())
+                            } else {
+                                RichText::new(issues.len().to_string())
+                                    .size(12.5)
+                                    .strong()
+                                    .color(theme::warn())
+                            },
+                        );
+                        if issues.is_empty() {
+                            resp.on_hover_text(t("rq_check_ok"));
+                        } else {
+                            resp.on_hover_text(
+                                issues.iter().map(issue_text).collect::<Vec<_>>().join(
+                                    "
+",
+                                ),
+                            );
                         }
 
                         egui::ComboBox::from_id_salt(("rq_pri", q.id))
@@ -389,6 +448,33 @@ fn table(ui: &mut egui::Ui, app: &mut App, supply: &[SupplyLine]) {
                         changed |= ui
                             .add_sized([120.0, 22.0], egui::TextEdit::singleline(&mut q.requester))
                             .changed();
+
+                        if wide {
+                            // Ariza qaysi ish uchun: kechikish kimga ta'sir
+                            // qilishini shu bog'lanish ko'rsatadi.
+                            let label = q
+                                .task_id
+                                .and_then(|id| tasks.iter().find(|t| t.id == id))
+                                .map(|t| t.wbs.clone())
+                                .unwrap_or_else(|| t("dash").to_string());
+                            egui::ComboBox::from_id_salt(("rq_task", q.id))
+                                .selected_text(label)
+                                .width(120.0)
+                                .show_ui(ui, |ui| {
+                                    changed |= ui
+                                        .selectable_value(&mut q.task_id, None, t("dash"))
+                                        .changed();
+                                    for tk in &tasks {
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut q.task_id,
+                                                Some(tk.id),
+                                                format!("{} {}", tk.wbs, tk.name),
+                                            )
+                                            .changed();
+                                    }
+                                });
+                        }
 
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
@@ -813,6 +899,27 @@ pub fn request_label(app: &App, id: i64) -> String {
             format!("{} · {}", q.number, title)
         })
         .unwrap_or_else(|| t("dash").to_string())
+}
+
+/// Ariza tekshiruvidagi savolning matni.
+fn issue_text(i: &crate::checks::RequestIssue) -> String {
+    use crate::checks::RequestIssue as I;
+    match i {
+        I::Duplicate { number } => format!("{} {number}", t("rq_i_duplicate")),
+        I::NotInEstimate => t("rq_i_not_in_estimate").to_string(),
+        I::OverBudget { over } => format!("{} {}", t("rq_i_over_budget"), money(*over)),
+        I::Cheaper { name, saving } => {
+            format!("{} {name} — {}", t("rq_i_cheaper"), money(*saving))
+        }
+        I::NoTask => t("rq_i_no_task").to_string(),
+        I::Banned { reason } => {
+            if reason.trim().is_empty() {
+                t("rq_i_banned").to_string()
+            } else {
+                format!("{}: {reason}", t("rq_i_banned"))
+            }
+        }
+    }
 }
 
 fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {

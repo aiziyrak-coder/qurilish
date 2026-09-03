@@ -5479,6 +5479,141 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(redistribution(&none, &need).is_empty());
     }
 
+    /// TZ IX.11-14: ariza tasdiqlashdan oldin tekshiriladi, lekin
+    /// tekshiruv taqiq emas — u savol qo'yadi.
+    #[test]
+    fn request_issues_ask_questions_not_forbid() {
+        use crate::checks::{request_issues, RequestIssue};
+        use crate::domain::{Material, Request, RequestKind, RequestStatus};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let mat = |id: i64, name: &str, price: f64, banned: bool| Material {
+            id,
+            project_id: 1,
+            code: String::new(),
+            name: name.into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: String::new(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock: 0.0,
+            price,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned,
+            ban_reason: if banned {
+                "Sinovdan o'tmagan".into()
+            } else {
+                String::new()
+            },
+            note: String::new(),
+        };
+        let req = |id: i64, material: i64, qty: f64, status: RequestStatus| Request {
+            id,
+            project_id: 1,
+            number: format!("A-{id:04}"),
+            date: today,
+            kind: RequestKind::Material,
+            title: String::new(),
+            material_id: Some(material),
+            qty,
+            unit: "t".into(),
+            requester: String::new(),
+            need_date: today,
+            priority: crate::domain::Priority::Normal,
+            status,
+            task_id: None,
+            reject_reason: String::new(),
+            note: String::new(),
+        };
+
+        let materials = vec![mat(1, "Sement M400", 1_000.0, false)];
+        let r = req(10, 1, 5.0, RequestStatus::New);
+
+        // Ish ko'rsatilmagan — savol bor.
+        let out = request_issues(&r, std::slice::from_ref(&r), &materials, &[], &[], &[], &[]);
+        assert!(out.contains(&RequestIssue::NoTask));
+
+        // Ochiq dublikat topiladi, yopilgani esa yo'q.
+        let open_dup = req(11, 1, 2.0, RequestStatus::Approved);
+        let closed_dup = req(12, 1, 2.0, RequestStatus::Closed);
+        let out = request_issues(
+            &r,
+            &[r.clone(), open_dup, closed_dup],
+            &materials,
+            &[],
+            &[],
+            &[],
+            &[],
+        );
+        assert_eq!(
+            out.iter()
+                .filter(|i| matches!(i, RequestIssue::Duplicate { .. }))
+                .count(),
+            1,
+            "yopilgan ariza dublikat sifatida sanaldi"
+        );
+
+        // Taqiqlangan material sababi bilan aytiladi.
+        let banned = vec![mat(1, "Sement M400", 1_000.0, true)];
+        let out = request_issues(&r, std::slice::from_ref(&r), &banned, &[], &[], &[], &[]);
+        assert!(out
+            .iter()
+            .any(|i| matches!(i, RequestIssue::Banned { reason } if !reason.is_empty())));
+    }
+
+    /// Arzonroq analog topilsa tejash summasi bilan ko'rsatiladi.
+    #[test]
+    fn cheaper_alternative_is_offered_with_saving() {
+        use crate::checks::{request_issues, RequestIssue};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let materials = t.db.materials(pid);
+        let alts = t.db.material_alts(pid);
+        assert!(!alts.is_empty(), "namunada analog yo'q");
+
+        // Analogi bor va undan qimmatroq materialga ariza tuzamiz.
+        let pair = alts.iter().find_map(|a| {
+            let m = materials.iter().find(|m| m.id == a.material_id)?;
+            let alt = materials.iter().find(|m| m.id == a.alt_id)?;
+            (alt.price > 0.0 && alt.price < m.price).then_some((m, alt))
+        });
+        let Some((m, alt)) = pair else {
+            // Namunada arzonroq analog bo'lmasa sinov ma'nosini yo'qotadi.
+            return;
+        };
+
+        let r = crate::domain::Request {
+            id: 0,
+            project_id: pid,
+            number: "A-9999".into(),
+            date: t.db.projects().unwrap()[0].start_date,
+            kind: crate::domain::RequestKind::Material,
+            title: String::new(),
+            material_id: Some(m.id),
+            qty: 10.0,
+            unit: m.unit.clone(),
+            requester: String::new(),
+            need_date: t.db.projects().unwrap()[0].start_date,
+            priority: crate::domain::Priority::Normal,
+            status: crate::domain::RequestStatus::New,
+            task_id: None,
+            reject_reason: String::new(),
+            note: String::new(),
+        };
+        let out = request_issues(&r, &[], &materials, &alts, &[], &[], &[]);
+        let found = out.iter().find_map(|i| match i {
+            RequestIssue::Cheaper { name, saving } => Some((name.clone(), *saving)),
+            _ => None,
+        });
+        let (name, saving) = found.expect("arzonroq analog topilmadi");
+        assert_eq!(name, alt.name);
+        assert!((saving - (m.price - alt.price) * 10.0).abs() < 0.01);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

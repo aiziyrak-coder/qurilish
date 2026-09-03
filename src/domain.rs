@@ -366,11 +366,15 @@ pub struct JournalEntry {
 // ---------- IX. Arizalar ----------
 
 enum_kind!(RequestKind {
-    Material => "material", "rk_material";
-    Machine  => "machine",  "rk_machine";
-    Labor    => "labor",    "rk_labor";
-    Document => "document", "rk_document";
-    Other    => "other",    "rk_other";
+    Material  => "material",  "rk_material";
+    Machine   => "machine",   "rk_machine";
+    Transport => "transport", "rk_transport";
+    Repair    => "repair",    "rk_repair";
+    Labor     => "labor",     "rk_labor";
+    Service   => "service",   "rk_service";
+    Money     => "money",     "rk_money";
+    Document  => "document",  "rk_document";
+    Other     => "other",     "rk_other";
 });
 
 enum_kind!(RequestStatus {

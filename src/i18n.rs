@@ -2843,6 +2843,30 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pf_move_to" => ("Qayerga", "Куда"),
         "pf_move_value" => ("Qiymati", "Стоимость"),
 
+        // ---------- IX. Ariza turlari va tekshiruvi ----------
+        "rk_transport" => ("Transport", "Транспорт"),
+        "rk_repair" => ("Ta'mir", "Ремонт"),
+        "rk_service" => ("Xizmat", "Услуга"),
+        "rk_money" => ("Pul mablag'i", "Денежные средства"),
+
+        "col_check" => ("Tekshiruv", "Проверка"),
+        "rq_check_ok" => (
+            "Tekshiruvda savol topilmadi.",
+            "Проверка не выявила вопросов.",
+        ),
+        "rq_i_duplicate" => ("Shu material bo'yicha ochiq ariza bor:", "По этому материалу уже есть открытая заявка:"),
+        "rq_i_not_in_estimate" => (
+            "Material smetada uchramaydi — qo'shimcha ish bo'lishi mumkin.",
+            "Материал не найден в смете — возможно, это дополнительные работы.",
+        ),
+        "rq_i_over_budget" => ("Bo'lim byudjeti oshadi:", "Бюджет раздела будет превышен на:"),
+        "rq_i_cheaper" => ("Arzonroq analog bor:", "Есть более дешёвый аналог:"),
+        "rq_i_no_task" => (
+            "Ish ko'rsatilmagan: kechikish kimga ta'sir qilishi ko'rinmaydi.",
+            "Не указана работа: не видно, на что повлияет задержка.",
+        ),
+        "rq_i_banned" => ("Material taqiqlangan", "Материал запрещён"),
+
         // ---------- XI.32-34. Asboblar va kamomad ----------
         "wh_tab_tools" => ("Asboblar", "Инструмент"),
         "wh_tab_shortage" => ("Kamomad", "Недостачи"),

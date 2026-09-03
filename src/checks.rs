@@ -5499,3 +5499,122 @@ pub fn redistribution(
     out.sort_by(|a, b| b.saving.total_cmp(&a.saving));
     out
 }
+
+// ================================================================ IX. Ariza tekshiruvi
+
+/// Arizadagi kamchilik yoki savol (TZ IX.11-14, 38).
+#[derive(Debug, Clone, PartialEq)]
+pub enum RequestIssue {
+    /// Xuddi shu material bo'yicha ochiq ariza allaqachon bor.
+    Duplicate { number: String },
+    /// Material smetada uchramaydi.
+    NotInEstimate,
+    /// Bo'lim byudjeti oshib ketadi.
+    OverBudget { over: f64 },
+    /// Arzonroq analog bor.
+    Cheaper { name: String, saving: f64 },
+    /// Ish ko'rsatilmagan: kechikish kimga ta'sir qilishi ko'rinmaydi.
+    NoTask,
+    /// Material taqiqlangan.
+    Banned { reason: String },
+}
+
+/// Arizani tasdiqlashdan oldin tekshiradi (TZ IX.11-14).
+///
+/// Har bir belgi — **savol**, taqiq emas: ariza baribir tasdiqlanishi
+/// mumkin, lekin qaror ko'zi ochiq qabul qilinadi.
+#[allow(clippy::too_many_arguments)]
+pub fn request_issues(
+    r: &Request,
+    others: &[Request],
+    materials: &[Material],
+    alts: &[MaterialAlt],
+    estimate_items: &[EstimateItem],
+    budgets: &[PurchaseBudget],
+    purchases: &[Purchase],
+) -> Vec<RequestIssue> {
+    let mut out = Vec::new();
+
+    // 1. Dublikat: shu material bo'yicha boshqa ochiq ariza.
+    if let Some(mid) = r.material_id {
+        if let Some(dup) = others
+            .iter()
+            .filter(|x| x.id != r.id)
+            .filter(|x| x.material_id == Some(mid))
+            .find(|x| !matches!(x.status, RequestStatus::Closed | RequestStatus::Rejected))
+        {
+            out.push(RequestIssue::Duplicate {
+                number: dup.number.clone(),
+            });
+        }
+    }
+
+    let material = r
+        .material_id
+        .and_then(|id| materials.iter().find(|m| m.id == id));
+
+    // 2. Taqiqlangan material.
+    if let Some(m) = material {
+        if m.banned {
+            out.push(RequestIssue::Banned {
+                reason: m.ban_reason.clone(),
+            });
+        }
+
+        // 3. Smetada bormi: kod bo'yicha, bo'lmasa nom bo'yicha.
+        if !estimate_items.is_empty() {
+            let by_code = !m.estimate_code.trim().is_empty()
+                && estimate_items
+                    .iter()
+                    .any(|i| i.code.trim() == m.estimate_code.trim());
+            let by_name = estimate_items
+                .iter()
+                .any(|i| i.name.trim().eq_ignore_ascii_case(m.name.trim()));
+            if !by_code && !by_name {
+                out.push(RequestIssue::NotInEstimate);
+            }
+        }
+
+        // 4. Arzonroq analog bor.
+        let mut best: Option<(&Material, f64)> = None;
+        for a in alts.iter().filter(|a| a.material_id == m.id) {
+            let Some(other) = materials.iter().find(|x| x.id == a.alt_id) else {
+                continue;
+            };
+            if other.banned || other.price <= 0.0 || other.price >= m.price {
+                continue;
+            }
+            let saving = (m.price - other.price) * r.qty;
+            if best.map(|(_, s)| saving > s).unwrap_or(true) {
+                best = Some((other, saving));
+            }
+        }
+        if let Some((other, saving)) = best {
+            out.push(RequestIssue::Cheaper {
+                name: other.name.clone(),
+                saving,
+            });
+        }
+
+        // 5. Bo'lim byudjeti: ariza summasi qoldiqdan oshadimi.
+        if let Some(b) = budgets.iter().find(|b| b.section == m.section) {
+            let spent: f64 = purchases
+                .iter()
+                .filter(|p| p.section == m.section)
+                .map(|p| p.amount())
+                .sum();
+            let left = b.planned - spent;
+            let need = r.qty * m.price;
+            if need > left {
+                out.push(RequestIssue::OverBudget { over: need - left });
+            }
+        }
+    }
+
+    // 6. Ish ko'rsatilmagan.
+    if r.task_id.is_none() && r.kind == RequestKind::Material {
+        out.push(RequestIssue::NoTask);
+    }
+
+    out
+}
