@@ -62,6 +62,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (2, t("wh_tab_batches")),
             (3, t("wh_tab_reserve")),
             (4, t("wh_tab_inventory")),
+            (5, t("wh_tab_tools")),
+            (6, t("wh_tab_shortage")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -76,8 +78,450 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         2 => batches_tab(ui, app),
         3 => reserve_tab(ui, app),
         4 => inventory_tab(ui, app),
+        5 => tools_tab(ui, app),
+        6 => shortage_tab(ui, app),
         _ => balance_tab(ui, app),
     }
+}
+
+// ================================================================ Asboblar
+
+/// Asboblar: kimda, qachondan beri, qaytarish muddati (TZ XI.32-34).
+///
+/// Material sarflanadi, asbob esa qaytariladi — shuning uchun bu yerda
+/// qoldiq emas, **egalik** ko'rsatiladi.
+fn tools_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(pid) = app.current else { return };
+    let can = app.can_edit(Screen::Warehouse);
+    let today = app.today;
+
+    let mut add = false;
+    ui.horizontal_wrapped(|ui| {
+        if can && ui.button(t("wh_add_tool")).clicked() {
+            add = true;
+        }
+        ui.label(
+            RichText::new(t("wh_tools_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    let status = app.tool_status();
+    let sum = crate::checks::tool_summary(&app.tools, &status, today);
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("wh_tools_total"),
+                sum.total.to_string(),
+                t("wh_tools_total_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("wh_tools_issued"),
+                sum.issued.to_string(),
+                &format!("{} {}", money(sum.issued_value), t("wh_tools_value")),
+                theme::text(),
+            ),
+            stat(
+                t("wh_tools_overdue"),
+                sum.overdue.to_string(),
+                t("wh_tools_overdue_hint"),
+                if sum.overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("wh_tools_repair"),
+                sum.out_of_service.to_string(),
+                t("wh_tools_repair_hint"),
+                if sum.out_of_service == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("wh_tools_check"),
+                sum.check_overdue.to_string(),
+                t("wh_tools_check_hint"),
+                if sum.check_overdue == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+
+    if app.tools.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("wh_tools_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+    } else {
+        let workers = app.workers.clone();
+        let mut edited: Option<crate::domain::Tool> = None;
+        let mut removed: Option<i64> = None;
+        let mut give: Option<i64> = None;
+        let mut take_back: Option<i64> = None;
+
+        egui::ScrollArea::both()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Grid::new("wh_tools_grid")
+                    .num_columns(10)
+                    .spacing([8.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 90.0, t("col_code"));
+                        head_l(ui, 220.0, t("col_name"));
+                        head_l(ui, 130.0, t("col_kind"));
+                        head_l(ui, 110.0, t("wh_tool_inv"));
+                        head_r(ui, 120.0, t("col_price"));
+                        head_l(ui, 120.0, t("wh_tool_condition"));
+                        head_l(ui, 120.0, t("wh_tool_check"));
+                        head_l(ui, 200.0, t("wh_tool_holder"));
+                        head_l(ui, 130.0, "");
+                        head_l(ui, 24.0, "");
+                        ui.end_row();
+
+                        for src in &app.tools {
+                            let mut x = src.clone();
+                            let mut changed = false;
+                            let st = status.iter().find(|s| s.tool_id == x.id);
+
+                            changed |= ui
+                                .add_sized([90.0, 22.0], egui::TextEdit::singleline(&mut x.code))
+                                .changed();
+                            changed |= ui
+                                .add_sized([220.0, 22.0], egui::TextEdit::singleline(&mut x.name))
+                                .changed();
+                            egui::ComboBox::from_id_salt(("wh_tk", x.id))
+                                .selected_text(x.kind.label())
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    for k in crate::domain::ToolKind::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut x.kind, *k, k.label())
+                                            .changed();
+                                    }
+                                });
+                            changed |= ui
+                                .add_sized(
+                                    [110.0, 22.0],
+                                    egui::TextEdit::singleline(&mut x.inventory_no),
+                                )
+                                .changed();
+                            changed |=
+                                super::materials::num_edit(ui, 120.0, &mut x.price, 1000.0, 1e10);
+                            egui::ComboBox::from_id_salt(("wh_tc", x.id))
+                                .selected_text(
+                                    RichText::new(x.condition.label())
+                                        .color(condition_color(x.condition)),
+                                )
+                                .width(120.0)
+                                .show_ui(ui, |ui| {
+                                    for c in crate::domain::ToolCondition::ALL {
+                                        changed |= ui
+                                            .selectable_value(&mut x.condition, *c, c.label())
+                                            .changed();
+                                    }
+                                });
+
+                            // Tekshiruv muddati: majburiy emas, lekin o'tgani
+                            // qizil bo'lib turishi kerak.
+                            ui.horizontal(|ui| {
+                                let mut has = x.check_due.is_some();
+                                if ui.checkbox(&mut has, "").changed() {
+                                    x.check_due = has.then(|| today + chrono::Duration::days(365));
+                                    changed = true;
+                                }
+                                if let Some(mut d) = x.check_due {
+                                    if super::passport::date_edit(
+                                        ui,
+                                        &format!("wtc{}", x.id),
+                                        &mut d,
+                                    ) {
+                                        x.check_due = Some(d);
+                                        changed = true;
+                                    }
+                                    if d < today {
+                                        ui.label(
+                                            RichText::new("!").color(theme::danger()).strong(),
+                                        );
+                                    }
+                                }
+                            });
+
+                            // Kimda: ism va necha kundan beri.
+                            let holder = st.and_then(|s| s.holder).and_then(|w| {
+                                workers.iter().find(|x| x.id == w).map(|x| x.name.clone())
+                            });
+                            cell_l(
+                                ui,
+                                200.0,
+                                match (&holder, st) {
+                                    (Some(name), Some(s)) => RichText::new(format!(
+                                        "{name} · {} {}",
+                                        s.days,
+                                        t("wh_tool_days")
+                                    ))
+                                    .size(12.0)
+                                    .color(if s.overdue {
+                                        theme::danger()
+                                    } else {
+                                        theme::text()
+                                    }),
+                                    _ => RichText::new(t("wh_tool_in_store"))
+                                        .size(12.0)
+                                        .color(theme::muted()),
+                                },
+                            );
+
+                            ui.horizontal(|ui| {
+                                if holder.is_some() {
+                                    if can && ui.small_button(t("wh_tool_return")).clicked() {
+                                        take_back = Some(x.id);
+                                    }
+                                } else if can
+                                    && !x.out_of_service()
+                                    && ui.small_button(t("wh_tool_give")).clicked()
+                                {
+                                    give = Some(x.id);
+                                }
+                            });
+
+                            if can
+                                && ui
+                                    .small_button(RichText::new("x").color(theme::danger()))
+                                    .clicked()
+                            {
+                                removed = Some(x.id);
+                            }
+                            ui.end_row();
+
+                            if changed && can {
+                                edited = Some(x);
+                            }
+                        }
+                    });
+            });
+
+        if let Some(x) = edited {
+            app.db.update_tool(&x);
+            if let Some(slot) = app.tools.iter_mut().find(|y| y.id == x.id) {
+                *slot = x;
+            }
+        }
+        if let Some(id) = removed {
+            app.db.delete_tool(id);
+            app.reload_modules();
+        }
+        // Berish: birinchi faol ishchiga. Kimga berishni keyin o'zgartirish
+        // mumkin — asosiysi asbob hisobdan chiqib ketmasin.
+        if let Some(tool_id) = give {
+            if let Some(w) = app.workers.iter().find(|w| w.active).map(|w| w.id) {
+                app.db.insert_tool_issue(&crate::domain::ToolIssue {
+                    id: 0,
+                    project_id: pid,
+                    tool_id,
+                    worker_id: w,
+                    issued: today,
+                    due: Some(today + chrono::Duration::days(14)),
+                    returned: None,
+                    note: String::new(),
+                });
+                app.reload_modules();
+            } else {
+                app.notify(t("wh_tool_no_workers").to_string());
+            }
+        }
+        if let Some(tool_id) = take_back {
+            let open = app
+                .tool_issues
+                .iter()
+                .filter(|x| x.tool_id == tool_id && x.open())
+                .max_by_key(|x| x.issued)
+                .cloned();
+            if let Some(mut x) = open {
+                x.returned = Some(today);
+                app.db.update_tool_issue(&x);
+                app.reload_modules();
+            }
+        }
+    }
+
+    if add {
+        app.db.insert_tool(&crate::domain::Tool {
+            id: 0,
+            project_id: pid,
+            code: String::new(),
+            name: t("wh_tool_new").to_string(),
+            kind: crate::domain::ToolKind::Hand,
+            inventory_no: String::new(),
+            price: 0.0,
+            condition: crate::domain::ToolCondition::Good,
+            check_due: None,
+            note: String::new(),
+        });
+        app.reload_modules();
+    }
+}
+
+fn condition_color(c: crate::domain::ToolCondition) -> egui::Color32 {
+    use crate::domain::ToolCondition as C;
+    match c {
+        C::Good => theme::ok(),
+        C::Worn => theme::warn(),
+        C::Repair => theme::danger(),
+        C::Written => theme::muted(),
+    }
+}
+
+// ================================================================ Kamomad
+
+/// Inventarizatsiya farqlari bo'yicha kamomad tahlili (TZ XI.26).
+fn shortage_tab(ui: &mut egui::Ui, app: &mut App) {
+    let rows = app.shortages();
+
+    ui.label(
+        RichText::new(t("wh_short_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    if rows.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("wh_short_none"))
+                    .color(theme::ok())
+                    .size(15.0),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(t("wh_short_none_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
+        });
+        return;
+    }
+
+    let total: f64 = rows.iter().map(|r| r.cost).sum();
+    let repeated = rows.iter().filter(|r| r.times > 1).count();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("wh_short_total"),
+                money(total),
+                t("wh_short_total_hint"),
+                if total == 0.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("wh_short_repeated"),
+                repeated.to_string(),
+                t("wh_short_repeated_hint"),
+                if repeated == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("wh_short_grid")
+                .num_columns(6)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 240.0, t("col_material"));
+                    head_r(ui, 90.0, t("wh_short_times"));
+                    head_r(ui, 120.0, t("wh_short_qty"));
+                    head_r(ui, 120.0, t("wh_short_surplus"));
+                    head_r(ui, 140.0, t("wh_short_cost"));
+                    head_l(ui, 200.0, t("wh_short_note"));
+                    ui.end_row();
+
+                    for r in &rows {
+                        let Some(m) = app.materials.iter().find(|m| m.id == r.material_id) else {
+                            continue;
+                        };
+                        cell_l(
+                            ui,
+                            240.0,
+                            RichText::new(super::issues::truncate(&m.name, 32)).size(12.5),
+                        );
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(r.times.to_string())
+                                .size(12.0)
+                                .color(if r.times > 1 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(format!(
+                                "{} {}",
+                                super::materials::trim_num(r.shortage),
+                                m.unit
+                            ))
+                            .size(12.0)
+                            .color(theme::danger()),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(if r.surplus > 0.0 {
+                                super::materials::trim_num(r.surplus)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(12.0)
+                            .color(theme::muted()),
+                        );
+                        cell_r(ui, 140.0, RichText::new(money(r.cost)).size(12.0));
+                        cell_l(
+                            ui,
+                            200.0,
+                            RichText::new(if r.times > 1 {
+                                t("wh_short_systematic")
+                            } else {
+                                t("wh_short_single")
+                            })
+                            .size(11.0)
+                            .color(theme::muted()),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 // ================================================================ Yuqori panel

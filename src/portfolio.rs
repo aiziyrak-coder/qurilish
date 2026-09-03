@@ -188,6 +188,43 @@ fn one(db: &Db, p: &Project, today: NaiveDate) -> ProjectSummary {
     }
 }
 
+/// Obyektlar orasida material ko'chirish takliflari (TZ XI.42).
+///
+/// Bir obyektda ortiqcha turgan material boshqasida yetishmayotgan
+/// bo'lishi mumkin. Ko'chirish sotib olishdan arzon — lekin qaror
+/// odamniki, shuning uchun bu faqat taklif.
+pub fn redistribution(db: &Db, today: NaiveDate) -> Vec<checks::Redistribution> {
+    let projects = db.projects().unwrap_or_default();
+    let mut surplus = Vec::new();
+    let mut need = Vec::new();
+
+    for p in &projects {
+        let materials = db.materials(p.id);
+        if materials.is_empty() {
+            continue;
+        }
+        let moves = db.stock_moves(p.id);
+        let stock = checks::stock_balances(&materials, &moves, &db.reservations(p.id), today);
+        let tasks = db.tasks(p.id).unwrap_or_default();
+        let plan = checks::purchase_plan(
+            &materials,
+            &stock,
+            &db.purchases(p.id),
+            &db.requests(p.id),
+            &db.material_norms(p.id),
+            &tasks,
+            today,
+            PLAN_HORIZON,
+        );
+        surplus.push((p.id, stock, materials.clone()));
+        need.push((p.id, plan, materials));
+    }
+    checks::redistribution(&surplus, &need)
+}
+
+/// Qayta taqsimlash rejasi shuncha kun oldinga qaraydi.
+const PLAN_HORIZON: i64 = 45;
+
 /// Portfel bo'yicha umumiy yakun.
 #[derive(Debug, Clone, Default)]
 pub struct PortfolioTotals {

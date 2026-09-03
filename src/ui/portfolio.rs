@@ -284,12 +284,87 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                         ui.end_row();
                     }
                 });
+            redistribution_block(ui, app);
         });
 
     if let Some(id) = pick {
         app.select_project(id);
         app.screen = Screen::Dashboard;
     }
+}
+
+/// Obyektlar orasida material ko'chirish takliflari (TZ XI.42).
+fn redistribution_block(ui: &mut egui::Ui, app: &App) {
+    let moves = portfolio::redistribution(&app.db, app.today);
+    if moves.is_empty() {
+        return;
+    }
+    let name = |id: i64| {
+        app.projects
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.code.clone())
+            .unwrap_or_default()
+    };
+    let total: f64 = moves.iter().map(|m| m.saving).sum();
+
+    ui.add_space(14.0);
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(t("pf_move_title")).size(14.0).strong());
+        ui.label(
+            RichText::new(format!("{} {}", money(total), t("pf_move_saving")))
+                .size(12.5)
+                .color(theme::ok()),
+        );
+    });
+    ui.label(
+        RichText::new(t("pf_move_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    egui::Grid::new("pf_move_grid")
+        .num_columns(5)
+        .spacing([10.0, 5.0])
+        .striped(true)
+        .show(ui, |ui| {
+            head_l(ui, 220.0, t("col_material"));
+            head_l(ui, 110.0, t("pf_move_from"));
+            head_l(ui, 110.0, t("pf_move_to"));
+            head_r(ui, 120.0, t("col_qty"));
+            head_r(ui, 140.0, t("pf_move_value"));
+            ui.end_row();
+            for m in moves.iter().take(10) {
+                cell_l(
+                    ui,
+                    220.0,
+                    RichText::new(super::issues::truncate(&m.material_name, 28)).size(12.0),
+                );
+                cell_l(
+                    ui,
+                    110.0,
+                    RichText::new(name(m.from_project))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+                cell_l(
+                    ui,
+                    110.0,
+                    RichText::new(name(m.to_project))
+                        .size(12.0)
+                        .color(theme::accent()),
+                );
+                cell_r(
+                    ui,
+                    120.0,
+                    RichText::new(format!("{} {}", super::materials::trim_num(m.qty), m.unit))
+                        .size(12.0),
+                );
+                cell_r(ui, 140.0, RichText::new(money(m.saving)).size(12.0));
+                ui.end_row();
+            }
+        });
 }
 
 /// Obyekt nima uchun e'tibor talab qilishini bir qatorda aytadi.

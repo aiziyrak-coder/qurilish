@@ -5313,6 +5313,172 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// TZ XI.34: asbob qaytariladi, shuning uchun asosiy savol — kimda.
+    #[test]
+    fn tool_status_shows_who_holds_it() {
+        use crate::checks::{tool_status, tool_summary};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let tools = t.db.tools(pid);
+        let issues = t.db.tool_issues(pid);
+        assert!(!tools.is_empty(), "namunada asbob yo'q");
+
+        let st = tool_status(&tools, &issues, today);
+        assert_eq!(st.len(), tools.len());
+
+        // Ishchida turgan asbobda ega ham, sana ham bor.
+        for s in st.iter().filter(|s| s.holder.is_some()) {
+            assert!(s.issued.is_some(), "berilgan sana yo'q");
+            assert!(s.days >= 0);
+        }
+        // Qaytarilgan asbob egasiz qoladi.
+        let returned: Vec<i64> = issues
+            .iter()
+            .filter(|x| x.returned.is_some())
+            .map(|x| x.tool_id)
+            .collect();
+        for id in returned {
+            let open = issues.iter().any(|x| x.tool_id == id && x.open());
+            if !open {
+                let s = st.iter().find(|s| s.tool_id == id).unwrap();
+                assert!(s.holder.is_none(), "qaytarilgan asbob hali ishchida");
+            }
+        }
+
+        let sum = tool_summary(&tools, &st, today);
+        assert_eq!(sum.total, tools.len());
+        assert_eq!(sum.in_store + sum.issued, sum.total);
+        assert!(sum.overdue > 0, "namunada muddati o'tgan asbob yo'q");
+        assert!(sum.out_of_service > 0, "ta'mirdagi asbob yo'q");
+    }
+
+    /// Muddati o'tgan berish aniq belgilanadi.
+    #[test]
+    fn overdue_tool_issue_is_flagged() {
+        use crate::domain::ToolIssue;
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 10).unwrap();
+        let mk = |due: Option<i64>, returned: Option<i64>| ToolIssue {
+            id: 0,
+            project_id: 1,
+            tool_id: 1,
+            worker_id: 1,
+            issued: today - chrono::Duration::days(20),
+            due: due.map(|d| today + chrono::Duration::days(d)),
+            returned: returned.map(|d| today - chrono::Duration::days(d)),
+            note: String::new(),
+        };
+        // Muddati o'tgan va qaytarilmagan.
+        assert!(mk(Some(-3), None).overdue(today));
+        // Muddati kelmagan.
+        assert!(!mk(Some(5), None).overdue(today));
+        // Qaytarilgan — muddat o'tgan bo'lsa ham savol yo'q.
+        assert!(!mk(Some(-3), Some(1)).overdue(today));
+        // Muddatsiz berilgan.
+        assert!(!mk(None, None).overdue(today));
+        // Ishchida turgan kun soni.
+        assert_eq!(mk(None, None).days(today), 20);
+        assert_eq!(mk(None, Some(5)).days(today), 15);
+    }
+
+    /// TZ XI.26: takrorlangan kamomad tizimli sabab degani.
+    #[test]
+    fn shortages_count_repeated_differences() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.shortages();
+        assert!(!rows.is_empty(), "namunada kamomad yo'q");
+        for r in &rows {
+            assert!(r.times > 0);
+            assert!(r.shortage >= 0.0);
+            assert!(r.cost >= 0.0);
+        }
+        // Puldagi zarari kattalari oldinda.
+        for w in rows.windows(2) {
+            assert!(w[0].cost >= w[1].cost);
+        }
+        // Ochiq inventarizatsiya hisobga kirmaydi: u hali to'ldirilmoqda.
+        let open_ids: Vec<i64> = app
+            .inventories
+            .iter()
+            .filter(|i| !i.closed)
+            .map(|i| i.id)
+            .collect();
+        assert!(!open_ids.is_empty(), "namunada ochiq inventarizatsiya yo'q");
+    }
+
+    /// TZ XI.42: ortiqcha material boshqa obyektga taklif qilinadi.
+    #[test]
+    fn redistribution_moves_surplus_to_where_it_is_needed() {
+        use crate::checks::{redistribution, PurchasePlanLine, StockLine};
+        use crate::domain::Material;
+
+        let mat = |id: i64, min_stock: f64| Material {
+            id,
+            project_id: 1,
+            code: String::new(),
+            name: "Sement M400".into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: String::new(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock,
+            price: 1_000_000.0,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let stock = |id: i64, available: f64| StockLine {
+            material_id: id,
+            available,
+            ..Default::default()
+        };
+        let plan = |id: i64, to_buy: f64| PurchasePlanLine {
+            material_id: id,
+            available: 0.0,
+            ordered: 0.0,
+            min_stock: 0.0,
+            needed_for_tasks: to_buy,
+            to_buy,
+            cost: 0.0,
+            need_by: None,
+            has_request: false,
+        };
+
+        // 1-obyektda 30 t, minimal zaxira 10 t — 20 t erkin.
+        // 2-obyektga 8 t kerak.
+        let surplus = vec![(1, vec![stock(11, 30.0)], vec![mat(11, 10.0)])];
+        let need = vec![(2, vec![plan(21, 8.0)], vec![mat(21, 0.0)])];
+        let moves = redistribution(&surplus, &need);
+        assert_eq!(moves.len(), 1);
+        assert_eq!(moves[0].from_project, 1);
+        assert_eq!(moves[0].to_project, 2);
+        assert!(
+            (moves[0].qty - 8.0).abs() < 0.001,
+            "kerakli miqdor ko'chadi"
+        );
+        assert!((moves[0].saving - 8_000_000.0).abs() < 0.01);
+
+        // Minimal zaxiraga tegilmaydi: 12 t bo'lsa, faqat 2 t erkin.
+        let tight = vec![(1, vec![stock(11, 12.0)], vec![mat(11, 10.0)])];
+        let moves = redistribution(&tight, &need);
+        assert_eq!(moves.len(), 1);
+        assert!((moves[0].qty - 2.0).abs() < 0.001);
+
+        // Zaxira chegarada — ko'chirish taklif qilinmaydi.
+        let none = vec![(1, vec![stock(11, 10.0)], vec![mat(11, 10.0)])];
+        assert!(redistribution(&none, &need).is_empty());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

@@ -8,7 +8,8 @@ use crate::domain::{
     ElementLink, Estimate, EstimateItem, ExecDoc, GeodesyPoint, Inspection, Inventory,
     InventoryLine, Issue, IssueModule, IssueStatus, JournalEntry, Machine, MachineLog, Material,
     Payment, PaymentStage, PprDoc, Purchase, QualityCheck, Request, Reservation, SafetyEvent,
-    Severity, Shift, StockMove, TimesheetEntry, Unit, Warehouse, WorkAcceptance, Worker,
+    Severity, Shift, StockMove, TimesheetEntry, Tool, ToolIssue, Unit, Warehouse, WorkAcceptance,
+    Worker,
 };
 use crate::i18n::{self, t, Lang};
 use crate::model::*;
@@ -487,6 +488,9 @@ pub struct App {
     pub machine_logs: Vec<MachineLog>,
     /// VII. Texnik nazorat: tekshiruvlar, beton sinovlari, geodeziya.
     pub inspections: Vec<Inspection>,
+    /// XI.32-34. Asboblar va ularni berish.
+    pub tools: Vec<Tool>,
+    pub tool_issues: Vec<ToolIssue>,
     /// Bildirishnomalar: ma'lumot o'zgarganda bir marta hisoblanadi.
     ///
     /// Uni har kadrda qayta yig'ish bo'lmaydi — hisob o'nlab SQL so'rovni
@@ -648,6 +652,8 @@ impl App {
             notices: Vec::new(),
             notices_rev: 0,
             inspections: Vec::new(),
+            tools: Vec::new(),
+            tool_issues: Vec::new(),
             contracts: Vec::new(),
             contract_changes: Vec::new(),
             payment_stages: Vec::new(),
@@ -831,6 +837,8 @@ impl App {
         self.machine_logs.clear();
         self.notices.clear();
         self.inspections.clear();
+        self.tools.clear();
+        self.tool_issues.clear();
         self.contracts.clear();
         self.contract_changes.clear();
         self.payment_stages.clear();
@@ -887,6 +895,8 @@ impl App {
         self.machines = self.db.machines(id);
         self.machine_logs = self.db.machine_logs(id);
         self.inspections = self.db.inspections(id);
+        self.tools = self.db.tools(id);
+        self.tool_issues = self.db.tool_issues(id);
         self.contracts = self.db.contracts(id);
         self.contract_changes = self.db.contract_changes(id);
         self.payment_stages = self.db.payment_stages(id);
@@ -1726,6 +1736,16 @@ impl App {
     /// Ishlar bo'yicha unumdorlik (TZ XVII.26).
     pub fn productivity(&self) -> Vec<checks::Productivity> {
         checks::productivity(&self.tasks, &self.timesheet, &self.workers)
+    }
+
+    /// Asboblarning hozirgi holati (TZ XI.34).
+    pub fn tool_status(&self) -> Vec<checks::ToolStatus> {
+        checks::tool_status(&self.tools, &self.tool_issues, self.today)
+    }
+
+    /// Inventarizatsiya farqlari bo'yicha kamomad (TZ XI.26).
+    pub fn shortages(&self) -> Vec<checks::ShortageLine> {
+        checks::shortages(&self.inventories, &self.inventory_lines, &self.materials)
     }
 
     /// TZ XI: ombor qoldiqlari. Materiallar, harakatlar va rezervlardan hisoblanadi.

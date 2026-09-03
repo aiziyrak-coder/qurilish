@@ -1720,3 +1720,87 @@ impl WorkAcceptance {
         self.state == AcceptState::Submitted
     }
 }
+
+// ================================================================ XI.32-35. Asboblar
+
+enum_kind!(ToolKind {
+    Power    => "power",    "tk_power";
+    Hand     => "hand",     "tk_hand";
+    Measure  => "measure",  "tk_measure";
+    Scaffold => "scaffold", "tk_scaffold";
+    Other    => "other",    "tk_other";
+});
+
+enum_kind!(ToolCondition {
+    Good    => "good",    "tc_good";
+    Worn    => "worn",    "tc_worn";
+    Repair  => "repair",  "tc_repair";
+    Written => "written", "tc_written";
+});
+
+/// Asbob (TZ XI.32).
+///
+/// Materialdan farqi: asbob sarflanmaydi, u **qaytariladi**. Shuning uchun
+/// uning qoldig'i emas, **kimdaligi** muhim.
+#[derive(Debug, Clone)]
+pub struct Tool {
+    pub id: i64,
+    pub project_id: i64,
+    pub code: String,
+    pub name: String,
+    pub kind: ToolKind,
+    /// Inventar raqami — ayni shu nusxani ajratadi.
+    pub inventory_no: String,
+    pub price: f64,
+    pub condition: ToolCondition,
+    /// Keyingi tekshiruv sanasi (masalan izolyatsiya sinovi).
+    pub check_due: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl Tool {
+    /// Ishlatib bo'lmaydigan asbob: ta'mirda yoki hisobdan chiqarilgan.
+    pub fn out_of_service(&self) -> bool {
+        matches!(
+            self.condition,
+            ToolCondition::Repair | ToolCondition::Written
+        )
+    }
+
+    /// Tekshiruv muddati o'tgan.
+    pub fn check_overdue(&self, today: NaiveDate) -> bool {
+        self.check_due.is_some_and(|d| d < today)
+    }
+}
+
+/// Asbobni berish va qaytarish (TZ XI.33-34).
+#[derive(Debug, Clone)]
+pub struct ToolIssue {
+    pub id: i64,
+    pub project_id: i64,
+    pub tool_id: i64,
+    pub worker_id: i64,
+    pub issued: NaiveDate,
+    /// Qaytarish muddati. Bo'sh — muddatsiz berilgan.
+    pub due: Option<NaiveDate>,
+    /// Qaytarilgan sana. Bo'sh — hali ishchida.
+    pub returned: Option<NaiveDate>,
+    pub note: String,
+}
+
+impl ToolIssue {
+    /// Asbob hali ishchida.
+    pub fn open(&self) -> bool {
+        self.returned.is_none()
+    }
+
+    /// Qaytarish muddati o'tgan.
+    pub fn overdue(&self, today: NaiveDate) -> bool {
+        self.open() && self.due.is_some_and(|d| d < today)
+    }
+
+    /// Necha kundan beri ishchida.
+    pub fn days(&self, today: NaiveDate) -> i64 {
+        (self.returned.unwrap_or(today) - self.issued).num_days()
+    }
+}

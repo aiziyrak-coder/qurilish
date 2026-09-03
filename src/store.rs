@@ -654,6 +654,32 @@ impl Db {
             );
             CREATE INDEX IF NOT EXISTS idx_geodesy_pid ON geodesy_point(project_id);
 
+            CREATE TABLE IF NOT EXISTS tool (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                code TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL DEFAULT '',
+                kind TEXT NOT NULL DEFAULT 'hand',
+                inventory_no TEXT NOT NULL DEFAULT '',
+                price REAL NOT NULL DEFAULT 0,
+                condition TEXT NOT NULL DEFAULT 'good',
+                check_due TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_tool_pid ON tool(project_id);
+
+            CREATE TABLE IF NOT EXISTS tool_issue (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                tool_id INTEGER NOT NULL REFERENCES tool(id) ON DELETE CASCADE,
+                worker_id INTEGER NOT NULL,
+                issued TEXT NOT NULL,
+                due TEXT,
+                returned TEXT,
+                note TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_toolissue_pid ON tool_issue(project_id);
+
             CREATE TABLE IF NOT EXISTS contract (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -3497,6 +3523,126 @@ impl Db {
         self.del("geodesy_point", id)
     }
 
+    // ---------- XI.32-34. Asboblar ----------
+
+    pub fn tools(&self, pid: i64) -> Vec<Tool> {
+        self.list(
+            "SELECT id,project_id,code,name,kind,inventory_no,price,condition,check_due,note
+             FROM tool WHERE project_id=?1 ORDER BY name,id",
+            pid,
+            |r| {
+                Ok(Tool {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    code: r.get(2)?,
+                    name: r.get(3)?,
+                    kind: ToolKind::parse(&r.get::<_, String>(4)?),
+                    inventory_no: r.get(5)?,
+                    price: r.get(6)?,
+                    condition: ToolCondition::parse(&r.get::<_, String>(7)?),
+                    check_due: odate(r.get(8)?),
+                    note: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_tool(&self, x: &Tool) -> i64 {
+        self.ins(
+            "INSERT INTO tool (project_id,code,name,kind,inventory_no,price,condition,check_due,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                x.project_id,
+                x.code,
+                x.name,
+                x.kind.code(),
+                x.inventory_no,
+                x.price,
+                x.condition.code(),
+                ods(x.check_due),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_tool(&self, x: &Tool) -> bool {
+        self.upd(
+            "UPDATE tool SET code=?2,name=?3,kind=?4,inventory_no=?5,price=?6,condition=?7,
+                    check_due=?8,note=?9 WHERE id=?1",
+            params![
+                x.id,
+                x.code,
+                x.name,
+                x.kind.code(),
+                x.inventory_no,
+                x.price,
+                x.condition.code(),
+                ods(x.check_due),
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_tool(&self, id: i64) -> bool {
+        self.del("tool", id)
+    }
+
+    pub fn tool_issues(&self, pid: i64) -> Vec<ToolIssue> {
+        self.list(
+            "SELECT id,project_id,tool_id,worker_id,issued,due,returned,note
+             FROM tool_issue WHERE project_id=?1 ORDER BY issued DESC,id DESC",
+            pid,
+            |r| {
+                Ok(ToolIssue {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    tool_id: r.get(2)?,
+                    worker_id: r.get(3)?,
+                    issued: date(&r.get::<_, String>(4)?),
+                    due: odate(r.get(5)?),
+                    returned: odate(r.get(6)?),
+                    note: r.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn insert_tool_issue(&self, x: &ToolIssue) -> i64 {
+        self.ins(
+            "INSERT INTO tool_issue (project_id,tool_id,worker_id,issued,due,returned,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                x.project_id,
+                x.tool_id,
+                x.worker_id,
+                x.issued.to_string(),
+                ods(x.due),
+                ods(x.returned),
+                x.note
+            ],
+        )
+    }
+
+    pub fn update_tool_issue(&self, x: &ToolIssue) -> bool {
+        self.upd(
+            "UPDATE tool_issue SET tool_id=?2,worker_id=?3,issued=?4,due=?5,returned=?6,note=?7
+             WHERE id=?1",
+            params![
+                x.id,
+                x.tool_id,
+                x.worker_id,
+                x.issued.to_string(),
+                ods(x.due),
+                ods(x.returned),
+                x.note
+            ],
+        )
+    }
+
+    pub fn delete_tool_issue(&self, id: i64) -> bool {
+        self.del("tool_issue", id)
+    }
+
     // ---------- VIII. Buyurtmachi: shartnomalar va to'lovlar ----------
 
     pub fn contracts(&self, pid: i64) -> Vec<Contract> {
@@ -4384,6 +4530,7 @@ impl Db {
         self.seed_demo_docs(pid, ru);
         self.seed_demo_history(pid, ru);
         self.seed_demo_supply_extra(pid, ru);
+        self.seed_demo_tools(pid, ru);
         self.seed_demo_estimate_alt(pid, ru);
     }
 
@@ -6661,6 +6808,164 @@ impl Db {
                 // rejadan tashqarida paydo bo'ladi.
                 urgent: req.is_empty(),
                 buyer: if ru { "Ким В.С." } else { "Kim V.S." }.into(),
+                note: String::new(),
+            });
+        }
+    }
+
+    /// Asboblar va ularni berish namunasi (TZ XI.32-34).
+    pub fn seed_demo_tools(&self, pid: i64, ru: bool) {
+        if !self.tools(pid).is_empty() {
+            return;
+        }
+        let today = chrono::Local::now().date_naive();
+        let d = |back: i64| today - chrono::Duration::days(back);
+        let workers = self.workers(pid);
+        if workers.is_empty() {
+            return;
+        }
+
+        // (kod, nomi uz/ru, tur, inventar №, narx, holat, tekshiruv kuni)
+        let tools: [ToolDef; 10] = [
+            (
+                "AS-101",
+                "Perforator Bosch GBH 2-26",
+                "Перфоратор Bosch GBH 2-26",
+                ToolKind::Power,
+                "INV-1042",
+                4_800_000.0,
+                ToolCondition::Good,
+                Some(-120),
+            ),
+            (
+                "AS-102",
+                "Burchak silliqlagich 230 mm",
+                "УШМ 230 мм",
+                ToolKind::Power,
+                "INV-1043",
+                2_600_000.0,
+                ToolCondition::Good,
+                Some(-95),
+            ),
+            (
+                "AS-103",
+                "Payvand apparati 200 A",
+                "Сварочный аппарат 200 А",
+                ToolKind::Power,
+                "INV-1051",
+                6_400_000.0,
+                ToolCondition::Worn,
+                Some(18),
+            ),
+            (
+                "AS-104",
+                "Vibrator, chuqurlik",
+                "Вибратор глубинный",
+                ToolKind::Power,
+                "INV-1063",
+                3_900_000.0,
+                ToolCondition::Repair,
+                None,
+            ),
+            (
+                "AS-201",
+                "Lazerli nivelir",
+                "Лазерный нивелир",
+                ToolKind::Measure,
+                "INV-2011",
+                5_200_000.0,
+                ToolCondition::Good,
+                Some(-210),
+            ),
+            (
+                "AS-202",
+                "Teodolit",
+                "Теодолит",
+                ToolKind::Measure,
+                "INV-2014",
+                12_400_000.0,
+                ToolCondition::Good,
+                Some(-45),
+            ),
+            (
+                "AS-203",
+                "Ruletka 50 m",
+                "Рулетка 50 м",
+                ToolKind::Hand,
+                "INV-2020",
+                320_000.0,
+                ToolCondition::Good,
+                None,
+            ),
+            (
+                "AS-301",
+                "Beton aralashtirgich 130 l",
+                "Бетономешалка 130 л",
+                ToolKind::Power,
+                "INV-3001",
+                4_100_000.0,
+                ToolCondition::Good,
+                None,
+            ),
+            (
+                "AS-401",
+                "Iskala, seksiya",
+                "Леса, секция",
+                ToolKind::Scaffold,
+                "INV-4010",
+                1_800_000.0,
+                ToolCondition::Good,
+                None,
+            ),
+            (
+                "AS-402",
+                "Ko'chma zinapoya 6 m",
+                "Лестница приставная 6 м",
+                ToolKind::Scaffold,
+                "INV-4022",
+                950_000.0,
+                ToolCondition::Worn,
+                None,
+            ),
+        ];
+        let mut ids = Vec::new();
+        for (code, uz, rux, kind, inv, price, condition, check) in tools {
+            ids.push(self.insert_tool(&Tool {
+                id: 0,
+                project_id: pid,
+                code: code.into(),
+                name: if ru { rux } else { uz }.into(),
+                kind,
+                inventory_no: inv.into(),
+                price,
+                condition,
+                check_due: check.map(d),
+                note: String::new(),
+            }));
+        }
+
+        // Berish: bir qismi ishchilarda, bittasi muddati o'tgan holda.
+        // (asbob indeksi, ishchi indeksi, berilgan kun, muddat kuni, qaytarilgan)
+        let issues: [ToolIssueDef; 6] = [
+            (0, 0, 42, Some(28), Some(30)),
+            (0, 1, 12, Some(-2), None),
+            (1, 2, 9, Some(5), None),
+            (2, 4, 26, Some(12), None),
+            (4, 3, 60, Some(46), Some(48)),
+            (6, 5, 3, Some(-11), None),
+        ];
+        for (ti, wi, back, due, ret) in issues {
+            let (Some(tool), Some(worker)) = (ids.get(ti), workers.get(wi)) else {
+                continue;
+            };
+            self.insert_tool_issue(&ToolIssue {
+                id: 0,
+                project_id: pid,
+                tool_id: *tool,
+                worker_id: worker.id,
+                issued: d(back),
+                due: due.map(d),
+                returned: ret.map(d),
                 note: String::new(),
             });
         }
@@ -9478,4 +9783,21 @@ type PurchaseDef = (
     PurchaseStatus,
     f64,
     Section,
+);
+
+/// Namunaviy asbob berish: asbob indeksi, ishchi indeksi, berilgan kun
+/// (orqaga), qaytarish muddati, qaytarilgan kun.
+type ToolIssueDef = (usize, usize, i64, Option<i64>, Option<i64>);
+
+/// Namunaviy asbob: kod, nomi (uz/ru), tur, inventar raqami, narx, holat,
+/// tekshiruv sanasi (kun, orqaga).
+type ToolDef = (
+    &'static str,
+    &'static str,
+    &'static str,
+    ToolKind,
+    &'static str,
+    f64,
+    ToolCondition,
+    Option<i64>,
 );

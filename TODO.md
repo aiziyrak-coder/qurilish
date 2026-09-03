@@ -28,7 +28,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VIII. Buyurtmachi kabineti | 37 | 17 | 14 | 6 | 2 |
 | IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
 | X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
-| XI. Ombor | 48 | 26 | 9 | 13 | 1 |
+| XI. Ombor | 48 | 32 | 8 | 8 | 1 |
 | XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
 | XIII. Tabel | 44 | 18 | 11 | 15 | 6 |
 | XIV. Sifat | 41 | 19 | 9 | 13 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **348** | **175** | **177** | **53** |
+| **Jami** | **700** | **354** | **174** | **172** | **53** |
 
-Ya'ni **~50 % to'liq**, **~25 % qisman**, **~25 % hali yo'q**.
+Ya'ni **~51 % to'liq**, **~25 % qisman**, **~25 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -453,15 +453,15 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 23. Nazoratsiz hisobdan chiqarishni taqiqlash — *sababsizlari ogohlantiriladi*
 - [x] 24. **Inventarizatsiya** — *hisob/fakt, yopilgach o'zgarmas*
 - [x] 25. Farqlar — *tuzatuvchi harakatga aylanadi*
-- [ ] 26. AI kamomad sababini izlashi
+- [x] 26. Kamomad sababini izlash — *takrorlangan farq tizimli sabab degani; puldagi zarar bo'yicha tartib*
 - [x] 27. Yaroqlilik muddati — *partiyada*
 - [x] 28. FIFO / FEFO — *navbatdagi partiya belgilanadi*
 - [ ] 29. Harorat nazorati
 - [~] 30. **YoMM** — *texnika modulida yoqilg'i*
 - [ ] 31. AI YoMM nazorati
-- [ ] 32. **Asboblar**
-- [ ] 33. Asbob berish
-- [ ] 34. Asbobni nazorat qilish
+- [x] 32. Asboblar — *katalog: tur, inventar raqami, holat, tekshiruv muddati*
+- [x] 33. Asbob berish — *kimga, qachon, qaysi muddatgacha*
+- [x] 34. Asbobni nazorat qilish — *kimda, necha kundan beri, muddati o'tganmi*
 - [ ] 35. **Ish kiyimi va SIZ**
 - [x] 36. Xaridlar bilan bog'lanish
 - [ ] 37. Buxgalteriya bilan bog'lanish
@@ -469,8 +469,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 39. Narxlarni nazorat qilish
 - [~] 40. Rahbar paneli
 - [x] 41. Uzoq turgan materiallar — *90 kun harakatsiz → sariq*
-- [ ] 42. Obyektlar orasida qayta taqsimlash
-- [~] 43. Nolikvidlarni nazorat qilish — *uzoq turganlar orqali*
+- [x] 42. Obyektlar orasida qayta taqsimlash — *ortiqcha va yetishmayotgan solishtiriladi; minimal zaxiraga tegilmaydi*
+- [x] 43. Nolikvidlarni nazorat qilish — *ortiqcha zaxira analitikada pulda o'lchanadi*
 - [ ] 44. Ombor fotosi
 - [~] 45. Omborchining AI-yordamchisi
 - [~] 46. Direktorning AI-yordamchisi

@@ -5270,3 +5270,232 @@ pub fn opportunities(
     out.sort_by(|a, b| b.amount.abs().total_cmp(&a.amount.abs()));
     out
 }
+
+// ================================================================ XI.32-34. Asboblar
+
+/// Bitta asbob bo'yicha holat (TZ XI.34).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolStatus {
+    pub tool_id: i64,
+    /// Hozir kimda. Bo'sh — omborda.
+    pub holder: Option<i64>,
+    pub issued: Option<NaiveDate>,
+    pub due: Option<NaiveDate>,
+    /// Necha kundan beri ishchida.
+    pub days: i64,
+    /// Qaytarish muddati o'tgan.
+    pub overdue: bool,
+    /// Necha marta berilgan.
+    pub issues: usize,
+}
+
+/// Asboblarning hozirgi holati.
+///
+/// Asbob sarflanmaydi — u qaytariladi, shuning uchun asosiy savol
+/// «qoldiq qancha» emas, «kimda va qachondan beri».
+pub fn tool_status(tools: &[Tool], issues: &[ToolIssue], today: NaiveDate) -> Vec<ToolStatus> {
+    tools
+        .iter()
+        .map(|t| {
+            let mine: Vec<&ToolIssue> = issues.iter().filter(|x| x.tool_id == t.id).collect();
+            // Ochiq berish — eng oxirgisi; ikkitasi bo'lsa oxirgisi haqiqiy.
+            let open = mine
+                .iter()
+                .filter(|x| x.open())
+                .max_by_key(|x| x.issued)
+                .copied();
+            ToolStatus {
+                tool_id: t.id,
+                holder: open.map(|x| x.worker_id),
+                issued: open.map(|x| x.issued),
+                due: open.and_then(|x| x.due),
+                days: open.map(|x| x.days(today)).unwrap_or(0),
+                overdue: open.is_some_and(|x| x.overdue(today)),
+                issues: mine.len(),
+            }
+        })
+        .collect()
+}
+
+/// Asboblar bo'yicha yakun.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ToolSummary {
+    pub total: usize,
+    /// Omborda turganlari.
+    pub in_store: usize,
+    /// Ishchilarda.
+    pub issued: usize,
+    /// Qaytarish muddati o'tganlari.
+    pub overdue: usize,
+    /// Ta'mirda yoki hisobdan chiqarilgan.
+    pub out_of_service: usize,
+    /// Tekshiruv muddati o'tganlari.
+    pub check_overdue: usize,
+    /// Ishchilardagi asboblarning qiymati.
+    pub issued_value: f64,
+}
+
+/// Asboblar bo'yicha yakunni yig'adi.
+pub fn tool_summary(tools: &[Tool], status: &[ToolStatus], today: NaiveDate) -> ToolSummary {
+    let held = |t: &Tool| {
+        status
+            .iter()
+            .find(|s| s.tool_id == t.id)
+            .is_some_and(|s| s.holder.is_some())
+    };
+    ToolSummary {
+        total: tools.len(),
+        in_store: tools.iter().filter(|t| !held(t)).count(),
+        issued: tools.iter().filter(|t| held(t)).count(),
+        overdue: status.iter().filter(|s| s.overdue).count(),
+        out_of_service: tools.iter().filter(|t| t.out_of_service()).count(),
+        check_overdue: tools.iter().filter(|t| t.check_overdue(today)).count(),
+        issued_value: tools.iter().filter(|t| held(t)).map(|t| t.price).sum(),
+    }
+}
+
+// ================================================================ XI.26. Kamomad
+
+/// Inventarizatsiya farqi bo'yicha xulosa (TZ XI.26).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShortageLine {
+    pub material_id: i64,
+    /// Necha marta inventarizatsiyada farq chiqqan.
+    pub times: usize,
+    /// Jami kamomad (manfiy farqlar yig'indisi), miqdorda.
+    pub shortage: f64,
+    /// Jami ortiqcha (musbat farqlar).
+    pub surplus: f64,
+    /// Kamomadning puldagi qiymati.
+    pub cost: f64,
+    /// Kamomad hisob bo'yicha qoldiqning necha foizi.
+    pub pct: f64,
+}
+
+/// Kamomad qaysi materiallarda takrorlanayotganini ko'rsatadi.
+///
+/// Bitta farq — xato bo'lishi mumkin; **takrorlangan** farq esa tizimli
+/// sabab: o'lchov, saqlash yoki hisob tartibida.
+pub fn shortages(
+    inventories: &[Inventory],
+    lines: &[InventoryLine],
+    materials: &[Material],
+) -> Vec<ShortageLine> {
+    // Faqat yopilgan inventarizatsiyalar: ochig'i hali to'ldirilmoqda.
+    let closed: Vec<i64> = inventories
+        .iter()
+        .filter(|i| i.closed)
+        .map(|i| i.id)
+        .collect();
+
+    let mut out: Vec<ShortageLine> = Vec::new();
+    for l in lines.iter().filter(|l| closed.contains(&l.inventory_id)) {
+        let diff = l.fact - l.book;
+        if diff.abs() < 0.0001 {
+            continue;
+        }
+        let price = materials
+            .iter()
+            .find(|m| m.id == l.material_id)
+            .map(|m| m.price)
+            .unwrap_or(0.0);
+        match out.iter_mut().find(|s| s.material_id == l.material_id) {
+            Some(s) => {
+                s.times += 1;
+                if diff < 0.0 {
+                    s.shortage += -diff;
+                    s.cost += -diff * price;
+                } else {
+                    s.surplus += diff;
+                }
+                s.pct += if l.book > 0.0 {
+                    (-diff).max(0.0) / l.book * 100.0
+                } else {
+                    0.0
+                };
+            }
+            None => out.push(ShortageLine {
+                material_id: l.material_id,
+                times: 1,
+                shortage: (-diff).max(0.0),
+                surplus: diff.max(0.0),
+                cost: (-diff).max(0.0) * price,
+                pct: if l.book > 0.0 {
+                    (-diff).max(0.0) / l.book * 100.0
+                } else {
+                    0.0
+                },
+            }),
+        }
+    }
+    // Puldagi zarari kattalari oldinda.
+    out.sort_by(|a, b| b.cost.total_cmp(&a.cost));
+    out
+}
+
+// ================================================================ XI.42. Qayta taqsimlash
+
+/// Obyektlar orasida material ko'chirish taklifi (TZ XI.42).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Redistribution {
+    /// Qayerdan — ortiqcha turgan obyekt.
+    pub from_project: i64,
+    /// Qayerga — yetishmayotgan obyekt.
+    pub to_project: i64,
+    pub material_name: String,
+    pub unit: String,
+    /// Ko'chirish mumkin bo'lgan miqdor.
+    pub qty: f64,
+    /// Shuncha pul sotib olishga sarflanmaydi.
+    pub saving: f64,
+}
+
+/// Bir obyektda ortiqcha, boshqasida yetishmayotgan materiallarni topadi.
+///
+/// Solishtirish **nom bo'yicha**: obyektlarning kataloglari alohida va
+/// bir xil material turli kodlar bilan yozilgan bo'lishi mumkin.
+pub fn redistribution(
+    surplus: &[(i64, Vec<StockLine>, Vec<Material>)],
+    need: &[(i64, Vec<PurchasePlanLine>, Vec<Material>)],
+) -> Vec<Redistribution> {
+    let mut out = Vec::new();
+    for (to_pid, plan, need_mats) in need {
+        for line in plan {
+            let Some(m) = need_mats.iter().find(|m| m.id == line.material_id) else {
+                continue;
+            };
+            let name = m.name.trim().to_lowercase();
+            for (from_pid, stock, mats) in surplus {
+                if from_pid == to_pid {
+                    continue;
+                }
+                let Some(src) = mats.iter().find(|x| x.name.trim().to_lowercase() == name) else {
+                    continue;
+                };
+                let Some(sl) = stock.iter().find(|l| l.material_id == src.id) else {
+                    continue;
+                };
+                // Ortiqcha deb faqat minimal zaxiradan yuqorisi hisoblanadi:
+                // boshqa obyektni zaxirasiz qoldirib bo'lmaydi.
+                let free = sl.available - src.min_stock;
+                if free <= 0.0 {
+                    continue;
+                }
+                let qty = free.min(line.to_buy);
+                if qty <= 0.0001 {
+                    continue;
+                }
+                out.push(Redistribution {
+                    from_project: *from_pid,
+                    to_project: *to_pid,
+                    material_name: m.name.clone(),
+                    unit: m.unit.clone(),
+                    qty,
+                    saving: qty * m.price,
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| b.saving.total_cmp(&a.saving));
+    out
+}
