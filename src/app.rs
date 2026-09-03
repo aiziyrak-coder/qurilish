@@ -2343,6 +2343,29 @@ impl App {
         })
     }
 
+    /// Ish haqi fondi tarkibi (TZ XIII.32).
+    pub fn payroll_summary(&self, from: chrono::NaiveDate) -> checks::PayrollSummary {
+        checks::payroll_summary(&self.timesheet, &self.workers, from, self.today)
+    }
+
+    /// Brigadalar kesimida bo'sh turish (TZ XIII.23).
+    pub fn idle_by_brigade(&self, from: chrono::NaiveDate) -> Vec<checks::IdleLine> {
+        checks::idle_by_brigade(&self.timesheet, &self.workers, from, self.today)
+    }
+
+    /// Kunlik xavfsizlik hisoboti (TZ XV.32).
+    pub fn safety_day(&self) -> checks::SafetyDay {
+        checks::safety_day(
+            &self.safety,
+            &self.worker_safety(),
+            &self.work_permits,
+            &self.machines,
+            &self.machine_checks,
+            &self.machine_logs,
+            self.today,
+        )
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

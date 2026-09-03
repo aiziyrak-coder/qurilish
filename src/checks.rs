@@ -11958,3 +11958,253 @@ pub fn benchmark(rows: &[BenchmarkInput]) -> Vec<Benchmark> {
     out.sort_by(|a, b| a.gap().total_cmp(&b.gap()));
     out
 }
+
+// ================= XIII.23, 32, XV.32. Ish haqi fondi va kunlik xavfsizlik =================
+
+/// Ish haqi fondining tarkibi (TZ XIII.32).
+#[derive(Debug, Clone, Default)]
+pub struct PayrollSummary {
+    /// Davr va jami fond.
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+    pub total: f64,
+    /// Ish uchun to'lanadigan qism.
+    pub work: f64,
+    /// Bo'sh turish uchun to'lanadigan qism — bu **yo'qotish**.
+    pub idle: f64,
+    /// Ta'til va kasallik.
+    pub absence: f64,
+    /// Smena qo'shimchasi (kechki va tungi).
+    pub shift_extra: f64,
+    /// Soatlar.
+    pub work_hours: f64,
+    pub idle_hours: f64,
+}
+
+impl PayrollSummary {
+    /// Bo'sh turishning fonddagi ulushi, foizda.
+    pub fn idle_pct(&self) -> f64 {
+        if self.total <= 0.0 {
+            0.0
+        } else {
+            self.idle * 100.0 / self.total
+        }
+    }
+
+    /// Bo'sh turish ulushi e'tibor talab qiladigan darajadami.
+    pub fn idle_high(&self) -> bool {
+        self.idle_pct() > IDLE_LIMIT_PCT
+    }
+}
+
+/// Bo'sh turish ulushi shu foizdan oshsa e'tibor talab qiladi.
+///
+/// Chegara shartli: qurilishda ob-havo va yetkazish tufayli bo'sh turish
+/// har doim bo'ladi. Muhimi — u sezilmay o'sib ketmasligi.
+pub const IDLE_LIMIT_PCT: f64 = 10.0;
+
+/// Brigada bo'yicha bo'sh turish (TZ XIII.23).
+#[derive(Debug, Clone)]
+pub struct IdleLine {
+    pub brigade_id: Option<i64>,
+    pub workers: usize,
+    pub idle_hours: f64,
+    pub work_hours: f64,
+    /// Bo'sh turishning shu brigadadagi ulushi, foizda.
+    pub idle_pct: f64,
+    /// Bo'sh turish qiymati.
+    pub cost: f64,
+}
+
+/// TZ XIII.32: ish haqi fondini tarkibiga ajratadi.
+///
+/// Fond **kelib chiqishi bo'yicha** bo'linadi: ish, bo'sh turish, ta'til
+/// va smena qo'shimchasi. Bo'sh turish alohida turadi, chunki u
+/// yo'qotish — u ish emas, lekin pul to'lanadi.
+pub fn payroll_summary(
+    timesheet: &[TimesheetEntry],
+    workers: &[Worker],
+    from: NaiveDate,
+    to: NaiveDate,
+) -> PayrollSummary {
+    let rate = |id: i64| {
+        workers
+            .iter()
+            .find(|w| w.id == id)
+            .map(|w| w.hourly_rate)
+            .unwrap_or(0.0)
+    };
+
+    let mut s = PayrollSummary {
+        from,
+        to,
+        ..Default::default()
+    };
+    for e in timesheet
+        .iter()
+        .filter(|e| e.date >= from && e.date <= to && e.kind.paid())
+    {
+        let base = e.hours * rate(e.worker_id);
+        let extra = base * (e.shift.rate() - 1.0);
+        s.total += base + extra;
+        s.shift_extra += extra;
+        match e.kind {
+            DayKind::Work => {
+                s.work += base;
+                s.work_hours += e.hours;
+            }
+            DayKind::Downtime => {
+                s.idle += base;
+                s.idle_hours += e.hours;
+            }
+            _ => s.absence += base,
+        }
+    }
+    s
+}
+
+/// TZ XIII.23: brigadalar kesimida bo'sh turish.
+pub fn idle_by_brigade(
+    timesheet: &[TimesheetEntry],
+    workers: &[Worker],
+    from: NaiveDate,
+    to: NaiveDate,
+) -> Vec<IdleLine> {
+    let mut ids: Vec<Option<i64>> = workers.iter().map(|w| w.brigade_id).collect();
+    ids.sort_unstable();
+    ids.dedup();
+
+    let mut out = Vec::new();
+    for brigade_id in ids {
+        let members: Vec<&Worker> = workers
+            .iter()
+            .filter(|w| w.brigade_id == brigade_id)
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        let rows: Vec<&TimesheetEntry> = timesheet
+            .iter()
+            .filter(|e| {
+                e.date >= from && e.date <= to && members.iter().any(|w| w.id == e.worker_id)
+            })
+            .collect();
+        let work: f64 = rows
+            .iter()
+            .filter(|e| e.kind == DayKind::Work)
+            .map(|e| e.hours)
+            .sum();
+        let idle: f64 = rows
+            .iter()
+            .filter(|e| e.kind == DayKind::Downtime)
+            .map(|e| e.hours)
+            .sum();
+        if work + idle <= 0.0 {
+            continue;
+        }
+        let cost: f64 = rows
+            .iter()
+            .filter(|e| e.kind == DayKind::Downtime)
+            .map(|e| {
+                e.hours
+                    * members
+                        .iter()
+                        .find(|w| w.id == e.worker_id)
+                        .map(|w| w.hourly_rate)
+                        .unwrap_or(0.0)
+            })
+            .sum();
+        out.push(IdleLine {
+            brigade_id,
+            workers: members.len(),
+            idle_hours: idle,
+            work_hours: work,
+            idle_pct: idle * 100.0 / (work + idle),
+            cost,
+        });
+    }
+    // Eng ko'p bo'sh turgan brigada oldinda.
+    out.sort_by(|a, b| b.idle_pct.total_cmp(&a.idle_pct));
+    out
+}
+
+/// Kunlik xavfsizlik hisoboti (TZ XV.32).
+#[derive(Debug, Clone, Default)]
+pub struct SafetyDay {
+    pub day: NaiveDate,
+    /// Bugun ochilgan va yopilgan holatlar.
+    pub opened: usize,
+    pub closed: usize,
+    /// Umuman yopilmagan holatlar va ulardan muddati o'tganlari.
+    pub open_total: usize,
+    pub overdue: usize,
+    /// Ishga qo'yib bo'lmaydigan ishchilar: instruktaj yoki SIZ yo'q.
+    pub blocked_workers: usize,
+    /// Bugun amal qilayotgan naryad-dopusklar.
+    pub permits_active: usize,
+    /// Bugun ko'rikdan o'tmagan texnika.
+    pub machines_unchecked: usize,
+}
+
+impl SafetyDay {
+    /// Kun xavfsiz o'tdimi: yangi holat yo'q va to'siq yo'q.
+    pub fn clean(&self) -> bool {
+        self.opened == 0
+            && self.overdue == 0
+            && self.blocked_workers == 0
+            && self.machines_unchecked == 0
+    }
+}
+
+/// TZ XV.32: kun bo'yicha xavfsizlik xulosasi.
+///
+/// Xulosa **yangi hisob qilmaydi**: ishchi holati [`worker_safety`] dan,
+/// texnika ko'rigi esa mexanik yozuvidan olinadi. Shuning uchun bu
+/// yerdagi son tegishli ekrandagi bilan bir xil bo'ladi.
+pub fn safety_day(
+    events: &[SafetyEvent],
+    safety: &[WorkerSafety],
+    permits: &[WorkPermit],
+    machines: &[Machine],
+    checks: &[MachineCheck],
+    logs: &[MachineLog],
+    today: NaiveDate,
+) -> SafetyDay {
+    SafetyDay {
+        day: today,
+        opened: events.iter().filter(|e| e.date == today).count(),
+        // Yopilgan sana alohida yuritilmaydi: holat «bartaraf etilgan»
+        // bo'lgani va muddati bugun ekani bo'yicha sanaladi.
+        closed: events
+            .iter()
+            .filter(|e| e.status == IssueStatus::Fixed && e.deadline == Some(today))
+            .count(),
+        open_total: events
+            .iter()
+            .filter(|e| matches!(e.status, IssueStatus::Open | IssueStatus::InWork))
+            .count(),
+        overdue: events
+            .iter()
+            .filter(|e| {
+                matches!(e.status, IssueStatus::Open | IssueStatus::InWork)
+                    && e.deadline.is_some_and(|d| d < today)
+            })
+            .count(),
+        blocked_workers: safety.iter().filter(|w| w.blocked()).count(),
+        permits_active: permits
+            .iter()
+            .filter(|p| p.date_from <= today && p.date_to >= today)
+            .count(),
+        // Bugun ishlagan, lekin ko'rikdan o'tmagan texnika.
+        machines_unchecked: machines
+            .iter()
+            .filter(|m| {
+                logs.iter()
+                    .any(|l| l.machine_id == m.id && l.date == today && l.hours > 0.0)
+                    && !checks
+                        .iter()
+                        .any(|c| c.machine_id == m.id && c.date == today)
+            })
+            .count(),
+    }
+}

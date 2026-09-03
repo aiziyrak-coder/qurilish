@@ -728,6 +728,114 @@ fn brigades_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
 // ================================================================ Tannarx
 
 fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
+    // ---------- Ish haqi fondi (TZ XIII.32) ----------
+    // Fond kelib chiqishi bo'yicha bo'linadi: bo'sh turish alohida
+    // turadi, chunki u ish emas, lekin pul to'lanadi.
+    let from = app.today - chrono::Duration::days(30);
+    let pay = app.payroll_summary(from);
+    let idle = app.idle_by_brigade(from);
+    let mut export = false;
+
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(t("ts_payroll")).size(13.5).strong());
+        ui.label(
+            RichText::new(format!(
+                "{} — {}",
+                pay.from.format("%d.%m.%Y"),
+                pay.to.format("%d.%m.%Y")
+            ))
+            .size(11.0)
+            .color(theme::muted()),
+        );
+        if ui
+            .button(t("ts_payroll_export"))
+            .on_hover_text(t("ts_payroll_export_hint"))
+            .clicked()
+        {
+            export = true;
+        }
+    });
+    ui.add_space(6.0);
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ts_pay_total"),
+                money(pay.total),
+                t("ts_pay_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("ts_pay_work"),
+                money(pay.work),
+                &format!("{:.0} {}", pay.work_hours, t("col_hours")),
+                theme::ok(),
+            ),
+            stat(
+                t("ts_pay_idle"),
+                money(pay.idle),
+                &format!(
+                    "{:.0}% · {:.0} {}",
+                    pay.idle_pct(),
+                    pay.idle_hours,
+                    t("col_hours")
+                ),
+                if pay.idle_high() {
+                    theme::danger()
+                } else {
+                    theme::muted()
+                },
+            ),
+            stat(
+                t("ts_pay_absence"),
+                money(pay.absence),
+                t("ts_pay_absence_hint"),
+                theme::muted(),
+            ),
+            stat(
+                t("ts_pay_shift"),
+                money(pay.shift_extra),
+                t("ts_pay_shift_hint"),
+                theme::muted(),
+            ),
+        ],
+    );
+
+    if !idle.is_empty() {
+        ui.add_space(10.0);
+        ui.label(RichText::new(t("ts_idle_title")).size(12.5).strong());
+        for l in &idle {
+            let name = l
+                .brigade_id
+                .and_then(|id| app.brigades.iter().find(|b| b.id == id))
+                .map(|b| b.name.clone())
+                .unwrap_or_else(|| t("ts_idle_no_brigade").to_string());
+            ui.label(
+                RichText::new(format!(
+                    "· {} ({} {}) — {:.0}%: {:.0} / {:.0} {} · {}",
+                    super::issues::truncate(&name, 26),
+                    l.workers,
+                    t("ts_obj_workers"),
+                    l.idle_pct,
+                    l.idle_hours,
+                    l.work_hours,
+                    t("col_hours"),
+                    money(l.cost)
+                ))
+                .size(12.0)
+                .color(if l.idle_pct > crate::checks::IDLE_LIMIT_PCT {
+                    theme::warn()
+                } else {
+                    theme::muted()
+                }),
+            );
+        }
+    }
+
+    if export {
+        save_timesheet(app);
+    }
+    ui.add_space(14.0);
     let lines = crate::checks::task_costs(
         &app.tasks,
         &app.workers,
@@ -1099,6 +1207,35 @@ fn periods_tab(ui: &mut egui::Ui, app: &mut App) {
 }
 
 // ================================================================ Xodimlar
+
+/// Buxgalteriya uchun tabelni faylga yozadi (TZ XIII.33).
+fn save_timesheet(app: &mut App) {
+    let Some(project) = app.project().cloned() else {
+        return;
+    };
+    let (from, to) = super::doc_period(app);
+    let file = format!("T-13-{}.xlsx", to.format("%Y-%m"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("doc_save"))
+        .set_file_name(&file)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    let inp = crate::docgen::DocInput {
+        project: &project,
+        parties: &app.parties,
+        tasks: &app.tasks,
+        today: app.today,
+        from,
+        to,
+    };
+    match crate::docgen::write_timesheet(&path, &inp, &app.workers, &app.timesheet) {
+        Ok(()) => app.notify(format!("{} {}", t("doc_saved"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("doc_failed"))),
+    }
+}
 
 // ================================================================ Obyektlar
 

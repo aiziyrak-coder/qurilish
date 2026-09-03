@@ -30,16 +30,16 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | X. Xaridlar | 48 | 43 | 3 | 2 | 2 |
 | XI. Ombor | 48 | 45 | 2 | 1 | 1 |
 | XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
-| XIII. Tabel | 44 | 34 | 4 | 6 | 6 |
+| XIII. Tabel | 44 | 37 | 1 | 6 | 6 |
 | XIV. Sifat | 41 | 38 | 1 | 2 | 2 |
-| XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
+| XV. Xavfsizlik | 41 | 38 | 0 | 3 | 3 |
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **572** | **82** | **46** | **46** |
+| **Jami** | **700** | **576** | **78** | **46** | **46** |
 
-Ya'ni **~82 % to'liq**, **~12 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~82 % to'liq**, **~11 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -549,7 +549,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 20. Anomaliyalarni nazorat qilish — *kunlik chegara, dam olish kuni, dam olishsiz ketma-ketlik, bir xil yozuv*
 - [x] 21. Ish vaqtini nazorat qilish — *anomaliyalar ro'yxati ishchi kesimida*
 - [x] 22. **Bo'sh turishlar hisobi** — *to'lanadi, ishlangan soat emas*
-- [~] 23. Bo'sh turishlar tahlili — *brigada bo'yicha ulush*
+- [x] 23. Bo'sh turishlar tahlili — *ulush, soat va qiymat*
 - [x] 24. Unumdorlik — *bir birlik ish: soat va pul, o'rtacha bilan solishtirish*
 - [x] 25. Brigadalarni solishtirish
 - [x] 26. Xodimlar sonini rejalashtirish — *yaqin 30 kun uchun kerakli soat va ishchi soni*
@@ -558,8 +558,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 29. Tabel → ish haqi
 - [x] 30. Tabel → tannarx
 - [x] 31. Aniq ishning tannarxi — *ish haqi + material, bir birlikka*
-- [~] 32. Ish haqi fondini nazorat qilish
-- [~] 33. Buxgalteriya uchun tabel — *soat, yo'qlik, ish haqi jadvali*
+- [x] 32. Ish haqi fondini nazorat qilish — *tarkibi bo'yicha*
+- [x] 33. Buxgalteriya uchun tabel — *`.xlsx` shakli*
 - [x] 34. Tabelni tuzatish — *davrni qayta ochish orqali, sabab bilan*
 - [x] 35. Oyni yopish — *yopilgan oy tasodifan o'zgarmaydi*
 - [x] 36. Tasdiqlash — *kim va qachon yopgani yoziladi; qayta ochish iz qoldiradi*
@@ -653,7 +653,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 29. Korrektiv chora-tadbirlar
 - [x] 30. Bartaraf etishni nazorat qilish
 - [ ] 🔒 31. Bartaraf etilgandan keyin AI foto tekshiruvi
-- [~] 32. Kunlik Safety Report
+- [x] 32. Kunlik Safety Report
 - [x] 33. **Safety Score** — *hodisa, ruxsat, SIZ va naryad kamchiliklari*
 - [x] 34. Obyektlar reytingi — *«Obyektlar» ekranida xavfsizlik balli*
 - [x] 35. Mas'ullar reytingi — *hodisa, buzilish, baxtsiz hodisa, ochiq va muddati o'tgan*

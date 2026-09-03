@@ -391,6 +391,100 @@ pub fn write_ks3(
 // ================================================================ M-29
 
 /// M-29 — material sarfi hisoboti: normativ va haqiqiy sarf.
+/// Buxgalteriya uchun tabel (TZ XIII.33).
+///
+/// Shakl **hisob yuritmaydi**: har xodim bo'yicha kun turlari, soatlar va
+/// hisoblangan summa jadvalga o'giriladi. Summa dastur ekranidagi bilan
+/// bir xil qoidada — soat × stavka × smena koeffitsiyenti.
+pub fn write_timesheet(
+    path: &Path,
+    inp: &DocInput,
+    workers: &[crate::domain::Worker],
+    entries: &[crate::domain::TimesheetEntry],
+) -> Result<(), XlsxError> {
+    use crate::domain::DayKind;
+
+    let st = Styles::new();
+    let mut wb = Workbook::new();
+    let sh = wb.add_worksheet();
+    sh.set_name(t("doc_ts_short"))?;
+    widths(sh, &[8.0, 30.0, 22.0, 12.0, 12.0, 12.0, 12.0, 12.0, 16.0])?;
+
+    let mut r = header(
+        sh,
+        &st,
+        inp,
+        t("doc_timesheet"),
+        &next_number(inp, "T-13"),
+        9,
+    )?;
+    for (i, h) in [
+        t("doc_pos"),
+        t("col_name"),
+        t("col_position"),
+        t("dk_work"),
+        t("dk_downtime"),
+        t("dk_vacation"),
+        t("dk_sick"),
+        t("col_hours"),
+        t("col_wage"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        sh.write_string_with_format(r, i as u16, *h, &st.head)?;
+    }
+    sh.set_row_height(r, 30.0)?;
+    r += 1;
+
+    let mut total = 0.0;
+    let mut pos = 0usize;
+    for w in workers.iter().filter(|w| w.active) {
+        let mine: Vec<&crate::domain::TimesheetEntry> = entries
+            .iter()
+            .filter(|e| e.worker_id == w.id && e.date >= inp.from && e.date <= inp.to)
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        // Kun turlari bo'yicha kunlar soni.
+        let days = |kind: DayKind| {
+            mine.iter()
+                .filter(|e| e.kind == kind && e.hours > 0.0)
+                .count() as f64
+        };
+        let hours: f64 = mine
+            .iter()
+            .filter(|e| e.kind == DayKind::Work)
+            .map(|e| e.hours)
+            .sum();
+        let wage: f64 = mine
+            .iter()
+            .filter(|e| e.kind.paid())
+            .map(|e| e.hours * w.hourly_rate * e.shift.rate())
+            .sum();
+        total += wage;
+        pos += 1;
+
+        sh.write_number_with_format(r, 0, pos as f64, &st.cell_num)?;
+        sh.write_string_with_format(r, 1, &w.name, &st.cell)?;
+        sh.write_string_with_format(r, 2, &w.position, &st.cell)?;
+        sh.write_number_with_format(r, 3, days(DayKind::Work), &st.cell_num)?;
+        sh.write_number_with_format(r, 4, days(DayKind::Downtime), &st.cell_num)?;
+        sh.write_number_with_format(r, 5, days(DayKind::Vacation), &st.cell_num)?;
+        sh.write_number_with_format(r, 6, days(DayKind::Sick), &st.cell_num)?;
+        sh.write_number_with_format(r, 7, hours, &st.cell_num)?;
+        sh.write_number_with_format(r, 8, wage, &st.cell_money)?;
+        r += 1;
+    }
+
+    sh.write_string_with_format(r, 1, t("col_total"), &st.total)?;
+    sh.write_number_with_format(r, 8, total, &st.total_money)?;
+    signatures(sh, &st, inp, r + 1, &[PartyRole::Contractor])?;
+    wb.save(path)?;
+    Ok(())
+}
+
 /// Obyekt arxivi — topshirishga tayyorlangan hujjatlar reyestri (TZ IV.27).
 ///
 /// Arxiv **fayllarni ko'chirmaydi**: dastur o'zi joylashtirmagan fayllarni

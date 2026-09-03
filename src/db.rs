@@ -10340,6 +10340,116 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(out[1].gap() > 0.0);
     }
 
+    /// TZ XIII.32: fond kelib chiqishi bo'yicha bo'linadi va bo'sh
+    /// turish alohida turadi — u ish emas, lekin pul to'lanadi.
+    #[test]
+    fn payroll_splits_work_from_idle() {
+        use crate::checks::{payroll_summary, IDLE_LIMIT_PCT};
+        use crate::domain::{DayKind, Shift, TimesheetEntry, Worker};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let from = today - chrono::Duration::days(30);
+        let worker = Worker {
+            id: 1,
+            project_id: 1,
+            name: "Ali".into(),
+            position: "Payvandchi".into(),
+            org: String::new(),
+            hourly_rate: 100.0,
+            active: true,
+            brigade_id: Some(7),
+        };
+        let entry = |kind: DayKind, shift: Shift, hours: f64| TimesheetEntry {
+            id: 1,
+            project_id: 1,
+            worker_id: 1,
+            date: today,
+            hours,
+            task_id: None,
+            kind,
+            shift,
+            note: String::new(),
+        };
+
+        // 8 soat ish (800) + 2 soat bo'sh turish (200) = 1000.
+        let rows = vec![
+            entry(DayKind::Work, Shift::Day, 8.0),
+            entry(DayKind::Downtime, Shift::Day, 2.0),
+        ];
+        let p = payroll_summary(&rows, std::slice::from_ref(&worker), from, today);
+        assert!((p.total - 1000.0).abs() < 0.001);
+        assert!((p.work - 800.0).abs() < 0.001);
+        assert!((p.idle - 200.0).abs() < 0.001);
+        assert!((p.idle_pct() - 20.0).abs() < 0.001);
+        assert!(p.idle_pct() > IDLE_LIMIT_PCT && p.idle_high());
+        assert!((p.shift_extra).abs() < 0.001);
+
+        // Tungi smena qo'shimchasi alohida ko'rinadi: 8 × 100 × 1.5 = 1200.
+        let night = payroll_summary(
+            &[entry(DayKind::Work, Shift::Night, 8.0)],
+            std::slice::from_ref(&worker),
+            from,
+            today,
+        );
+        assert!((night.total - 1200.0).abs() < 0.001);
+        assert!((night.shift_extra - 400.0).abs() < 0.001);
+
+        // Brigada kesimi.
+        let idle =
+            crate::checks::idle_by_brigade(&rows, std::slice::from_ref(&worker), from, today);
+        assert_eq!(idle.len(), 1);
+        assert_eq!(idle[0].brigade_id, Some(7));
+        assert!((idle[0].idle_pct - 20.0).abs() < 0.001);
+        assert!((idle[0].cost - 200.0).abs() < 0.001);
+    }
+
+    /// TZ XV.32: kunlik hisobot yangi hisob qilmaydi — ishchi holati va
+    /// texnika ko'rigi o'z modullaridan olinadi.
+    #[test]
+    fn safety_day_reads_other_modules() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let d = app.safety_day();
+        assert_eq!(d.day, app.today);
+        assert_eq!(
+            d.blocked_workers,
+            app.worker_safety().iter().filter(|w| w.blocked()).count()
+        );
+        assert_eq!(
+            d.open_total,
+            app.safety
+                .iter()
+                .filter(|s| matches!(
+                    s.status,
+                    crate::domain::IssueStatus::Open | crate::domain::IssueStatus::InWork
+                ))
+                .count()
+        );
+        assert!(d.overdue <= d.open_total);
+        // Ko'riksiz texnika mexanik ekranidagi bilan bir xil mantiqda.
+        let unchecked = app
+            .machines
+            .iter()
+            .filter(|m| {
+                app.machine_logs
+                    .iter()
+                    .any(|l| l.machine_id == m.id && l.date == app.today && l.hours > 0.0)
+                    && !app
+                        .machine_checks
+                        .iter()
+                        .any(|c| c.machine_id == m.id && c.date == app.today)
+            })
+            .count();
+        assert_eq!(d.machines_unchecked, unchecked);
+        assert_eq!(
+            d.clean(),
+            d.opened == 0 && d.overdue == 0 && d.blocked_workers == 0 && d.machines_unchecked == 0
+        );
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

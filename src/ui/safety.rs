@@ -45,6 +45,40 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(6.0);
     kpi_row(ui, app);
+    ui.add_space(6.0);
+
+    // Kunlik xavfsizlik hisoboti (TZ XV.32). Yangi hisob qilinmaydi:
+    // ishchi holati va texnika ko'rigi o'z modullaridan olinadi.
+    let day = app.safety_day();
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(format!("{} {}", t("sf_day"), day.day.format("%d.%m.%Y")))
+                .size(12.0)
+                .strong()
+                .color(if day.clean() {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                }),
+        );
+        let item =
+            |ui: &mut egui::Ui, label: &str, n: usize, bad: bool| {
+                ui.label(RichText::new(format!("{label}: {n}")).size(11.5).color(
+                    if bad && n > 0 {
+                        theme::danger()
+                    } else {
+                        theme::muted()
+                    },
+                ));
+            };
+        item(ui, t("sf_day_opened"), day.opened, true);
+        item(ui, t("sf_day_closed"), day.closed, false);
+        item(ui, t("sf_day_open_total"), day.open_total, false);
+        item(ui, t("sf_day_overdue"), day.overdue, true);
+        item(ui, t("sf_day_blocked"), day.blocked_workers, true);
+        item(ui, t("sf_day_permits"), day.permits_active, false);
+        item(ui, t("sf_day_machines"), day.machines_unchecked, true);
+    });
     ui.add_space(10.0);
 
     let tab_key = egui::Id::new("sf_tab");
