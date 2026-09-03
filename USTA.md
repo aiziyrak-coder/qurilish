@@ -18,13 +18,15 @@ kvartiralarni sotish.
 - `src/ifc.rs` — IFC o'qish · `src/roles.rs` — rollar · `src/package.rs` — almashish
 - `src/llm.rs` — til modeli nuqtasi (ixtiyoriy `llm` xususiyati)
 - `src/import.rs` — smeta importi · `src/db.rs` + `src/store.rs` — ombor
-- `src/docgen.rs` — KS-2, KS-3, M-29, AOSR va Excel yozish
+- `src/docgen.rs` — KS-2, KS-3, M-29, AOSR va Excel yozish · `src/pdf.rs` — PDF
 - `src/ui/export.rs` — ekran jadvalini eksportga tayyorlash
 - `src/actions.rs` — yordamchining takliflari va ularni bajarish
 - `src/ui/` — har bir ekran alohida fayl · `src/i18n.rs` — uz/ru satrlar
 
 Ishga tushirish: `cargo run --release` · Test: `cargo test` · Lint: `cargo clippy`
-Til modeli bilan: `cargo build --release --features llm` (sukut bo'yicha kirmaydi)
+Tarmoq kodisiz yig'ish: `cargo build --release --no-default-features`
+(OpenAI integratsiyasi yig'ilishga kiradi, lekin sozlamada yoqilib kalit
+kiritilmaguncha ishlamaydi)
 
 Diagnostika: `QURAI_SCREEN=<ekran>` kerakli ekranda ochadi, `QURAI_DB=<yo'l>`
 boshqa bazada ishga tushiradi (sinov uchun).
@@ -44,13 +46,14 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
 - [x] **XI Ombor** · **XII Materiallar** — qoldiq harakatlardan hisoblanadi
 - [x] **XIII Tabel** · **XIV Sifat** · **XV Xavfsizlik** · **XVI Texnika**
 - [x] **XVII AI analitika** — 8 yo'nalish, 24 qoida, sog'lomlik indeksi, hisobot
-- [x] **XVIII Yordamchi** — savol-javob, faqat o'z bazasidan (til modelisiz)
+- [x] **XVIII Yordamchi** — savol-javob o'z bazasidan + OpenAI integratsiyasi;
+      o'n bir xil qoralama amal, har javobda manba ko'rsatiladi
 - [x] **XIX Sotuv — shaxmatka** · **XX Shartnomalar va to'lovlar**
 - [x] **Umumiy ko'rinish**, **umumiy qidiruv** (Ctrl+K), **zaxira nusxa**
 - [x] **II.1–2 Chizmani tanish** — IFC (ochiq format) o'qiladi va grafga tushadi
 - [x] **Rollar** — 5 rol, ekran bo'yicha yozish huquqi, faqat-o'qish tasmasi
 - [x] **Loyiha paketi** — qurilmalar orasida fayl orqali almashish
-- [x] **Til modeli** — integratsiya nuqtasi, sukut bo'yicha o'chiq
+- [x] **Til modeli** — OpenAI bilan to'liq integratsiya, sukut bo'yicha o'chiq
 
 ### Chuqurlashtirilgan modullar (TZ bo'yicha ikkinchi qatlam)
 
@@ -104,9 +107,10 @@ qiladigan) bandlar alohida ustunda ko'rinadi.
 - **Hosilaviy holat saqlanmaydi, hisoblanadi.** Ombor qoldig'i — harakatlardan,
   kvartira holati — shartnomadan, ish haqi — tabel va stavkadan. Shuning uchun
   hujjat bilan ko'rsatkich hech qachon bir-biriga zid bo'lmaydi.
-- **Yordamchida til modeli yo'q** (XVIII). Javob shu bazadagi hisobdan chiqadi va
-  «Tekshirish» tugmasi manba ekranini ochadi. Model qo'shilganda shu funksiyalar
-  unga asbob bo'lib beriladi — sonlar baribir bazadan olinadi.
+- **Yordamchi sonni o'ylab topmaydi** (XVIII). Javob shu bazadagi hisobdan
+  chiqadi; har javobda sonlar qaysi yozuvlardan olingani yoziladi va
+  «Tekshirish» tugmasi manba ekranini ochadi. Til modeli yoqilganda ham
+  sonlar unga **tayyor holda** biriktiriladi — model hisoblamaydi.
 - **Baza migratsiyasi qo'shimcha ustunlar orqali** — eski baza ochilaveradi,
   ma'lumot yo'qolmaydi (test bilan qoplangan).
 - **Zaxira nusxa `VACUUM INTO` orqali.** WAL rejimida `.db` faylini shunchaki
@@ -131,9 +135,12 @@ chiqariladi va ofisdagi bazaga qo'shiladi. **Bu parol bilan himoya emas** va
 jonli sinxronizatsiya emas — baza fayli ochiq, buni sozlamalar ham aytadi.
 Haqiqiy kirish nazorati server qismi bilan keladi.
 
-**3. Til modeli.** `src/llm.rs` — integratsiya nuqtasi, **sukut bo'yicha o'chiq
-va yig'ilishga umuman kirmaydi**: tarmoq kutubxonasi `llm` xususiyati bilan
-qo'shiladi (`cargo build --features llm`). Yoqilganda savol va unga biriktirilgan
+**3. Til modeli.** `src/llm.rs` — OpenAI bilan to'liq integratsiya: ko'p
+bosqichli suhbat, fon so'rovi, xatolarni aniq ko'rsatish, token hisobi.
+**Sukut bo'yicha o'chiq**: sozlamada yoqilib API kalit kiritilmaguncha ilova
+hech qayerga ulanmaydi; kalit faqat `Authorization` sarlavhasida ketadi va
+logga tushmaydi. Tarmoq kodi umuman kerak bo'lmasa —
+`cargo build --no-default-features`. Yoqilganda savol va unga biriktirilgan
 sonlar tashqi xizmatga jo'natiladi — sozlamalarda bu ochiq ogohlantirish bilan
 yozilgan va yoqishni foydalanuvchi o'zi tanlaydi. Modelga beriladigan ko'rsatma
 qat'iy: **sonni o'ylab topma, bilmasang ochiq ayt**. So'rov tuzish va javobni

@@ -487,6 +487,9 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/analytics.rs` | Kesishgan tahlil: 24 qoida, sog'lomlik indeksi, hisobot |
 | `src/copilot.rs` | Savol-javob: niyatni tanish va javob hisobi |
 | `src/backup.rs` | Bazaning izchil zaxira nusxasi |
+| `src/docgen.rs` | KS-2, KS-3, M-29, AOSR va jadvallarni `.xlsx` ga yozish |
+| `src/pdf.rs` | Ekran jadvalini PDF ga chiqarish (A4 albom, sahifalash) |
+| `src/actions.rs` | Yordamchining qoralama amallari va ularni bajarish |
 | `src/ui/analytics.rs` | AI analitika ekrani |
 | `src/ui/copilot.rs` | Yordamchi ekrani |
 | `src/ui/foreman.rs` | Prorab ish o'rni |
