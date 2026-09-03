@@ -24,22 +24,22 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | IV. Ijro hujjatlari | 30 | 20 | 7 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 30 | 5 | 3 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 32 | 3 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
 | IX. Arizalar | 42 | 38 | 3 | 1 | 1 |
 | X. Xaridlar | 48 | 43 | 3 | 2 | 2 |
 | XI. Ombor | 48 | 45 | 2 | 1 | 1 |
 | XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
 | XIII. Tabel | 44 | 34 | 4 | 6 | 6 |
-| XIV. Sifat | 41 | 33 | 6 | 2 | 2 |
+| XIV. Sifat | 41 | 38 | 1 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 37 | 1 | 3 | 3 |
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 47 | 4 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **558** | **96** | **46** | **46** |
+| **Jami** | **700** | **565** | **89** | **46** | **46** |
 
-Ya'ni **~80 % to'liq**, **~14 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~81 % to'liq**, **~13 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -250,7 +250,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 5. Yashirin ishlar tekshiruvi — *tekshiruv turi, natija, bartaraf etish muddati*
 - [x] 6. Jismoniy tekshiruv — *tekshiruv turlaridan biri*
 - [ ] 🔒 7. AR / vizual tekshiruv
-- [~] 8. Loyihaga muvofiqlikni tekshirish — *AI tekshiruvi orqali*
+- [x] 8. Loyihaga muvofiqlikni tekshirish — *AI tekshiruvi va versiya nazorati*
 - [x] 9. Materiallarni tekshirish
 - [x] 10. Kirish nazorati
 - [ ] 🔒 11. AI sertifikat tekshiruvi
@@ -270,7 +270,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 25. Sifat nazorati
 - [x] 26. AI chek-list yaratadi
 - [~] 27. PPR nazorati
-- [~] 28. Ishlar ketma-ketligini nazorat qilish
+- [x] 28. Ishlar ketma-ketligini nazorat qilish
 - [~] 29. Loyihani nazorat qilish
 - [x] 30. Versiyalarni nazorat qilish
 - [ ] 🔒 31. Texnik nazorat uchun AI Clash
@@ -580,7 +580,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 2. Bosh ekran
 - [x] 3. **Uch daraja nazorat** — *kirish, operatsion, qabul*
 - [x] 4. Materiallarning kirish nazorati
-- [~] 5. AI material tekshiruvi — *kirish nazorati chek-listi*
+- [x] 5. AI material tekshiruvi — *kirish nazorati va zanjir*
 - [x] 6. Brakka chiqarilgan material — *taqiqdan keyin chiqarilgani ko'rsatiladi: qancha va necha marta*
 - [x] 7. Operatsion nazorat
 - [x] 8. Chek-listlar — *namuna, normativ havolasi, tekshiruvga ko'chiriladi*
@@ -590,11 +590,11 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 12. Fotolarni AI tahlili
 - [x] 13. Geometriya nazorati — *geodeziya: loyiha/fakt/dopusk (VII)*
 - [ ] 🔒 14. BIM Quality Control
-- [~] 15. Bo'limlarni nazorat qilish
-- [~] 16. Kolliziyalarni tekshirish — *AI tekshiruvida*
+- [x] 15. Bo'limlarni nazorat qilish — *bo'lim kesimida ball*
+- [x] 16. Kolliziyalarni tekshirish — *AI tekshiruvida: kesish va teshik*
 - [x] 17. Izohlar
 - [x] 18. Izohlar tasnifi
-- [~] 19. AI ustuvorlikni aniqlashi
+- [x] 19. AI ustuvorlikni aniqlashi — *sabablar ko'rsatiladi*
 - [x] 20. Izohni bartaraf etish
 - [x] 21. Oldin / keyin fotosi
 - [x] 22. Laboratoriya sinovlari — *«Sinovlar» tabi: payvand, bosim, izolyatsiya, grunt, ishga tushirish*
@@ -602,7 +602,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 24. Payvand nazorati — *sinov turi, talab bilan solishtiriladi*
 - [x] 25. Muhandislik tizimlari sinovlari — *bosim, izolyatsiya, ishga tushirish*
 - [~] 26. PPR nazorati
-- [~] 27. Texnologik ketma-ketlik nazorati
+- [x] 27. Texnologik ketma-ketlik nazorati
 - [x] 28. Mas'ullar bo'yicha sifat nazorati — *tekshiruv, salbiy, ochiq nuqson, muddat*
 - [x] 29. Sifat reytingi — *ball umumiy ball bilan bir xil qoidada*
 - [x] 30. Brak sabablarini tahlil qilish

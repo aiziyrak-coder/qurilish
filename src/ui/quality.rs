@@ -58,6 +58,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (4, t("ql_tab_tests")),
             (5, t("ql_tab_risks")),
             (6, t("ql_tab_week")),
+            (7, t("ql_tab_sections")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -74,6 +75,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         4 => tests_tab(ui, app, pid),
         5 => risks_tab(ui, app),
         6 => week_tab(ui, app),
+        7 => sections_tab(ui, app),
         _ => {
             if app.quality.is_empty() {
                 ui.add_space(40.0);
@@ -426,6 +428,213 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         app.quality_open = (app.quality_open != Some(id)).then_some(id);
     }
     super::notes::below_table(ui, app, NoteTarget::Quality, open_notes);
+}
+
+// ================================================================ Bo'limlar
+
+/// Bo'limlar kesimi, nuqsonlar ustuvorligi va texnologik ketma-ketlik
+/// (TZ XIV.15, 19, 27, VII.28).
+fn sections_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let sections = app.section_quality();
+    let priority = app.defect_priority();
+    let breaks = app.sequence_breaks();
+
+    ui.label(
+        RichText::new(t("ql_sec_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Bo'limlar (TZ XIV.15) ----------
+            if sections.is_empty() {
+                ui.label(
+                    RichText::new(t("ql_sec_empty"))
+                        .size(12.5)
+                        .color(theme::muted()),
+                );
+            } else {
+                egui::Grid::new("ql_sections")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("col_section"));
+                        head_r(ui, 100.0, t("ql_w_checks"));
+                        head_r(ui, 100.0, t("ql_sec_failed"));
+                        head_r(ui, 110.0, t("ql_w_open"));
+                        head_r(ui, 120.0, t("dr_defects_overdue"));
+                        head_r(ui, 90.0, t("dr_score"));
+                        ui.end_row();
+
+                        for s in &sections {
+                            cell_l(ui, 200.0, RichText::new(s.section.label()).size(12.5));
+                            cell_r(ui, 100.0, RichText::new(s.checks.to_string()).size(12.0));
+                            cell_r(
+                                ui,
+                                100.0,
+                                RichText::new(s.failed.to_string()).size(12.0).color(
+                                    if s.failed == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::warn()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(s.defects_open.to_string()).size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                120.0,
+                                RichText::new(s.overdue.to_string()).size(12.0).color(
+                                    if s.overdue == 0 {
+                                        theme::muted()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{:.0}", s.score)).size(12.5).color(
+                                    if s.score >= 80.0 {
+                                        theme::ok()
+                                    } else if s.score >= 60.0 {
+                                        theme::warn()
+                                    } else {
+                                        theme::danger()
+                                    },
+                                ),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            // ---------- Ustuvorlik (TZ XIV.19) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("ql_priority")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("ql_priority_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if priority.is_empty() {
+                ui.label(
+                    RichText::new(t("ql_priority_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for p in priority.iter().take(12) {
+                ui.horizontal(|ui| {
+                    // Ball chizig'i: tartib ko'z bilan ko'rinadi.
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(52.0, 8.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 2.0, theme::line());
+                    ui.painter().rect_filled(
+                        egui::Rect::from_min_size(
+                            rect.min,
+                            egui::vec2(rect.width() * (p.weight / 100.0) as f32, rect.height()),
+                        ),
+                        2.0,
+                        if p.urgent() {
+                            theme::danger()
+                        } else {
+                            theme::warn()
+                        },
+                    );
+                    // Nuqson qaysi ishga tegishli — sichqoncha ostida.
+                    let task = app
+                        .quality
+                        .iter()
+                        .find(|q| q.id == p.check_id)
+                        .and_then(|q| q.task_id)
+                        .and_then(|id| app.task(id))
+                        .map(|x| format!("{} {}", x.wbs, x.name))
+                        .unwrap_or_default();
+                    ui.label(
+                        RichText::new(super::issues::truncate(&p.defect, 50))
+                            .size(12.0)
+                            .color(if p.urgent() {
+                                theme::text()
+                            } else {
+                                theme::muted()
+                            }),
+                    )
+                    .on_hover_text(if task.is_empty() {
+                        t("dash").to_string()
+                    } else {
+                        task
+                    });
+                    // Nima uchun aynan shu nuqson birinchi ekani.
+                    ui.label(
+                        RichText::new(
+                            p.reasons
+                                .iter()
+                                .map(|k| t(k))
+                                .collect::<Vec<_>>()
+                                .join(" · "),
+                        )
+                        .size(10.5)
+                        .color(theme::muted()),
+                    );
+                });
+            }
+
+            // ---------- Ketma-ketlik (TZ XIV.27, VII.28) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("ql_sequence")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("ql_sequence_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if breaks.is_empty() {
+                ui.label(
+                    RichText::new(t("ql_sequence_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for b in &breaks {
+                let name = |id: i64| {
+                    app.task(id)
+                        .map(|x| format!("{} {}", x.wbs, x.name))
+                        .unwrap_or_default()
+                };
+                ui.label(
+                    RichText::new(format!(
+                        "· {} ← {} ({:.0}%) — {}",
+                        super::issues::truncate(&name(b.task_id), 30),
+                        super::issues::truncate(&name(b.pred_id), 30),
+                        b.pred_progress,
+                        if b.pred_checked {
+                            t("ql_seq_checked")
+                        } else {
+                            t("ql_seq_unchecked")
+                        }
+                    ))
+                    .size(12.0)
+                    .color(if b.pred_checked {
+                        theme::muted()
+                    } else {
+                        theme::warn()
+                    }),
+                );
+            }
+            ui.add_space(16.0);
+        });
 }
 
 // ================================================================ Haftalik hisobot

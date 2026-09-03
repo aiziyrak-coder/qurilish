@@ -4515,6 +4515,33 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "mch_fc_left" => ("qoldi", "осталось"),
         "mch_fc_based" => ("Ta'mirlar soni", "Число ремонтов"),
         "mch_fc_since" => ("Oxirgi ta'mirdan beri", "С последнего ремонта"),
+        // XIV.15, 19, 27. Bo'limlar, ustuvorlik, ketma-ketlik
+        "ql_tab_sections" => ("Bo'limlar", "Разделы"),
+        "ql_sec_hint" => (
+            "Bo'lim balli umumiy ball bilan bir xil qoidada hisoblanadi — faqat shu bo'lim yozuvlari bo'yicha.",
+            "Балл раздела считается по тем же правилам, что и общий — только по записям этого раздела.",
+        ),
+        "ql_sec_empty" => ("Bo'limga bog'langan tekshiruv yo'q.", "Нет проверок, привязанных к разделу."),
+        "ql_sec_failed" => ("Salbiy", "Отрицательных"),
+        "ql_priority" => ("Nuqsonlar ustuvorligi", "Приоритет дефектов"),
+        "ql_priority_hint" => (
+            "Har ball sababi ko'rsatiladi: nima uchun aynan shu nuqson birinchi ekani ko'rinib turishi kerak.",
+            "Каждая причина балла показана: должно быть видно, почему именно этот дефект первый.",
+        ),
+        "ql_priority_none" => ("Ochiq nuqson yo'q.", "Открытых дефектов нет."),
+        "dp_open" => ("ochiq", "открыт"),
+        "dp_overdue" => ("muddati o'tgan", "просрочен"),
+        "dp_failed" => ("salbiy natija", "отрицательный результат"),
+        "dp_closing" => ("ish yopilmoqda", "работа закрывается"),
+        "dp_hidden" => ("keyin ochib bo'lmaydi", "потом не вскрыть"),
+        "ql_sequence" => ("Texnologik ketma-ketlik", "Технологическая последовательность"),
+        "ql_sequence_hint" => (
+            "Bu taqiq emas: qurilishda ishlar qisman ustma-ust ketadi. Lekin oldingi ish tekshiruvdan o'tmagan bo'lsa, keyingisi uni ko'mib yuboradi.",
+            "Это не запрет: на стройке работы частично идут внахлёст. Но если предыдущая работа не проверена, следующая её закроет.",
+        ),
+        "ql_sequence_none" => ("Ketma-ketlik buzilmagan.", "Последовательность не нарушена."),
+        "ql_seq_checked" => ("tekshirilgan", "проверена"),
+        "ql_seq_unchecked" => ("tekshirilmagan", "не проверена"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

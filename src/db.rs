@@ -10111,6 +10111,134 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(thirsty.score(30) < base.score(30));
     }
 
+    /// TZ XIV.15: bo'lim balli umumiy ball bilan bir xil qoidada.
+    #[test]
+    fn section_quality_uses_the_same_rule() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = app.section_quality();
+        for s in &rows {
+            // Shu bo'limga tegishli tekshiruvlarni ajratamiz.
+            let mine: Vec<crate::domain::QualityCheck> = app
+                .quality
+                .iter()
+                .filter(|q| {
+                    q.task_id.and_then(|id| app.task(id)).map(|x| x.section) == Some(s.section)
+                })
+                .cloned()
+                .collect();
+            assert_eq!(s.checks, mine.len());
+            let module = crate::checks::quality_score(&mine, app.today);
+            assert!((s.score - module.score).abs() < 0.001, "ball mos kelmadi");
+            assert!(s.overdue <= s.defects_open);
+        }
+        // Eng past ball oldinda.
+        for w in rows.windows(2) {
+            assert!(w[0].score <= w[1].score);
+        }
+    }
+
+    /// TZ XIV.19: ustuvorlik balli sabablardan yig'iladi va har sabab
+    /// ko'rsatiladi.
+    #[test]
+    fn defect_priority_shows_its_reasons() {
+        use crate::checks::{defect_priority, CLOSING_PROGRESS};
+        use crate::domain::{QualityCheck, QualityKind, QualityResult};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let task = test_task(10, 100.0, CLOSING_PROGRESS);
+        let check = |result: QualityResult, deadline: Option<chrono::NaiveDate>| QualityCheck {
+            id: 1,
+            project_id: 1,
+            kind: QualityKind::Input,
+            date: today,
+            task_id: Some(10),
+            material_id: None,
+            subject: String::new(),
+            inspector: String::new(),
+            result,
+            defect: "yoriq".into(),
+            deadline,
+            checklist_id: None,
+            fixed_at: None,
+            note: String::new(),
+        };
+
+        // Ochiq nuqson: 20 + yopilishga yaqin 20 + yashirin bo'lim 10 = 50.
+        let plain = defect_priority(
+            &[check(QualityResult::Pass, None)],
+            std::slice::from_ref(&task),
+            today,
+        );
+        assert_eq!(plain.len(), 1);
+        assert!(
+            (plain[0].weight - 50.0).abs() < 0.001,
+            "{}",
+            plain[0].weight
+        );
+        assert!(plain[0].reasons.contains(&"dp_open"));
+        assert!(plain[0].reasons.contains(&"dp_closing"));
+        assert!(!plain[0].urgent());
+
+        // Muddati o'tgan va salbiy: 50 + 40 + 20 = 110 -> 100.
+        let worst = defect_priority(
+            &[check(
+                QualityResult::Fail,
+                Some(today - chrono::Duration::days(3)),
+            )],
+            std::slice::from_ref(&task),
+            today,
+        );
+        assert!((worst[0].weight - 100.0).abs() < 0.001);
+        assert!(worst[0].urgent());
+        assert!(worst[0].reasons.contains(&"dp_overdue"));
+        assert!(worst[0].reasons.contains(&"dp_failed"));
+
+        // Bartaraf etilgan nuqson ro'yxatga tushmaydi.
+        let mut fixed = check(QualityResult::Fail, None);
+        fixed.fixed_at = Some(today);
+        assert!(defect_priority(&[fixed], std::slice::from_ref(&task), today).is_empty());
+    }
+
+    /// TZ XIV.27, VII.28: oldingi ish tugamasdan boshlangan ish
+    /// ko'rsatiladi va tekshirilmaganlari oldinda turadi.
+    #[test]
+    fn sequence_breaks_put_unchecked_first() {
+        use crate::checks::sequence_breaks;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let breaks = sequence_breaks(&app.tasks, &app.links, &app.quality);
+        for b in &breaks {
+            let succ = app.task(b.task_id).expect("keyingi ish");
+            let pred = app.task(b.pred_id).expect("oldingi ish");
+            // Keyingisi boshlangan, oldingisi tugamagan.
+            assert!(succ.progress > 0.0 || succ.fact_start.is_some());
+            assert!(pred.progress < 99.999 && pred.fact_end.is_none());
+            assert!((b.pred_progress - pred.progress).abs() < 0.001);
+            assert_eq!(
+                b.pred_checked,
+                app.quality.iter().any(|q| q.task_id == Some(b.pred_id))
+            );
+        }
+
+        // Tekshirilmaganlari oldinda.
+        let mut seen_checked = false;
+        for b in &breaks {
+            if b.pred_checked {
+                seen_checked = true;
+            } else {
+                assert!(!seen_checked, "tekshirilmagan buzilish pastga tushgan");
+            }
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

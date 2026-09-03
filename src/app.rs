@@ -2314,6 +2314,21 @@ impl App {
         )
     }
 
+    /// Bo'limlar kesimida sifat (TZ XIV.15).
+    pub fn section_quality(&self) -> Vec<checks::SectionQuality> {
+        checks::section_quality(&self.quality, &self.tasks, self.today)
+    }
+
+    /// Nuqsonlar ustuvorligi (TZ XIV.19).
+    pub fn defect_priority(&self) -> Vec<checks::DefectPriority> {
+        checks::defect_priority(&self.quality, &self.tasks, self.today)
+    }
+
+    /// Texnologik ketma-ketlik buzilishlari (TZ XIV.27, VII.28).
+    pub fn sequence_breaks(&self) -> Vec<checks::SequenceBreak> {
+        checks::sequence_breaks(&self.tasks, &self.links, &self.quality)
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

@@ -11564,3 +11564,193 @@ pub fn machine_chain(
     out.sort_by(|a, b| a.score(period_days).total_cmp(&b.score(period_days)));
     out
 }
+
+// ================= XIV.15, 19, 26-27. Bo'limlar, ustuvorlik, ketma-ketlik =================
+
+/// Bo'lim bo'yicha sifat yakuni (TZ XIV.15).
+#[derive(Debug, Clone)]
+pub struct SectionQuality {
+    pub section: Section,
+    pub checks: usize,
+    pub failed: usize,
+    pub defects_open: usize,
+    pub overdue: usize,
+    /// Sifat balli, 0-100 — umumiy ball bilan bir xil qoidada.
+    pub score: f64,
+}
+
+/// TZ XIV.15: bo'limlar kesimida sifat.
+///
+/// Ball [`quality_score`] bilan **bir xil qoidada** hisoblanadi, faqat
+/// tanlangan bo'lim yozuvlari bo'yicha — shuning uchun bo'lim balli va
+/// umumiy ball bir mantiqdan chiqadi.
+pub fn section_quality(
+    quality: &[QualityCheck],
+    tasks: &[Task],
+    today: NaiveDate,
+) -> Vec<SectionQuality> {
+    let section_of = |q: &QualityCheck| -> Option<Section> {
+        q.task_id
+            .and_then(|id| tasks.iter().find(|t| t.id == id))
+            .map(|t| t.section)
+    };
+
+    let mut out = Vec::new();
+    for section in Section::ALL {
+        if section == Section::None {
+            continue;
+        }
+        let mine: Vec<QualityCheck> = quality
+            .iter()
+            .filter(|q| section_of(q) == Some(section))
+            .cloned()
+            .collect();
+        if mine.is_empty() {
+            continue;
+        }
+        let has_defect = |q: &QualityCheck| !q.defect.trim().is_empty();
+        out.push(SectionQuality {
+            section,
+            checks: mine.len(),
+            failed: mine
+                .iter()
+                .filter(|q| q.result == QualityResult::Fail)
+                .count(),
+            defects_open: mine
+                .iter()
+                .filter(|q| has_defect(q) && q.fixed_at.is_none())
+                .count(),
+            overdue: mine
+                .iter()
+                .filter(|q| {
+                    has_defect(q) && q.fixed_at.is_none() && q.deadline.is_some_and(|d| d < today)
+                })
+                .count(),
+            score: quality_score(&mine, today).score,
+        });
+    }
+    // Eng past ball oldinda.
+    out.sort_by(|a, b| a.score.total_cmp(&b.score));
+    out
+}
+
+/// Nuqsonning ustuvorligi (TZ XIV.19).
+#[derive(Debug, Clone)]
+pub struct DefectPriority {
+    pub check_id: i64,
+    pub defect: String,
+    /// Ustuvorlik balli: qanchalik katta bo'lsa, shunchalik oldin.
+    pub weight: f64,
+    /// Ball qaysi sabablardan yig'ilgani — i18n kalitlari.
+    pub reasons: Vec<&'static str>,
+}
+
+impl DefectPriority {
+    /// Birinchi navbatda hal qilinadigan nuqson.
+    pub fn urgent(&self) -> bool {
+        self.weight >= 60.0
+    }
+}
+
+/// TZ XIV.19: nuqsonlarni ustuvorlik bo'yicha tartiblaydi.
+///
+/// Ball to'rt sababdan yig'iladi va **har sabab ko'rsatiladi**: nima
+/// uchun aynan shu nuqson birinchi ekani ko'rinib turishi kerak, aks
+/// holda tartib ishonchsiz bo'ladi.
+pub fn defect_priority(
+    quality: &[QualityCheck],
+    tasks: &[Task],
+    today: NaiveDate,
+) -> Vec<DefectPriority> {
+    let mut out = Vec::new();
+    for q in quality
+        .iter()
+        .filter(|q| !q.defect.trim().is_empty() && q.fixed_at.is_none())
+    {
+        let mut weight = 20.0_f64;
+        let mut reasons = vec!["dp_open"];
+
+        // Muddati o'tgan — eng og'ir sabab.
+        if q.deadline.is_some_and(|d| d < today) {
+            weight += 40.0;
+            reasons.push("dp_overdue");
+        }
+        // Salbiy natija.
+        if q.result == QualityResult::Fail {
+            weight += 20.0;
+            reasons.push("dp_failed");
+        }
+        // Yopilishga yaqin ish: nuqson bosqich ostida ko'milib qoladi.
+        if let Some(task) = q.task_id.and_then(|id| tasks.iter().find(|t| t.id == id)) {
+            if task.progress >= CLOSING_PROGRESS {
+                weight += 20.0;
+                reasons.push("dp_closing");
+            }
+            // Konstruksiya va tarmoq: keyin ochib bo'lmaydi.
+            if matches!(
+                task.section,
+                Section::Kj | Section::Km | Section::Vk | Section::Ov | Section::Eom | Section::Pb
+            ) {
+                weight += 10.0;
+                reasons.push("dp_hidden");
+            }
+        }
+
+        out.push(DefectPriority {
+            check_id: q.id,
+            defect: q.defect.clone(),
+            weight: weight.min(100.0),
+            reasons,
+        });
+    }
+    out.sort_by(|a, b| b.weight.total_cmp(&a.weight));
+    out
+}
+
+/// Texnologik ketma-ketlik buzilishi (TZ XIV.27, VII.28).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SequenceBreak {
+    /// Boshlangan ish.
+    pub task_id: i64,
+    /// Tugallanmagan oldingi ish.
+    pub pred_id: i64,
+    /// Oldingi ishning bajarilishi.
+    pub pred_progress: f64,
+    /// Oldingi ishda sifat tekshiruvi o'tkazilganmi.
+    pub pred_checked: bool,
+}
+
+/// TZ XIV.27, VII.28: ish oldingisi tugamasdan boshlanganmi.
+///
+/// Bu **taqiq emas**: qurilishda ishlar qisman ustma-ust ketadi. Lekin
+/// oldingi ish sifat tekshiruvidan o'tmagan bo'lsa, keyingisi uni
+/// ko'mib yuboradi — shuning uchun tekshiruv holati alohida ustunda.
+pub fn sequence_breaks(
+    tasks: &[Task],
+    links: &[crate::model::Link],
+    quality: &[QualityCheck],
+) -> Vec<SequenceBreak> {
+    let mut out = Vec::new();
+    for l in links {
+        let (Some(pred), Some(succ)) = (
+            tasks.iter().find(|t| t.id == l.pred),
+            tasks.iter().find(|t| t.id == l.succ),
+        ) else {
+            continue;
+        };
+        let succ_started = succ.progress > 0.0 || succ.fact_start.is_some();
+        let pred_done = pred.progress >= 99.999 || pred.fact_end.is_some();
+        if !succ_started || pred_done {
+            continue;
+        }
+        out.push(SequenceBreak {
+            task_id: succ.id,
+            pred_id: pred.id,
+            pred_progress: pred.progress,
+            pred_checked: quality.iter().any(|q| q.task_id == Some(pred.id)),
+        });
+    }
+    // Tekshirilmaganlari oldinda: xavf shu yerda.
+    out.sort_by_key(|b| (b.pred_checked, b.task_id));
+    out
+}
