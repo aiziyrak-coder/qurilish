@@ -12853,3 +12853,193 @@ pub fn supplier_cards(
     });
     out
 }
+
+// ================= IV.14, 22. Maxsus jurnallar va AN-D1 =================
+
+/// Maxsus jurnal turi (TZ IV.14).
+///
+/// Maxsus jurnallar alohida jadval sifatida yuritilmaydi: ular mavjud
+/// yozuvlarning **ko'rinishi**. Beton jurnali — beton namunalari,
+/// payvand jurnali — metall konstruksiya tekshiruvlari, yashirin ishlar
+/// jurnali — dalolatnomalar, geodeziya jurnali — o'lchov nuqtalari.
+/// Ikkinchi nusxa yuritish ularning bir-biriga zid bo'lishiga olib
+/// kelardi.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpecialJournal {
+    Concrete,
+    Welding,
+    Hidden,
+    Geodesy,
+}
+
+impl SpecialJournal {
+    pub const ALL: [SpecialJournal; 4] = [
+        SpecialJournal::Concrete,
+        SpecialJournal::Welding,
+        SpecialJournal::Hidden,
+        SpecialJournal::Geodesy,
+    ];
+
+    /// Sarlavha uchun i18n kaliti.
+    pub fn key(self) -> &'static str {
+        match self {
+            SpecialJournal::Concrete => "sj_concrete",
+            SpecialJournal::Welding => "sj_welding",
+            SpecialJournal::Hidden => "sj_hidden",
+            SpecialJournal::Geodesy => "sj_geodesy",
+        }
+    }
+}
+
+/// Maxsus jurnalning bitta yozuvi.
+#[derive(Debug, Clone)]
+pub struct JournalLine {
+    pub date: NaiveDate,
+    /// Raqam yoki namuna belgisi.
+    pub number: String,
+    /// Nima yozilgan.
+    pub subject: String,
+    /// Natija matni.
+    pub result: String,
+    /// Natija salbiymi.
+    pub bad: bool,
+}
+
+/// TZ IV.14: maxsus jurnalni mavjud yozuvlardan yig'adi.
+pub fn special_journal(
+    kind: SpecialJournal,
+    concrete: &[ConcreteTest],
+    quality: &[QualityCheck],
+    docs: &[ExecDoc],
+    points: &[GeodesyPoint],
+    tasks: &[Task],
+) -> Vec<JournalLine> {
+    let mut out: Vec<JournalLine> = match kind {
+        SpecialJournal::Concrete => concrete
+            .iter()
+            .map(|c| JournalLine {
+                date: c.poured,
+                number: c.sample.clone(),
+                subject: format!("{} · {}", c.grade, c.structure),
+                result: match c.actual {
+                    None => crate::i18n::t("sj_waiting").to_string(),
+                    Some(v) => format!("{v:.1} / {:.1}", c.required),
+                },
+                bad: c.actual.is_some_and(|v| v < c.required),
+            })
+            .collect(),
+        SpecialJournal::Welding => quality
+            .iter()
+            .filter(|q| {
+                q.task_id
+                    .and_then(|id| tasks.iter().find(|t| t.id == id))
+                    .is_some_and(|t| t.section == Section::Km)
+            })
+            .map(|q| JournalLine {
+                date: q.date,
+                number: q.kind.label().to_string(),
+                subject: q.subject.clone(),
+                result: q.result.label().to_string(),
+                bad: q.result == QualityResult::Fail,
+            })
+            .collect(),
+        SpecialJournal::Hidden => docs
+            .iter()
+            .filter(|d| d.kind == ExecDocKind::Hidden)
+            .map(|d| JournalLine {
+                date: d.date,
+                number: d.number.clone(),
+                subject: d.name.clone(),
+                result: d.status.label().to_string(),
+                bad: d.status != ExecDocStatus::Signed,
+            })
+            .collect(),
+        SpecialJournal::Geodesy => points
+            .iter()
+            .map(|p| JournalLine {
+                date: p.measured,
+                number: p.mark.clone(),
+                subject: format!("{} {}", p.axis, p.level).trim().to_string(),
+                result: format!("{:+.3} {}", p.deviation(), p.unit),
+                bad: !p.within(),
+            })
+            .collect(),
+    };
+    // Yangi yozuvlar oldinda.
+    out.sort_by_key(|l| std::cmp::Reverse(l.date));
+    out
+}
+
+/// Hujjat qurilish yozuvlariga tayanadimi (TZ IV.22, AN-D1 qoidasi).
+#[derive(Debug, Clone)]
+pub struct DocEvidence {
+    pub doc_id: i64,
+    pub number: String,
+    /// Hujjat sanasi atrofida jurnalda yozuv bormi.
+    pub in_journal: bool,
+    /// O'sha kunlarda tabelda odam bormi.
+    pub in_timesheet: bool,
+    /// Ishga material berilganmi.
+    pub has_material: bool,
+}
+
+impl DocEvidence {
+    /// Hujjat ortida hech qanday qurilish yozuvi yo'q.
+    pub fn unsupported(&self) -> bool {
+        !self.in_journal && !self.in_timesheet && !self.has_material
+    }
+
+    /// Nechta manba tasdiqlaydi.
+    pub fn sources(&self) -> usize {
+        [self.in_journal, self.in_timesheet, self.has_material]
+            .iter()
+            .filter(|x| **x)
+            .count()
+    }
+}
+
+/// Hujjat sanasi atrofida shuncha kun qaraladi.
+///
+/// Aynan bir kunga qarash noto'g'ri bo'lardi: dalolatnoma ish tugagan
+/// kuni emas, bir necha kundan keyin rasmiylashtirilishi odatiy hol.
+pub const EVIDENCE_WINDOW: i64 = 7;
+
+/// TZ IV.22: ijro hujjatini haqiqiy qurilish yozuvlari bilan solishtiradi.
+///
+/// Qoida oddiy: imzolangan hujjat ortida **kamida bitta** qurilish
+/// yozuvi turishi kerak — jurnalda hajm, tabelda odam yoki omborda
+/// material. Uchalasi ham bo'lmasa, hujjat qog'ozda qolgan ishni
+/// tasdiqlayotgan bo'lishi mumkin.
+pub fn doc_evidence(
+    docs: &[ExecDoc],
+    journal: &[JournalEntry],
+    timesheet: &[TimesheetEntry],
+    moves: &[StockMove],
+) -> Vec<DocEvidence> {
+    let mut out = Vec::new();
+    for d in docs.iter().filter(|d| d.status == ExecDocStatus::Signed) {
+        let Some(task_id) = d.task_id else {
+            continue;
+        };
+        let from = d.date - chrono::Duration::days(EVIDENCE_WINDOW);
+        let to = d.date + chrono::Duration::days(EVIDENCE_WINDOW);
+        let near = |day: NaiveDate| day >= from && day <= to;
+
+        out.push(DocEvidence {
+            doc_id: d.id,
+            number: d.number.clone(),
+            in_journal: journal
+                .iter()
+                .any(|j| j.task_id == Some(task_id) && near(j.date) && j.volume > 0.0),
+            in_timesheet: timesheet
+                .iter()
+                .any(|e| e.task_id == Some(task_id) && near(e.date) && e.hours > 0.0),
+            has_material: moves
+                .iter()
+                .any(|m| m.task_id == Some(task_id) && matches!(m.kind, MoveKind::Out)),
+        });
+    }
+    // Tasdiqsizlari oldinda.
+    out.sort_by_key(|e| e.sources());
+    out
+}

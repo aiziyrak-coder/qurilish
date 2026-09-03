@@ -2417,6 +2417,28 @@ impl App {
         checks::supplier_cards(&self.suppliers, &self.purchases, self.today)
     }
 
+    /// Maxsus jurnal yozuvlari (TZ IV.14).
+    pub fn special_journal(&self, kind: checks::SpecialJournal) -> Vec<checks::JournalLine> {
+        checks::special_journal(
+            kind,
+            &self.concrete_tests,
+            &self.quality,
+            &self.exec_docs,
+            &self.geodesy_points,
+            &self.tasks,
+        )
+    }
+
+    /// Hujjat ortida qurilish yozuvi bormi (TZ IV.22).
+    pub fn doc_evidence(&self) -> Vec<checks::DocEvidence> {
+        checks::doc_evidence(
+            &self.exec_docs,
+            &self.journal,
+            &self.timesheet,
+            &self.stock_moves,
+        )
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

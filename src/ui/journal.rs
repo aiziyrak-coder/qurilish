@@ -79,6 +79,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (0u8, t("jr_tab_entries")),
                 (1, t("jr_tab_day")),
                 (2, t("jr_tab_tomorrow")),
+                (3, t("jr_tab_special")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -90,6 +91,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         match tab {
             1 => day_tab(ui, app),
             2 => tomorrow_tab(ui, app),
+            3 => special_tab(ui, app),
             _ => entries(ui, app),
         }
     }
@@ -119,6 +121,97 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if apply {
         app.apply_journal_to_tasks();
     }
+}
+
+// ================================================================ Maxsus jurnallar
+
+/// Maxsus jurnallar (TZ IV.14).
+///
+/// Ular alohida jadval sifatida yuritilmaydi: bu mavjud yozuvlarning
+/// ko'rinishi. Ikkinchi nusxa yuritish ularning bir-biriga zid bo'lishiga
+/// olib kelardi.
+fn special_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    use crate::checks::SpecialJournal;
+
+    let key = egui::Id::new("jr_special");
+    let mut kind = ui
+        .data(|d| d.get_temp::<u8>(key))
+        .and_then(|i| SpecialJournal::ALL.get(i as usize).copied())
+        .unwrap_or(SpecialJournal::Concrete);
+
+    ui.label(
+        RichText::new(t("jr_special_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(8.0);
+    ui.horizontal_wrapped(|ui| {
+        for (i, k) in SpecialJournal::ALL.iter().enumerate() {
+            if ui.selectable_label(kind == *k, t(k.key())).clicked() {
+                kind = *k;
+                ui.data_mut(|d| d.insert_temp(key, i as u8));
+            }
+        }
+    });
+    ui.add_space(8.0);
+
+    let rows = app.special_journal(kind);
+    if rows.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("jr_special_empty"))
+                    .color(theme::muted())
+                    .size(15.0),
+            );
+        });
+        return;
+    }
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("jr_special_grid")
+                .num_columns(4)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 110.0, t("col_date"));
+                    head_l(ui, 160.0, t("col_number"));
+                    head_l(ui, 320.0, t("col_item"));
+                    head_r(ui, 180.0, t("col_result"));
+                    ui.end_row();
+
+                    for r in &rows {
+                        cell_l(
+                            ui,
+                            110.0,
+                            RichText::new(r.date.format("%d.%m.%Y").to_string()).size(12.0),
+                        );
+                        cell_l(
+                            ui,
+                            160.0,
+                            RichText::new(super::issues::truncate(&r.number, 20)).size(12.0),
+                        );
+                        cell_l(
+                            ui,
+                            320.0,
+                            RichText::new(super::issues::truncate(&r.subject, 42)).size(12.5),
+                        );
+                        cell_r(
+                            ui,
+                            180.0,
+                            RichText::new(&r.result).size(12.0).color(if r.bad {
+                                theme::danger()
+                            } else {
+                                theme::ok()
+                            }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 // ================================================================ Kun tahlili

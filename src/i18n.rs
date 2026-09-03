@@ -4750,6 +4750,31 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "si_no_contact" => ("Aloqa ma'lumoti yo'q", "Нет контактных данных"),
         "si_share" => ("Ulushi juda katta:", "Слишком большая доля:"),
         "si_late" => ("Kechikkan yetkazishlar", "Опоздавшие поставки"),
+        // IV.14, 22. Maxsus jurnallar va AN-D1
+        "jr_tab_special" => ("Maxsus jurnallar", "Специальные журналы"),
+        "jr_special_hint" => (
+            "Maxsus jurnallar alohida jadval sifatida yuritilmaydi: bu mavjud yozuvlarning ko'rinishi. Ikkinchi nusxa ularning zid bo'lishiga olib kelardi.",
+            "Специальные журналы не ведутся отдельной таблицей: это представление уже существующих записей. Вторая копия привела бы к расхождениям.",
+        ),
+        "jr_special_empty" => ("Bu jurnalda yozuv yo'q.", "В этом журнале записей нет."),
+        "sj_concrete" => ("Beton ishlari", "Бетонные работы"),
+        "sj_welding" => ("Payvandlash", "Сварочные работы"),
+        "sj_hidden" => ("Yashirin ishlar", "Скрытые работы"),
+        "sj_geodesy" => ("Geodeziya", "Геодезия"),
+        "sj_waiting" => ("natija kutilmoqda", "ожидается результат"),
+        "ed_evidence" => ("Qurilish yozuvlari bilan solishtirish", "Сверка с записями стройки"),
+        "ed_evidence_hint" => (
+            "Imzolangan hujjat ortida kamida bitta qurilish yozuvi turishi kerak: jurnalda hajm, tabelda odam yoki omborda material.",
+            "За подписанным документом должна стоять хотя бы одна запись стройки: объём в журнале, люди в табеле или материал со склада.",
+        ),
+        "ed_evidence_ok" => (
+            "Barcha imzolangan hujjatlar qurilish yozuvlariga tayanadi.",
+            "Все подписанные документы опираются на записи стройки.",
+        ),
+        "ed_ev_journal" => ("jurnal", "журнал"),
+        "ed_ev_timesheet" => ("tabel", "табель"),
+        "ed_ev_material" => ("material", "материал"),
+        "ed_ev_none" => ("hech qanday yozuv yo'q", "никаких записей нет"),
         "screen_director" => ("Rahbar", "Руководителю"),
         "dr_hint" => (
             "Ekran yangi hisob qilmaydi: har son o'z modulidagi funksiyadan olinadi, shuning uchun modul ekranidagi bilan farq qilmaydi.",

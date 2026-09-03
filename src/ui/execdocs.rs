@@ -697,6 +697,61 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(6.0);
             }
 
+            // ---------- Qurilish yozuvlari bilan solishtirish (TZ IV.22) ----------
+            ui.add_space(14.0);
+            ui.label(RichText::new(t("ed_evidence")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("ed_evidence_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(4.0);
+            let evidence = app.doc_evidence();
+            let unsupported = evidence.iter().filter(|e| e.unsupported()).count();
+            if evidence.is_empty() || unsupported == 0 {
+                ui.label(
+                    RichText::new(t("ed_evidence_ok"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for e in evidence.iter().filter(|e| e.sources() < 2).take(10) {
+                let mut have: Vec<&str> = Vec::new();
+                if e.in_journal {
+                    have.push(t("ed_ev_journal"));
+                }
+                if e.in_timesheet {
+                    have.push(t("ed_ev_timesheet"));
+                }
+                if e.has_material {
+                    have.push(t("ed_ev_material"));
+                }
+                ui.label(
+                    RichText::new(format!(
+                        "· {} — {}",
+                        e.number,
+                        if have.is_empty() {
+                            t("ed_ev_none").to_string()
+                        } else {
+                            have.join(", ")
+                        }
+                    ))
+                    .size(12.0)
+                    .color(if e.unsupported() {
+                        theme::danger()
+                    } else {
+                        theme::muted()
+                    }),
+                )
+                .on_hover_text(
+                    app.exec_docs
+                        .iter()
+                        .find(|d| d.id == e.doc_id)
+                        .map(|d| format!("{} · {}", d.name, d.date.format("%d.%m.%Y")))
+                        .unwrap_or_default(),
+                );
+            }
+
             ui.add_space(14.0);
             ui.label(RichText::new(t("ed_review_hidden")).size(13.5).strong());
             ui.add_space(6.0);

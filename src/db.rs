@@ -10870,6 +10870,108 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             .any(|i| matches!(i, S::LateHistory { late: 1, total: 1 })));
     }
 
+    /// TZ IV.14: maxsus jurnal alohida jadval emas — mavjud
+    /// yozuvlarning ko'rinishi, yangi yozuv paydo bo'lmaydi.
+    #[test]
+    fn special_journals_are_views() {
+        use crate::checks::SpecialJournal;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Beton jurnali namunalar sonidan oshmaydi.
+        let concrete = app.special_journal(SpecialJournal::Concrete);
+        assert_eq!(concrete.len(), app.concrete_tests.len());
+
+        // Yashirin ishlar jurnali — aynan shu turdagi hujjatlar.
+        let hidden = app.special_journal(SpecialJournal::Hidden);
+        assert_eq!(
+            hidden.len(),
+            app.exec_docs
+                .iter()
+                .filter(|d| d.kind == crate::domain::ExecDocKind::Hidden)
+                .count()
+        );
+
+        // Geodeziya jurnali — o'lchov nuqtalari, chetlanishi bilan.
+        let geo = app.special_journal(SpecialJournal::Geodesy);
+        assert_eq!(geo.len(), app.geodesy_points.len());
+        for (line, point) in geo.iter().zip(
+            app.geodesy_points
+                .iter()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev(),
+        ) {
+            let _ = point;
+            // Yangi yozuvlar oldinda.
+            assert!(!line.number.is_empty() || line.subject.is_empty());
+        }
+        for w in geo.windows(2) {
+            assert!(w[0].date >= w[1].date);
+        }
+
+        // Payvand jurnali faqat KM bo'limi tekshiruvlaridan.
+        let weld = app.special_journal(SpecialJournal::Welding);
+        for line in &weld {
+            assert!(app.quality.iter().any(|q| q.date == line.date));
+        }
+    }
+
+    /// TZ IV.22: imzolangan hujjat ortida kamida bitta qurilish yozuvi
+    /// bo'lishi kerak; tasdiqsizlari ro'yxat boshida turadi.
+    #[test]
+    fn signed_documents_need_site_records() {
+        use crate::checks::{doc_evidence, EVIDENCE_WINDOW};
+        use crate::domain::ExecDocStatus;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = doc_evidence(
+            &app.exec_docs,
+            &app.journal,
+            &app.timesheet,
+            &app.stock_moves,
+        );
+        for e in &rows {
+            let doc = app
+                .exec_docs
+                .iter()
+                .find(|d| d.id == e.doc_id)
+                .expect("hujjat");
+            // Faqat imzolangan va ishga bog'langan hujjatlar tekshiriladi.
+            assert_eq!(doc.status, ExecDocStatus::Signed);
+            assert!(doc.task_id.is_some());
+            assert_eq!(
+                e.sources(),
+                [e.in_journal, e.in_timesheet, e.has_material]
+                    .iter()
+                    .filter(|x| **x)
+                    .count()
+            );
+            assert_eq!(e.unsupported(), e.sources() == 0);
+
+            // Jurnal tasdig'i oyna ichidagi yozuvdan chiqadi.
+            if e.in_journal {
+                let from = doc.date - chrono::Duration::days(EVIDENCE_WINDOW);
+                let to = doc.date + chrono::Duration::days(EVIDENCE_WINDOW);
+                assert!(app.journal.iter().any(|j| {
+                    j.task_id == doc.task_id && j.date >= from && j.date <= to && j.volume > 0.0
+                }));
+            }
+        }
+
+        // Tasdiqsizlari oldinda.
+        for w in rows.windows(2) {
+            assert!(w[0].sources() <= w[1].sources());
+        }
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

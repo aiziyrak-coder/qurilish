@@ -21,7 +21,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
 | III. AI smeta tekshiruvi | 34 | 31 | 1 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 24 | 3 | 3 | 3 |
+| IV. Ijro hujjatlari | 30 | 26 | 1 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 26 | 2 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 25 | 5 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **611** | **43** | **46** | **46** |
+| **Jami** | **700** | **613** | **41** | **46** | **46** |
 
-Ya'ni **~87 % to'liq**, **~6 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~88 % to'liq**, **~6 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -136,7 +136,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 11. AI sertifikat tekshiruvi (OCR)
 - [x] 12. Beton pasporti
 - [x] 13. Laboratoriya sinovlari
-- [~] 14. Jurnallar — *umumiy ishlar jurnali bor; maxsus jurnallar yo'q*
+- [x] 14. Jurnallar — *umumiy + maxsus jurnallar (beton, payvand, yashirin, geodeziya) mavjud yozuvlar ko'rinishi sifatida*
 - [x] 15. Prorabning kunlik hisoboti
 - [x] 16. Yashirin ishlar nazorati
 - [x] 17. Kelishuv workflow — *marshrut hujjat holatidan ko'rinadi*
@@ -144,7 +144,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 19. Versiyalilik
 - [x] 20. Imzolashdan oldin AI tekshiruvi
 - [x] 21. Loyiha bilan solishtirish — *versiya va topshirish sanasi bo'yicha*
-- [~] 22. Haqiqiy qurilish bilan solishtirish — *AN-D1 qoidasi*
+- [x] 22. Haqiqiy qurilish bilan solishtirish — *AN-D1: imzolangan hujjat jurnal/tabel/material bilan tasdiqlanadi*
 - [x] 23. Texnik nazorat kabineti
 - [x] 24. Mualliflik nazorati kabineti
 - [x] 25. Buyurtmachi kabineti
