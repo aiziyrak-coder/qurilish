@@ -232,6 +232,7 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckTab {
     Issues,
+    Clash,
     Action,
     Graph,
     Elements,
@@ -240,8 +241,9 @@ pub enum CheckTab {
 }
 
 impl CheckTab {
-    pub const ALL: [CheckTab; 6] = [
+    pub const ALL: [CheckTab; 7] = [
         CheckTab::Issues,
+        CheckTab::Clash,
         CheckTab::Action,
         CheckTab::Graph,
         CheckTab::Elements,
@@ -252,6 +254,7 @@ impl CheckTab {
     pub fn label(self) -> &'static str {
         match self {
             CheckTab::Issues => t("tab_issues"),
+            CheckTab::Clash => t("tab_clash"),
             CheckTab::Action => t("tab_action"),
             CheckTab::Graph => t("tab_graph"),
             CheckTab::Elements => t("tab_elements"),
@@ -2391,6 +2394,16 @@ impl App {
     /// Nazoratsiz hisobdan chiqarishlar (TZ XI.23).
     pub fn write_offs(&self) -> Vec<checks::WriteOff> {
         checks::write_offs(&self.stock_moves, self.today, SCHEDULE_DAYS)
+    }
+
+    /// Loyiha va smeta hajmlarini solishtirish (TZ III.7).
+    pub fn project_volumes(&self) -> Vec<checks::VolumeLine> {
+        checks::project_volumes(&self.elements, &self.estimate_items)
+    }
+
+    /// GPR da bor, smetada yo'q ishlar (TZ III.10).
+    pub fn missing_works(&self) -> Vec<checks::MissingWork> {
+        checks::missing_works(&self.tasks, &self.estimate_items)
     }
 
     /// Kechikish sabablari (TZ XVII.7).

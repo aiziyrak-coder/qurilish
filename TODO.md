@@ -19,12 +19,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 22 | 19 | 1 | 2 | 2 |
-| III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
+| II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
+| III. AI smeta tekshiruvi | 34 | 31 | 1 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 23 | 4 | 3 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 22 | 8 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 33 | 2 | 3 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 34 | 1 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
 | X. Xaridlar | 48 | 44 | 2 | 2 | 2 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **597** | **57** | **46** | **46** |
+| **Jami** | **700** | **602** | **52** | **46** | **46** |
 
-Ya'ni **~85 % to'liq**, **~8 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~86 % to'liq**, **~7 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -75,7 +75,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 16. Har xatoning kartochkasi — *kod, bo'lim, element, joy, varaq, me'yor, tavsiya, mas'ul*
 - [x] 17. AI ga majburiy talab — *normativni o'ylab topmaydi (II.17)*
 - [x] 18. Arxitektura — *bilimlar grafi tugun va qirralar bilan*
-- [~] 19. Interfeys: PROYEKT / AI CHECK / CLASH / ACTION — *4 tabdan 3 tasi; CLASH alohida emas*
+- [x] 19. Interfeys: PROYEKT / AI CHECK / CLASH / ACTION
 - [x] 🔒 **IFC dan o'qish** — *ochiq format o'qiladi; DWG/RVT uchun kutubxona kerak*
 - [ ] 🔒 PDF va DWG dan chizmani tanish
 - [ ] 🔒 3D geometriya bo'yicha haqiqiy kolliziya (clash) hisobi
@@ -90,10 +90,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 4. Arifmetikani tekshirish
 - [x] 5. O'lchov birliklarini tekshirish
 - [x] 6. Hajmlarni tekshirish — *loyiha bilan solishtirish*
-- [~] 7. Loyiha bo'yicha hajmni avtomatik hisoblash — *elementdan oddiy hisob; to'liq emas*
+- [x] 7. Loyiha bo'yicha hajmni avtomatik hisoblash — *bo'lim kesimida solishtirish*
 - [x] 8. Dublikatlarni tekshirish
 - [x] 9. Kompleks rasrenkalarni tekshirish — *takror hisob va bir kod ikki narx*
-- [~] 10. Tushib qolgan ishlarni tekshirish — *loyihada bor, smetada yo'q holati*
+- [x] 10. Tushib qolgan ishlarni tekshirish
 - [x] 11. Texnologik ketma-ketlikni tekshirish
 - [x] 12. Materiallarni tekshirish — *marka va standart talab qilinadi*
 - [x] 13. Marka va xarakteristikani tekshirish
@@ -115,7 +115,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 28. Ortiqcha sarfni nazorat qilish — *sarf normalari bilan*
 - [x] 29. Yakuniy qiymat prognozi — *analitikadagi «Prognoz» tabi*
 - [x] 30. Tejashni izlash — *eng past narx hisobi va analitikadagi «Yo'qotishlar» tabi*
-- [~] 31. AI-smetachining bosh ekrani — *KPI bor, to'liq COST CONTROL paneli yo'q*
+- [x] 31. AI-smetachining bosh ekrani — *COST CONTROL paneli*
 - [x] 32. Eng muhim talab — *hukm chiqarmaslik (III.32)*
 - [x] 33. Yakuniy arxitektura — *«Zanjir» tabi: reja → ariza → xarid → ombor → fakt → farq; uzilish belgilanadi*
 
@@ -271,7 +271,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. AI chek-list yaratadi
 - [~] 27. PPR nazorati
 - [x] 28. Ishlar ketma-ketligini nazorat qilish
-- [~] 29. Loyihani nazorat qilish
+- [x] 29. Loyihani nazorat qilish — *CLASH va versiya nazorati*
 - [x] 30. Versiyalarni nazorat qilish
 - [ ] 🔒 31. Texnik nazorat uchun AI Clash
 - [x] 32. Qurilishdagi o'zgarishlarni nazorat qilish — *yangi chizmadan oldin tugatilgan ishlar*

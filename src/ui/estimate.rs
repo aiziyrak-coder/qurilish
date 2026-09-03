@@ -39,6 +39,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (3, t("tab_structure")),
             (4, t("tab_chain")),
             (5, t("tab_deep")),
+            (6, t("tab_volumes")),
         ];
         for (i, label) in tabs {
             if ui.selectable_label(tab == i, label).clicked() {
@@ -55,8 +56,198 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         3 => structure_tab(ui, app),
         4 => chain_tab(ui, app),
         5 => deep_tab(ui, app),
+        6 => volumes_tab(ui, app),
         _ => items(ui, app),
     }
+}
+
+// ================================================================ Hajmlar
+
+/// Loyiha va smeta hajmlari, tushib qolgan ishlar (TZ III.7, 10, 31).
+///
+/// Hisob **qo'pol**: elementlarning asosiy o'lchovi bo'lim bo'yicha
+/// yig'iladi. Bu aniq hajm emas — maqsad kattalik tartibini tekshirish:
+/// smetada ikki barobar ko'p hajm turgan bo'lsa, buni sezish kerak.
+fn volumes_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+    let volumes = app.project_volumes();
+    let missing = app.missing_works();
+    let cost = app.cost_summary();
+    let started = missing.iter().filter(|m| m.started).count();
+
+    ui.label(
+        RichText::new(t("es_vol_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    // ---------- COST CONTROL (TZ III.31) ----------
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("es_cc_total"),
+                money(cost.total),
+                t("es_cc_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("es_cc_excess"),
+                money(cost.volume_excess),
+                t("es_cc_excess_hint"),
+                if cost.volume_excess <= 0.0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("es_cc_duplicate"),
+                money(cost.duplicate_cost),
+                &format!("{} {}", cost.duplicate_count, t("es_cc_positions")),
+                if cost.duplicate_count == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("es_cc_saving"),
+                money(cost.price_saving),
+                t("es_cc_saving_hint"),
+                theme::muted(),
+            ),
+            stat(
+                t("es_cc_missing"),
+                format!("{started} / {}", missing.len()),
+                t("es_cc_missing_hint"),
+                if started == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(14.0);
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Hajmlar (TZ III.7) ----------
+            ui.label(RichText::new(t("es_vol_title")).size(13.5).strong());
+            ui.add_space(6.0);
+            if volumes.is_empty() {
+                ui.label(
+                    RichText::new(t("es_vol_empty"))
+                        .size(12.5)
+                        .color(theme::muted()),
+                );
+            } else {
+                egui::Grid::new("es_volumes")
+                    .num_columns(6)
+                    .spacing([10.0, 5.0])
+                    .striped(true)
+                    .show(ui, |ui| {
+                        head_l(ui, 200.0, t("col_section"));
+                        head_r(ui, 140.0, t("es_vol_project"));
+                        head_r(ui, 140.0, t("es_vol_estimate"));
+                        head_r(ui, 110.0, t("es_vol_diff"));
+                        head_r(ui, 110.0, t("es_vol_elements"));
+                        head_r(ui, 110.0, t("es_vol_items"));
+                        ui.end_row();
+
+                        for v in &volumes {
+                            cell_l(ui, 200.0, RichText::new(v.section.label()).size(12.5));
+                            cell_r(
+                                ui,
+                                140.0,
+                                RichText::new(super::materials::trim_num(v.from_project))
+                                    .size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                140.0,
+                                RichText::new(super::materials::trim_num(v.from_estimate))
+                                    .size(12.0),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                match v.diff_pct {
+                                    None => RichText::new(t("dash")).color(theme::muted()),
+                                    Some(d) => RichText::new(format!("{d:+.0}%")).size(12.5).color(
+                                        if v.off() {
+                                            theme::warn()
+                                        } else {
+                                            theme::muted()
+                                        },
+                                    ),
+                                },
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(v.elements.to_string())
+                                    .size(12.0)
+                                    .color(theme::muted()),
+                            );
+                            cell_r(
+                                ui,
+                                110.0,
+                                RichText::new(v.items.to_string())
+                                    .size(12.0)
+                                    .color(theme::muted()),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            }
+
+            // ---------- Tushib qolgan ishlar (TZ III.10) ----------
+            ui.add_space(16.0);
+            ui.label(RichText::new(t("es_missing")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("es_missing_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if missing.is_empty() {
+                ui.label(
+                    RichText::new(t("es_missing_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            }
+            for m in missing.iter().take(15) {
+                let name = app
+                    .task(m.task_id)
+                    .map(|x| format!("{} {}", x.wbs, x.name))
+                    .unwrap_or_default();
+                ui.label(
+                    RichText::new(format!(
+                        "· {} — {} {} {}",
+                        super::issues::truncate(&name, 40),
+                        m.section.code(),
+                        super::materials::trim_num(m.volume),
+                        if m.started {
+                            t("es_missing_started")
+                        } else {
+                            ""
+                        }
+                    ))
+                    .size(12.0)
+                    .color(if m.started {
+                        theme::danger()
+                    } else {
+                        theme::muted()
+                    }),
+                );
+            }
+            ui.add_space(16.0);
+        });
 }
 
 // ================================================================ Chuqur tekshiruv

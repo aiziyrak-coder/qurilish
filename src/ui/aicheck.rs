@@ -34,6 +34,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     match app.check_tab {
         CheckTab::Issues => issues_tab(ui, app),
+        CheckTab::Clash => clash_tab(ui, app),
         CheckTab::Action => action_tab(ui, app),
         CheckTab::Graph => graph_tab(ui, app),
         CheckTab::Elements => elements_tab(ui, app),
@@ -438,6 +439,160 @@ fn empty(ui: &mut egui::Ui, msg: &str) {
 }
 
 // ---------------------------------------------------------------- Nomuvofiqliklar
+
+// ================================================================ CLASH
+
+/// Bo'limlar orasidagi to'qnashuvlar (TZ II.19).
+///
+/// CLASH — bu **bo'limlar orasidagi** nomuvofiqlik: tarmoq konstruksiyani
+/// kesib o'tadi, xonaga xizmat yo'q, qurilma ta'minotsiz qolgan.
+/// Ular alohida turadi, chunki yechim ham alohida: ikki bo'lim
+/// loyihachisi birga o'tirib hal qiladi.
+fn clash_tab(ui: &mut egui::Ui, app: &mut App) {
+    use crate::domain::{IssueModule, IssueStatus, Severity};
+
+    // Bo'limlararo qoidalar ro'yxati: sarlavhasi bo'yicha aniqlanadi.
+    let clash_titles = [
+        t("chk_cross_title"),
+        t("chk_room_service_title"),
+        t("chk_power_title"),
+        t("chk_kmkj_title"),
+        t("chk_arkj_title"),
+        t("chk_build_size_title"),
+        t("chk_pb_water_title"),
+        t("chk_ss_cable_title"),
+    ];
+    let rows: Vec<&crate::domain::Issue> = app
+        .issues
+        .iter()
+        .filter(|i| i.module == IssueModule::Project)
+        .filter(|i| clash_titles.contains(&i.title.as_str()))
+        .collect();
+    let open = rows
+        .iter()
+        .filter(|i| matches!(i.status, IssueStatus::Open | IssueStatus::InWork))
+        .count();
+    let critical = rows
+        .iter()
+        .filter(|i| i.severity == Severity::Critical && i.status != IssueStatus::Fixed)
+        .count();
+
+    ui.label(
+        RichText::new(t("clash_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("clash_total"),
+                rows.len().to_string(),
+                t("clash_total_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("clash_open"),
+                open.to_string(),
+                t("clash_open_hint"),
+                if open == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("clash_critical"),
+                critical.to_string(),
+                t("clash_critical_hint"),
+                if critical == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(12.0);
+
+    if rows.is_empty() {
+        ui.vertical_centered(|ui| {
+            ui.add_space(30.0);
+            ui.label(RichText::new(t("clash_none")).color(theme::ok()).size(15.0));
+        });
+        return;
+    }
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("clash_grid")
+                .num_columns(5)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    for (i, h) in [
+                        (120.0, t("col_code")),
+                        (90.0, t("col_section_short")),
+                        (300.0, t("col_title")),
+                        (200.0, t("col_element")),
+                        (120.0, t("col_status")),
+                    ] {
+                        super::warehouse::cell_l(
+                            ui,
+                            i,
+                            RichText::new(h).size(11.0).color(theme::muted()),
+                        );
+                    }
+                    ui.end_row();
+
+                    for issue in &rows {
+                        super::warehouse::cell_l(
+                            ui,
+                            120.0,
+                            RichText::new(&issue.code).size(12.0).monospace(),
+                        );
+                        super::warehouse::cell_l(
+                            ui,
+                            90.0,
+                            RichText::new(issue.section.code())
+                                .size(11.5)
+                                .color(theme::muted()),
+                        );
+                        super::warehouse::cell_l(
+                            ui,
+                            300.0,
+                            RichText::new(super::issues::truncate(&issue.title, 40))
+                                .size(12.5)
+                                .color(if issue.severity == Severity::Critical {
+                                    theme::danger()
+                                } else {
+                                    theme::text()
+                                }),
+                        );
+                        super::warehouse::cell_l(
+                            ui,
+                            200.0,
+                            RichText::new(super::issues::truncate(&issue.element, 24)).size(12.0),
+                        );
+                        super::warehouse::cell_l(
+                            ui,
+                            120.0,
+                            RichText::new(issue.status.label()).size(11.5).color(
+                                if issue.status == IssueStatus::Fixed {
+                                    theme::ok()
+                                } else {
+                                    theme::warn()
+                                },
+                            ),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
+}
 
 fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
     if issues::filter_bar(ui, app, t("run_project_check")) {

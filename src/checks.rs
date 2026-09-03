@@ -12515,3 +12515,110 @@ pub fn write_offs(moves: &[StockMove], today: NaiveDate, days: i64) -> Vec<Write
     out.sort_by(|a, b| b.qty.total_cmp(&a.qty));
     out
 }
+
+// ================= III.7, 10. Hajm va tushib qolgan ishlar =================
+
+/// Bo'lim bo'yicha hajm solishtiruvi (TZ III.7).
+#[derive(Debug, Clone)]
+pub struct VolumeLine {
+    pub section: Section,
+    /// Loyiha elementlaridan chiqqan hajm.
+    pub from_project: f64,
+    /// Smetadagi hajm.
+    pub from_estimate: f64,
+    /// Farq, foizda. Ikkalasi ham nol bo'lsa `None`.
+    pub diff_pct: Option<f64>,
+    /// Nechta element va nechta smeta pozitsiyasidan chiqqani.
+    pub elements: usize,
+    pub items: usize,
+}
+
+impl VolumeLine {
+    /// Farq e'tibor talab qiladigan darajadami.
+    pub fn off(&self) -> bool {
+        self.diff_pct.is_some_and(|d| d.abs() > VOLUME_DIFF_PCT)
+    }
+}
+
+/// Hajm farqi shu foizdan oshsa ko'rsatiladi.
+///
+/// Chegara kichik bo'lmasligi kerak: loyiha elementi va smeta pozitsiyasi
+/// har doim ham bir xil o'lchovda yuritilmaydi.
+pub const VOLUME_DIFF_PCT: f64 = 15.0;
+
+/// TZ III.7: loyiha bo'yicha hajmni smeta bilan solishtiradi.
+///
+/// Hisob **qo'pol**: elementlarning asosiy o'lchovi bo'lim bo'yicha
+/// yig'iladi. Bu aniq hajm emas va shunday deb ko'rsatiladi — maqsad
+/// kattalik tartibini tekshirish: smetada ikki barobar ko'p hajm
+/// turgan bo'lsa, buni sezish kerak.
+pub fn project_volumes(elements: &[Element], items: &[EstimateItem]) -> Vec<VolumeLine> {
+    let mut out = Vec::new();
+    for section in Section::ALL {
+        if section == Section::None {
+            continue;
+        }
+        let mine: Vec<&Element> = elements.iter().filter(|e| e.section == section).collect();
+        let rows: Vec<&EstimateItem> = items.iter().filter(|i| i.section == section).collect();
+        if mine.is_empty() && rows.is_empty() {
+            continue;
+        }
+        let from_project: f64 = mine
+            .iter()
+            .map(|e| if e.size > 0.0 { e.size } else { e.value })
+            .sum();
+        let from_estimate: f64 = rows.iter().map(|i| i.qty).sum();
+        out.push(VolumeLine {
+            section,
+            from_project,
+            from_estimate,
+            diff_pct: (from_project > 0.0 && from_estimate > 0.0)
+                .then(|| (from_estimate - from_project) * 100.0 / from_project),
+            elements: mine.len(),
+            items: rows.len(),
+        });
+    }
+    // Farqi kattalari oldinda.
+    out.sort_by(|a, b| {
+        b.diff_pct
+            .map(f64::abs)
+            .unwrap_or(0.0)
+            .total_cmp(&a.diff_pct.map(f64::abs).unwrap_or(0.0))
+    });
+    out
+}
+
+/// Loyihada bor, smetada yo'q ish (TZ III.10).
+#[derive(Debug, Clone)]
+pub struct MissingWork {
+    pub task_id: i64,
+    pub section: Section,
+    /// Ish hajmi — smetaga qo'shilganda shu hajm olinadi.
+    pub volume: f64,
+    /// Ish boshlanganmi: boshlangan ish smetasiz bajarilyapti.
+    pub started: bool,
+}
+
+/// TZ III.10: GPR da bor, smetada yo'q ishlar.
+///
+/// Boshlangan ish smetasiz bajarilyapti degani — uni keyin qanday
+/// to'lash noma'lum. Shuning uchun boshlanganlari birinchi turadi.
+pub fn missing_works(tasks: &[Task], items: &[EstimateItem]) -> Vec<MissingWork> {
+    let norm = |s: &str| s.trim().to_lowercase();
+    let mut out: Vec<MissingWork> = tasks
+        .iter()
+        .filter(|t| {
+            !items
+                .iter()
+                .any(|i| i.task_id == Some(t.id) || norm(&i.name) == norm(&t.name))
+        })
+        .map(|t| MissingWork {
+            task_id: t.id,
+            section: t.section,
+            volume: t.volume,
+            started: t.progress > 0.0 || t.fact_start.is_some(),
+        })
+        .collect();
+    out.sort_by_key(|m| (!m.started, m.task_id));
+    out
+}

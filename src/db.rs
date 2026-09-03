@@ -10605,6 +10605,84 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(write_offs(&[old], today, 30).is_empty());
     }
 
+    /// TZ III.10: GPR da bor, smetada yo'q ishlar; boshlanganlari
+    /// oldinda turadi.
+    #[test]
+    fn missing_works_put_started_first() {
+        use crate::checks::missing_works;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let rows = missing_works(&app.tasks, &app.estimate_items);
+        for m in &rows {
+            let task = app.task(m.task_id).expect("ish");
+            // Smetada bu ish yo'q — na bog'lanish, na nom bo'yicha.
+            assert!(!app
+                .estimate_items
+                .iter()
+                .any(|i| i.task_id == Some(m.task_id)));
+            assert!(!app
+                .estimate_items
+                .iter()
+                .any(|i| i.name.trim().to_lowercase() == task.name.trim().to_lowercase()));
+            assert_eq!(m.started, task.progress > 0.0 || task.fact_start.is_some());
+        }
+        let mut seen_idle = false;
+        for m in &rows {
+            if m.started {
+                assert!(!seen_idle, "boshlangan ish pastga tushib qolgan");
+            } else {
+                seen_idle = true;
+            }
+        }
+    }
+
+    /// TZ III.7: hajm solishtiruvi qo'pol — ikkala tomonda ham son
+    /// bo'lgandagina farq hisoblanadi.
+    #[test]
+    fn volume_diff_needs_both_sides() {
+        use crate::checks::{project_volumes, VOLUME_DIFF_PCT};
+        use crate::domain::{ElementKind, EstimateItem};
+        use crate::model::Section;
+
+        let element = test_element(1, Section::Kj, ElementKind::Column, "K-1", 100.0);
+        let item = |qty: f64| EstimateItem {
+            id: 1,
+            estimate_id: 1,
+            pos: 1,
+            section: Section::Kj,
+            code: "E-1".into(),
+            name: "Ustun".into(),
+            unit: "m3".into(),
+            qty,
+            price: 1.0,
+            cost: qty,
+            task_id: None,
+            note: String::new(),
+        };
+
+        // Faqat loyihada bor — farq hisoblanmaydi.
+        let one = project_volumes(std::slice::from_ref(&element), &[]);
+        assert_eq!(one.len(), 1);
+        assert!(one[0].diff_pct.is_none());
+        assert!(!one[0].off());
+
+        // Ikkalasi bor va farq chegara ichida.
+        let near = project_volumes(std::slice::from_ref(&element), &[item(105.0)]);
+        assert!((near[0].diff_pct.unwrap() - 5.0).abs() < 0.001);
+        assert!(!near[0].off());
+
+        // Ikki barobar ko'p — e'tiroz.
+        let big = project_volumes(std::slice::from_ref(&element), &[item(200.0)]);
+        assert!(big[0].diff_pct.unwrap() > VOLUME_DIFF_PCT);
+        assert!(big[0].off());
+        assert_eq!(big[0].elements, 1);
+        assert_eq!(big[0].items, 1);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {
