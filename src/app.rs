@@ -1009,6 +1009,15 @@ impl App {
             .unwrap_or(crate::roles::Role::Admin)
     }
 
+    /// Joriy foydalanuvchi ismi. Tanlanmagan bo'lsa — bo'sh satr:
+    /// kimdir deb o'ylab topmaymiz.
+    pub fn current_user_name(&self) -> String {
+        self.current_user
+            .and_then(|id| self.users.iter().find(|u| u.id == id))
+            .map(|u| u.name.clone())
+            .unwrap_or_default()
+    }
+
     /// Joriy rol shu ekranni o'zgartira oladimi.
     pub fn can_edit(&self, screen: Screen) -> bool {
         self.role().can_edit(screen)

@@ -64,9 +64,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     ui.horizontal_wrapped(|ui| {
         for (i, label) in [
             (0u8, t("pu_tab_orders")),
-            (1, t("pu_tab_quotes")),
-            (2, t("pu_tab_suppliers")),
-            (3, t("pu_tab_budget")),
+            (1, t("pu_tab_plan")),
+            (2, t("pu_tab_quotes")),
+            (3, t("pu_tab_suppliers")),
+            (4, t("pu_tab_budget")),
+            (5, t("pu_tab_risks")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -77,9 +79,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     ui.add_space(8.0);
 
     match tab {
-        1 => quotes_tab(ui, app, pid),
-        2 => suppliers_tab(ui, app, pid),
-        3 => budget_tab(ui, app, pid),
+        1 => plan_tab(ui, app, pid),
+        2 => quotes_tab(ui, app, pid),
+        3 => suppliers_tab(ui, app, pid),
+        4 => budget_tab(ui, app, pid),
+        5 => risks_tab(ui, app),
         _ => {
             if app.purchases.is_empty() {
                 ui.add_space(50.0);
@@ -137,6 +141,10 @@ fn new_purchase(app: &App, pid: i64, number: String, request_id: Option<i64>) ->
             .and_then(|m| app.materials.iter().find(|x| x.id == m))
             .map(|m| m.section)
             .unwrap_or(Section::None),
+        task_id: None,
+        contract_id: None,
+        urgent: false,
+        buyer: String::new(),
         note: String::new(),
     }
 }
@@ -333,15 +341,20 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     let mut removed: Option<i64> = None;
     let today = app.today;
     let waiting: Vec<i64> = unposted(app).iter().map(|p| p.id).collect();
+    // Tor ekranda mas'ul va ish ustunlari yashiriladi: kunlik ish miqdor,
+    // narx va muddat ustunlarida.
+    let wide = ui.available_width() > 1700.0;
+    let tasks = app.tasks.clone();
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("purchases_grid")
-                .num_columns(16)
+                .num_columns(if wide { 19 } else { 17 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
+                    head_l(ui, 30.0, t("col_urgent"));
                     head_l(ui, 80.0, t("col_number"));
                     head_l(ui, 110.0, t("col_date"));
                     head_l(ui, 180.0, t("col_supplier"));
@@ -357,6 +370,10 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                     head_l(ui, 110.0, t("col_delivery"));
                     head_l(ui, 120.0, t("col_status"));
                     head_l(ui, 110.0, t("col_stock_post"));
+                    if wide {
+                        head_l(ui, 130.0, t("col_buyer"));
+                        head_l(ui, 120.0, t("col_task"));
+                    }
                     head_l(ui, 24.0, "");
                     ui.end_row();
 
@@ -364,6 +381,15 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                         let mut p = src.clone();
                         let mut changed = false;
 
+                        // Shoshilinch xarid odatdagi tartibdan chetga chiqish —
+                        // u ro'yxatda ko'zga tashlanib turishi kerak.
+                        ui.horizontal(|ui| {
+                            ui.add_space(6.0);
+                            changed |= ui
+                                .checkbox(&mut p.urgent, "")
+                                .on_hover_text(t("col_urgent"))
+                                .changed();
+                        });
                         changed |= ui
                             .add_sized([80.0, 22.0], egui::TextEdit::singleline(&mut p.number))
                             .changed();
@@ -502,6 +528,36 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             );
                         } else {
                             cell_l(ui, 110.0, RichText::new(t("dash")).color(theme::muted()));
+                        }
+
+                        if wide {
+                            changed |= ui
+                                .add_sized([130.0, 22.0], egui::TextEdit::singleline(&mut p.buyer))
+                                .changed();
+                            // Xarid qaysi ish uchun: kechikish qaysi ishni
+                            // to'xtatishini shu bog'lanish ko'rsatadi.
+                            let label = p
+                                .task_id
+                                .and_then(|id| tasks.iter().find(|t| t.id == id))
+                                .map(|t| t.wbs.clone())
+                                .unwrap_or_else(|| t("dash").to_string());
+                            egui::ComboBox::from_id_salt(("pu_task", p.id))
+                                .selected_text(label)
+                                .width(120.0)
+                                .show_ui(ui, |ui| {
+                                    changed |= ui
+                                        .selectable_value(&mut p.task_id, None, t("dash"))
+                                        .changed();
+                                    for tk in &tasks {
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut p.task_id,
+                                                Some(tk.id),
+                                                format!("{} {}", tk.wbs, tk.name),
+                                            )
+                                            .changed();
+                                    }
+                                });
                         }
 
                         if ui
@@ -1251,6 +1307,378 @@ fn bar(ui: &mut egui::Ui, width: f32, v: f64, color: egui::Color32) {
         let mut fill = rect;
         fill.set_width(w);
         p.rect_filled(fill, 3.0, color);
+    }
+}
+
+// ================================================================ Xarid rejasi
+
+/// Reja shuncha kun oldinga qaraydi.
+const PLAN_HORIZON: i64 = 45;
+
+/// Nima sotib olish kerakligi (TZ X.4-6).
+///
+/// Ro'yxat qo'lda tuzilmaydi: qoldiq, yo'ldagi buyurtma va yaqin ishlarning
+/// normativ ehtiyoji solishtiriladi. Har qatordan bir bosishda ariza
+/// ochiladi — reja va ariza orasida qo'lda ko'chirish bo'lmasin.
+fn plan_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
+    let stock = app.stock();
+    let lines = crate::checks::purchase_plan(
+        &app.materials,
+        &stock,
+        &app.purchases,
+        &app.requests,
+        &app.material_norms,
+        &app.tasks,
+        app.today,
+        PLAN_HORIZON,
+    );
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(t("pu_plan_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(8.0);
+
+    if lines.is_empty() {
+        ui.add_space(40.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("pu_plan_empty"))
+                    .color(theme::ok())
+                    .size(15.0),
+            );
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(t("pu_plan_empty_hint"))
+                    .color(theme::muted())
+                    .size(12.0),
+            );
+        });
+        return;
+    }
+
+    let total: f64 = lines.iter().map(|l| l.cost).sum();
+    let tight = lines.iter().filter(|l| l.tight(app.today)).count();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("pu_plan_kpi_items"),
+                lines.len().to_string(),
+                t("pu_plan_kpi_items_hint"),
+                theme::accent(),
+            ),
+            stat(
+                t("pu_plan_kpi_sum"),
+                money(total),
+                t("pu_plan_kpi_sum_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("pu_plan_kpi_tight"),
+                tight.to_string(),
+                t("pu_plan_kpi_tight_hint"),
+                if tight == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+        ],
+    );
+    ui.add_space(10.0);
+
+    let can = app.can_edit(Screen::Requests);
+    let today = app.today;
+    let mut make: Option<(i64, f64)> = None;
+
+    egui::ScrollArea::both()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("pu_plan_grid")
+                .num_columns(10)
+                .spacing([8.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 230.0, t("col_material"));
+                    head_r(ui, 100.0, t("pu_plan_available"));
+                    head_r(ui, 100.0, t("pu_plan_ordered"));
+                    head_r(ui, 100.0, t("col_min_stock"));
+                    head_r(ui, 110.0, t("pu_plan_needed"));
+                    head_r(ui, 110.0, t("pu_plan_to_buy"));
+                    head_r(ui, 140.0, t("pu_plan_cost"));
+                    head_l(ui, 120.0, t("pu_plan_need_by"));
+                    head_l(ui, 110.0, t("col_status"));
+                    head_l(ui, 110.0, "");
+                    ui.end_row();
+
+                    for l in &lines {
+                        let Some(m) = app.materials.iter().find(|m| m.id == l.material_id) else {
+                            continue;
+                        };
+                        cell_l(
+                            ui,
+                            230.0,
+                            RichText::new(super::issues::truncate(&m.name, 30)).size(12.5),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(format!("{} {}", trim_num(l.available), m.unit))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(if l.ordered > 0.0 {
+                                trim_num(l.ordered)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(12.0)
+                            .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(trim_num(l.min_stock))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(if l.needed_for_tasks > 0.0 {
+                                trim_num(l.needed_for_tasks)
+                            } else {
+                                t("dash").to_string()
+                            })
+                            .size(12.0),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(trim_num(l.to_buy))
+                                .size(12.5)
+                                .strong()
+                                .color(theme::accent()),
+                        );
+                        cell_r(ui, 140.0, RichText::new(money(l.cost)).size(12.0));
+                        cell_l(
+                            ui,
+                            120.0,
+                            match l.need_by {
+                                Some(d) => RichText::new(d.format("%d.%m.%Y").to_string())
+                                    .size(12.0)
+                                    .color(if l.tight(today) {
+                                        theme::danger()
+                                    } else {
+                                        theme::muted()
+                                    }),
+                                None => RichText::new(t("dash")).color(theme::muted()),
+                            },
+                        );
+                        cell_l(
+                            ui,
+                            110.0,
+                            if l.has_request {
+                                RichText::new(t("pu_plan_has_request"))
+                                    .size(11.0)
+                                    .color(theme::ok())
+                            } else {
+                                RichText::new(t("pu_plan_no_request"))
+                                    .size(11.0)
+                                    .color(theme::warn())
+                            },
+                        );
+                        // Rejadan arizaga: miqdor va material o'z-o'zidan
+                        // ko'chadi, odam qaytadan yozib o'tirmaydi.
+                        if ui
+                            .add_enabled(
+                                can && !l.has_request,
+                                egui::Button::new(RichText::new(t("pu_plan_make")).size(11.5)),
+                            )
+                            .on_disabled_hover_text(t("pu_plan_make_off"))
+                            .clicked()
+                        {
+                            make = Some((l.material_id, l.to_buy));
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
+
+    if let Some((material_id, qty)) = make {
+        let m = app.materials.iter().find(|m| m.id == material_id).cloned();
+        if let Some(m) = m {
+            let n = app.requests.len() + 1;
+            app.db.insert_request(&crate::domain::Request {
+                id: 0,
+                project_id: pid,
+                number: format!("A-{n:04}"),
+                date: today,
+                kind: crate::domain::RequestKind::Material,
+                title: m.name.clone(),
+                material_id: Some(m.id),
+                qty,
+                unit: m.unit.clone(),
+                requester: app.current_user_name(),
+                need_date: today + chrono::Duration::days(14),
+                priority: crate::domain::Priority::Normal,
+                status: crate::domain::RequestStatus::New,
+                task_id: None,
+                reject_reason: String::new(),
+                note: t("pu_plan_from_plan").to_string(),
+            });
+            app.reload_modules();
+            app.notify(format!("{} {}", t("pu_plan_made"), m.name));
+        }
+    }
+}
+
+// ================================================================ Risklar
+
+/// Xarid jarayonidagi shubhali joylar (TZ X.41, 46).
+fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
+    let risks = crate::checks::procurement_risks(&app.purchases, &app.quotes, &app.materials);
+    let buyers = crate::checks::buyer_stats(&app.purchases, &app.quotes, app.today);
+
+    ui.label(
+        RichText::new(t("pu_risks_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---------- Belgilar ----------
+            ui.label(RichText::new(t("pu_risks_title")).size(14.0).strong());
+            ui.add_space(6.0);
+            if risks.is_empty() {
+                ui.label(
+                    RichText::new(t("pu_risks_none"))
+                        .size(12.0)
+                        .color(theme::ok()),
+                );
+            }
+            for r in &risks {
+                let (text, detail, color) = risk_text(r);
+                ui.horizontal(|ui| {
+                    ui.add_space(4.0);
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(3.0, 16.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 1.5, color);
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(text).size(12.5).color(color));
+                    ui.label(RichText::new(detail).size(11.5).color(theme::muted()));
+                });
+                ui.add_space(3.0);
+            }
+
+            ui.add_space(16.0);
+
+            // ---------- Xaridchilar ----------
+            ui.label(RichText::new(t("pu_buyers_title")).size(14.0).strong());
+            ui.label(
+                RichText::new(t("pu_buyers_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            if buyers.is_empty() {
+                ui.label(
+                    RichText::new(t("pu_buyers_none"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+                return;
+            }
+            egui::Grid::new("pu_buyers_grid")
+                .num_columns(6)
+                .spacing([10.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 180.0, t("pu_buyer"));
+                    head_r(ui, 90.0, t("pu_buyer_count"));
+                    head_r(ui, 150.0, t("pu_buyer_amount"));
+                    head_r(ui, 110.0, t("pu_buyer_on_time"));
+                    head_r(ui, 110.0, t("pu_buyer_quotes"));
+                    head_r(ui, 100.0, t("pu_buyer_urgent"));
+                    ui.end_row();
+                    for b in &buyers {
+                        cell_l(ui, 180.0, RichText::new(&b.buyer).size(12.5));
+                        cell_r(ui, 90.0, RichText::new(b.purchases.to_string()).size(12.0));
+                        cell_r(ui, 150.0, RichText::new(money(b.amount)).size(12.0));
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(format!("{:.0}%", b.on_time_pct))
+                                .size(12.0)
+                                .color(if b.on_time_pct >= 80.0 {
+                                    theme::ok()
+                                } else {
+                                    theme::warn()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            110.0,
+                            RichText::new(format!("{:.0}%", b.with_quotes_pct))
+                                .size(12.0)
+                                .color(if b.with_quotes_pct >= 50.0 {
+                                    theme::ok()
+                                } else {
+                                    theme::warn()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            100.0,
+                            RichText::new(b.urgent.to_string()).size(12.0).color(
+                                if b.urgent == 0 {
+                                    theme::muted()
+                                } else {
+                                    theme::warn()
+                                },
+                            ),
+                        );
+                        ui.end_row();
+                    }
+                });
+            ui.add_space(16.0);
+        });
+}
+
+/// Risk belgisining matni, dalili va rangi.
+fn risk_text(r: &crate::checks::ProcurementRisk) -> (String, String, egui::Color32) {
+    use crate::checks::ProcurementRisk as R;
+    match r {
+        R::SupplierShare { supplier, pct } => (
+            format!("{} — {:.0}%", supplier, pct),
+            t("pu_risk_share").to_string(),
+            theme::warn(),
+        ),
+        R::NoQuotes { number, amount } => (
+            format!("{number} · {}", money(*amount)),
+            t("pu_risk_no_quotes").to_string(),
+            theme::accent(),
+        ),
+        R::HighPrice { number, over_pct } => (
+            format!("{number} · +{:.0}%", over_pct),
+            t("pu_risk_high_price").to_string(),
+            theme::danger(),
+        ),
+        R::TooManyUrgent { count, pct } => (
+            format!("{count} · {:.0}%", pct),
+            t("pu_risk_urgent").to_string(),
+            theme::warn(),
+        ),
     }
 }
 

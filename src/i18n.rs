@@ -2833,6 +2833,83 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cl_w_paid" => ("Haftada to'langan", "Оплачено за неделю"),
         "cl_w_waiting" => ("Sizni kutmoqda: o'zgarish · qabul", "Ждут вас: изменения · приёмка"),
 
+        // ---------- X. Xarid rejasi va risklar ----------
+        "pu_tab_plan" => ("Xarid rejasi", "План закупок"),
+        "pu_tab_risks" => ("Risklar", "Риски"),
+
+        "pu_plan_hint" => (
+            "Ro'yxat qo'lda tuzilmaydi: qoldiq, yo'ldagi buyurtma va yaqin ishlarning normativ ehtiyoji solishtiriladi.",
+            "Список не составляется вручную: сравниваются остаток, заказанное в пути и нормативная потребность ближайших работ.",
+        ),
+        "pu_plan_empty" => ("Sotib olish kerak bo'lgan narsa yo'q", "Закупать нечего"),
+        "pu_plan_empty_hint" => (
+            "Qoldiq va yo'ldagi buyurtma yaqin ishlar uchun yetarli.",
+            "Остатка и заказанного в пути хватает на ближайшие работы.",
+        ),
+        "pu_plan_kpi_items" => ("Pozitsiya", "Позиций"),
+        "pu_plan_kpi_items_hint" => ("sotib olish kerak", "к закупке"),
+        "pu_plan_kpi_sum" => ("Taxminiy summa", "Ориентировочно"),
+        "pu_plan_kpi_sum_hint" => ("katalog narxi bo'yicha", "по цене каталога"),
+        "pu_plan_kpi_tight" => ("Muddat siqilgan", "Сроки поджимают"),
+        "pu_plan_kpi_tight_hint" => ("ikki haftadan kam qoldi", "осталось менее двух недель"),
+        "pu_plan_available" => ("Erkin qoldiq", "Свободный остаток"),
+        "pu_plan_ordered" => ("Yo'lda", "В пути"),
+        "pu_plan_needed" => ("Ishlar uchun", "На работы"),
+        "pu_plan_to_buy" => ("Sotib olish", "К закупке"),
+        "pu_plan_cost" => ("Summa", "Сумма"),
+        "pu_plan_need_by" => ("Qachongacha", "К сроку"),
+        "pu_plan_has_request" => ("ariza bor", "заявка есть"),
+        "pu_plan_no_request" => ("ariza yo'q", "заявки нет"),
+        "pu_plan_make" => ("Ariza ochish", "Создать заявку"),
+        "pu_plan_make_off" => (
+            "Ariza allaqachon bor yoki bu rolda ariza ochib bo'lmaydi.",
+            "Заявка уже есть либо эта роль не может создавать заявки.",
+        ),
+        "pu_plan_from_plan" => ("Xarid rejasidan", "Из плана закупок"),
+        "pu_plan_made" => ("Ariza ochildi:", "Создана заявка:"),
+
+        "pu_risks_hint" => (
+            "Bu ayblov emas: har bir belgi — tekshirib ko'rish uchun sabab. Xulosa odamniki.",
+            "Это не обвинение: каждый признак — повод проверить. Вывод остаётся за человеком.",
+        ),
+        "pu_risks_title" => ("Diqqat qaratish kerak", "На что обратить внимание"),
+        "pu_risks_none" => ("Shubhali belgi topilmadi", "Подозрительных признаков нет"),
+        "pu_risk_share" => (
+            "bitta yetkazib beruvchining ulushi juda katta",
+            "слишком большая доля одного поставщика",
+        ),
+        "pu_risk_no_quotes" => (
+            "taklif solishtirilmagan",
+            "предложения не сравнивались",
+        ),
+        "pu_risk_high_price" => (
+            "narx katalogdan yuqori",
+            "цена выше каталожной",
+        ),
+        "pu_risk_urgent" => (
+            "shoshilinch xaridlar ulushi katta",
+            "велика доля срочных закупок",
+        ),
+
+        "pu_buyers_title" => ("Xaridchilar", "Закупщики"),
+        "pu_buyers_hint" => (
+            "Kim nechta xarid rasmiylashtirgan va qanday sifatda.",
+            "Кто сколько закупок оформил и с каким качеством.",
+        ),
+        "pu_buyers_none" => (
+            "Xaridlarda mas'ul ko'rsatilmagan",
+            "В закупках не указан ответственный",
+        ),
+        "pu_buyer" => ("Xaridchi", "Закупщик"),
+        "pu_buyer_count" => ("Xarid", "Закупок"),
+        "pu_buyer_amount" => ("Summa", "Сумма"),
+        "pu_buyer_on_time" => ("Muddatida", "В срок"),
+        "pu_buyer_quotes" => ("Taklif bilan", "С предложениями"),
+        "pu_buyer_urgent" => ("Shoshilinch", "Срочных"),
+
+        "col_urgent" => ("Shoshilinch", "Срочно"),
+        "col_buyer" => ("Xaridchi", "Закупщик"),
+
         // ---------- Bildirishnomalar markazi ----------
         "screen_notices" => ("Bildirishnomalar", "Уведомления"),
         "nt_hint" => (

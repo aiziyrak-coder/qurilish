@@ -467,6 +467,15 @@ pub struct Purchase {
     pub delivered_qty: f64,
     /// Qaysi bo'limga tegishli — byudjet shu kesimda nazorat qilinadi.
     pub section: crate::model::Section,
+    /// Qaysi ish uchun (TZ X.32): xarid GPR bilan bog'lansa, muddat
+    /// kechikishi qaysi ishni to'xtatishini ko'rish mumkin.
+    pub task_id: Option<i64>,
+    /// Yetkazib beruvchi bilan tuzilgan shartnoma (TZ X.21).
+    pub contract_id: Option<i64>,
+    /// Shoshilinch xarid (TZ X.43): odatdagi tartibdan chetga chiqilgan.
+    pub urgent: bool,
+    /// Kim rasmiylashtirgan — xaridchi samaradorligi shu kesimda (TZ X.46).
+    pub buyer: String,
     pub note: String,
 }
 

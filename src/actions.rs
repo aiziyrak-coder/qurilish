@@ -417,6 +417,10 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
                 status: PurchaseStatus::Draft,
                 delivered_qty: 0.0,
                 section,
+                task_id: None,
+                contract_id: None,
+                urgent: false,
+                buyer: String::new(),
                 note: t("ac_from_copilot").to_string(),
             });
             format!("{} {number}", t("ac_done_purchase"))

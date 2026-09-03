@@ -2803,6 +2803,10 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             status: PurchaseStatus::Ordered,
             delivered_qty: delivered,
             section: crate::model::Section::None,
+            task_id: None,
+            contract_id: None,
+            urgent: false,
+            buyer: String::new(),
             note: String::new(),
         };
         let a = p(180.0, 120.0);
@@ -4974,6 +4978,195 @@ ENDSEC;\nEND-ISO-10303-21;\n";
 
         // Bayroq qo'yilgan: bo'sh bazada ham namuna qayta yaratilmaydi.
         assert!(t.db.demo_cleared());
+    }
+
+    /// TZ X.4-6: reja qoldiq, yo'ldagi buyurtma va normativ ehtiyojdan
+    /// hisoblanadi — qo'lda tuzilmaydi.
+    #[test]
+    fn purchase_plan_subtracts_stock_and_orders() {
+        use crate::checks::purchase_plan;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let materials = t.db.materials(pid);
+        let moves = t.db.stock_moves(pid);
+        let stock =
+            crate::checks::stock_balances(&materials, &moves, &t.db.reservations(pid), today);
+        let plan = purchase_plan(
+            &materials,
+            &stock,
+            &t.db.purchases(pid),
+            &t.db.requests(pid),
+            &t.db.material_norms(pid),
+            &t.db.tasks(pid).unwrap_or_default(),
+            today,
+            45,
+        );
+
+        // Rejada faqat haqiqatan yetishmayotgani qoladi.
+        for l in &plan {
+            assert!(l.to_buy > 0.0, "nol miqdor rejaga tushdi");
+            let target = l.needed_for_tasks.max(l.min_stock);
+            assert!(
+                (l.to_buy - (target - l.available - l.ordered)).abs() < 0.001,
+                "hisob mos emas"
+            );
+            assert!(l.cost >= 0.0);
+        }
+        // Muddati yaqinlari oldinda turadi.
+        let dates: Vec<_> = plan.iter().filter_map(|l| l.need_by).collect();
+        for w in dates.windows(2) {
+            assert!(w[0] <= w[1], "muddat tartibi buzilgan");
+        }
+    }
+
+    /// Qoldiq yetarli bo'lsa material rejaga tushmaydi.
+    #[test]
+    fn material_with_enough_stock_stays_out_of_the_plan() {
+        use crate::checks::{purchase_plan, StockLine};
+        use crate::domain::Material;
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let m = Material {
+            id: 7,
+            project_id: 1,
+            code: "M-1".into(),
+            name: "Sinov".into(),
+            unit: "t".into(),
+            section: crate::model::Section::Kj,
+            spec: String::new(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock: 10.0,
+            price: 1_000.0,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        };
+        let line = |available: f64| StockLine {
+            material_id: 7,
+            balance: available,
+            incoming: 0.0,
+            outgoing: 0.0,
+            written_off: 0.0,
+            returned: 0.0,
+            reserved: 0.0,
+            available,
+            ..Default::default()
+        };
+
+        // Qoldiq minimal zaxiradan katta — reja bo'sh.
+        let plan = purchase_plan(
+            std::slice::from_ref(&m),
+            &[line(12.0)],
+            &[],
+            &[],
+            &[],
+            &[],
+            today,
+            45,
+        );
+        assert!(plan.is_empty());
+
+        // Qoldiq kam — rejada aynan yetishmaydigan miqdor.
+        let plan = purchase_plan(&[m], &[line(4.0)], &[], &[], &[], &[], today, 45);
+        assert_eq!(plan.len(), 1);
+        assert!((plan[0].to_buy - 6.0).abs() < 0.001);
+        assert!((plan[0].cost - 6_000.0).abs() < 0.001);
+    }
+
+    /// TZ X.41: risk belgilari dalil bilan chiqadi.
+    #[test]
+    fn procurement_risks_are_found_with_evidence() {
+        use crate::checks::{procurement_risks, ProcurementRisk};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let purchases = t.db.purchases(pid);
+        let risks = procurement_risks(&purchases, &t.db.quotes(pid), &t.db.materials(pid));
+
+        assert!(!risks.is_empty(), "namunada risk belgisi topilmadi");
+        // Taklifsiz xarid — namunada bor.
+        assert!(
+            risks
+                .iter()
+                .any(|r| matches!(r, ProcurementRisk::NoQuotes { .. })),
+            "taklifsiz xarid belgilanmadi"
+        );
+        // Har bir belgida son bor: bo'sh ogohlantirish foydasiz.
+        for r in &risks {
+            match r {
+                ProcurementRisk::SupplierShare { supplier, pct } => {
+                    assert!(!supplier.is_empty());
+                    assert!(*pct > crate::checks::SUPPLIER_SHARE_LIMIT);
+                }
+                ProcurementRisk::NoQuotes { number, amount } => {
+                    assert!(!number.is_empty());
+                    assert!(*amount > 0.0);
+                }
+                ProcurementRisk::HighPrice { over_pct, .. } => {
+                    assert!(*over_pct > crate::checks::PRICE_OVER_LIMIT);
+                }
+                ProcurementRisk::TooManyUrgent { count, pct } => {
+                    assert!(*count > 0);
+                    assert!(*pct > crate::checks::URGENT_SHARE_LIMIT);
+                }
+            }
+        }
+
+        // Xarid bo'lmasa belgi ham bo'lmaydi.
+        assert!(procurement_risks(&[], &[], &[]).is_empty());
+    }
+
+    /// TZ X.46: xaridchi kesimidagi yakun.
+    #[test]
+    fn buyer_stats_are_grouped_by_person() {
+        use crate::checks::buyer_stats;
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let today = chrono::Local::now().date_naive();
+        let purchases = t.db.purchases(pid);
+        let stats = buyer_stats(&purchases, &t.db.quotes(pid), today);
+
+        assert!(!stats.is_empty(), "namunada xaridchi ko'rsatilmagan");
+        // Jami summa xaridlar summasidan oshmaydi.
+        let total: f64 = purchases.iter().map(|p| p.amount()).sum();
+        let counted: f64 = stats.iter().map(|s| s.amount).sum();
+        assert!(counted <= total + 0.01);
+        for s in &stats {
+            assert!(!s.buyer.is_empty(), "nomsiz xaridchi ro'yxatga tushdi");
+            assert!(s.purchases > 0);
+            assert!(s.on_time_pct >= 0.0 && s.on_time_pct <= 100.0);
+            assert!(s.with_quotes_pct >= 0.0 && s.with_quotes_pct <= 100.0);
+        }
+    }
+
+    /// Xaridning ishga va shartnomaga bog'lanishi bazadan qaytadi.
+    #[test]
+    fn purchase_keeps_its_task_and_buyer() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut p = t.db.purchases(pid).remove(0);
+
+        let task = t.db.tasks(pid).unwrap().remove(0).id;
+        p.task_id = Some(task);
+        p.buyer = "Sinov".into();
+        p.urgent = true;
+        assert!(t.db.update_purchase(&p));
+
+        let back =
+            t.db.purchases(pid)
+                .into_iter()
+                .find(|x| x.id == p.id)
+                .expect("xarid yo'qoldi");
+        assert_eq!(back.task_id, Some(task));
+        assert_eq!(back.buyer, "Sinov");
+        assert!(back.urgent);
     }
 
     /// TZ XI.21: qaytarish qoldiqni oshiradi.

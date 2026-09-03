@@ -756,6 +756,10 @@ impl Db {
             "ALTER TABLE machine_log ADD COLUMN cargo REAL NOT NULL DEFAULT 0",
             "ALTER TABLE quality_check ADD COLUMN fixed_at TEXT",
             "ALTER TABLE purchase ADD COLUMN section TEXT NOT NULL DEFAULT 'none'",
+            "ALTER TABLE purchase ADD COLUMN task_id INTEGER",
+            "ALTER TABLE purchase ADD COLUMN contract_id INTEGER",
+            "ALTER TABLE purchase ADD COLUMN urgent INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE purchase ADD COLUMN buyer TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE timesheet ADD COLUMN kind TEXT NOT NULL DEFAULT 'work'",
             "ALTER TABLE timesheet ADD COLUMN shift TEXT NOT NULL DEFAULT 'day'",
             "ALTER TABLE stock_move ADD COLUMN batch_id INTEGER",
@@ -2705,7 +2709,7 @@ impl Db {
     pub fn purchases(&self, pid: i64) -> Vec<Purchase> {
         self.list(
             "SELECT id,project_id,request_id,number,date,supplier,title,qty,unit,price,currency,
-                    delivery_date,status,delivered_qty,section,note
+                    delivery_date,status,delivered_qty,section,task_id,contract_id,urgent,buyer,note
              FROM purchase WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -2725,7 +2729,11 @@ impl Db {
                     status: PurchaseStatus::parse(&r.get::<_, String>(12)?),
                     delivered_qty: r.get(13)?,
                     section: Section::parse(&r.get::<_, String>(14)?),
-                    note: r.get(15)?,
+                    task_id: r.get(15)?,
+                    contract_id: r.get(16)?,
+                    urgent: r.get::<_, i64>(17)? != 0,
+                    buyer: r.get(18)?,
+                    note: r.get(19)?,
                 })
             },
         )
@@ -2734,8 +2742,9 @@ impl Db {
     pub fn insert_purchase(&self, p: &Purchase) -> i64 {
         self.ins(
             "INSERT INTO purchase (project_id,request_id,number,date,supplier,title,qty,unit,price,
-                                   currency,delivery_date,status,delivered_qty,section,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                                   currency,delivery_date,status,delivered_qty,section,task_id,
+                                   contract_id,urgent,buyer,note)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19)",
             params![
                 p.project_id,
                 p.request_id,
@@ -2751,6 +2760,10 @@ impl Db {
                 p.status.code(),
                 p.delivered_qty,
                 p.section.code(),
+                p.task_id,
+                p.contract_id,
+                p.urgent as i64,
+                p.buyer,
                 p.note
             ],
         )
@@ -2760,7 +2773,8 @@ impl Db {
         self.upd(
             "UPDATE purchase SET request_id=?2,number=?3,date=?4,supplier=?5,title=?6,qty=?7,
                     unit=?8,price=?9,currency=?10,delivery_date=?11,status=?12,delivered_qty=?13,
-                    section=?14,note=?15 WHERE id=?1",
+                    section=?14,task_id=?15,contract_id=?16,urgent=?17,buyer=?18,note=?19
+             WHERE id=?1",
             params![
                 p.id,
                 p.request_id,
@@ -2776,6 +2790,10 @@ impl Db {
                 p.status.code(),
                 p.delivered_qty,
                 p.section.code(),
+                p.task_id,
+                p.contract_id,
+                p.urgent as i64,
+                p.buyer,
                 p.note
             ],
         )
@@ -6635,6 +6653,14 @@ impl Db {
                 status,
                 delivered_qty: got,
                 section,
+                // Xarid arizadan keladi, ariza esa aniq ishga bog'langan —
+                // shuning uchun ishni ariza orqali topamiz.
+                task_id: reqs.iter().find(|r| r.0 == req).and_then(|r| by_wbs(r.10)),
+                contract_id: None,
+                // Shoshilinch xaridlar — arizasiz kelganlari: ular odatda
+                // rejadan tashqarida paydo bo'ladi.
+                urgent: req.is_empty(),
+                buyer: if ru { "Ким В.С." } else { "Kim V.S." }.into(),
                 note: String::new(),
             });
         }
@@ -7896,6 +7922,10 @@ impl Db {
                 status,
                 delivered_qty,
                 section,
+                task_id: None,
+                contract_id: None,
+                urgent: false,
+                buyer: String::new(),
                 note: String::new(),
             });
         };

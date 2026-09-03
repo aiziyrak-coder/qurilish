@@ -1180,7 +1180,7 @@ pub fn supply_status(
 // ================= XI-XII. Ombor =================
 
 /// Bitta material bo'yicha ombor holati.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StockLine {
     pub material_id: i64,
     /// Kirim va qaytarish minus chiqim va hisobdan chiqarish.
@@ -4656,4 +4656,285 @@ pub fn week_report(
         changes_pending: changes.iter().filter(|x| x.pending()).count(),
         acceptances_pending: acceptances.iter().filter(|x| x.pending()).count(),
     }
+}
+
+// ================================================================ X. Xaridlar
+
+/// Xarid rejasidagi bitta pozitsiya (TZ X.4-6).
+#[derive(Debug, Clone, PartialEq)]
+pub struct PurchasePlanLine {
+    pub material_id: i64,
+    /// Erkin qoldiq (rezervsiz).
+    pub available: f64,
+    /// Yo'lda: buyurtma qilingan, lekin hali kelmagan.
+    pub ordered: f64,
+    /// Minimal zaxira.
+    pub min_stock: f64,
+    /// Normativ bo'yicha yaqin ishlar uchun kerak bo'ladigan miqdor.
+    pub needed_for_tasks: f64,
+    /// Sotib olish kerak bo'lgan miqdor.
+    pub to_buy: f64,
+    /// Taxminiy summa katalog narxi bo'yicha.
+    pub cost: f64,
+    /// Qachongacha kerak — eng erta ishning boshlanishi.
+    pub need_by: Option<NaiveDate>,
+    /// Ariza allaqachon berilganmi.
+    pub has_request: bool,
+}
+
+impl PurchasePlanLine {
+    /// Muddat siqilgan: kerak bo'lgan sanagacha ikki haftadan kam qoldi.
+    pub fn tight(&self, today: NaiveDate) -> bool {
+        self.need_by.is_some_and(|d| (d - today).num_days() <= 14)
+    }
+}
+
+/// Nima sotib olish kerakligini hisoblaydi (TZ X.4-6).
+///
+/// Ikki manba qo'shiladi: minimal zaxirani tiklash va yaqin ishlar uchun
+/// normativ ehtiyoj. Yo'ldagi buyurtma va erkin qoldiq ayriladi — shuning
+/// uchun ro'yxatda faqat haqiqatan yetishmayotgani qoladi.
+#[allow(clippy::too_many_arguments)]
+pub fn purchase_plan(
+    materials: &[Material],
+    stock: &[StockLine],
+    purchases: &[Purchase],
+    requests: &[Request],
+    norms: &[MaterialNorm],
+    tasks: &[Task],
+    today: NaiveDate,
+    horizon_days: i64,
+) -> Vec<PurchasePlanLine> {
+    let until = today + chrono::Duration::days(horizon_days);
+    // Yaqin ufqdagi ishlar: hali tugamagan va shu davrda boshlanadigan.
+    let soon: Vec<&Task> = tasks
+        .iter()
+        .filter(|t| t.fact_end.is_none() && t.progress < 99.999)
+        .filter(|t| t.plan_start <= until)
+        .collect();
+
+    let mut out: Vec<PurchasePlanLine> = Vec::new();
+    for m in materials {
+        let line = stock.iter().find(|l| l.material_id == m.id);
+        let available = line.map(|l| l.available).unwrap_or(0.0);
+        // Yo'ldagi miqdor: buyurtma qilingan, lekin yetkazilmagan qism.
+        let ordered: f64 = purchases
+            .iter()
+            .filter(|p| !p.fully_delivered())
+            .filter(|p| p.title.trim() == m.name.trim())
+            .map(|p| (p.qty - p.delivered_qty).max(0.0))
+            .sum();
+
+        // Normativ ehtiyoj: har bir yaqin ish uchun qolgan hajm × norma.
+        let mut needed = 0.0;
+        let mut need_by: Option<NaiveDate> = None;
+        for t in &soon {
+            let Some(n) = norms
+                .iter()
+                .find(|n| n.material_id == m.id && n.task_id == t.id)
+            else {
+                continue;
+            };
+            let left = t.volume * (1.0 - t.progress / 100.0).clamp(0.0, 1.0);
+            needed += left * n.per_unit;
+            need_by = Some(match need_by {
+                Some(d) if d < t.plan_start => d,
+                _ => t.plan_start,
+            });
+        }
+
+        // Sotib olish kerak: ehtiyoj va minimal zaxiradan kattasi.
+        let target = needed.max(m.min_stock);
+        let to_buy = target - available - ordered;
+        if to_buy <= 0.001 {
+            continue;
+        }
+
+        out.push(PurchasePlanLine {
+            material_id: m.id,
+            available,
+            ordered,
+            min_stock: m.min_stock,
+            needed_for_tasks: needed,
+            to_buy,
+            cost: to_buy * m.price,
+            need_by,
+            has_request: requests
+                .iter()
+                .filter(|r| !matches!(r.status, RequestStatus::Closed | RequestStatus::Rejected))
+                .any(|r| r.material_id == Some(m.id)),
+        });
+    }
+    // Muddati yaqinlari oldinda, keyin summasi kattalari.
+    out.sort_by(|a, b| {
+        a.need_by
+            .unwrap_or(NaiveDate::MAX)
+            .cmp(&b.need_by.unwrap_or(NaiveDate::MAX))
+            .then(b.cost.total_cmp(&a.cost))
+    });
+    out
+}
+
+/// Xaridlardagi risk belgisi (TZ X.41).
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProcurementRisk {
+    /// Bitta yetkazib beruvchining ulushi juda katta.
+    SupplierShare { supplier: String, pct: f64 },
+    /// Taklifsiz, to'g'ridan-to'g'ri xarid.
+    NoQuotes { number: String, amount: f64 },
+    /// Narx katalogdan sezilarli yuqori.
+    HighPrice { number: String, over_pct: f64 },
+    /// Shoshilinch xaridlar ulushi katta.
+    TooManyUrgent { count: usize, pct: f64 },
+}
+
+/// Bitta yetkazib beruvchining shundan katta ulushi — savol tug'diradi.
+pub const SUPPLIER_SHARE_LIMIT: f64 = 45.0;
+/// Katalog narxidan shuncha foiz yuqorisi tekshirishga arziydi.
+pub const PRICE_OVER_LIMIT: f64 = 20.0;
+/// Shoshilinch xaridlarning maqbul ulushi.
+pub const URGENT_SHARE_LIMIT: f64 = 25.0;
+
+/// Xarid jarayonidagi shubhali joylarni topadi (TZ X.41).
+///
+/// Bu **ayblov emas**: har bir belgi — tekshirib ko'rish uchun sabab.
+/// Shuning uchun har birida son va dalil bor, xulosa esa odamniki.
+pub fn procurement_risks(
+    purchases: &[Purchase],
+    quotes: &[Quote],
+    materials: &[Material],
+) -> Vec<ProcurementRisk> {
+    let mut out = Vec::new();
+    let total: f64 = purchases.iter().map(|p| p.amount()).sum();
+    if total <= 0.0 {
+        return out;
+    }
+
+    // 1. Yetkazib beruvchilar ulushi.
+    let mut by_supplier: Vec<(String, f64)> = Vec::new();
+    for p in purchases {
+        let key = p.supplier.trim().to_string();
+        if key.is_empty() {
+            continue;
+        }
+        match by_supplier.iter_mut().find(|(s, _)| *s == key) {
+            Some((_, sum)) => *sum += p.amount(),
+            None => by_supplier.push((key, p.amount())),
+        }
+    }
+    for (supplier, sum) in &by_supplier {
+        let pct = sum / total * 100.0;
+        if pct > SUPPLIER_SHARE_LIMIT {
+            out.push(ProcurementRisk::SupplierShare {
+                supplier: supplier.clone(),
+                pct,
+            });
+        }
+    }
+
+    // 2. Taklifsiz xaridlar: arizasi bo'lsa ham taklif solishtirilmagan.
+    for p in purchases {
+        let has_quote = p
+            .request_id
+            .is_some_and(|rid| quotes.iter().any(|q| q.request_id == Some(rid)));
+        if !has_quote && p.amount() > 0.0 {
+            out.push(ProcurementRisk::NoQuotes {
+                number: p.number.clone(),
+                amount: p.amount(),
+            });
+        }
+    }
+
+    // 3. Katalog narxidan yuqori.
+    for p in purchases {
+        let Some(m) = materials.iter().find(|m| m.name.trim() == p.title.trim()) else {
+            continue;
+        };
+        if m.price <= 0.0 {
+            continue;
+        }
+        let over = (p.price - m.price) / m.price * 100.0;
+        if over > PRICE_OVER_LIMIT {
+            out.push(ProcurementRisk::HighPrice {
+                number: p.number.clone(),
+                over_pct: over,
+            });
+        }
+    }
+
+    // 4. Shoshilinch xaridlar ulushi.
+    let urgent = purchases.iter().filter(|p| p.urgent).count();
+    if !purchases.is_empty() {
+        let pct = urgent as f64 / purchases.len() as f64 * 100.0;
+        if pct > URGENT_SHARE_LIMIT {
+            out.push(ProcurementRisk::TooManyUrgent { count: urgent, pct });
+        }
+    }
+    out
+}
+
+/// Xaridchi bo'yicha yakun (TZ X.46).
+#[derive(Debug, Clone, PartialEq)]
+pub struct BuyerStats {
+    pub buyer: String,
+    pub purchases: usize,
+    pub amount: f64,
+    /// Muddatida yetkazilganlar ulushi, foizda.
+    pub on_time_pct: f64,
+    /// Shoshilinch xaridlar soni.
+    pub urgent: usize,
+    /// Taklif solishtirilgan xaridlar ulushi.
+    pub with_quotes_pct: f64,
+}
+
+/// Xaridchilar kesimida yakun.
+pub fn buyer_stats(purchases: &[Purchase], quotes: &[Quote], today: NaiveDate) -> Vec<BuyerStats> {
+    let mut names: Vec<String> = purchases
+        .iter()
+        .map(|p| p.buyer.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    names.sort();
+    names.dedup();
+
+    let mut out: Vec<BuyerStats> = names
+        .into_iter()
+        .map(|buyer| {
+            let mine: Vec<&Purchase> = purchases
+                .iter()
+                .filter(|p| p.buyer.trim() == buyer)
+                .collect();
+            // Muddatida: yetkazilgan va yetkazish sanasi o'tmagan.
+            let closed: Vec<&&Purchase> = mine.iter().filter(|p| p.fully_delivered()).collect();
+            let on_time = closed
+                .iter()
+                .filter(|p| p.delivery_date >= today || p.fully_delivered())
+                .count();
+            let with_quotes = mine
+                .iter()
+                .filter(|p| {
+                    p.request_id
+                        .is_some_and(|rid| quotes.iter().any(|q| q.request_id == Some(rid)))
+                })
+                .count();
+            BuyerStats {
+                purchases: mine.len(),
+                amount: mine.iter().map(|p| p.amount()).sum(),
+                on_time_pct: if closed.is_empty() {
+                    0.0
+                } else {
+                    on_time as f64 / closed.len() as f64 * 100.0
+                },
+                urgent: mine.iter().filter(|p| p.urgent).count(),
+                with_quotes_pct: if mine.is_empty() {
+                    0.0
+                } else {
+                    with_quotes as f64 / mine.len() as f64 * 100.0
+                },
+                buyer,
+            }
+        })
+        .collect();
+    out.sort_by(|a, b| b.amount.total_cmp(&a.amount));
+    out
 }

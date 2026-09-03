@@ -27,7 +27,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VII. Texnik nazorat kabineti | 38 | 21 | 9 | 8 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 17 | 14 | 6 | 2 |
 | IX. Arizalar | 42 | 21 | 8 | 13 | 1 |
-| X. Xaridlar | 48 | 16 | 16 | 16 | 2 |
+| X. Xaridlar | 48 | 24 | 13 | 11 | 2 |
 | XI. Ombor | 48 | 26 | 9 | 13 | 1 |
 | XII. Materiallar | 41 | 24 | 9 | 8 | 2 |
 | XIII. Tabel | 44 | 18 | 11 | 15 | 6 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 23 | 12 | 16 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **329** | **179** | **192** | **53** |
+| **Jami** | **700** | **337** | **176** | **187** | **53** |
 
-Ya'ni **~47 % to'liq**, **~26 % qisman**, **~27 % hali yo'q**.
+Ya'ni **~48 % to'liq**, **~25 % qisman**, **~27 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -378,9 +378,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Modul maqsadi
 - [x] 2. Xaridlarning bosh ekrani
 - [x] 3. Har xaridning manbai — *arizaga bog'lanadi*
-- [ ] 4. AI xaridlarni rejalashtirishi
-- [~] 5. Ehtiyojni avtomatik hisoblash — *zaxiradan kam bo'yicha*
-- [~] 6. Xariddan oldin tekshirish
+- [x] 4. AI xaridlarni rejalashtirishi — *«Xarid rejasi» tabi: qoldiq, yo'ldagi buyurtma va normativ ehtiyoj*
+- [x] 5. Ehtiyojni avtomatik hisoblash — *minimal zaxira va yaqin ishlar normasi bo'yicha, 45 kunlik ufq*
+- [x] 6. Xariddan oldin tekshirish — *reja arizasi bor-yo'qligini ko'rsatadi, takrorlashni oldini oladi*
 - [~] 7. Yetkazib beruvchilarni izlash — *kartochka va ro'yxat*
 - [x] 8. Yetkazib beruvchi tarixi — *xaridlardan hisoblanadi*
 - [~] 9. Tijorat taklifini so'rash — *taklif yozuvi*
@@ -406,21 +406,21 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 29. Ombor bilan bog'lanish — *bir bosishda kirim*
 - [x] 30. Qisman yetkazish — *kelgan miqdor, qoldiq, kirim*
 - [x] 31. Kechikishlarni nazorat qilish
-- [ ] 32. GPR bilan bog'lanish
+- [x] 32. GPR bilan bog'lanish — *xarid ishga bog'lanadi; ariza orqali ham*
 - [ ] 33. Obyektlar bo'yicha xaridlarni nazorat qilish
 - [x] 34. Bo'limlar bo'yicha xaridlarni nazorat qilish
 - [x] 35. Xarid byudjetini nazorat qilish — *reja / buyurtma / qoldiq*
 - [~] 36. AI ortiqcha sarfni aniqlashi
 - [ ] 37. Markazlashtirilgan xaridlar
 - [ ] 38. Turli obyektlar xaridlarini solishtirish
-- [~] 39. Sarfni nazorat qilish
+- [x] 39. Sarfni nazorat qilish — *byudjet, xaridchi va risk kesimlari*
 - [x] 40. Yetkazib beruvchilar tahlili — *muddatida %, o'rtacha kechikish*
-- [ ] 41. Korrupsiya/manfaatlar to'qnashuvi riskini nazorat qilish
+- [x] 41. Korrupsiya riskini nazorat qilish — *yetkazib beruvchi ulushi, taklifsiz xarid, narx oshishi, shoshilinch ulushi*
 - [ ] 42. Xaridlarni avtomatik bo'lish
-- [ ] 43. Shoshilinch xaridlar
+- [x] 43. Shoshilinch xaridlar — *belgi va ulush nazorati*
 - [ ] 🔒 44. AI narx prognozi
 - [~] 45. Direktorning bosh hisoboti
-- [ ] 46. Xaridchi samaradorligini AI tahlili
+- [x] 46. Xaridchi samaradorligi — *xarid soni, summa, muddatida %, taklif bilan %*
 - [~] 47. Modulning to'liq zanjiri
 - [x] 48. Modulning eng kuchli funksiyasi — *xarid → ombor kirimi*
 
