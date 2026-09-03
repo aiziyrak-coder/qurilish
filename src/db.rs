@@ -7042,6 +7042,178 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// Yordamchi: sinov uchun loyiha elementi.
+    #[cfg(test)]
+    fn test_element(
+        id: i64,
+        section: crate::model::Section,
+        kind: crate::domain::ElementKind,
+        mark: &str,
+        size: f64,
+    ) -> crate::domain::Element {
+        crate::domain::Element {
+            id,
+            project_id: 1,
+            section,
+            kind,
+            mark: mark.into(),
+            room: String::new(),
+            axis: String::new(),
+            level: "1".into(),
+            size,
+            unit: "m2".into(),
+            value: 0.0,
+            value_name: String::new(),
+            sheet: "L-1".into(),
+            note: String::new(),
+        }
+    }
+
+    /// Yordamchi: elementlar orasidagi bog'lanish.
+    #[cfg(test)]
+    fn test_link(
+        from_el: i64,
+        to_el: i64,
+        relation: crate::domain::Relation,
+    ) -> crate::domain::ElementLink {
+        crate::domain::ElementLink {
+            id: 0,
+            from_el,
+            to_el,
+            relation,
+        }
+    }
+
+    /// TZ II.10: katta xona yong'in qurilmasisiz va eshiksiz qolsa —
+    /// ikkala kamchilik ham kritik.
+    #[test]
+    fn fire_rules_ask_for_protection_and_exit() {
+        use crate::checks::{check_project, Ctx};
+        use crate::domain::{ElementKind, Relation, Severity};
+        use crate::model::Section;
+        use std::collections::HashMap;
+
+        let norms = HashMap::new();
+        let run = |elements: &[crate::domain::Element], links: &[crate::domain::ElementLink]| {
+            check_project(&Ctx {
+                project_id: 1,
+                tasks: &[],
+                elements,
+                links,
+                items: &[],
+                declared_total: 0.0,
+                norms: &norms,
+            })
+        };
+
+        // Chegaradan katta xona, hech narsa bog'lanmagan.
+        let room = test_element(1, Section::Ar, ElementKind::Room, "X-1", 48.0);
+        let bare = run(std::slice::from_ref(&room), &[]);
+        let titles: Vec<&str> = bare.iter().map(|i| i.title.as_str()).collect();
+        assert!(titles.contains(&crate::i18n::t("chk_pb_room_title")));
+        // Eshiklar umuman modellanmagan: chiqish haqida savol berilmaydi —
+        // bu chizmaning emas, modelning to'liqsizligi.
+        assert!(!titles.contains(&crate::i18n::t("chk_pb_exit_title")));
+
+        // Loyihada eshik bog'lanishi ishlatilgan, lekin bu xonada yo'q —
+        // endi savol o'rinli.
+        let other = test_element(5, Section::Ar, ElementKind::Room, "X-9", 30.0);
+        let some_door = test_element(6, Section::Ar, ElementKind::Door, "D-9", 0.9);
+        let modelled = run(
+            &[room.clone(), other, some_door],
+            &[test_link(5, 6, Relation::Contains)],
+        );
+        assert!(modelled
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_pb_exit_title") && i.element == "X-1"));
+        for i in bare
+            .iter()
+            .filter(|i| i.title == crate::i18n::t("chk_pb_room_title"))
+        {
+            assert_eq!(i.section, Section::Pb);
+            assert_eq!(i.severity, Severity::Critical);
+            assert!(!i.recommendation.is_empty());
+        }
+
+        // Kichik xona tekshiruvdan chetda qoladi.
+        let small = test_element(1, Section::Ar, ElementKind::Room, "X-2", 6.0);
+        let quiet = run(std::slice::from_ref(&small), &[]);
+        assert!(!quiet
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_pb_room_title")));
+
+        // Datchik va eshik qo'shilsa — ikkala e'tiroz ham yopiladi.
+        let device = test_element(2, Section::Pb, ElementKind::Device, "IP-1", 1.0);
+        let door = test_element(3, Section::Ar, ElementKind::Door, "D-1", 0.9);
+        let pipe = test_element(4, Section::Vk, ElementKind::Pipe, "T-1", 50.0);
+        let full = run(
+            &[room, device, door, pipe],
+            &[
+                test_link(2, 1, Relation::Serves),
+                test_link(1, 3, Relation::Contains),
+                test_link(2, 4, Relation::Related),
+            ],
+        );
+        assert!(!full
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_pb_room_title")));
+        assert!(!full
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_pb_exit_title")));
+        // Suv ta'minoti bog'langani uchun bu e'tiroz ham yo'q.
+        assert!(!full
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_pb_water_title")));
+    }
+
+    /// TZ II.9: kuchsiz tok qurilmasi kabelsiz va joysiz qolmasligi kerak.
+    #[test]
+    fn lowvoltage_device_needs_cable_and_place() {
+        use crate::checks::{check_project, Ctx};
+        use crate::domain::{ElementKind, Relation};
+        use crate::model::Section;
+        use std::collections::HashMap;
+
+        let norms = HashMap::new();
+        let run = |elements: &[crate::domain::Element], links: &[crate::domain::ElementLink]| {
+            check_project(&Ctx {
+                project_id: 1,
+                tasks: &[],
+                elements,
+                links,
+                items: &[],
+                declared_total: 0.0,
+                norms: &norms,
+            })
+        };
+
+        let device = test_element(1, Section::Ss, ElementKind::Device, "SS-1", 1.0);
+        let bare = run(std::slice::from_ref(&device), &[]);
+        assert!(bare
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_ss_cable_title")));
+        assert!(bare
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_ss_place_title")));
+        for i in &bare {
+            if i.title == crate::i18n::t("chk_ss_cable_title") {
+                assert_eq!(i.section, Section::Ss);
+            }
+        }
+
+        // Kabel bog'lansa va xona ko'rsatilsa — e'tiroz qolmaydi.
+        let mut placed = device.clone();
+        placed.room = "Server xonasi".into();
+        let cable = test_element(2, Section::Ss, ElementKind::Cable, "K-1", 4.0);
+        let wired = run(&[placed, cable], &[test_link(2, 1, Relation::Serves)]);
+        assert!(!wired
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_ss_cable_title")));
+        assert!(!wired
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_ss_place_title")));
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

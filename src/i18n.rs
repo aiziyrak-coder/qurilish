@@ -662,6 +662,57 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "rule_prj_slope" => ("Kanalizatsiya ukloni", "Уклон канализации"),
         "rule_prj_power" => ("OV/VK/PB/SS - EOM: elektr ta'minoti", "ОВ/ВК/ПБ/СС - ЭОМ: электропитание"),
         "rule_prj_km_kj" => ("KM - KJ: tayanch va ankerlar", "КМ - КЖ: опирание и анкеры"),
+        // II.9-10. Kuchsiz tok va yong'in xavfsizligi qoidalari
+        "rule_prj_pb_room" => ("PB: xonada yong'in qurilmasi", "ПБ: пожарное устройство в помещении"),
+        "rule_prj_pb_exit" => ("PB: evakuatsiya chiqishi", "ПБ: эвакуационный выход"),
+        "rule_prj_pb_water" => ("PB: o'chirish tizimiga suv", "ПБ: вода для системы тушения"),
+        "rule_prj_ss_cable" => ("SS: qurilma kabelga ulanmagan", "СС: устройство не подключено кабелем"),
+        "rule_prj_ss_place" => ("SS: o'rnatish joyi ko'rsatilmagan", "СС: не указано место установки"),
+        "chk_pb_room_title" => ("Xona yong'in nazoratisiz", "Помещение без пожарной защиты"),
+        "chk_pb_room_desc" => (
+            "yong'in signalizatsiyasi yoki o'chirish qurilmasi ko'zda tutilmagan",
+            "не предусмотрено устройство сигнализации или тушения"
+        ),
+        "chk_pb_room_fix" => (
+            "PB bo'limiga xonaga xizmat qiladigan qurilma qo'shing.",
+            "Добавьте в раздел ПБ устройство, обслуживающее помещение."
+        ),
+        "chk_pb_exit_title" => ("Xonadan chiqish yo'q", "Из помещения нет выхода"),
+        "chk_pb_exit_desc" => (
+            "eshik ko'rsatilmagan — evakuatsiya yo'li aniqlanmagan",
+            "дверь не указана — путь эвакуации не определён"
+        ),
+        "chk_pb_exit_fix" => (
+            "AR bo'limida xonaga eshik qo'shing yoki evakuatsiya yo'lini ko'rsating.",
+            "Добавьте дверь в разделе АР или укажите путь эвакуации."
+        ),
+        "chk_pb_water_title" => ("O'chirish tizimiga suv ta'minoti yo'q", "Нет водоснабжения системы тушения"),
+        "chk_pb_water_desc" => (
+            "VK bo'limi bilan bog'lanmagan — suv qayerdan kelishi noma'lum",
+            "не связано с разделом ВК — источник воды неизвестен"
+        ),
+        "chk_pb_water_fix" => (
+            "Qurilmani VK bo'limidagi quvur yoki nasosga bog'lang.",
+            "Свяжите устройство с трубой или насосом раздела ВК."
+        ),
+        "chk_ss_cable_title" => ("Kuchsiz tok qurilmasi ulanmagan", "Устройство слаботочки не подключено"),
+        "chk_ss_cable_desc" => (
+            "hech qanday kabelga bog'lanmagan",
+            "не связано ни с одним кабелем"
+        ),
+        "chk_ss_cable_fix" => (
+            "SS bo'limida qurilmani kabelga bog'lang.",
+            "Свяжите устройство с кабелем в разделе СС."
+        ),
+        "chk_ss_place_title" => ("O'rnatish joyi ko'rsatilmagan", "Не указано место установки"),
+        "chk_ss_place_desc" => (
+            "xona ko'rsatilmagan va hech bir xonaga kiritilmagan",
+            "помещение не указано и устройство не включено ни в одно помещение"
+        ),
+        "chk_ss_place_fix" => (
+            "Qurilma kartochkasida xonani to'ldiring yoki xonaga bog'lang.",
+            "Заполните помещение в карточке устройства или свяжите с помещением."
+        ),
         "rule_prj_orphan" => ("Bog'lanmagan elementlar", "Несвязанные элементы"),
 
         // ---------- Tekshiruv matnlari / Тексты проверок ----------

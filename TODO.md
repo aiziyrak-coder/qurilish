@@ -19,7 +19,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 22 | 9 | 7 | 6 | 2 |
+| II. AI loyiha tekshiruvi | 22 | 11 | 7 | 4 | 2 |
 | III. AI smeta tekshiruvi | 34 | 22 | 6 | 6 | 2 |
 | IV. Ijro hujjatlari | 30 | 15 | 9 | 6 | 3 |
 | V. Kunlik ishlar jurnali | 34 | 21 | 5 | 8 | 6 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 34 | 11 | 6 | 0 |
 | XVIII. AI Copilot | 45 | 15 | 23 | 7 | 7 |
 | Umumiy (TZ dan tashqari) | 14 | 10 | 1 | 3 | 2 |
-| **Jami** | **700** | **433** | **158** | **109** | **53** |
+| **Jami** | **700** | **435** | **158** | **107** | **53** |
 
-Ya'ni **~62 % to'liq**, **~23 % qisman**, **~16 % hali yo'q**.
+Ya'ni **~62 % to'liq**, **~23 % qisman**, **~15 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -65,8 +65,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 6. **VK — suv va kanalizatsiya** — *truba, uklon, kesish; diametr hisobi yo'q*
 - [~] 7. **OV — isitish va ventilyatsiya** — *vozduxovod, qurilma; havo hisobi yo'q*
 - [~] 8. **EOM — elektrika** — *kabel, qurilma, quvvat; kesim hisobi yo'q*
-- [ ] 9. **SS — kuchsiz tok** — *bo'lim bor, tekshiruv qoidalari yo'q*
-- [ ] 10. **PB — yong'in xavfsizligi** — *bo'lim bor, qoidalar yo'q*
+- [x] 9. **SS — kuchsiz tok** — *kabel va o'rnatish joyi tekshiriladi*
+- [x] 10. **PB — yong'in xavfsizligi** — *himoya, chiqish va suv ta'minoti*
 - [x] 11. **CROSS CHECK** — *bo'limlararo tekshiruv: AR↔KJ, VK↔KJ, EOM↔OV va h.k.*
 - [ ] 12. Spetsifikatsiyalarni tekshirish — *spetsifikatsiya modeli yo'q*
 - [x] 13. Hajmlarni tekshirish — *element o'lchamlaridan hisob*

@@ -61,6 +61,11 @@ pub const RULES: &[(&str, &str)] = &[
     ("PRJ_POWER", "rule_prj_power"),
     ("PRJ_KM_KJ", "rule_prj_km_kj"),
     ("PRJ_ORPHAN", "rule_prj_orphan"),
+    ("PRJ_PB_ROOM", "rule_prj_pb_room"),
+    ("PRJ_PB_EXIT", "rule_prj_pb_exit"),
+    ("PRJ_PB_WATER", "rule_prj_pb_water"),
+    ("PRJ_SS_CABLE", "rule_prj_ss_cable"),
+    ("PRJ_SS_PLACE", "rule_prj_ss_place"),
 ];
 
 impl Db {
@@ -1052,6 +1057,208 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
             crate::i18n::t("chk_kmkj_fix").to_string(),
             crate::i18n::t("role_designer").to_string(),
         ));
+    }
+
+    // --- II.10 PB: yong'in xavfsizligi ---
+    // Uch savol: xonani kim qo'riqlaydi, undan qanday chiqiladi va
+    // o'chirish tizimiga suv qayerdan keladi.
+    let (pb_area, pb_confirmed) = ctx.threshold("PRJ_PB_AREA", 20.0);
+
+    // Eshiklar umuman modellanmagan loyihada «chiqish yo'q» deyish
+    // noto'g'ri bo'ladi: bu chizmaning kamchiligi emas, modelning
+    // to'liqsizligi. Shuning uchun qoida faqat eshik bog'lanishi
+    // ishlatilgan loyihalarda yoqiladi.
+    let doors_modelled = ctx.links.iter().any(|l| {
+        l.relation == Relation::Contains
+            && by_id
+                .get(&l.to_el)
+                .map(|e| e.kind == ElementKind::Door)
+                .unwrap_or(false)
+    });
+
+    for room in ctx.elements.iter().filter(|e| e.kind == ElementKind::Room) {
+        // Maydon `size` da ham, `value` da ham yozilishi mumkin — kartochka
+        // qaysi maydonni ishlatgani import manbasiga bog'liq.
+        let area = if room.size > 0.0 {
+            room.size
+        } else {
+            room.value
+        };
+        // Kichik xonalar tekshiruvdan chetda: chegara reyestrda sozlanadi.
+        if area <= pb_area {
+            continue;
+        }
+        let room_name = if room.mark.is_empty() {
+            room.room.clone()
+        } else {
+            room.mark.clone()
+        };
+
+        let served_by = |section: Section| -> bool {
+            rel_in
+                .get(&room.id)
+                .map(|v| {
+                    v.iter()
+                        .any(|(l, e)| l.relation == Relation::Serves && e.section == section)
+                })
+                .unwrap_or(false)
+        };
+
+        if !served_by(Section::Pb) {
+            let mut desc = format!(
+                "{} «{}», {:.1} {}: {}",
+                crate::i18n::t("ek_room"),
+                room_name,
+                area,
+                if room.unit.is_empty() {
+                    "m2"
+                } else {
+                    &room.unit
+                },
+                crate::i18n::t("chk_pb_room_desc")
+            );
+            if !pb_confirmed {
+                desc.push('\n');
+                desc.push_str(crate::i18n::t("chk_threshold_unconfirmed"));
+            }
+            out.push(b.make(
+                "PRJ_PB_ROOM",
+                "PR",
+                Section::Pb,
+                Severity::Critical,
+                crate::i18n::t("chk_pb_room_title").to_string(),
+                desc,
+                room.room.clone(),
+                room.mark.clone(),
+                room.sheet.clone(),
+                crate::i18n::t("chk_pb_room_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+
+        // Evakuatsiya: xonada eshik bo'lishi shart.
+        let has_door = rel_out
+            .get(&room.id)
+            .into_iter()
+            .chain(rel_in.get(&room.id))
+            .flatten()
+            .any(|(l, e)| l.relation == Relation::Contains && e.kind == ElementKind::Door);
+        if !has_door && doors_modelled {
+            out.push(b.make(
+                "PRJ_PB_EXIT",
+                "PR",
+                Section::Pb,
+                Severity::Critical,
+                crate::i18n::t("chk_pb_exit_title").to_string(),
+                format!(
+                    "{} «{}»: {}",
+                    crate::i18n::t("ek_room"),
+                    room_name,
+                    crate::i18n::t("chk_pb_exit_desc")
+                ),
+                room.room.clone(),
+                room.mark.clone(),
+                room.sheet.clone(),
+                crate::i18n::t("chk_pb_exit_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+    }
+
+    // O'chirish tizimi qurilmasiga suv ta'minoti (VK) kerak.
+    for e in ctx
+        .elements
+        .iter()
+        .filter(|e| e.section == Section::Pb && e.kind == ElementKind::Device)
+    {
+        let watered = rel_out
+            .get(&e.id)
+            .into_iter()
+            .chain(rel_in.get(&e.id))
+            .flatten()
+            .any(|(_, o)| o.section == Section::Vk);
+        if watered {
+            continue;
+        }
+        out.push(b.make(
+            "PRJ_PB_WATER",
+            "PR",
+            Section::Pb,
+            Severity::Major,
+            crate::i18n::t("chk_pb_water_title").to_string(),
+            format!(
+                "{} «{}» {}",
+                e.kind.label(),
+                e.mark,
+                crate::i18n::t("chk_pb_water_desc")
+            ),
+            format!("{} {}", e.room, e.axis).trim().to_string(),
+            e.mark.clone(),
+            e.sheet.clone(),
+            crate::i18n::t("chk_pb_water_fix").to_string(),
+            crate::i18n::t("role_designer").to_string(),
+        ));
+    }
+
+    // --- II.9 SS: kuchsiz tok ---
+    // Kuchsiz tok qurilmasi ikki narsasiz ishlamaydi: kabel va o'rnatish joyi.
+    for e in ctx
+        .elements
+        .iter()
+        .filter(|e| e.section == Section::Ss && e.kind == ElementKind::Device)
+    {
+        let cabled = rel_out
+            .get(&e.id)
+            .into_iter()
+            .chain(rel_in.get(&e.id))
+            .flatten()
+            .any(|(_, o)| o.kind == ElementKind::Cable);
+        if !cabled {
+            out.push(b.make(
+                "PRJ_SS_CABLE",
+                "PR",
+                Section::Ss,
+                Severity::Major,
+                crate::i18n::t("chk_ss_cable_title").to_string(),
+                format!(
+                    "{} «{}» {}",
+                    e.kind.label(),
+                    e.mark,
+                    crate::i18n::t("chk_ss_cable_desc")
+                ),
+                format!("{} {}", e.room, e.axis).trim().to_string(),
+                e.mark.clone(),
+                e.sheet.clone(),
+                crate::i18n::t("chk_ss_cable_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
+
+        let placed = !e.room.trim().is_empty()
+            || rel_in
+                .get(&e.id)
+                .map(|v| v.iter().any(|(l, _)| l.relation == Relation::Contains))
+                .unwrap_or(false);
+        if !placed {
+            out.push(b.make(
+                "PRJ_SS_PLACE",
+                "PR",
+                Section::Ss,
+                Severity::Info,
+                crate::i18n::t("chk_ss_place_title").to_string(),
+                format!(
+                    "{} «{}» {}",
+                    e.kind.label(),
+                    e.mark,
+                    crate::i18n::t("chk_ss_place_desc")
+                ),
+                e.axis.clone(),
+                e.mark.clone(),
+                e.sheet.clone(),
+                crate::i18n::t("chk_ss_place_fix").to_string(),
+                crate::i18n::t("role_designer").to_string(),
+            ));
+        }
     }
 
     // --- Bog'lanmagan elementlar: grafda yolg'iz turibdi ---
