@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::domain::Document;
+use crate::domain::NoteTarget;
 use crate::model::Section;
 
 /// Rasm sifatida ko'rsatiladigan kengaytmalar.
@@ -50,6 +51,7 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
     let mut removed: Option<i64> = None;
     let mut edited: Option<Document> = None;
     let mut new_version: Option<i64> = None;
+    let mut open_notes: Option<i64> = None;
 
     card_frame(ui, t("card_documents"), w, |ui| {
         ui.horizontal(|ui| {
@@ -236,6 +238,13 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                     new_version = Some(d.id);
                 }
 
+                // Chizmadagi izoh (TZ VII.18): varaq raqami izoh matnida
+                // yoziladi — dastur chizmaning ichini o'qimaydi, shuning
+                // uchun nuqta koordinatasini o'ylab topmaydi.
+                if super::notes::badge(ui, app, NoteTarget::Document, d.id) {
+                    open_notes = Some(d.id);
+                }
+
                 if ui
                     .small_button(RichText::new("x").color(theme::danger()))
                     .on_hover_text(t("remove_from_list"))
@@ -261,6 +270,8 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                 edited = Some(d);
             }
         }
+
+        super::notes::below_table(ui, app, NoteTarget::Document, open_notes);
 
         // --- Versiya nazorati (TZ VII.30, 32) ---
         let issues = app.version_issues();

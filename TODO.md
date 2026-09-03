@@ -22,22 +22,22 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | II. AI loyiha tekshiruvi | 22 | 11 | 7 | 4 | 2 |
 | III. AI smeta tekshiruvi | 34 | 28 | 4 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 17 | 7 | 6 | 3 |
-| V. Kunlik ishlar jurnali | 34 | 22 | 4 | 8 | 6 |
+| V. Kunlik ishlar jurnali | 34 | 25 | 3 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 21 | 9 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 28 | 6 | 4 | 3 |
+| VII. Texnik nazorat kabineti | 38 | 29 | 6 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 25 | 10 | 2 | 2 |
 | IX. Arizalar | 42 | 35 | 6 | 1 | 1 |
 | X. Xaridlar | 48 | 33 | 13 | 2 | 2 |
 | XI. Ombor | 48 | 41 | 6 | 1 | 1 |
 | XII. Materiallar | 41 | 31 | 8 | 2 | 2 |
 | XIII. Tabel | 44 | 26 | 9 | 9 | 6 |
-| XIV. Sifat | 41 | 30 | 8 | 3 | 2 |
+| XIV. Sifat | 41 | 31 | 8 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 35 | 3 | 3 | 3 |
 | XVI. Mashinalar | 50 | 41 | 7 | 2 | 2 |
 | XVII. AI analitika | 51 | 40 | 11 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **495** | **147** | **58** | **46** |
+| **Jami** | **700** | **500** | **146** | **54** | **46** |
 
 Ya'ni **~71 % to'liq**, **~21 % qisman**, **~8 % hali yo'q**.
 
@@ -174,14 +174,14 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 14. GPR bajarilishi — *jurnal hajmi ishga o'tadi*
 - [x] 15. Kechikish tahlili — *AN-S2, AN-S3, AN-S4*
 - [x] 16. Ertangi kunga reja
-- [ ] 17. Avtomatik arizalar — *zaxira bo'yicha ariza bor, jurnaldan emas*
+- [x] 17. Avtomatik arizalar — *jurnaldagi hajmdan norma bo'yicha*
 - [x] 18. Muammolar — *xavfsizlik, sifat va yozuvlarga izoh*
 - [x] 19. Kritik muammolarni AI aniqlashi — *analitika topilmalari*
 - [x] 20. Texnik nazorat izohlari
 - [~] 21. Yashirin ishlar nazorati
 - [x] 22. Sifat nazorati
 - [x] 23. Mehnat muhofazasi
-- [ ] 24. Direktorning kunlik hisoboti
+- [x] 24. Direktorning kunlik hisoboti
 - [ ] 🔒 25. AI prorabga savol beradi
 - [ ] 🔒 26. Ovozli rejim
 - [ ] 🔒 27. Geolokatsiya nazorati
@@ -190,7 +190,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [~] 30. AI qidiruv
 - [x] 31. Boshqa modullar bilan bog'lanish
 - [x] 32. Soxta hisobotlardan himoya — *ichki ziddiyatlar*
-- [~] 33. Kunning yakuniy holati — *prorab ekranida*
+- [x] 33. Kunning yakuniy holati — *prorab ekrani va kunlik xulosa*
 - [x] 34. Asosiy g'oya
 
 ---
@@ -260,7 +260,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 15. Izohlar — *nomuvofiqliklar*
 - [x] 16. Izoh toifalari
 - [~] 17. AI izohni tasniflashi — *muhimlik darajasi*
-- [ ] 18. Chizmadagi izoh
+- [x] 18. Chizmadagi izoh — *hujjatga izoh va foto*
 - [x] 19. Bartaraf etishni nazorat qilish
 - [x] 20. «Oldin/keyin» fotosi
 - [x] 21. Muddatlarni nazorat qilish
@@ -612,7 +612,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 34. Bosqich tayyorligini nazorat qilish
 - [x] 35. Bosqichni yopishni taqiqlash — *ogohlantirish, taqiq emas*
 - [x] 36. Kunlik sifat nazorati
-- [ ] 37. Haftalik hisobot
+- [x] 37. Haftalik hisobot
 - [~] 38. AI-yordamchi
 - [~] 39. Direktor kabineti
 - [x] 40. Boshqa modullar bilan bog'lanish

@@ -9652,3 +9652,235 @@ pub fn version_diff(old: &Document, new: &Document, tasks: &[Task]) -> VersionDi
         },
     }
 }
+
+// ================= XIV.37, V.17, V.24. Haftalik sifat, kunlik xulosa, ariza =================
+
+/// Haftalik sifat hisoboti (TZ XIV.37).
+#[derive(Debug, Clone, Default)]
+pub struct QualityWeek {
+    pub from: NaiveDate,
+    pub to: NaiveDate,
+    /// Haftada o'tkazilgan tekshiruvlar.
+    pub checks: usize,
+    pub passed: usize,
+    pub failed: usize,
+    /// Haftada ochilgan va yopilgan nuqsonlar.
+    pub defects_opened: usize,
+    pub defects_closed: usize,
+    /// Hafta oxiriga ochiq qolgan nuqsonlar (butun loyiha bo'yicha).
+    pub defects_open: usize,
+    /// Muddati o'tgan nuqsonlar.
+    pub overdue: usize,
+    /// Eng ko'p takrorlangan nuqson sabablari.
+    pub top_defects: Vec<(String, usize)>,
+    /// Hafta oxiridagi sifat balli — sifat modulidagi bilan bir xil qoida.
+    pub score: f64,
+}
+
+/// TZ XIV.37: hafta bo'yicha sifat xulosasi.
+///
+/// Ball [`quality_score`] dan olinadi — bu yerda qayta hisoblanmaydi,
+/// shuning uchun hisobotdagi son sifat ekranidagi bilan bir xil bo'ladi.
+pub fn quality_week(quality: &[QualityCheck], today: NaiveDate) -> QualityWeek {
+    let from = today - chrono::Duration::days(7);
+    let in_week = |d: NaiveDate| d > from && d <= today;
+
+    let week: Vec<&QualityCheck> = quality.iter().filter(|q| in_week(q.date)).collect();
+    let has_defect = |q: &QualityCheck| !q.defect.trim().is_empty();
+
+    // Eng ko'p takrorlangan nuqson matnlari.
+    let mut causes: Vec<(String, usize)> = Vec::new();
+    for q in quality.iter().filter(|q| has_defect(q)) {
+        let key = q.defect.trim().to_lowercase();
+        match causes.iter_mut().find(|(c, _)| *c == key) {
+            Some(e) => e.1 += 1,
+            None => causes.push((q.defect.trim().to_string(), 1)),
+        }
+    }
+    causes.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+    causes.truncate(3);
+
+    QualityWeek {
+        from,
+        to: today,
+        checks: week.len(),
+        passed: week
+            .iter()
+            .filter(|q| q.result == QualityResult::Pass)
+            .count(),
+        failed: week
+            .iter()
+            .filter(|q| q.result == QualityResult::Fail)
+            .count(),
+        defects_opened: week.iter().filter(|q| has_defect(q)).count(),
+        defects_closed: quality
+            .iter()
+            .filter(|q| q.fixed_at.is_some_and(in_week))
+            .count(),
+        defects_open: quality
+            .iter()
+            .filter(|q| has_defect(q) && q.fixed_at.is_none())
+            .count(),
+        overdue: quality
+            .iter()
+            .filter(|q| {
+                has_defect(q) && q.fixed_at.is_none() && q.deadline.is_some_and(|d| d < today)
+            })
+            .count(),
+        top_defects: causes,
+        score: quality_score(quality, today).score,
+    }
+}
+
+/// Direktor uchun kunlik xulosa (TZ V.24).
+#[derive(Debug, Clone, Default)]
+pub struct DayReport {
+    pub day: NaiveDate,
+    /// Bugun ketayotgan ishlar.
+    pub running: usize,
+    /// Jurnalga yozilgan hajm bo'yicha ishlar soni.
+    pub logged: usize,
+    /// Tabelda belgilangan odamlar va soatlar.
+    pub workers: usize,
+    pub hours: f64,
+    /// Bugun ishlagan texnika.
+    pub machines: usize,
+    /// Bugungi material chiqimi qiymati.
+    pub material_cost: f64,
+    /// Bugun ochilgan xavfsizlik va sifat holatlari.
+    pub safety_new: usize,
+    pub quality_new: usize,
+    /// Bugun imzolangan ijro hujjatlari.
+    pub docs_signed: usize,
+    /// Kun yakuni tekshiruvidagi to'siqlar soni.
+    pub blockers: usize,
+}
+
+/// TZ V.24: kun bo'yicha bir ekranli xulosa.
+///
+/// Hisobot **yangi son o'ylab topmaydi**: har qatori bugungi yozuvlardan
+/// sanaladi. To'siqlar soni [`day_close`] dan olinadi — prorab ekranidagi
+/// bilan bir xil.
+#[allow(clippy::too_many_arguments)]
+pub fn day_report(
+    day: NaiveDate,
+    running: usize,
+    journal: &[JournalEntry],
+    timesheet: &[TimesheetEntry],
+    machine_logs: &[MachineLog],
+    moves: &[StockMove],
+    materials: &[Material],
+    safety: &[SafetyEvent],
+    quality: &[QualityCheck],
+    docs: &[ExecDoc],
+    blockers: usize,
+) -> DayReport {
+    let today_hours: Vec<&TimesheetEntry> = timesheet
+        .iter()
+        .filter(|e| e.date == day && e.hours > 0.0)
+        .collect();
+    DayReport {
+        day,
+        running,
+        logged: journal
+            .iter()
+            .filter(|j| j.date == day && j.volume > 0.0)
+            .count(),
+        workers: today_hours.len(),
+        hours: today_hours.iter().map(|e| e.hours).sum(),
+        machines: machine_logs
+            .iter()
+            .filter(|l| l.date == day && l.hours > 0.0)
+            .count(),
+        material_cost: moves
+            .iter()
+            .filter(|m| m.date == day && matches!(m.kind, MoveKind::Out))
+            .map(|m| {
+                let price = if m.price > 0.0 {
+                    m.price
+                } else {
+                    materials
+                        .iter()
+                        .find(|x| x.id == m.material_id)
+                        .map(|x| x.price)
+                        .unwrap_or(0.0)
+                };
+                m.qty * price
+            })
+            .sum(),
+        safety_new: safety.iter().filter(|s| s.date == day).count(),
+        quality_new: quality.iter().filter(|q| q.date == day).count(),
+        docs_signed: docs
+            .iter()
+            .filter(|d| d.date == day && d.status == ExecDocStatus::Signed)
+            .count(),
+        blockers,
+    }
+}
+
+/// Jurnaldan chiqadigan ariza taklifi (TZ V.17).
+#[derive(Debug, Clone, PartialEq)]
+pub struct JournalRequest {
+    pub task_id: i64,
+    pub material_id: i64,
+    /// Qolgan hajmga norma bo'yicha kerak bo'lgan miqdor.
+    pub need: f64,
+    /// Omborda erkin qoldiq.
+    pub available: f64,
+    /// So'raladigan miqdor: kerak minus qoldiq.
+    pub qty: f64,
+}
+
+/// TZ V.17: bugungi jurnal yozuvidan ariza taklif qiladi.
+///
+/// Mantiq oddiy va tekshiriladigan: jurnalda hajm yozilgan ish bo'yicha
+/// **qolgan** hajmga norma qo'llanadi, natijadan ombordagi erkin qoldiq
+/// ayriladi. Qoldiq yetsa — ariza taklif qilinmaydi, chunki keraksiz
+/// ariza tartibni buzadi.
+pub fn journal_requests(
+    journal: &[JournalEntry],
+    norms: &[MaterialNorm],
+    tasks: &[Task],
+    stock: &[StockLine],
+    day: NaiveDate,
+) -> Vec<JournalRequest> {
+    let mut out: Vec<JournalRequest> = Vec::new();
+    for j in journal.iter().filter(|j| j.date == day && j.volume > 0.0) {
+        let Some(task_id) = j.task_id else { continue };
+        let Some(task) = tasks.iter().find(|t| t.id == task_id) else {
+            continue;
+        };
+        let left = task.volume * (100.0 - task.progress.clamp(0.0, 100.0)) / 100.0;
+        if left <= 0.0 {
+            continue;
+        }
+        for n in norms.iter().filter(|n| n.task_id == task_id) {
+            let need = n.per_unit * left;
+            let available = stock
+                .iter()
+                .find(|l| l.material_id == n.material_id)
+                .map_or(0.0, |l| l.available);
+            let qty = need - available;
+            if qty <= 0.0001 {
+                continue;
+            }
+            // Bir material bo'yicha ikki marta taklif qilmaymiz.
+            if out
+                .iter()
+                .any(|r| r.task_id == task_id && r.material_id == n.material_id)
+            {
+                continue;
+            }
+            out.push(JournalRequest {
+                task_id,
+                material_id: n.material_id,
+                need,
+                available,
+                qty,
+            });
+        }
+    }
+    // Eng katta ehtiyoj oldinda.
+    out.sort_by(|a, b| b.qty.total_cmp(&a.qty));
+    out
+}

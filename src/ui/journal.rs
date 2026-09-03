@@ -138,6 +138,112 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
     );
     ui.add_space(10.0);
 
+    // ---------- Direktor uchun kunlik xulosa (TZ V.24) ----------
+    let d = app.day_report();
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("jr_dr_running"),
+                format!("{} / {}", d.logged, d.running),
+                t("jr_dr_running_hint"),
+                if d.logged >= d.running {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("jr_dr_crew"),
+                d.workers.to_string(),
+                &format!("{:.0} {}", d.hours, t("col_hours")),
+                theme::text(),
+            ),
+            stat(
+                t("jr_dr_machines"),
+                d.machines.to_string(),
+                t("jr_dr_machines_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("jr_dr_material"),
+                money(d.material_cost),
+                t("jr_dr_material_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("jr_dr_events"),
+                format!("{} / {}", d.safety_new, d.quality_new),
+                t("jr_dr_events_hint"),
+                if d.safety_new == 0 {
+                    theme::muted()
+                } else {
+                    theme::warn()
+                },
+            ),
+            stat(
+                t("jr_dr_blockers"),
+                d.blockers.to_string(),
+                t("jr_dr_blockers_hint"),
+                if d.blockers == 0 {
+                    theme::ok()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("jr_dr_docs"),
+                d.docs_signed.to_string(),
+                t("jr_dr_docs_hint"),
+                theme::text(),
+            ),
+        ],
+    );
+    ui.label(
+        RichText::new(format!("{}: {}", t("col_date"), d.day.format("%d.%m.%Y")))
+            .size(10.5)
+            .color(theme::muted()),
+    );
+    ui.add_space(14.0);
+
+    // ---------- Jurnaldan ariza (TZ V.17) ----------
+    let suggestions = app.journal_requests();
+    let mut make: Option<usize> = None;
+    if !suggestions.is_empty() {
+        ui.label(RichText::new(t("jr_req_title")).size(13.5).strong());
+        ui.label(
+            RichText::new(t("jr_req_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.add_space(4.0);
+        for (i, r) in suggestions.iter().enumerate() {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "· {} — {}: {} ({} {})",
+                        app.task(r.task_id)
+                            .map(|x| super::issues::truncate(&x.name, 28))
+                            .unwrap_or_default(),
+                        super::materials::material_label(app, r.material_id),
+                        super::materials::trim_num(r.qty),
+                        t("jr_req_stock"),
+                        super::materials::trim_num(r.available)
+                    ))
+                    .size(12.0),
+                );
+                if ui.small_button(t("jr_req_make")).clicked() {
+                    make = Some(i);
+                }
+            });
+        }
+        ui.add_space(12.0);
+    }
+
+    if let Some(i) = make {
+        create_request(app, &suggestions[i]);
+    }
+
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -268,6 +374,40 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(6.0);
             }
         });
+}
+
+/// Taklif bo'yicha ariza yaratadi (TZ V.17).
+///
+/// Ariza **qoralama** holatida ochiladi: dastur o'zi ariza yubormaydi,
+/// prorab uni ko'rib, tasdiqqa qo'yadi.
+fn create_request(app: &mut App, r: &crate::checks::JournalRequest) {
+    let Some(pid) = app.current else { return };
+    let material = app.materials.iter().find(|m| m.id == r.material_id);
+    let title = material.map(|m| m.name.clone()).unwrap_or_default();
+    let unit = material.map(|m| m.unit.clone()).unwrap_or_default();
+    let n = app.requests.len() + 1;
+
+    app.db.insert_request(&crate::domain::Request {
+        id: 0,
+        project_id: pid,
+        number: format!("Z-{n:03}"),
+        date: app.today,
+        kind: crate::domain::RequestKind::Material,
+        title,
+        material_id: Some(r.material_id),
+        qty: r.qty,
+        unit,
+        requester: app.current_user_name(),
+        // Muddat: ish davom etyapti, shuning uchun material tez kerak.
+        need_date: app.today + chrono::Duration::days(3),
+        priority: crate::domain::Priority::High,
+        status: crate::domain::RequestStatus::New,
+        task_id: Some(r.task_id),
+        reject_reason: String::new(),
+        note: t("jr_req_note").to_string(),
+    });
+    app.reload_modules();
+    app.notify(t("jr_req_done").to_string());
 }
 
 /// Shubhani odam o'qiydigan gapga aylantiradi.

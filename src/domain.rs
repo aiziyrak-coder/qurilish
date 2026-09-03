@@ -2115,6 +2115,7 @@ enum_kind!(NoteTarget {
     Machine    => "machine",    "nt_machine";
     Material   => "material",   "nt_material";
     Worker     => "worker",     "nt_worker";
+    Document   => "document",   "nt_document";
     Other      => "other",      "nt_other";
 });
 

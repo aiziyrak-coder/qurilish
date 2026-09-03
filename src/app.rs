@@ -2208,6 +2208,39 @@ impl App {
         )
     }
 
+    /// Haftalik sifat hisoboti (TZ XIV.37).
+    pub fn quality_week(&self) -> checks::QualityWeek {
+        checks::quality_week(&self.quality, self.today)
+    }
+
+    /// Direktor uchun kunlik xulosa (TZ V.24).
+    pub fn day_report(&self) -> checks::DayReport {
+        checks::day_report(
+            self.today,
+            self.running_today().len(),
+            &self.journal,
+            &self.timesheet,
+            &self.machine_logs,
+            &self.stock_moves,
+            &self.materials,
+            &self.safety,
+            &self.quality,
+            &self.exec_docs,
+            self.day_close().len(),
+        )
+    }
+
+    /// Bugungi jurnal yozuvidan ariza takliflari (TZ V.17).
+    pub fn journal_requests(&self) -> Vec<checks::JournalRequest> {
+        checks::journal_requests(
+            &self.journal,
+            &self.material_norms,
+            &self.tasks,
+            &self.stock(),
+            self.today,
+        )
+    }
+
     /// Loyiha hujjatlari versiyalari nazorati (TZ VII.30, 32).
     pub fn version_issues(&self) -> Vec<checks::VersionIssue> {
         checks::version_issues(&self.documents, &self.tasks, self.today)

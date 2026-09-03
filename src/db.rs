@@ -9002,6 +9002,168 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// TZ XIV.37: haftalik hisobotdagi ball sifat modulidagi bilan
+    /// bir xil bo'ladi va sonlar hafta oynasidan chiqadi.
+    #[test]
+    fn quality_week_matches_the_module() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let w = app.quality_week();
+        let module = crate::checks::quality_score(&app.quality, app.today);
+        assert!((w.score - module.score).abs() < 0.001, "ball mos kelmadi");
+        assert_eq!((w.to - w.from).num_days(), 7);
+        assert_eq!(w.to, app.today);
+
+        // Hafta ichidagi tekshiruvlar aynan shu oynadan.
+        let in_week = app
+            .quality
+            .iter()
+            .filter(|q| q.date > w.from && q.date <= w.to)
+            .count();
+        assert_eq!(w.checks, in_week);
+        assert!(w.passed + w.failed <= w.checks);
+
+        // Ochiq nuqsonlar butun loyiha bo'yicha sanaladi.
+        let open = app
+            .quality
+            .iter()
+            .filter(|q| !q.defect.trim().is_empty() && q.fixed_at.is_none())
+            .count();
+        assert_eq!(w.defects_open, open);
+        assert!(w.overdue <= w.defects_open);
+        // Eng ko'p takrorlanganlar uchtadan oshmaydi.
+        assert!(w.top_defects.len() <= 3);
+        for pair in w.top_defects.windows(2) {
+            assert!(pair[0].1 >= pair[1].1);
+        }
+    }
+
+    /// TZ V.24: kunlik xulosaning har qatori bugungi yozuvlardan sanaladi
+    /// va to'siqlar soni prorab ekranidagi bilan bir xil.
+    #[test]
+    fn day_report_counts_todays_records() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let d = app.day_report();
+        let today = app.today;
+        assert_eq!(d.day, today);
+        assert_eq!(d.running, app.running_today().len());
+        assert_eq!(d.blockers, app.day_close().len());
+        assert_eq!(
+            d.workers,
+            app.timesheet
+                .iter()
+                .filter(|e| e.date == today && e.hours > 0.0)
+                .count()
+        );
+        assert_eq!(
+            d.machines,
+            app.machine_logs
+                .iter()
+                .filter(|l| l.date == today && l.hours > 0.0)
+                .count()
+        );
+        assert_eq!(
+            d.safety_new,
+            app.safety.iter().filter(|s| s.date == today).count()
+        );
+        assert!(d.material_cost >= 0.0);
+        assert!(d.hours >= 0.0);
+    }
+
+    /// TZ V.17: taklif faqat ombordagi qoldiq yetmaganda beriladi va
+    /// so'raladigan miqdor aynan yetishmaydigan qism bo'ladi.
+    #[test]
+    fn journal_request_only_when_stock_is_short() {
+        use crate::checks::{journal_requests, StockLine};
+        use crate::domain::{JournalEntry, MaterialNorm};
+
+        let day = chrono::NaiveDate::from_ymd_opt(2026, 6, 20).unwrap();
+        let task = test_task(10, 100.0, 40.0); // qolgan hajm: 60
+        let entry = JournalEntry {
+            id: 1,
+            project_id: 1,
+            date: day,
+            author: String::new(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers: 5,
+            machines: 0,
+            task_id: Some(10),
+            volume: 8.0,
+            unit: "m3".into(),
+            text: String::new(),
+            remarks: String::new(),
+            photos: String::new(),
+        };
+        let norm = MaterialNorm {
+            id: 1,
+            project_id: 1,
+            task_id: 10,
+            material_id: 3,
+            per_unit: 0.5,
+            tolerance: 0.0,
+            note: String::new(),
+        };
+        let line = |available: f64| StockLine {
+            material_id: 3,
+            available,
+            ..Default::default()
+        };
+
+        // Qolgan 60 × 0.5 = 30 kerak. Omborda 10 — 20 yetishmaydi.
+        let out = journal_requests(
+            std::slice::from_ref(&entry),
+            std::slice::from_ref(&norm),
+            std::slice::from_ref(&task),
+            &[line(10.0)],
+            day,
+        );
+        assert_eq!(out.len(), 1);
+        assert!((out[0].need - 30.0).abs() < 1e-9);
+        assert!((out[0].qty - 20.0).abs() < 1e-9);
+        assert_eq!(out[0].task_id, 10);
+
+        // Qoldiq yetarli — taklif berilmaydi.
+        let enough = journal_requests(
+            std::slice::from_ref(&entry),
+            std::slice::from_ref(&norm),
+            std::slice::from_ref(&task),
+            &[line(40.0)],
+            day,
+        );
+        assert!(enough.is_empty());
+
+        // Tugallangan ishga material so'ralmaydi.
+        let done = test_task(10, 100.0, 100.0);
+        assert!(journal_requests(
+            std::slice::from_ref(&entry),
+            std::slice::from_ref(&norm),
+            std::slice::from_ref(&done),
+            &[line(0.0)],
+            day,
+        )
+        .is_empty());
+
+        // Boshqa kunning yozuvi hisobga olinmaydi.
+        let mut other = entry.clone();
+        other.date = day - chrono::Duration::days(1);
+        assert!(journal_requests(
+            std::slice::from_ref(&other),
+            std::slice::from_ref(&norm),
+            std::slice::from_ref(&task),
+            &[line(0.0)],
+            day,
+        )
+        .is_empty());
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

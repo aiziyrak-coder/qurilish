@@ -52,6 +52,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (3, t("ql_tab_blocks")),
             (4, t("ql_tab_tests")),
             (5, t("ql_tab_risks")),
+            (6, t("ql_tab_week")),
         ] {
             if ui.selectable_label(tab == i, label).clicked() {
                 tab = i;
@@ -67,6 +68,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         3 => blocks_tab(ui, app),
         4 => tests_tab(ui, app, pid),
         5 => risks_tab(ui, app),
+        6 => week_tab(ui, app),
         _ => {
             if app.quality.is_empty() {
                 ui.add_space(40.0);
@@ -419,6 +421,102 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         app.quality_open = (app.quality_open != Some(id)).then_some(id);
     }
     super::notes::below_table(ui, app, NoteTarget::Quality, open_notes);
+}
+
+// ================================================================ Haftalik hisobot
+
+/// Hafta bo'yicha sifat xulosasi (TZ XIV.37).
+///
+/// Ball sifat modulidagi umumiy ball bilan bir xil qoidada hisoblanadi —
+/// hisobotdagi son ekrandagi bilan hech qachon farq qilmaydi.
+fn week_tab(ui: &mut egui::Ui, app: &mut App) {
+    let w = app.quality_week();
+
+    ui.label(
+        RichText::new(format!(
+            "{} — {}",
+            w.from.format("%d.%m.%Y"),
+            w.to.format("%d.%m.%Y")
+        ))
+        .size(11.5)
+        .color(theme::muted()),
+    );
+    ui.add_space(10.0);
+
+    stat_row(
+        ui,
+        vec![
+            stat(
+                t("ql_w_score"),
+                format!("{:.0}", w.score),
+                t("ql_w_score_hint"),
+                if w.score >= 80.0 {
+                    theme::ok()
+                } else if w.score >= 60.0 {
+                    theme::warn()
+                } else {
+                    theme::danger()
+                },
+            ),
+            stat(
+                t("ql_w_checks"),
+                w.checks.to_string(),
+                &format!("{} / {}", w.passed, w.failed),
+                theme::text(),
+            ),
+            stat(
+                t("ql_w_opened"),
+                w.defects_opened.to_string(),
+                t("ql_w_opened_hint"),
+                theme::text(),
+            ),
+            stat(
+                t("ql_w_closed"),
+                w.defects_closed.to_string(),
+                t("ql_w_closed_hint"),
+                theme::ok(),
+            ),
+            stat(
+                t("ql_w_open"),
+                w.defects_open.to_string(),
+                &format!("{} {}", w.overdue, t("ql_w_overdue")),
+                if w.defects_open == 0 {
+                    theme::ok()
+                } else {
+                    theme::warn()
+                },
+            ),
+        ],
+    );
+    ui.add_space(14.0);
+
+    if w.top_defects.is_empty() {
+        ui.label(
+            RichText::new(t("ql_w_no_defects"))
+                .size(12.5)
+                .color(theme::ok()),
+        );
+        return;
+    }
+
+    ui.label(RichText::new(t("ql_w_top")).size(13.5).strong());
+    ui.label(
+        RichText::new(t("ql_w_top_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+    for (name, count) in &w.top_defects {
+        ui.label(
+            RichText::new(format!(
+                "· {} — {} {}",
+                super::issues::truncate(name, 60),
+                count,
+                t("ql_w_times")
+            ))
+            .size(12.0),
+        );
+    }
 }
 
 // ================================================== Nazorat nuqtalari
