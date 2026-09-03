@@ -12208,3 +12208,156 @@ pub fn safety_day(
             .count(),
     }
 }
+
+// ================= XII.11, 18, 22, 25-27, XI.39. Material kartochkasi =================
+
+/// Materialning to'liq kartochkasi (TZ XII.11, 18, 22, 25-27).
+///
+/// Kartochka **yangi hisob qilmaydi**: har bo'lim o'z funksiyasidan
+/// olinadi — qoldiq ombordan, sarf normadan, ehtiyoj tayyorlikdan,
+/// yetkazib beruvchilar xariddan. Qiymati boshqa: material haqidagi
+/// hamma narsa bir joyda va uni ko'rish uchun beshta ekranni aylanish
+/// shart emas.
+#[derive(Debug, Clone, Default)]
+pub struct MaterialCard {
+    pub material_id: i64,
+    /// Ombor holati.
+    pub balance: f64,
+    pub reserved: f64,
+    pub available: f64,
+    pub below_min: bool,
+    /// Narx: katalogdagi va oxirgi xariddagi (TZ XI.39).
+    pub catalog_price: f64,
+    pub last_price: f64,
+    /// Narx o'zgarishi, foizda. Xarid bo'lmasa `None`.
+    pub price_change: Option<f64>,
+    /// Yetkazib beruvchilar: nomi, xaridlar soni, jami summa (TZ XII.18).
+    pub suppliers: Vec<(String, usize, f64)>,
+    /// Tasdiqlangan almashtiruvchilar: id, narx, qoldiq (TZ XII.11).
+    pub alternatives: Vec<(i64, f64, f64)>,
+    /// Normativ va haqiqiy sarf (TZ XII.22).
+    pub norm_total: f64,
+    pub fact_total: f64,
+    /// Yaqin ishlar uchun kerak bo'ladigan miqdor (TZ XII.25, 27).
+    pub needed_soon: f64,
+    /// Qaysi ishlar kutmoqda.
+    pub waiting_tasks: Vec<i64>,
+    /// Qachongacha kerak — eng erta ish boshlanishi (TZ XII.26).
+    pub need_by: Option<NaiveDate>,
+}
+
+impl MaterialCard {
+    /// Ortiqcha sarf: fakt normadan qancha ko'p (TZ XII.22).
+    pub fn overuse(&self) -> f64 {
+        (self.fact_total - self.norm_total).max(0.0)
+    }
+
+    /// Yaqin ehtiyoj qoldiqdan oshadimi (TZ XII.26).
+    pub fn short(&self) -> f64 {
+        (self.needed_soon - self.available).max(0.0)
+    }
+}
+
+/// Kartochka uchun manba.
+pub struct CardCtx<'a> {
+    pub materials: &'a [Material],
+    pub stock: &'a [StockLine],
+    pub purchases: &'a [Purchase],
+    pub alts: &'a [MaterialAlt],
+    pub tasks: &'a [Task],
+    pub readiness: &'a [Readiness],
+    pub consumption: &'a [ConsumptionLine],
+}
+
+/// TZ XII: bitta material bo'yicha to'liq kartochka.
+pub fn material_card(ctx: &CardCtx, material_id: i64) -> Option<MaterialCard> {
+    let m = ctx.materials.iter().find(|m| m.id == material_id)?;
+    let key = |s: &str| s.trim().to_lowercase();
+
+    let line = ctx.stock.iter().find(|l| l.material_id == material_id);
+
+    // Yetkazib beruvchilar: shu material nomi bo'yicha xaridlar.
+    let mut suppliers: Vec<(String, usize, f64)> = Vec::new();
+    let mut last: Option<(&Purchase, f64)> = None;
+    for p in ctx
+        .purchases
+        .iter()
+        .filter(|p| p.material_id == Some(material_id) || key(&p.title) == key(&m.name))
+    {
+        match suppliers
+            .iter_mut()
+            .find(|(n, _, _)| key(n) == key(&p.supplier))
+        {
+            Some(e) => {
+                e.1 += 1;
+                e.2 += p.amount();
+            }
+            None => suppliers.push((p.supplier.clone(), 1, p.amount())),
+        }
+        if p.price > 0.0 && last.map(|(o, _)| p.date > o.date).unwrap_or(true) {
+            last = Some((p, p.price));
+        }
+    }
+    suppliers.sort_by(|a, b| b.2.total_cmp(&a.2));
+
+    // Tasdiqlangan almashtiruvchilar.
+    let alternatives: Vec<(i64, f64, f64)> = ctx
+        .alts
+        .iter()
+        .filter(|a| a.material_id == material_id && a.approved())
+        .filter_map(|a| {
+            let other = ctx.materials.iter().find(|x| x.id == a.alt_id)?;
+            let free = ctx
+                .stock
+                .iter()
+                .find(|l| l.material_id == a.alt_id)
+                .map_or(0.0, |l| l.available);
+            Some((other.id, other.price, free))
+        })
+        .collect();
+
+    // Yaqin ishlar: tayyorlik hisobidan (bir manbadan).
+    let waiting: Vec<&Readiness> = ctx
+        .readiness
+        .iter()
+        .filter(|r| r.material_id == material_id)
+        .collect();
+
+    let last_price = last.map(|(_, p)| p).unwrap_or(0.0);
+    Some(MaterialCard {
+        material_id,
+        balance: line.map_or(0.0, |l| l.balance),
+        reserved: line.map_or(0.0, |l| l.reserved),
+        available: line.map_or(0.0, |l| l.available),
+        below_min: line.is_some_and(|l| l.below_min),
+        catalog_price: m.price,
+        last_price,
+        price_change: (last_price > 0.0 && m.price > 0.0)
+            .then(|| (last_price - m.price) * 100.0 / m.price),
+        suppliers,
+        alternatives,
+        norm_total: ctx
+            .consumption
+            .iter()
+            .filter(|c| c.material_id == material_id)
+            .map(|c| c.norm)
+            .sum(),
+        fact_total: ctx
+            .consumption
+            .iter()
+            .filter(|c| c.material_id == material_id)
+            .map(|c| c.fact)
+            .sum(),
+        needed_soon: waiting.iter().map(|r| r.needed).sum(),
+        waiting_tasks: waiting.iter().map(|r| r.task_id).collect(),
+        need_by: waiting
+            .iter()
+            .filter_map(|r| {
+                ctx.tasks
+                    .iter()
+                    .find(|t| t.id == r.task_id)
+                    .map(|t| t.fact_start.unwrap_or(t.plan_start))
+            })
+            .min(),
+    })
+}

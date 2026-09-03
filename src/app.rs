@@ -2366,6 +2366,23 @@ impl App {
         )
     }
 
+    /// Material kartochkasi: qoldiq, narx, ta'minotchi, analog, sarf
+    /// va yaqin ehtiyoj (TZ XII.11, 18, 22, 25-27).
+    pub fn material_card(&self, material_id: i64) -> Option<checks::MaterialCard> {
+        checks::material_card(
+            &checks::CardCtx {
+                materials: &self.materials,
+                stock: &self.stock(),
+                purchases: &self.purchases,
+                alts: &self.material_alts,
+                tasks: &self.tasks,
+                readiness: &self.readiness(),
+                consumption: &self.consumption(),
+            },
+            material_id,
+        )
+    }
+
     /// Kechikish sabablari (TZ XVII.7).
     pub fn delay_causes(&self) -> Vec<checks::TaskDelay> {
         checks::delay_causes(&checks::DelayCtx {

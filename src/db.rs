@@ -10450,6 +10450,68 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         );
     }
 
+    /// TZ XII: kartochka yangi hisob qilmaydi — har bo'lim o'z
+    /// funksiyasidan olinadi.
+    #[test]
+    fn material_card_collects_from_modules() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let stock = app.stock();
+        let readiness = app.readiness();
+        let consumption = app.consumption();
+        let mut checked = 0;
+
+        for m in app.materials.clone() {
+            let Some(c) = app.material_card(m.id) else {
+                continue;
+            };
+            checked += 1;
+            assert_eq!(c.material_id, m.id);
+            assert!((c.catalog_price - m.price).abs() < 0.001);
+
+            // Qoldiq ombordan.
+            if let Some(l) = stock.iter().find(|l| l.material_id == m.id) {
+                assert!((c.available - l.available).abs() < 0.001);
+                assert!((c.balance - l.balance).abs() < 0.001);
+                assert_eq!(c.below_min, l.below_min);
+            }
+
+            // Yaqin ehtiyoj tayyorlikdan — bir manbadan.
+            let need: f64 = readiness
+                .iter()
+                .filter(|r| r.material_id == m.id)
+                .map(|r| r.needed)
+                .sum();
+            assert!((c.needed_soon - need).abs() < 0.001);
+            assert_eq!(
+                c.waiting_tasks.len(),
+                readiness.iter().filter(|r| r.material_id == m.id).count()
+            );
+
+            // Sarf normativ hisobidan.
+            let fact: f64 = consumption
+                .iter()
+                .filter(|x| x.material_id == m.id)
+                .map(|x| x.fact)
+                .sum();
+            assert!((c.fact_total - fact).abs() < 0.001);
+            assert!(c.overuse() >= 0.0);
+            assert!(c.short() >= 0.0);
+
+            // Almashtiruvchilar faqat tasdiqlanganlari.
+            for (id, _, _) in &c.alternatives {
+                assert!(app
+                    .material_alts
+                    .iter()
+                    .any(|a| a.material_id == m.id && a.alt_id == *id && a.approved()));
+            }
+        }
+        assert!(checked > 0, "kartochka umuman ochilmadi");
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

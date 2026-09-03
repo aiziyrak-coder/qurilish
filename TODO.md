@@ -27,9 +27,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | VII. Texnik nazorat kabineti | 38 | 32 | 3 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 26 | 9 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
-| X. Xaridlar | 48 | 43 | 3 | 2 | 2 |
-| XI. Ombor | 48 | 45 | 2 | 1 | 1 |
-| XII. Materiallar | 41 | 33 | 6 | 2 | 2 |
+| X. Xaridlar | 48 | 44 | 2 | 2 | 2 |
+| XI. Ombor | 48 | 46 | 1 | 1 | 1 |
+| XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
 | XIII. Tabel | 44 | 37 | 1 | 6 | 6 |
 | XIV. Sifat | 41 | 38 | 1 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 38 | 0 | 3 | 3 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 17 | 28 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 11 | 1 | 2 | 2 |
-| **Jami** | **700** | **576** | **78** | **46** | **46** |
+| **Jami** | **700** | **584** | **70** | **46** | **46** |
 
-Ya'ni **~82 % to'liq**, **~11 % qisman**, **~7 % hali yo'q**.
+Ya'ni **~83 % to'liq**, **~10 % qisman**, **~7 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -391,7 +391,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 14. Narx o'zgarishini nazorat qilish — *takliflar va obyektlar kesimi*
 - [x] 15. Muqobil yetkazib beruvchi izlash — *bir arizaga bir necha taklif*
 - [~] 16. Yetkazib beruvchini tekshirish — *STIR, taqiq belgisi*
-- [~] 17. Materialni tekshirish
+- [x] 17. Materialni tekshirish — *moslik tekshiruvi va kartochka*
 - [x] 18. Texnik kelishuv
 - [x] 19. Materialni almashtirish — *tasdiqlangan analog talab qilinadi*
 - [x] 20. Buyurtma shakllantirish — *xarid, to'lov va zanjir*
@@ -466,7 +466,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 36. Xaridlar bilan bog'lanish
 - [x] 37. Buxgalteriya bilan bog'lanish — *aylanma qaydnoma `.xlsx`*
 - [x] 38. Materialning o'rtacha qiymati — *vaznlangan o'rtacha*
-- [~] 39. Narxlarni nazorat qilish
+- [x] 39. Narxlarni nazorat qilish — *katalog va oxirgi xarid narxi*
 - [x] 40. Rahbar paneli — *«Rahbar» ekranida*
 - [x] 41. Uzoq turgan materiallar — *90 kun harakatsiz → sariq*
 - [x] 42. Obyektlar orasida qayta taqsimlash — *ortiqcha va yetishmayotgan solishtiriladi; minimal zaxiraga tegilmaydi*
@@ -491,23 +491,23 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. AI materialning loyihaga mosligini tekshirishi
 - [x] 9. Analoglar — *tasdiqlangan almashtiruvchi*
 - [x] 10. Materiallarni solishtirish — *narx farqi va qoldiq*
-- [~] 11. Almashtiruvchi tanlash — *narx, qoldiq va tasdiq holati ko'rsatiladi*
+- [x] 11. Almashtiruvchi tanlash — *kartochkada narx va qoldiq bilan*
 - [x] 12. Juda muhim qoida — *bir material — bitta kartochka*
 - [x] 13. Sertifikatlar
 - [ ] 🔒 14. AI OCR sertifikatlar
 - [x] 15. AI sertifikatni tekshiradi — *raqam, muddat va ishlatilgani*
 - [x] 16. Hujjat amal qilish muddati
 - [x] 17. Material → partiya — *ombor partiyalari*
-- [~] 18. Material → yetkazib beruvchi — *xarid orqali*
+- [x] 18. Material → yetkazib beruvchi — *kartochkada ta'minotchilar ro'yxati*
 - [x] 19. Narx tarixi — *kirimlardan, o'zgarish foizi bilan*
 - [ ] 🔒 20. Bozor narxi
 - [x] 21. Material → sarf normalari
-- [~] 22. AI ortiqcha sarfni tahlil qilishi — *farq va summa hisoblanadi*
+- [x] 22. AI ortiqcha sarfni tahlil qilishi — *kartochkada fakt/norma*
 - [x] 23. Obyektlar bo'yicha materiallar
 - [x] 24. Materiallarni qayta taqsimlash
-- [~] 25. Tez orada kerak bo'ladigan materiallar — *analitikada*
-- [~] 26. AI oldindan ogohlantirishi — *zaxiradan kam*
-- [~] 27. GPR bo'yicha materiallar — *ish tayyorligi ko'rinishi*
+- [x] 25. Tez orada kerak bo'ladigan materiallar — *kartochkada muddat bilan*
+- [x] 26. AI oldindan ogohlantirishi — *yetishmovchilik va muddat*
+- [x] 27. GPR bo'yicha materiallar — *kutayotgan ishlar ro'yxati*
 - [x] 28. Ish boshlanishidan oldin mavjudlikni nazorat qilish — *ikki hafta oldin*
 - [x] 29. Material → ijro hujjati — *ish orqali*
 - [x] 30. To'liq kuzatuvchanlik — *yetkazuvchi → partiya → ish → hujjat*

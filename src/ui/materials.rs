@@ -199,6 +199,8 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
 }
 
 fn table(ui: &mut egui::Ui, app: &mut App) {
+    let card_key = egui::Id::new("mat_card");
+    let mut open_card: Option<i64> = None;
     let mut edited: Option<Material> = None;
     let mut removed: Option<i64> = None;
     let lines = app.stock();
@@ -393,6 +395,16 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                             }
                         });
 
+                        // Kartochka: material haqidagi hamma narsa bir
+                        // joyda — beshta ekranni aylanish shart emas.
+                        if ui
+                            .small_button(t("mc_open"))
+                            .on_hover_text(t("mc_open_hint"))
+                            .clicked()
+                        {
+                            open_card = Some(m.id);
+                        }
+
                         if ui
                             .small_button(RichText::new("x").color(theme::danger()))
                             .clicked()
@@ -417,6 +429,20 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     if let Some(id) = removed {
         app.db.del("material", id);
         app.reload_modules();
+    }
+
+    // Kartochka jadval ostida ochiladi; o'sha tugma qayta bosilsa yopiladi.
+    let mut shown = ui.data(|d| d.get_temp::<i64>(card_key));
+    if let Some(id) = open_card {
+        shown = if shown == Some(id) { None } else { Some(id) };
+    }
+    match shown {
+        Some(id) => {
+            ui.data_mut(|d| d.insert_temp(card_key, id));
+            ui.add_space(10.0);
+            card_panel(ui, app, id);
+        }
+        None => ui.data_mut(|d| d.remove::<i64>(card_key)),
     }
 }
 
@@ -1337,6 +1363,205 @@ fn ready_tab(ui: &mut egui::Ui, app: &mut App) {
                         ui.end_row();
                     }
                 });
+        });
+}
+
+// ================================================================ Kartochka
+
+/// Material kartochkasi (TZ XII.11, 18, 22, 25-27, XI.39).
+///
+/// Kartochka yangi hisob qilmaydi: har bo'lim o'z funksiyasidan olinadi.
+/// Qiymati boshqa — material haqidagi hamma narsa bir joyda va uni
+/// ko'rish uchun beshta ekranni aylanish shart emas.
+fn card_panel(ui: &mut egui::Ui, app: &mut App, material_id: i64) {
+    let Some(c) = app.material_card(material_id) else {
+        return;
+    };
+    let name = material_label(app, material_id);
+    let unit = app
+        .materials
+        .iter()
+        .find(|m| m.id == material_id)
+        .map(|m| m.unit.clone())
+        .unwrap_or_default();
+
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(egui::Stroke::new(1.0_f32, theme::line()))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(14, 12))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&name).size(13.5).strong());
+                ui.label(
+                    RichText::new(format!("#{}", c.material_id))
+                        .size(10.5)
+                        .monospace()
+                        .color(theme::muted()),
+                );
+            });
+            ui.add_space(6.0);
+
+            // ---------- Ombor va narx ----------
+            ui.horizontal_wrapped(|ui| {
+                let item = |ui: &mut egui::Ui, label: &str, value: String, colour| {
+                    ui.label(
+                        RichText::new(format!("{label}: "))
+                            .size(11.5)
+                            .color(theme::muted()),
+                    );
+                    ui.label(RichText::new(value).size(12.5).color(colour));
+                    ui.add_space(10.0);
+                };
+                item(
+                    ui,
+                    t("mc_available"),
+                    format!("{} {}", trim_num(c.available), unit),
+                    if c.below_min {
+                        theme::danger()
+                    } else {
+                        theme::text()
+                    },
+                );
+                item(
+                    ui,
+                    t("mc_balance"),
+                    format!("{} {}", trim_num(c.balance), unit),
+                    theme::muted(),
+                );
+                item(
+                    ui,
+                    t("mc_reserved"),
+                    format!("{} {}", trim_num(c.reserved), unit),
+                    theme::muted(),
+                );
+                item(ui, t("mc_price"), money(c.catalog_price), theme::text());
+                if let Some(change) = c.price_change {
+                    item(
+                        ui,
+                        t("mc_last_price"),
+                        format!("{} ({change:+.0}%)", money(c.last_price)),
+                        if change.abs() > 10.0 {
+                            theme::warn()
+                        } else {
+                            theme::muted()
+                        },
+                    );
+                }
+            });
+
+            // ---------- Sarf (TZ XII.22) ----------
+            if c.norm_total > 0.0 || c.fact_total > 0.0 {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {} / {} {} · {}: {}",
+                        t("mc_use"),
+                        trim_num(c.fact_total),
+                        trim_num(c.norm_total),
+                        unit,
+                        t("mc_overuse"),
+                        trim_num(c.overuse())
+                    ))
+                    .size(12.0)
+                    .color(if c.overuse() > 0.0 {
+                        theme::warn()
+                    } else {
+                        theme::muted()
+                    }),
+                );
+            }
+
+            // ---------- Yaqin ehtiyoj (TZ XII.25-27) ----------
+            if c.needed_soon > 0.0 {
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {} {} · {}: {} · {}: {}",
+                        t("mc_needed"),
+                        trim_num(c.needed_soon),
+                        unit,
+                        t("mc_short"),
+                        trim_num(c.short()),
+                        t("mc_need_by"),
+                        c.need_by
+                            .map(|d| d.format("%d.%m.%Y").to_string())
+                            .unwrap_or_else(|| t("dash").to_string())
+                    ))
+                    .size(12.0)
+                    .color(if c.short() > 0.0 {
+                        theme::danger()
+                    } else {
+                        theme::muted()
+                    }),
+                );
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {}",
+                        t("mc_waiting"),
+                        c.waiting_tasks
+                            .iter()
+                            .filter_map(|id| app.task(*id))
+                            .map(|x| super::issues::truncate(&x.name, 22))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ))
+                    .size(11.0)
+                    .color(theme::muted()),
+                );
+            }
+
+            // ---------- Yetkazib beruvchilar (TZ XII.18) ----------
+            if !c.suppliers.is_empty() {
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(t("mc_suppliers"))
+                        .size(12.0)
+                        .strong()
+                        .color(theme::muted()),
+                );
+                for (name, deals, amount) in c.suppliers.iter().take(4) {
+                    ui.label(
+                        RichText::new(format!(
+                            "· {} — {} {} · {}",
+                            super::issues::truncate(name, 26),
+                            deals,
+                            t("mat_maker_deals"),
+                            money(*amount)
+                        ))
+                        .size(11.5),
+                    );
+                }
+            }
+
+            // ---------- Almashtiruvchilar (TZ XII.11) ----------
+            if !c.alternatives.is_empty() {
+                ui.add_space(6.0);
+                ui.label(
+                    RichText::new(t("mc_alternatives"))
+                        .size(12.0)
+                        .strong()
+                        .color(theme::muted()),
+                );
+                for (id, price, free) in &c.alternatives {
+                    let cheaper = *price > 0.0 && c.catalog_price > 0.0 && *price < c.catalog_price;
+                    ui.label(
+                        RichText::new(format!(
+                            "· {} — {} · {}: {}",
+                            super::issues::truncate(&material_label(app, *id), 26),
+                            money(*price),
+                            t("mc_free"),
+                            trim_num(*free)
+                        ))
+                        .size(11.5)
+                        .color(if cheaper {
+                            theme::ok()
+                        } else {
+                            theme::text()
+                        }),
+                    );
+                }
+            }
         });
 }
 
