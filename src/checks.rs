@@ -582,18 +582,26 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
     }
 
     // --- III.6 Yetishmayotgan ishlar: GPR da bor, smetada yo'q ---
-    let est_names: std::collections::HashSet<String> =
-        ctx.items.iter().map(|i| norm_name(&i.name)).collect();
+    // Javob `work_is_estimated` dan olinadi: «tushib qolgan ish» degan
+    // savolga ikki joyda ikki xil javob bo'lmasligi kerak.
     for task in ctx.tasks {
-        let n = norm_name(&task.name);
-        if n.is_empty() || est_names.contains(&n) {
+        if work_is_estimated(task, ctx.items) {
             continue;
         }
+        // Bo'lim smetada umuman yo'q bo'lsa — bu jiddiy bo'shliq. Bo'lim
+        // bor, faqat shu nom topilmasa — ish boshqa nom bilan yozilgan
+        // bo'lishi mumkin, shuning uchun ogohlantirish darajasi.
+        let section_present =
+            task.section != Section::None && ctx.items.iter().any(|i| i.section == task.section);
         out.push(b.make(
             "EST_MISSING",
             "SM",
             task.section,
-            Severity::Major,
+            if section_present {
+                Severity::Warning
+            } else {
+                Severity::Major
+            },
             crate::i18n::t("chk_missing_title").to_string(),
             format!("«{}» {}", task.name, crate::i18n::t("chk_missing_desc")),
             task.wbs.clone(),
@@ -4375,6 +4383,73 @@ mod tests {
             pinned: false,
             volume,
             unit: unit.into(),
+        }
+    }
+
+    /// TZ III.6, 10: «tushib qolgan ish» qat'iy nom tengligiga tayanmaydi.
+    ///
+    /// Grafik va smeta nomlari hech qachon harfma-harf mos kelmaydi;
+    /// tenglikka tayansak, tekshiruv deyarli har bir ishni ko'rsatib,
+    /// foydasiz shovqinga aylanardi.
+    #[test]
+    fn missing_work_matching_tolerates_wording() {
+        let items = vec![
+            item(
+                1,
+                "Monolit temir-beton karkas qurish",
+                "m3",
+                100.0,
+                1.0,
+                100.0,
+            ),
+            item(2, "Deraza va vitrajlar montaji", "m2", 20.0, 1.0, 20.0),
+        ];
+
+        // Mazmunli so'zlar ustma-ust tushadi — bu o'sha ish.
+        assert!(work_is_estimated(
+            &task("Monolit karkas qurish, 4-6 qavat", 10.0, "m3"),
+            &items
+        ));
+        // Aynan bir xil nom.
+        assert!(work_is_estimated(
+            &task("Deraza va vitrajlar montaji", 10.0, "m2"),
+            &items
+        ));
+        // Umuman boshqa ish — topilmaydi.
+        assert!(!work_is_estimated(
+            &task("Yong'in signalizatsiyasi", 1.0, "kompl"),
+            &items
+        ));
+
+        // Aniq bog'lanish nomdan ustun turadi.
+        let mut linked = items.clone();
+        linked[0].task_id = Some(7);
+        let mut t = task("Butunlay boshqacha nom", 1.0, "m3");
+        t.id = 7;
+        assert!(work_is_estimated(&t, &linked));
+
+        // Nomsiz ish haqida xulosa chiqarilmaydi.
+        assert!(work_is_estimated(&task("", 1.0, ""), &items));
+    }
+
+    /// Ikki joyda bitta javob: qoida va ro'yxat bir xil ishlarni ko'rsatadi.
+    #[test]
+    fn missing_works_agrees_with_the_rule() {
+        let items = vec![item(1, "Pol styashkasi", "m2", 10.0, 1.0, 10.0)];
+        let mut a = task("Pol styashkasini qurish", 10.0, "m2");
+        a.id = 1;
+        let mut b = task("Fasad ishlari", 10.0, "m2");
+        b.id = 2;
+        let tasks = vec![a, b];
+
+        let listed = missing_works(&tasks, &items);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].task_id, 2);
+        for t in &tasks {
+            assert_eq!(
+                work_is_estimated(t, &items),
+                !listed.iter().any(|m| m.task_id == t.id)
+            );
         }
     }
 
@@ -12588,6 +12663,42 @@ pub fn project_volumes(elements: &[Element], items: &[EstimateItem]) -> Vec<Volu
     out
 }
 
+/// Smeta qatori ishni qoplaydimi (TZ III.6, 10).
+///
+/// Nomlar hech qachon harfma-harf mos kelmaydi: grafikda «Monolit karkas,
+/// 4-6 qavat», smetada «Monolit temir-beton karkas qurish». Shuning uchun
+/// uch bosqich: aniq bog'lanish, aynan bir xil nom va **mazmunli
+/// so'zlarning ustma-ust tushishi**. Qat'iy tenglikda tekshiruv deyarli
+/// har bir ishni «tushib qolgan» deb ko'rsatardi — bunday shovqin
+/// tekshiruvni foydasiz qiladi.
+pub fn work_is_estimated(task: &Task, items: &[EstimateItem]) -> bool {
+    let name = norm_name(&task.name);
+    if name.is_empty() {
+        return true;
+    }
+    // Mazmunli so'zlar: qisqalari («va», «3 mm») bog'lanish bermaydi.
+    let words: Vec<&str> = name.split(' ').filter(|w| w.chars().count() >= 4).collect();
+
+    for it in items {
+        if it.task_id == Some(task.id) {
+            return true;
+        }
+        let other = norm_name(&it.name);
+        if other == name || other.contains(&name) || name.contains(&other) {
+            return true;
+        }
+        if words.is_empty() {
+            continue;
+        }
+        let hits = words.iter().filter(|w| other.contains(**w)).count();
+        // Yarmi va undan ko'pi mos kelsa — bu o'sha ish.
+        if hits * 2 >= words.len() {
+            return true;
+        }
+    }
+    false
+}
+
 /// Loyihada bor, smetada yo'q ish (TZ III.10).
 #[derive(Debug, Clone)]
 pub struct MissingWork {
@@ -12604,14 +12715,9 @@ pub struct MissingWork {
 /// Boshlangan ish smetasiz bajarilyapti degani — uni keyin qanday
 /// to'lash noma'lum. Shuning uchun boshlanganlari birinchi turadi.
 pub fn missing_works(tasks: &[Task], items: &[EstimateItem]) -> Vec<MissingWork> {
-    let norm = |s: &str| s.trim().to_lowercase();
     let mut out: Vec<MissingWork> = tasks
         .iter()
-        .filter(|t| {
-            !items
-                .iter()
-                .any(|i| i.task_id == Some(t.id) || norm(&i.name) == norm(&t.name))
-        })
+        .filter(|t| !work_is_estimated(t, items))
         .map(|t| MissingWork {
             task_id: t.id,
             section: t.section,
