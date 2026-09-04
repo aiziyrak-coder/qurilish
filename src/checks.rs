@@ -280,6 +280,26 @@ fn norm_name(s: &str) -> String {
         .join(" ")
 }
 
+/// Smeta qatoriga mos ish (TZ III.5-7).
+///
+/// Avval **aniq bog'lanish**: foydalanuvchi qatorni ishga o'zi bog'lagan
+/// bo'lsa, nom qanday yozilganidan qat'i nazar o'sha ish olinadi. Keyin
+/// nom bo'yicha aynan moslik. Taxminiy moslik bu yerda ishlatilmaydi:
+/// hajm va o'lchov birligi solishtiriladigan joyda noto'g'ri juftlik
+/// noto'g'ri xulosaga olib keladi.
+fn task_for_item<'a>(
+    it: &EstimateItem,
+    tasks: &'a [Task],
+    by_name: &HashMap<String, &'a Task>,
+) -> Option<&'a Task> {
+    if let Some(id) = it.task_id {
+        if let Some(t) = tasks.iter().find(|t| t.id == id) {
+            return Some(t);
+        }
+    }
+    by_name.get(&norm_name(&it.name)).copied()
+}
+
 /// O'lchov birligining o'lchamliligi: uzunlik, yuza, hajm, massa, dona.
 fn unit_dim(u: &str) -> &'static str {
     let u = u.trim().to_lowercase().replace(['.', ' '], "");
@@ -429,7 +449,7 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
             ));
             continue;
         }
-        if let Some(task) = task_by_name.get(&norm_name(&it.name)) {
+        if let Some(task) = task_for_item(it, ctx.tasks, &task_by_name) {
             if !task.unit.trim().is_empty()
                 && unit_dim(&task.unit) != "?"
                 && unit_dim(&task.unit) != unit_dim(&it.unit)
@@ -460,7 +480,7 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
     // --- III.6 Hajmlar: loyiha bo'yicha hajm bilan solishtirish ---
     let (dev_pct, _) = ctx.threshold("EST_VOLUME", 5.0);
     for it in ctx.items {
-        let Some(task) = task_by_name.get(&norm_name(&it.name)) else {
+        let Some(task) = task_for_item(it, ctx.tasks, &task_by_name) else {
             continue;
         };
         if task.volume <= 0.0 || it.qty <= 0.0 {
@@ -662,7 +682,7 @@ pub fn cost_summary(ctx: &Ctx) -> CostSummary {
     let task_by_name: HashMap<String, &Task> =
         ctx.tasks.iter().map(|t| (norm_name(&t.name), t)).collect();
     for it in ctx.items {
-        let Some(task) = task_by_name.get(&norm_name(&it.name)) else {
+        let Some(task) = task_for_item(it, ctx.tasks, &task_by_name) else {
             continue;
         };
         if task.volume <= 0.0 || it.qty <= 0.0 {
@@ -4384,6 +4404,33 @@ mod tests {
             volume,
             unit: unit.into(),
         }
+    }
+
+    /// TZ III.5-7: qatorni ishga bog'lash nomdan ustun turadi.
+    ///
+    /// Foydalanuvchi bog'lagan bo'lsa, nom boshqacha yozilgani hajm va
+    /// birlik solishtiruvini to'xtatmasligi kerak.
+    #[test]
+    fn explicit_link_beats_the_name() {
+        let mut t = task("Monolit karkas", 100.0, "m3");
+        t.id = 5;
+        let tasks = vec![t];
+
+        // Nomi boshqacha, lekin ishga bog'langan va birligi mos emas.
+        let mut it = item(1, "Karkas qurish ishlari", "m2", 100.0, 1.0, 100.0);
+        it.task_id = Some(5);
+
+        let mut f = empty();
+        f.tasks = tasks;
+        f.items = vec![it];
+        f.declared = 100.0;
+        let issues = check_estimate(&f.ctx());
+        assert!(
+            issues
+                .iter()
+                .any(|i| i.title == crate::i18n::t("chk_unit_title")),
+            "bog'langan qatorda birlik tekshirilmadi"
+        );
     }
 
     /// TZ III.6, 10: «tushib qolgan ish» qat'iy nom tengligiga tayanmaydi.
