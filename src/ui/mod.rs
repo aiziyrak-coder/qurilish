@@ -1345,6 +1345,78 @@ mod screen_tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// Diagnostika: har bir ekranning kadr vaqti.
+    ///
+    /// Sinov emas — o'lchov: `cargo test -- --ignored screen_timing
+    /// --nocapture`. Sekin ekranni topish uchun ishlatiladi; chegara
+    /// qo'yilmaydi, chunki u mashinaga bog'liq.
+    #[test]
+    #[ignore = "diagnostika: kadr vaqtini o'lchaydi"]
+    fn screen_timing() {
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        app.auto_check(crate::domain::IssueModule::Project);
+
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app);
+
+        let mut rows: Vec<(String, f64)> = Vec::new();
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                app.screen = *s;
+                // Birinchi kadr qizdiradi, keyingi beshtasi o'lchanadi.
+                frame(&ctx, &mut app);
+                let t0 = std::time::Instant::now();
+                for _ in 0..5 {
+                    frame(&ctx, &mut app);
+                }
+                rows.push((s.label().to_string(), t0.elapsed().as_secs_f64() * 200.0));
+            }
+        }
+        rows.sort_by(|a, b| b.1.total_cmp(&a.1));
+        for (name, ms) in &rows {
+            println!("{ms:8.2} ms · {name}");
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Tab kalitlari ro'yxati kod bilan mos turishi kerak.
+    ///
+    /// Ro'yxat qo'lda yuritiladi, shuning uchun u eskirib qolishi mumkin:
+    /// yangi tab qo'shilib, sinovga kirmay qolsa, chizilmagan ekran
+    /// sezilmay ketardi. Shu sababli kalitlar manbadan o'qib solishtiriladi.
+    #[test]
+    fn tab_key_list_matches_the_code() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui");
+        let mut found: Vec<String> = Vec::new();
+        for entry in std::fs::read_dir(&dir).expect("src/ui") {
+            let path = entry.expect("fayl").path();
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).expect("o'qish");
+            for part in src.split("Id::new(\"").skip(1) {
+                let Some(key) = part.split('"').next() else {
+                    continue;
+                };
+                // Faqat tab tanlovi kalitlari: ular `_tab` bilan tugaydi.
+                if key.contains("_tab") && !found.iter().any(|k| k == key) {
+                    found.push(key.to_string());
+                }
+            }
+        }
+        assert!(!found.is_empty(), "manbada tab kaliti topilmadi");
+        for key in &found {
+            assert!(
+                TAB_KEYS.contains(&key.as_str()),
+                "{key} sinov ro'yxatida yo'q — yangi tab qo'shilgan bo'lsa, TAB_KEYS ga qo'shing"
+            );
+        }
+    }
+
     /// Chekka ma'lumotda ham ekranlar yiqilmaydi.
     ///
     /// Nolga bo'lish, bo'sh matn, nol hajm va juda katta sonlar — bular
