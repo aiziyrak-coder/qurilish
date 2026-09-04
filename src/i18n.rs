@@ -6002,6 +6002,53 @@ mod tests {
     /// Kodda ishlatilgan har bir kalit tarjima ro'yxatida bo'lishi kerak.
     ///
     /// Bu sinov `?` belgisining interfeysga chiqib ketishini oldini oladi:
+    /// Har bir sanaladigan qiymatning nomi tarjima qilingan bo'lsin.
+    ///
+    /// `enum_kind!` makrosi ichidagi kalitlar `t("...")` ko'rinishida
+    /// yozilmaydi, shuning uchun ular yuqoridagi tekshiruvga tushmaydi.
+    /// Kalit xato yozilsa, interfeysda qiymat o'rniga «?» chiqadi —
+    /// buni sinov ushlashi kerak.
+    #[test]
+    fn every_enum_value_has_a_name() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        collect(&root, &mut files);
+
+        let mut checked = 0usize;
+        let mut missing: Vec<String> = Vec::new();
+        for f in &files {
+            let text = std::fs::read_to_string(f).unwrap_or_default();
+            for line in text.lines() {
+                let line = line.trim();
+                // `Working => "working", "ms_working";`
+                if !line.ends_with("\";") || !line.contains("=> \"") {
+                    continue;
+                }
+                let quotes: Vec<&str> = line.split('"').collect();
+                // Oxirgi qo'shtirnoq ichidagi bo'lak — i18n kaliti.
+                let Some(key) = quotes.iter().rev().nth(1) else {
+                    continue;
+                };
+                if key.is_empty()
+                    || !key
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                {
+                    continue;
+                }
+                checked += 1;
+                if lookup(key).is_none() {
+                    missing.push(format!(
+                        "{}: {key}",
+                        f.file_name().unwrap_or_default().to_string_lossy()
+                    ));
+                }
+            }
+        }
+        assert!(checked > 100, "sanaladigan qiymatlar topilmadi: {checked}");
+        assert!(missing.is_empty(), "nomi yo'q qiymatlar: {missing:?}");
+    }
+
     /// Ruscha tarjima o'zbekchasidan nusxa bo'lib qolmasin.
     ///
     /// Ikki til bir xil yozilishi faqat atoqli ot va qisqartmalarda
