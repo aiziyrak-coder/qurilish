@@ -1,0 +1,515 @@
+//! Server ombori: foydalanuvchilar, seanslar, o'zgarishlar va imzolar.
+//!
+//! Server **qurilish mantiqini takrorlamaydi**. Barcha hisob-kitob desktop
+//! ilovada qoladi; server uchta ishni bajaradi:
+//!
+//! 1. **Kim kirgan** — parol va seans; rol bo'yicha huquq.
+//! 2. **Nima o'zgargan** — qurilmalardan kelgan paketlarni tartib bilan
+//!    saqlaydi va boshqalarga tarqatadi.
+//! 3. **Kim imzoladi** — hujjat imzosi: kim, qachon va **nimani** imzolagani
+//!    (matn xesh-yig'indisi bilan).
+//!
+//! Paket formati desktop ilovaniki bilan bir xil — bu ataylab: server yangi
+//! format o'ylab topmaydi, shu sababli ikkala tomonda ma'lumot bir xil
+//! tushuniladi.
+
+use rusqlite::{params, Connection, OptionalExtension};
+use std::path::Path;
+use std::sync::Mutex;
+
+/// Foydalanuvchi.
+#[derive(Debug, Clone)]
+pub struct User {
+    pub id: i64,
+    pub login: String,
+    pub name: String,
+    /// Desktop ilovadagi rol kodi (`admin`, `foreman`, `supervisor`, ...).
+    pub role: String,
+    pub active: bool,
+}
+
+/// Qurilmadan kelgan bitta o'zgarishlar paketi.
+#[derive(Debug, Clone)]
+pub struct Change {
+    pub id: i64,
+    pub project: String,
+    /// Paket matni — desktop ilova formatida.
+    pub body: String,
+    pub author: String,
+    pub at: String,
+    pub rows: i64,
+}
+
+/// Hujjat imzosi.
+#[derive(Debug, Clone)]
+pub struct Signature {
+    pub id: i64,
+    pub project: String,
+    /// Hujjat raqami — desktop ilovadagi ijro hujjati bilan bog'lanadi.
+    pub document: String,
+    pub user: String,
+    pub role: String,
+    pub at: String,
+    /// Imzolangan matnning xesh-yig'indisi.
+    pub digest: String,
+    /// Rad etilgan bo'lsa sababi; bo'sh bo'lsa — tasdiqlangan.
+    pub rejected: String,
+}
+
+/// Baza. Bitta ulanish mutex ostida: server kichik va yozuvlar qisqa.
+pub struct Store {
+    conn: Mutex<Connection>,
+}
+
+impl Store {
+    /// Bazani ochadi va sxemani yaratadi.
+    pub fn open(path: &Path) -> Result<Self, String> {
+        let conn = Connection::open(path).map_err(|e| e.to_string())?;
+        // WAL — bir vaqtda o'qish va yozish uchun.
+        let _ = conn.pragma_update(None, "journal_mode", "WAL");
+        let _ = conn.pragma_update(None, "foreign_keys", "ON");
+        conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
+        Ok(Store {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    /// Sinov uchun xotiradagi baza.
+    pub fn memory() -> Result<Self, String> {
+        let conn = Connection::open_in_memory().map_err(|e| e.to_string())?;
+        conn.execute_batch(SCHEMA).map_err(|e| e.to_string())?;
+        Ok(Store {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Connection> {
+        // Mutex buzilgan bo'lsa ham ishlashda davom etamiz: bu bitta
+        // so'rovning xatosi, butun serverni to'xtatish sababi emas.
+        self.conn.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    // ---------------------------------------------------------- Foydalanuvchi
+
+    /// Foydalanuvchi qo'shadi. Parol xeshi tayyor holda keladi — bu modul
+    /// parolning o'zini hech qachon ko'rmaydi va saqlamaydi.
+    pub fn add_user(&self, login: &str, name: &str, role: &str, hash: &str) -> Result<i64, String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO user (login,name,role,hash,active) VALUES (?1,?2,?3,?4,1)",
+            params![login.trim().to_lowercase(), name, role, hash],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Login bo'yicha foydalanuvchi va uning parol xeshi.
+    pub fn user_by_login(&self, login: &str) -> Option<(User, String)> {
+        let conn = self.lock();
+        conn.query_row(
+            "SELECT id,login,name,role,active,hash FROM user WHERE login=?1",
+            params![login.trim().to_lowercase()],
+            |r| {
+                Ok((
+                    User {
+                        id: r.get(0)?,
+                        login: r.get(1)?,
+                        name: r.get(2)?,
+                        role: r.get(3)?,
+                        active: r.get::<_, i64>(4)? != 0,
+                    },
+                    r.get::<_, String>(5)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten()
+    }
+
+    pub fn user(&self, id: i64) -> Option<User> {
+        let conn = self.lock();
+        conn.query_row(
+            "SELECT id,login,name,role,active FROM user WHERE id=?1",
+            params![id],
+            |r| {
+                Ok(User {
+                    id: r.get(0)?,
+                    login: r.get(1)?,
+                    name: r.get(2)?,
+                    role: r.get(3)?,
+                    active: r.get::<_, i64>(4)? != 0,
+                })
+            },
+        )
+        .optional()
+        .ok()
+        .flatten()
+    }
+
+    pub fn users(&self) -> Vec<User> {
+        let conn = self.lock();
+        let mut st = match conn.prepare("SELECT id,login,name,role,active FROM user ORDER BY login")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map([], |r| {
+            Ok(User {
+                id: r.get(0)?,
+                login: r.get(1)?,
+                name: r.get(2)?,
+                role: r.get(3)?,
+                active: r.get::<_, i64>(4)? != 0,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Parolni almashtiradi (xesh tayyor holda keladi).
+    pub fn set_hash(&self, user_id: i64, hash: &str) -> bool {
+        self.lock()
+            .execute(
+                "UPDATE user SET hash=?2 WHERE id=?1",
+                params![user_id, hash],
+            )
+            .map(|n| n > 0)
+            .unwrap_or(false)
+    }
+
+    /// Foydalanuvchini yoqadi yoki o'chiradi. Yozuv o'chirilmaydi: uning
+    /// imzolari va o'zgarishlari tarixda qolishi kerak.
+    pub fn set_active(&self, user_id: i64, active: bool) -> bool {
+        self.lock()
+            .execute(
+                "UPDATE user SET active=?2 WHERE id=?1",
+                params![user_id, i64::from(active)],
+            )
+            .map(|n| n > 0)
+            .unwrap_or(false)
+    }
+
+    // ---------------------------------------------------------------- Seans
+
+    /// Seans ochadi va uning belgisini qaytaradi.
+    pub fn open_session(&self, user_id: i64, token: &str, until: &str) -> bool {
+        self.lock()
+            .execute(
+                "INSERT INTO session (token,user_id,until) VALUES (?1,?2,?3)",
+                params![token, user_id, until],
+            )
+            .map(|n| n > 0)
+            .unwrap_or(false)
+    }
+
+    /// Belgi bo'yicha foydalanuvchi. Muddati o'tgan seans qabul qilinmaydi.
+    pub fn session_user(&self, token: &str, now: &str) -> Option<User> {
+        let conn = self.lock();
+        let id: Option<i64> = conn
+            .query_row(
+                "SELECT user_id FROM session WHERE token=?1 AND until > ?2",
+                params![token, now],
+                |r| r.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten();
+        drop(conn);
+        let user = self.user(id?)?;
+        user.active.then_some(user)
+    }
+
+    pub fn close_session(&self, token: &str) -> bool {
+        self.lock()
+            .execute("DELETE FROM session WHERE token=?1", params![token])
+            .map(|n| n > 0)
+            .unwrap_or(false)
+    }
+
+    /// Muddati o'tgan seanslarni tozalaydi.
+    pub fn purge_sessions(&self, now: &str) -> usize {
+        self.lock()
+            .execute("DELETE FROM session WHERE until <= ?1", params![now])
+            .unwrap_or(0)
+    }
+
+    // ----------------------------------------------------------- O'zgarishlar
+
+    /// Paketni saqlaydi va uning tartib raqamini qaytaradi.
+    pub fn push_change(
+        &self,
+        project: &str,
+        body: &str,
+        author: &str,
+        at: &str,
+        rows: i64,
+    ) -> Result<i64, String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO change (project,body,author,at,rows) VALUES (?1,?2,?3,?4,?5)",
+            params![project, body, author, at, rows],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// `since` dan keyingi o'zgarishlar — tartib bo'yicha.
+    ///
+    /// Tartib muhim: paketlar bir-birining ustiga qo'yiladi, shuning uchun
+    /// ular yozilgan tartibda qaytariladi.
+    pub fn changes_since(&self, project: &str, since: i64, limit: i64) -> Vec<Change> {
+        let conn = self.lock();
+        let mut st = match conn.prepare(
+            "SELECT id,project,body,author,at,rows FROM change
+             WHERE project=?1 AND id>?2 ORDER BY id LIMIT ?3",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project, since, limit], |r| {
+            Ok(Change {
+                id: r.get(0)?,
+                project: r.get(1)?,
+                body: r.get(2)?,
+                author: r.get(3)?,
+                at: r.get(4)?,
+                rows: r.get(5)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Obyektdagi eng oxirgi o'zgarish raqami.
+    pub fn last_change(&self, project: &str) -> i64 {
+        self.lock()
+            .query_row(
+                "SELECT COALESCE(MAX(id),0) FROM change WHERE project=?1",
+                params![project],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    /// Serverdagi obyektlar ro'yxati va ularning oxirgi o'zgarishi.
+    pub fn projects(&self) -> Vec<(String, i64, String)> {
+        let conn = self.lock();
+        let mut st = match conn.prepare(
+            "SELECT project, MAX(id), MAX(at) FROM change GROUP BY project ORDER BY project",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    // ---------------------------------------------------------------- Imzo
+
+    /// Imzo qo'yadi. Bir hujjatni bitta odam ikki marta imzolamaydi.
+    pub fn sign(&self, s: &Signature) -> Result<i64, String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO signature (project,document,user,role,at,digest,rejected)
+             VALUES (?1,?2,?3,?4,?5,?6,?7)
+             ON CONFLICT(project,document,user) DO NOTHING",
+            params![s.project, s.document, s.user, s.role, s.at, s.digest, s.rejected],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    pub fn signatures(&self, project: &str) -> Vec<Signature> {
+        let conn = self.lock();
+        let mut st = match conn.prepare(
+            "SELECT id,project,document,user,role,at,digest,rejected FROM signature
+             WHERE project=?1 ORDER BY at DESC, id DESC",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project], |r| {
+            Ok(Signature {
+                id: r.get(0)?,
+                project: r.get(1)?,
+                document: r.get(2)?,
+                user: r.get(3)?,
+                role: r.get(4)?,
+                at: r.get(5)?,
+                digest: r.get(6)?,
+                rejected: r.get(7)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    // --------------------------------------------------------------- Jurnal
+
+    /// Amallar jurnali: kim, qachon, nima qildi.
+    ///
+    /// Parol, belgi va boshqa maxfiy qiymatlar bu yerga **hech qachon**
+    /// yozilmaydi — faqat amalning nomi va obyekt.
+    pub fn log(&self, user: &str, action: &str, detail: &str, at: &str) {
+        let _ = self.lock().execute(
+            "INSERT INTO server_log (user,action,detail,at) VALUES (?1,?2,?3,?4)",
+            params![user, action, detail, at],
+        );
+    }
+
+    pub fn recent_log(&self, limit: i64) -> Vec<(String, String, String, String)> {
+        let conn = self.lock();
+        let mut st = match conn
+            .prepare("SELECT user,action,detail,at FROM server_log ORDER BY id DESC LIMIT ?1")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![limit], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+}
+
+/// Sxema. Har bir jadval bitta savolga javob beradi.
+const SCHEMA: &str = "
+CREATE TABLE IF NOT EXISTS user (
+    id INTEGER PRIMARY KEY,
+    login TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE IF NOT EXISTS session (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES user(id),
+    until TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS change (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    body TEXT NOT NULL,
+    author TEXT NOT NULL,
+    at TEXT NOT NULL,
+    rows INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS change_project ON change(project, id);
+CREATE TABLE IF NOT EXISTS signature (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    document TEXT NOT NULL,
+    user TEXT NOT NULL,
+    role TEXT NOT NULL,
+    at TEXT NOT NULL,
+    digest TEXT NOT NULL,
+    rejected TEXT NOT NULL DEFAULT '',
+    UNIQUE(project, document, user)
+);
+CREATE TABLE IF NOT EXISTS server_log (
+    id INTEGER PRIMARY KEY,
+    user TEXT NOT NULL,
+    action TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    at TEXT NOT NULL
+);
+";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn store() -> Store {
+        Store::memory().expect("baza")
+    }
+
+    #[test]
+    fn user_round_trips_and_login_is_case_insensitive() {
+        let s = store();
+        let id = s.add_user("Prorab", "Alisher", "foreman", "xesh").unwrap();
+        let (u, hash) = s.user_by_login("PRORAB").expect("topildi");
+        assert_eq!(u.id, id);
+        assert_eq!(u.login, "prorab");
+        assert_eq!(u.role, "foreman");
+        assert_eq!(hash, "xesh");
+        assert!(u.active);
+        // Bir xil login ikki marta qo'shilmaydi.
+        assert!(s.add_user("prorab", "Boshqa", "admin", "x").is_err());
+    }
+
+    #[test]
+    fn expired_session_is_not_accepted() {
+        let s = store();
+        let id = s.add_user("a", "A", "admin", "h").unwrap();
+        assert!(s.open_session(id, "belgi", "2020-01-01T00:00:00Z"));
+        assert!(s.session_user("belgi", "2026-01-01T00:00:00Z").is_none());
+
+        assert!(s.open_session(id, "yangi", "2030-01-01T00:00:00Z"));
+        assert!(s.session_user("yangi", "2026-01-01T00:00:00Z").is_some());
+        // O'chirilgan foydalanuvchining seansi ham ishlamaydi.
+        s.set_active(id, false);
+        assert!(s.session_user("yangi", "2026-01-01T00:00:00Z").is_none());
+    }
+
+    #[test]
+    fn changes_come_back_in_order_after_the_marker() {
+        let s = store();
+        let a = s.push_change("OBY-1", "birinchi", "a", "t1", 1).unwrap();
+        let b = s.push_change("OBY-1", "ikkinchi", "a", "t2", 2).unwrap();
+        s.push_change("OBY-2", "boshqa obyekt", "a", "t3", 3)
+            .unwrap();
+
+        let all = s.changes_since("OBY-1", 0, 100);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].id, a);
+        assert_eq!(all[1].id, b);
+
+        // Belgidan keyingilari — faqat yangilari.
+        let rest = s.changes_since("OBY-1", a, 100);
+        assert_eq!(rest.len(), 1);
+        assert_eq!(rest[0].body, "ikkinchi");
+
+        assert_eq!(s.last_change("OBY-1"), b);
+        assert_eq!(s.last_change("YO-Q"), 0);
+        assert_eq!(s.projects().len(), 2);
+    }
+
+    #[test]
+    fn one_person_signs_a_document_once() {
+        let s = store();
+        let sig = Signature {
+            id: 0,
+            project: "OBY-1".into(),
+            document: "AOSR-001".into(),
+            user: "prorab".into(),
+            role: "foreman".into(),
+            at: "2026-09-04T10:00:00Z".into(),
+            digest: "abc".into(),
+            rejected: String::new(),
+        };
+        s.sign(&sig).unwrap();
+        s.sign(&sig).unwrap();
+        assert_eq!(s.signatures("OBY-1").len(), 1);
+
+        // Boshqa odam o'sha hujjatni imzolashi mumkin.
+        let mut other = sig.clone();
+        other.user = "nazorat".into();
+        s.sign(&other).unwrap();
+        assert_eq!(s.signatures("OBY-1").len(), 2);
+    }
+
+    #[test]
+    fn log_keeps_the_last_actions() {
+        let s = store();
+        s.log("a", "kirdi", "", "t1");
+        s.log("a", "paket", "OBY-1", "t2");
+        let rows = s.recent_log(10);
+        assert_eq!(rows.len(), 2);
+        // Oxirgisi birinchi turadi.
+        assert_eq!(rows[0].1, "paket");
+    }
+}

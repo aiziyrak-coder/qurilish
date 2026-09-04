@@ -1,0 +1,387 @@
+//! Telefon brauzeri uchun ko'rinish (TZ VI.5, XIII.7, VIII.22).
+//!
+//! Bu **mobil klient emas**, mobil ko'rinish: oddiy sahifalar, telefon
+//! ekraniga moslangan. Shunday qilingani ataylab — maydonchada ishlayotgan
+//! odam ilova o'rnatmasdan, brauzerdan kirib ishlatadi va yangilanish
+//! serverda bir joyda bo'ladi.
+//!
+//! Sahifalar ataylab sodda: JavaScript yo'q, faqat forma. Sekin internetda
+//! ham ochiladi va nima yuborilayotgani ko'rinib turadi.
+
+use crate::auth::{self, Access};
+use crate::state::AppState;
+use crate::store::{Signature, User};
+use axum::extract::{Form, Path, State};
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::{Html, IntoResponse, Redirect, Response};
+use serde::Deserialize;
+use std::sync::Arc;
+
+/// Seans belgisi shu nomdagi cookie da saqlanadi.
+const COOKIE: &str = "qurai_session";
+
+/// HTML ga tushadigan matnni xavfsiz ko'rinishga keltiradi.
+///
+/// Foydalanuvchi kiritgan har qanday matn shu yerdan o'tadi: aks holda
+/// izohdagi belgi sahifani buzishi mumkin edi.
+pub fn esc(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// Sahifa qolipi: sarlavha va tarkib.
+fn page(title: &str, body: &str) -> Html<String> {
+    Html(format!(
+        "<!doctype html><html lang=\"uz\"><head><meta charset=\"utf-8\">\
+<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+<title>{}</title><style>{}</style></head><body>{}</body></html>",
+        esc(title),
+        STYLE,
+        body
+    ))
+}
+
+/// Uslub: bitta ustun, katta tugmalar — telefon uchun.
+const STYLE: &str = "
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin:0; padding:16px; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+       max-width: 720px; margin-inline:auto; line-height:1.5; }
+h1 { font-size:20px; margin:0 0 4px; }
+h2 { font-size:16px; margin:20px 0 8px; }
+.muted { color:#6b7280; font-size:13px; }
+.card { border:1px solid #d1d5db; border-radius:10px; padding:12px; margin:10px 0; }
+.row { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+input, select, textarea { width:100%; padding:10px; font-size:16px; border:1px solid #9ca3af;
+       border-radius:8px; background:transparent; color:inherit; }
+button { padding:12px 16px; font-size:16px; border-radius:8px; border:1px solid #2563eb;
+       background:#2563eb; color:#fff; width:100%; margin-top:10px; }
+button.ghost { background:transparent; color:inherit; border-color:#9ca3af; }
+a { color:#2563eb; }
+.err { color:#b91c1c; }
+.ok { color:#15803d; }
+label { display:block; margin-top:10px; font-size:13px; }
+table { width:100%; border-collapse:collapse; font-size:14px; }
+td, th { text-align:left; padding:6px 4px; border-bottom:1px solid #e5e7eb; }
+";
+
+/// Cookie dan seans belgisini oladi.
+fn token_of(headers: &HeaderMap) -> Option<String> {
+    let raw = headers.get(header::COOKIE)?.to_str().ok()?;
+    raw.split(';')
+        .filter_map(|p| p.trim().split_once('='))
+        .find(|(k, _)| *k == COOKIE)
+        .map(|(_, v)| v.to_string())
+}
+
+/// Sahifani ochayotgan odam.
+fn viewer(state: &AppState, headers: &HeaderMap) -> Option<User> {
+    let token = token_of(headers)?;
+    state.store.session_user(&token, &crate::now())
+}
+
+/// Kirish sahifasi.
+fn login_page(message: &str) -> Html<String> {
+    let note = if message.is_empty() {
+        String::new()
+    } else {
+        format!("<p class=\"err\">{}</p>", esc(message))
+    };
+    page(
+        "QURAi — kirish",
+        &format!(
+            "<h1>QURAi</h1><p class=\"muted\">Qurilish maydonchasi uchun ko'rinish</p>{note}\
+<form method=\"post\" action=\"/login\">\
+<label>Login<input name=\"login\" autocomplete=\"username\" autocapitalize=\"none\" required></label>\
+<label>Parol<input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label>\
+<button type=\"submit\">Kirish</button></form>"
+        ),
+    )
+}
+
+/// `GET /`
+pub async fn index(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    let projects = state.store.projects();
+    let mut body = format!(
+        "<div class=\"row\"><h1>Obyektlar</h1>\
+<form method=\"post\" action=\"/logout\" style=\"width:auto\">\
+<button class=\"ghost\" style=\"width:auto;margin:0\">Chiqish</button></form></div>\
+<p class=\"muted\">{} · {}</p>",
+        esc(&user.name),
+        esc(&role_name(&user.role))
+    );
+    if projects.is_empty() {
+        body.push_str("<p class=\"muted\">Hali biror qurilma ma'lumot yubormagan.</p>");
+    }
+    for (code, last, at) in projects {
+        body.push_str(&format!(
+            "<div class=\"card\"><div class=\"row\"><b>{}</b>\
+<span class=\"muted\">#{last}</span></div>\
+<div class=\"muted\">oxirgi yangilanish: {}</div>\
+<a href=\"/o/{}\">Ochish</a></div>",
+            esc(&code),
+            esc(&at),
+            esc(&code)
+        ));
+    }
+    page("QURAi — obyektlar", &body).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct LoginForm {
+    pub login: String,
+    pub password: String,
+}
+
+/// `POST /login`
+pub async fn login(State(state): State<Arc<AppState>>, Form(form): Form<LoginForm>) -> Response {
+    let Some((user, hash)) = state.store.user_by_login(&form.login) else {
+        return login_page("Login yoki parol noto'g'ri").into_response();
+    };
+    if !user.active || !auth::verify_password(&form.password, &hash) {
+        state
+            .store
+            .log(&user.login, "kirish-rad", "web", &crate::now());
+        return login_page("Login yoki parol noto'g'ri").into_response();
+    }
+    let token = auth::new_token();
+    state
+        .store
+        .open_session(user.id, &token, &crate::plus_days(auth::SESSION_DAYS));
+    state.store.log(&user.login, "kirdi", "web", &crate::now());
+
+    // `HttpOnly` — belgini sahifa kodidan o'qib bo'lmaydi.
+    // `SameSite=Lax` — boshqa saytdan yuborilgan so'rovda ishlatilmaydi.
+    let cookie = format!(
+        "{COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
+        auth::SESSION_DAYS * 24 * 3600
+    );
+    let mut resp = Redirect::to("/").into_response();
+    if let Ok(v) = cookie.parse() {
+        resp.headers_mut().insert(header::SET_COOKIE, v);
+    }
+    resp
+}
+
+/// `POST /logout`
+pub async fn logout(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    if let Some(token) = token_of(&headers) {
+        state.store.close_session(&token);
+    }
+    let mut resp = Redirect::to("/").into_response();
+    if let Ok(v) = format!("{COOKIE}=; Path=/; HttpOnly; Max-Age=0").parse() {
+        resp.headers_mut().insert(header::SET_COOKIE, v);
+    }
+    resp
+}
+
+/// `GET /o/{project}` — obyekt sahifasi.
+pub async fn object(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    let last = state.store.last_change(&project);
+    let changes = state.store.changes_since(&project, (last - 10).max(0), 10);
+    let signatures = state.store.signatures(&project);
+
+    let mut body = format!(
+        "<div class=\"row\"><h1>{}</h1><a href=\"/\">Ortga</a></div>\
+<p class=\"muted\">{} · {}</p>",
+        esc(&project),
+        esc(&user.name),
+        esc(&role_name(&user.role))
+    );
+
+    // ---- Oxirgi o'zgarishlar
+    body.push_str("<h2>Oxirgi o'zgarishlar</h2>");
+    if changes.is_empty() {
+        body.push_str("<p class=\"muted\">Hali o'zgarish yo'q.</p>");
+    } else {
+        body.push_str("<table><tr><th>№</th><th>Kim</th><th>Qachon</th><th>Qator</th></tr>");
+        for c in changes.iter().rev() {
+            body.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                c.id,
+                esc(&c.author),
+                esc(&c.at),
+                c.rows
+            ));
+        }
+        body.push_str("</table>");
+    }
+
+    // ---- Imzo
+    body.push_str("<h2>Imzolar</h2>");
+    if signatures.is_empty() {
+        body.push_str("<p class=\"muted\">Hali imzo yo'q.</p>");
+    } else {
+        body.push_str("<table><tr><th>Hujjat</th><th>Kim</th><th>Qachon</th><th>Holat</th></tr>");
+        for s in signatures.iter().take(20) {
+            body.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td class=\"{}\">{}</td></tr>",
+                esc(&s.document),
+                esc(&s.user),
+                esc(&s.at),
+                if s.rejected.is_empty() { "ok" } else { "err" },
+                if s.rejected.is_empty() {
+                    "tasdiqlandi".to_string()
+                } else {
+                    esc(&s.rejected)
+                }
+            ));
+        }
+        body.push_str("</table>");
+    }
+
+    // ---- Imzolash formasi (faqat huquqi borlarga)
+    if auth::can(&user.role, Access::Sign) {
+        body.push_str(&format!(
+            "<h2>Hujjatni imzolash</h2>\
+<p class=\"muted\">Imzo hujjat matniga bog'lanadi: matn keyin o'zgarsa, bu ko'rinadi.</p>\
+<form method=\"post\" action=\"/o/{}/sign\">\
+<label>Hujjat raqami<input name=\"document\" required></label>\
+<label>Hujjat matni yoki mazmuni<textarea name=\"text\" rows=\"4\" required></textarea></label>\
+<label>Rad etish sababi (bo'sh bo'lsa — tasdiqlash)<input name=\"rejected\"></label>\
+<button type=\"submit\">Imzolash</button></form>",
+            esc(&project)
+        ));
+    } else {
+        body.push_str(
+            "<p class=\"muted\">Sizning rolingiz hujjat imzolamaydi — bu ko'rish uchun.</p>",
+        );
+    }
+
+    page(&format!("QURAi — {project}"), &body).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct SignForm {
+    pub document: String,
+    pub text: String,
+    #[serde(default)]
+    pub rejected: String,
+}
+
+/// `POST /o/{project}/sign`
+pub async fn sign(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+    Form(form): Form<SignForm>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Sign) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Sizning rolingiz hujjat imzolamaydi.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    if form.document.trim().is_empty() || form.text.trim().is_empty() {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Hujjat raqami va matni to'ldirilmagan.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+
+    let sig = Signature {
+        id: 0,
+        project: project.clone(),
+        document: form.document.trim().to_string(),
+        user: user.login.clone(),
+        role: user.role.clone(),
+        at: crate::now(),
+        digest: auth::digest(form.text.trim()),
+        rejected: form.rejected.trim().to_string(),
+    };
+    let _ = state.store.sign(&sig);
+    state.store.log(
+        &user.login,
+        if sig.rejected.is_empty() {
+            "imzo"
+        } else {
+            "rad"
+        },
+        &format!("{} / {}", sig.project, sig.document),
+        &crate::now(),
+    );
+    Redirect::to(&format!("/o/{project}")).into_response()
+}
+
+/// Rol kodining o'qiladigan nomi.
+fn role_name(role: &str) -> String {
+    match role {
+        "admin" => "Administrator",
+        "director" => "Direktor",
+        "pm" => "Loyiha rahbari",
+        "foreman" => "Prorab",
+        "brigadier" => "Brigadir",
+        "supervisor" => "Texnik nazorat",
+        "designer" => "Mualliflik nazorati",
+        "estimator" => "Smetachi",
+        "supply" => "Ta'minotchi",
+        "storekeeper" => "Omborchi",
+        "client" => "Buyurtmachi",
+        "accountant" => "Buxgalter",
+        other => other,
+    }
+    .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Foydalanuvchi matni sahifani buzmaydi.
+    #[test]
+    fn user_text_is_escaped() {
+        assert_eq!(esc("<script>"), "&lt;script&gt;");
+        assert_eq!(esc("a & b"), "a &amp; b");
+        assert_eq!(esc("\"tirnoq\""), "&quot;tirnoq&quot;");
+        assert_eq!(esc("oddiy"), "oddiy");
+    }
+
+    /// Cookie dan belgi to'g'ri ajratiladi.
+    #[test]
+    fn session_token_is_read_from_the_cookie() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            header::COOKIE,
+            "boshqa=1; qurai_session=abc123; yana=2".parse().unwrap(),
+        );
+        assert_eq!(token_of(&h), Some("abc123".to_string()));
+
+        let empty = HeaderMap::new();
+        assert_eq!(token_of(&empty), None);
+    }
+
+    /// Rol nomi tanilmasa, kodi ko'rsatiladi — o'ylab topilmaydi.
+    #[test]
+    fn unknown_role_shows_its_code() {
+        assert_eq!(role_name("foreman"), "Prorab");
+        assert_eq!(role_name("yangi-rol"), "yangi-rol");
+    }
+}
