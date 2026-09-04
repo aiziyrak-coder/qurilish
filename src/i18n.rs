@@ -1930,10 +1930,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "cash_gap_months" => ("oydan keyin", "мес. вперёд"),
 
         // ---------- Excel eksporti va hujjatlar ----------
-        "export" => ("Excel", "Excel"),
+        "export" => ("Eksport", "Экспорт"),
         "export_hint" => (
-            "Joriy ekran jadvalini .xlsx ga saqlash (Ctrl+E). Sonlar son bo'lib chiqadi — Excel da darrov yig'indi olish mumkin.",
-            "Сохранить таблицу текущего экрана в .xlsx (Ctrl+E). Числа остаются числами — в Excel сразу можно посчитать итог.",
+            "Joriy ekran jadvalini saqlash (Ctrl+E). Kengaytma formatni belgilaydi: .xlsx — ish uchun (sonlar son bo'lib chiqadi), .pdf — topshirish uchun.",
+            "Сохранить таблицу текущего экрана (Ctrl+E). Формат задаётся расширением: .xlsx — для работы (числа остаются числами), .pdf — для сдачи.",
         ),
         "export_none" => (
             "Bu ekranda eksport qilinadigan jadval yo'q",
@@ -6002,6 +6002,65 @@ mod tests {
     /// Kodda ishlatilgan har bir kalit tarjima ro'yxatida bo'lishi kerak.
     ///
     /// Bu sinov `?` belgisining interfeysga chiqib ketishini oldini oladi:
+    /// Ruscha tarjima o'zbekchasidan nusxa bo'lib qolmasin.
+    ///
+    /// Ikki til bir xil yozilishi faqat atoqli ot va qisqartmalarda
+    /// mumkin («E-mail», «CLASH»). Qolgan holatda bu — tarjima
+    /// unutilgani, va ruscha interfeys yarim o'zbekcha bo'lib qoladi.
+    #[test]
+    fn russian_text_is_actually_translated() {
+        /// Ataylab bir xil qoldirilgan kalitlar.
+        const SAME_ON_PURPOSE: &[&str] = &[
+            "col_email",
+            "screen_copilot",
+            "tab_clash",
+            "kpi_score_near_miss",
+        ];
+
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/i18n.rs");
+        let src = std::fs::read_to_string(&path).expect("i18n.rs");
+
+        // Kalitlar ta'riflar ro'yxatidan olinadi: `"kalit" => (`.
+        let mut defined: Vec<String> = Vec::new();
+        for (i, _) in src.match_indices("\" => (") {
+            let before = &src[..i];
+            let Some(q) = before.rfind('"') else { continue };
+            let key = &before[q + 1..];
+            if !key.is_empty()
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+                && !defined.iter().any(|k| k == key)
+            {
+                defined.push(key.to_string());
+            }
+        }
+        assert!(
+            defined.len() > 1000,
+            "kalitlar topilmadi: {}",
+            defined.len()
+        );
+
+        let mut same: Vec<String> = Vec::new();
+        for key in defined {
+            let Some((uz, ru)) = lookup(&key) else {
+                continue;
+            };
+            let (uz, ru) = (uz.trim(), ru.trim());
+            // Faqat harfli matn tekshiriladi: «%», «m2», «—» kabi
+            // belgilar ikki tilda ham bir xil bo'ladi.
+            let has_letters = uz.chars().any(char::is_alphabetic);
+            if uz == ru
+                && has_letters
+                && uz.chars().count() > 3
+                && !SAME_ON_PURPOSE.contains(&key.as_str())
+            {
+                same.push(format!("{key} = {uz}"));
+            }
+        }
+        assert!(same.is_empty(), "tarjimasi nusxa ko'chirilgan: {same:?}");
+    }
+
     /// yangi ekran qo'shilganda tarjima unutilsa, yig'ish emas — sinov yiqiladi.
     #[test]
     fn every_key_used_in_the_code_has_a_translation() {
