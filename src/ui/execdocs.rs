@@ -628,6 +628,8 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
     ui.add_space(12.0);
 
     let mut new_version: Option<i64> = None;
+    // Serverda imzolash: hujjat raqami va imzolanadigan matn.
+    let mut remote_sign: Option<(String, String)> = None;
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -680,6 +682,24 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
                             }
                             if ui.small_button(t("ed_new_version")).clicked() {
                                 new_version = Some(doc.id);
+                            }
+                            // Server sozlangan bo'lsagina ko'rinadi.
+                            if app.sync.ready()
+                                && ui
+                                    .small_button(t("sync_sign_btn"))
+                                    .on_hover_text(t("sync_sign_hint"))
+                                    .clicked()
+                            {
+                                remote_sign = Some((
+                                    doc.number.clone(),
+                                    format!(
+                                        "{} · {} · {} · v{}",
+                                        doc.number,
+                                        doc.name,
+                                        doc.date.format("%d.%m.%Y"),
+                                        doc.version
+                                    ),
+                                ));
                             }
                         });
                         for p in &c.problems {
@@ -794,6 +814,10 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
                 );
             }
         });
+
+    if let Some((number, text)) = remote_sign {
+        app.sync_sign(&number, &text, "");
+    }
 
     if let Some(id) = new_version {
         make_new_version(app, id);

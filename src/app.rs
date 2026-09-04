@@ -394,6 +394,19 @@ impl Settings {
     }
 }
 
+/// Obyektning server tomonidagi kaliti.
+///
+/// Kod bo'sh bo'lishi mumkin, shuning uchun nom zaxira sifatida olinadi:
+/// ikkala nusxada bir xil kalit chiqishi kerak, aks holda paketlar
+/// boshqa obyektga tushib qolardi.
+pub fn project_key(p: &Project) -> String {
+    let code = p.code.trim();
+    if !code.is_empty() {
+        return code.to_string();
+    }
+    p.name.trim().to_string()
+}
+
 /// Amallar tarixida shuncha yozuv saqlanadi.
 ///
 /// Chegara bor: jurnal bazani cheksiz shishirmasligi kerak. 50 000 yozuv
@@ -543,6 +556,13 @@ pub struct App {
     /// Ilova foydalanuvchilari va joriy tanlangani (TZ VI–VIII).
     /// Til modeli sozlamasi. Sukut bo'yicha o'chiq — ilova lokal qoladi.
     pub llm: crate::llm::Config,
+    /// Server bilan sinxronizatsiya sozlamasi (TZ VI.36).
+    pub sync: crate::sync::Config,
+    /// Kutilayotgan sinxronizatsiya natijasi.
+    pub sync_pending:
+        Option<std::sync::mpsc::Receiver<Result<crate::sync::Outcome, crate::sync::Error>>>,
+    /// Oxirgi sinxronizatsiya natijasi: xabar va u xatomi.
+    pub sync_status: Option<(String, bool)>,
     /// Modul ekranidan yordamchiga uzatilgan savol (TZ VI.30 va h.k.).
     pub copilot_intent: Option<crate::copilot::Intent>,
     /// Qidiruvdan kelingan jurnal yozuvining sanasi (TZ V.30).
@@ -729,6 +749,9 @@ impl App {
             geodesy_points: Vec::new(),
             timesheet_week: None,
             llm: crate::llm::Config::default(),
+            sync: crate::sync::Config::default(),
+            sync_pending: None,
+            sync_status: None,
             copilot_intent: None,
             journal_focus: None,
             work_schedule: checks::WorkSchedule::default(),
@@ -805,6 +828,20 @@ impl App {
                 .get_setting("llm_timeout")
                 .and_then(|v| v.parse::<u64>().ok())
                 .unwrap_or(crate::llm::DEFAULT_TIMEOUT),
+        };
+
+        // Sinxronizatsiya sozlamasi. Parol saqlanmaydi — faqat seans belgisi.
+        app.sync = crate::sync::Config {
+            enabled: cfg!(feature = "sync")
+                && app.db.get_setting("sync_enabled").as_deref() == Some("1"),
+            url: app.db.get_setting("sync_url").unwrap_or_default(),
+            login: app.db.get_setting("sync_login").unwrap_or_default(),
+            token: app.db.get_setting("sync_token").unwrap_or_default(),
+            last_pull: app
+                .db
+                .get_setting("sync_last")
+                .and_then(|v| v.parse::<i64>().ok())
+                .unwrap_or(0),
         };
 
         // Rollar: oxirgi tanlangan foydalanuvchi tiklanadi.
@@ -1779,6 +1816,180 @@ impl App {
             t("dxf_geometry"),
             drawing.skipped
         ));
+    }
+
+    /// Sinxronizatsiya sozlamasini saqlaydi.
+    pub fn save_sync(&self) {
+        let _ = self
+            .db
+            .set_setting("sync_enabled", if self.sync.enabled { "1" } else { "0" });
+        let _ = self.db.set_setting("sync_url", self.sync.url.trim());
+        let _ = self.db.set_setting("sync_login", self.sync.login.trim());
+        let _ = self.db.set_setting("sync_token", &self.sync.token);
+        let _ = self
+            .db
+            .set_setting("sync_last", &self.sync.last_pull.to_string());
+    }
+
+    /// Serverga kiradi va seans belgisini saqlaydi.
+    ///
+    /// Parol hech qayerda saqlanmaydi: u faqat shu so'rovda ketadi.
+    #[cfg(feature = "sync")]
+    pub fn sync_login(&mut self, password: &str) {
+        let url = self.sync.url.trim().to_string();
+        let login = self.sync.login.trim().to_string();
+        if url.is_empty() || login.is_empty() {
+            self.sync_status = Some((t("sync_err_config").to_string(), true));
+            return;
+        }
+        match crate::sync::login(&url, &login, password) {
+            Ok(session) => {
+                self.sync.token = session.token;
+                self.sync.enabled = true;
+                self.save_sync();
+                self.sync_status = Some((
+                    format!(
+                        "{} {} · {}",
+                        t("sync_signed_in"),
+                        session.name,
+                        session.role
+                    ),
+                    false,
+                ));
+            }
+            Err(e) => {
+                self.sync.token.clear();
+                self.save_sync();
+                self.sync_status = Some((t(e.key()).to_string(), true));
+            }
+        }
+    }
+
+    /// Serverdan chiqadi: belgi o'chiriladi.
+    pub fn sync_logout(&mut self) {
+        self.sync.token.clear();
+        self.sync.enabled = false;
+        self.save_sync();
+        self.sync_status = Some((t("sync_signed_out").to_string(), false));
+    }
+
+    /// Sinxronizatsiyani boshlaydi: o'z paketini yuboradi va yangilarini oladi.
+    ///
+    /// Ish fon oqimida bajariladi — interfeys qotib qolmaydi. Natija
+    /// keyingi kadrda `poll_sync` orqali olinadi.
+    pub fn sync_now(&mut self) {
+        if self.sync_pending.is_some() {
+            return;
+        }
+        if !self.sync.ready() {
+            self.sync_status = Some((t("sync_err_config").to_string(), true));
+            return;
+        }
+        let Some(project) = self.project().map(project_key) else {
+            self.sync_status = Some((t("no_object_selected").to_string(), true));
+            return;
+        };
+        // Yuboriladigan paket — shu obyektning maydon ma'lumotlari.
+        let pkg = self.export_package();
+        let rows = pkg.row_count() as i64;
+        let body = crate::package::write(&pkg);
+        self.sync_pending = Some(crate::sync::spawn(
+            self.sync.clone(),
+            project,
+            Some((body, rows)),
+        ));
+        self.sync_status = Some((t("sync_running").to_string(), false));
+    }
+
+    /// Fon oqimidagi natijani tekshiradi va kelgan paketlarni qo'llaydi.
+    pub fn poll_sync(&mut self) {
+        let Some(rx) = &self.sync_pending else {
+            return;
+        };
+        let Ok(result) = rx.try_recv() else {
+            return;
+        };
+        self.sync_pending = None;
+
+        match result {
+            Ok(outcome) => {
+                let mut added = 0usize;
+                let mut skipped = 0usize;
+                for item in &outcome.pulled.items {
+                    // O'zimiz yuborgan paketni qaytadan qo'llash shart emas,
+                    // lekin zarar ham qilmaydi: import mavjud yozuvni
+                    // takrorlamaydi.
+                    match crate::package::read(&item.body) {
+                        Ok(pkg) => {
+                            let (a, s) = self.import_package(&pkg);
+                            added += a;
+                            skipped += s;
+                        }
+                        // Buzilgan paket jimgina tashlanmaydi.
+                        Err(_) => skipped += 1,
+                    }
+                }
+                if outcome.pulled.last > self.sync.last_pull {
+                    self.sync.last_pull = outcome.pulled.last;
+                    self.save_sync();
+                }
+                self.reload_modules();
+                self.sync_status = Some((
+                    format!(
+                        "{} {} · {} {} · {} {}",
+                        t("sync_sent"),
+                        outcome.pushed,
+                        t("sync_added"),
+                        added,
+                        t("sync_skipped"),
+                        skipped
+                    ),
+                    false,
+                ));
+            }
+            Err(e) => {
+                // Seans tugagan bo'lsa, belgi foydasiz — qayta kirish kerak.
+                if e == crate::sync::Error::Auth {
+                    self.sync.token.clear();
+                    self.save_sync();
+                }
+                // Tarmoq xatosi o'tkinchi bo'lishi mumkin — buni aytamiz.
+                let hint = if e.retryable() {
+                    format!(" ({})", t("sync_retry"))
+                } else {
+                    String::new()
+                };
+                self.sync_status = Some((format!("{}{hint}", t(e.key())), true));
+            }
+        }
+    }
+
+    /// Hujjatni serverda imzolaydi (TZ VIII.22).
+    ///
+    /// Imzo hujjat matniga bog'lanadi: keyin hujjat o'zgarsa, xesh mos
+    /// kelmaydi va buni ko'rish mumkin. Bu davlat elektron raqamli imzosi
+    /// emas va shunday deb atalmaydi — u kim, qachon va nimani
+    /// tasdiqlaganini qayd etadi.
+    #[cfg(feature = "sync")]
+    pub fn sync_sign(&mut self, document: &str, text: &str, rejected: &str) {
+        if !self.sync.ready() {
+            self.sync_status = Some((t("sync_err_config").to_string(), true));
+            return;
+        }
+        let Some(project) = self.project().map(project_key) else {
+            self.sync_status = Some((t("no_object_selected").to_string(), true));
+            return;
+        };
+        match crate::sync::sign(&self.sync, &project, document, text, rejected) {
+            Ok(()) => self.sync_status = Some((format!("{} {document}", t("sync_signed")), false)),
+            Err(e) => self.sync_status = Some((t(e.key()).to_string(), true)),
+        }
+    }
+
+    /// Tarmoqsiz yig'ilishda masofadan imzolash yo'q.
+    #[cfg(not(feature = "sync"))]
+    pub fn sync_sign(&mut self, _document: &str, _text: &str, _rejected: &str) {
+        self.sync_status = Some((t("sync_err_config").to_string(), true));
     }
 
     /// TZ XVII: kesishgan tahlil uchun barcha modullardan ma'lumot yig'adi.

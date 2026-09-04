@@ -209,6 +209,14 @@ pub async fn object(
         esc(&role_name(&user.role))
     );
 
+    // ---- Kunlik yozuv havolasi (yozish huquqi borlarga)
+    if auth::can(&user.role, Access::Write) {
+        body.push_str(&format!(
+            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{}/journal\">Ochish</a></div>",
+            esc(&project)
+        ));
+    }
+
     // ---- Oxirgi o'zgarishlar
     body.push_str("<h2>Oxirgi o'zgarishlar</h2>");
     if changes.is_empty() {
@@ -328,6 +336,178 @@ pub async fn sign(
         &format!("{} / {}", sig.project, sig.document),
         &crate::now(),
     );
+    Redirect::to(&format!("/o/{project}")).into_response()
+}
+
+// ================================================================ Kunlik yozuv
+
+/// Telefondan kiritilgan kunlik yozuv (TZ V, VI.5).
+#[derive(Deserialize)]
+pub struct JournalForm {
+    pub date: String,
+    #[serde(default)]
+    pub task: String,
+    #[serde(default)]
+    pub volume: String,
+    #[serde(default)]
+    pub unit: String,
+    #[serde(default)]
+    pub workers: String,
+    #[serde(default)]
+    pub machines: String,
+    #[serde(default)]
+    pub weather: String,
+    pub text: String,
+    #[serde(default)]
+    pub remarks: String,
+}
+
+/// Paket qatoridagi maydonni xavfsiz ko'rinishga keltiradi.
+///
+/// Ajratgich — tabulyatsiya, shuning uchun matndagi tabulyatsiya va qator
+/// ko'chirish qochiriladi. Qoida desktop ilovaning `package` moduli bilan
+/// bir xil: aks holda paket u yerda buzilib o'qilardi.
+fn pkg_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\n', "\\n")
+        .replace('\r', "")
+}
+
+/// Kunlik yozuvdan desktop ilova tushunadigan paket tuzadi.
+///
+/// Server yangi format o'ylab topmaydi: bu aynan ilovaning almashish
+/// formati, shuning uchun telefondan kelgan yozuv ofisdagi bazaga oddiy
+/// paket kabi qo'shiladi.
+pub fn journal_package(project: &str, author: &str, at: &str, f: &JournalForm) -> String {
+    let cols = [
+        "date",
+        "author",
+        "weather",
+        "temperature",
+        "workers",
+        "machines",
+        "task",
+        "volume",
+        "unit",
+        "text",
+        "remarks",
+    ];
+    // Bo'sh son — nol emas, «kiritilmagan». Paketda nol bo'lib ketmasligi
+    // uchun raqamsiz maydon bo'sh qoldirilmaydi: ilova uni nol deb o'qiydi
+    // va buni bilib turamiz.
+    let num = |s: &str| {
+        let v = s.trim().replace(',', ".");
+        if v.is_empty() {
+            "0".to_string()
+        } else {
+            v
+        }
+    };
+    let row = [
+        f.date.trim().to_string(),
+        author.to_string(),
+        f.weather.trim().to_string(),
+        "0".to_string(),
+        num(&f.workers),
+        num(&f.machines),
+        f.task.trim().to_string(),
+        num(&f.volume),
+        f.unit.trim().to_string(),
+        f.text.trim().to_string(),
+        f.remarks.trim().to_string(),
+    ];
+    format!(
+        "QURAI-PACKAGE\t1\nPROJECT\t{}\nCREATED\t{}\n\n#journal\n{}\n{}\n",
+        pkg_escape(project),
+        pkg_escape(at),
+        cols.join("\t"),
+        row.iter()
+            .map(|c| pkg_escape(c))
+            .collect::<Vec<_>>()
+            .join("\t")
+    )
+}
+
+/// `GET /o/{project}/journal` — kunlik yozuv formasi.
+pub async fn journal_form(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Sizning rolingiz kunlik yozuv kiritmaydi.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let body = format!(
+        "<div class=\"row\"><h1>Kunlik yozuv</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">{obj} · {name}</p>\
+<form method=\"post\" action=\"/o/{p}/journal\">\
+<label>Sana<input type=\"date\" name=\"date\" value=\"{today}\" required></label>\
+<label>Ish (grafikdagi nomi)<input name=\"task\" placeholder=\"Monolit karkas, 4-6 qavat\"></label>\
+<div class=\"row\"><label style=\"flex:1\">Hajm<input name=\"volume\" inputmode=\"decimal\"></label>\
+<label style=\"flex:1\">Birlik<input name=\"unit\" placeholder=\"m3\"></label></div>\
+<div class=\"row\"><label style=\"flex:1\">Ishchi<input name=\"workers\" inputmode=\"numeric\"></label>\
+<label style=\"flex:1\">Texnika<input name=\"machines\" inputmode=\"numeric\"></label></div>\
+<label>Ob-havo<input name=\"weather\"></label>\
+<label>Nima qilindi<textarea name=\"text\" rows=\"3\" required></textarea></label>\
+<label>Muammo yoki izoh<textarea name=\"remarks\" rows=\"2\"></textarea></label>\
+<button type=\"submit\">Yuborish</button></form>\
+<p class=\"muted\">Yozuv obyekt paketiga qo'shiladi va ofisdagi ilova uni keyingi sinxronizatsiyada oladi.</p>",
+        p = esc(&project),
+        obj = esc(&project),
+        name = esc(&user.name),
+        today = esc(&today),
+    );
+    page("QURAi — kunlik yozuv", &body).into_response()
+}
+
+/// `POST /o/{project}/journal`
+pub async fn journal_submit(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+    Form(form): Form<JournalForm>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Huquq yo'q.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    if form.date.trim().is_empty() || form.text.trim().is_empty() {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Sana va bajarilgan ish to'ldirilmagan.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+
+    let at = crate::now();
+    let body = journal_package(&project, &user.name, &at, &form);
+    let _ = state
+        .store
+        .push_change(project.trim(), &body, &user.login, &at, 1);
+    state
+        .store
+        .log(&user.login, "kunlik-yozuv", project.trim(), &at);
     Redirect::to(&format!("/o/{project}")).into_response()
 }
 

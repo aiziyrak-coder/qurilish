@@ -352,3 +352,104 @@ fn health_needs_no_login() {
         assert_eq!(body["ok"], true);
     });
 }
+
+/// Telefondan kiritilgan kunlik yozuv paketga aylanadi va sinxronizatsiya
+/// orqali desktop ilovaga tushadi.
+#[test]
+fn journal_from_the_phone_becomes_a_package() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        // Kirish va cookie ni olamiz.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=prorab&password=prorab-parol-1"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        // Kunlik yozuv yuboramiz.
+        let form = "date=2026-09-04&task=Monolit+karkas&volume=12%2C5&unit=m3\
+&workers=8&machines=2&weather=ochiq&text=Beton+quyildi&remarks=";
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/journal")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(form))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+
+        // Desktop ilova uni oddiy paket sifatida oladi.
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+        let (code, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
+        assert_eq!(code, StatusCode::OK);
+        let changes = body["changes"].as_array().expect("ro'yxat");
+        assert_eq!(changes.len(), 1);
+        let text = changes[0]["body"].as_str().expect("matn");
+        assert!(text.starts_with("QURAI-PACKAGE\t1"), "{text}");
+        assert!(text.contains("#journal"), "{text}");
+        assert!(text.contains("Beton quyildi"), "{text}");
+        // Vergul bilan yozilgan son nuqtaga o'giriladi.
+        assert!(text.contains("12.5"), "{text}");
+    });
+}
+
+/// Faqat ko'ruvchi rol kunlik yozuv kiritmaydi.
+#[test]
+fn read_only_role_cannot_open_the_journal_form() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=mijoz&password=mijoz-parol-11"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1/journal")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    });
+}

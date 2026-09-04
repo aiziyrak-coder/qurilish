@@ -8,6 +8,16 @@ use crate::theme::Theme;
 /// Amallar tarixida shuncha oxirgi yozuv ko'rsatiladi.
 const AUDIT_SHOWN: i64 = 25;
 
+/// Serverga kirish. Tarmoqsiz yig'ilishda tugma ko'rinmaydi, shuning
+/// uchun bu yerda ham hech narsa qilinmaydi.
+#[cfg(feature = "sync")]
+fn sync_login(app: &mut App, password: &str) {
+    app.sync_login(password);
+}
+
+#[cfg(not(feature = "sync"))]
+fn sync_login(_app: &mut App, _password: &str) {}
+
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut changed = false;
     let mut make_demo = false;
@@ -227,6 +237,101 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(10.0);
 
         // ---------- Foydalanuvchilar va rollar ----------
+        // ---- Server bilan sinxronizatsiya ----
+        card_frame(ui, t("set_group_sync"), w, |ui| {
+            ui.label(
+                RichText::new(t("set_sync_note"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+
+            if !cfg!(feature = "sync") {
+                ui.label(
+                    RichText::new(t("set_sync_not_built"))
+                        .size(12.0)
+                        .color(theme::warn()),
+                );
+                return;
+            }
+
+            let mut changed = false;
+            field(ui, t("set_sync_url"), |ui| {
+                changed |= ui
+                    .add_sized([320.0, 24.0], egui::TextEdit::singleline(&mut app.sync.url))
+                    .on_hover_text(t("set_sync_url_hint"))
+                    .changed();
+            });
+            field(ui, t("set_sync_login"), |ui| {
+                changed |= ui
+                    .add_sized(
+                        [200.0, 24.0],
+                        egui::TextEdit::singleline(&mut app.sync.login),
+                    )
+                    .changed();
+            });
+
+            // Parol faqat kirish paytida ishlatiladi va saqlanmaydi.
+            let key = egui::Id::new("sync_pw");
+            let mut password = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
+            let signed_in = !app.sync.token.trim().is_empty();
+            if !signed_in {
+                field(ui, t("set_sync_password"), |ui| {
+                    if ui
+                        .add_sized(
+                            [200.0, 24.0],
+                            egui::TextEdit::singleline(&mut password).password(true),
+                        )
+                        .changed()
+                    {
+                        ui.data_mut(|d| d.insert_temp(key, password.clone()));
+                    }
+                });
+            }
+
+            field(ui, "", |ui| {
+                if signed_in {
+                    ui.label(
+                        RichText::new(format!("{} {}", t("set_sync_signed"), app.sync.login))
+                            .size(12.0)
+                            .color(theme::ok()),
+                    );
+                    if ui.button(t("set_sync_logout")).clicked() {
+                        app.sync_logout();
+                        ui.data_mut(|d| d.remove::<String>(key));
+                    }
+                } else if ui.button(t("set_sync_login_btn")).clicked() {
+                    sync_login(app, &password);
+                    ui.data_mut(|d| d.remove::<String>(key));
+                }
+                if signed_in && ui.button(t("set_sync_now")).clicked() {
+                    app.sync_now();
+                }
+            });
+
+            if signed_in {
+                field(ui, t("set_sync_last"), |ui| {
+                    ui.label(
+                        RichText::new(app.sync.last_pull.to_string())
+                            .size(12.0)
+                            .color(theme::muted()),
+                    );
+                });
+            }
+            if let Some((message, bad)) = &app.sync_status {
+                ui.add_space(4.0);
+                ui.label(RichText::new(message).size(11.5).color(if *bad {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                }));
+            }
+            if changed {
+                app.save_sync();
+            }
+        });
+        ui.add_space(12.0);
+
         // ---- Matnni tanish (OCR) ----
         card_frame(ui, t("set_group_ocr"), w, |ui| {
             ui.label(

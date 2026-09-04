@@ -35,8 +35,11 @@ lopdf = { version = "0.31", default-features = false, features = ["chrono_time",
 # yoqilib, kalit kiritilmaguncha ilova hech qayerga ulanmaydi. Tarmoq
 # kutubxonasi umuman kerak bo'lmasa — `--no-default-features` bilan yig'ing,
 # shunda `llm` kodi kompilyatsiyaga ham kirmaydi.
-default = ["llm"]
+default = ["llm", "sync"]
 llm = ["dep:ureq"]
+# Server bilan sinxronizatsiya. Sukut bo'yicha yig'ilishga kiradi, lekin
+# sozlamada manzil kiritilib, kirish qilinmaguncha ishlamaydi.
+sync = ["dep:ureq"]
 
 [profile.release]
 opt-level = 3

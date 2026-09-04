@@ -26,6 +26,7 @@ mod portfolio;
 mod roles;
 mod sales;
 mod store;
+mod sync;
 mod theme;
 mod ui;
 

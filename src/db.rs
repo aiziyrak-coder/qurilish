@@ -11065,6 +11065,46 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let _ = std::fs::remove_file(&path);
     }
 
+    /// Telefondan (server orqali) kelgan kunlik yozuv ilovaga tushadi.
+    ///
+    /// Paket matni serverdagi forma qanday yozsa, aynan shunday yoziladi:
+    /// ikkala tomon bir xil formatdan foydalanishi shu yerda tekshiriladi.
+    #[test]
+    fn journal_from_the_phone_reaches_the_desktop() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let before = app.journal.len();
+        let text = "QURAI-PACKAGE\t1\nPROJECT\tOBY-1\nCREATED\t2026-09-04T10:00:00Z\n\n\
+                    #journal\n\
+                    date\tauthor\tweather\ttemperature\tworkers\tmachines\ttask\tvolume\tunit\ttext\tremarks\n\
+                    2026-09-04\tAlisher\tochiq\t0\t8\t2\t\t12.5\tm3\tBeton quyildi\t\n";
+
+        let pkg = crate::package::read(text).expect("paket o'qildi");
+        let (added, _) = app.import_package(&pkg);
+        assert_eq!(added, 1, "yozuv qo'shilmadi");
+        app.reload_modules();
+        assert_eq!(app.journal.len(), before + 1);
+
+        let entry = app
+            .journal
+            .iter()
+            .find(|j| j.text == "Beton quyildi")
+            .expect("yozuv");
+        assert_eq!(entry.author, "Alisher");
+        assert_eq!(entry.volume, 12.5);
+        assert_eq!(entry.unit, "m3");
+        assert_eq!(entry.workers, 8);
+        assert_eq!(entry.machines, 2);
+
+        // Ikkinchi marta qo'llansa nusxa paydo bo'lmaydi.
+        let (again, skipped) = app.import_package(&pkg);
+        assert_eq!(again, 0, "nusxa qo'shildi");
+        assert!(skipped >= 1);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

@@ -228,6 +228,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/logout", post(web::logout))
         .route("/o/{project}", get(web::object))
         .route("/o/{project}/sign", post(web::sign))
+        .route("/o/{project}/journal", get(web::journal_form))
+        .route("/o/{project}/journal", post(web::journal_submit))
         // ---- Desktop ilova bilan aloqa
         .route("/api/health", get(api::health))
         .route("/api/login", post(api::login))

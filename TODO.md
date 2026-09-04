@@ -23,7 +23,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | III. AI smeta tekshiruvi | 34 | 32 | 0 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 27 | 1 | 2 | 2 |
 | V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
-| VI. Prorab ilovasi | 37 | 25 | 5 | 7 | 7 |
+| VI. Prorab ilovasi | 37 | 27 | 3 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
@@ -36,10 +36,10 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
-| Umumiy (TZ dan tashqari) | 14 | 12 | 0 | 2 | 2 |
-| **Jami** | **700** | **639** | **17** | **44** | **44** |
+| Umumiy (TZ dan tashqari) | 14 | 13 | 1 | 0 | 0 |
+| **Jami** | **700** | **642** | **16** | **42** | **42** |
 
-Ya'ni **~91 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
+Ya'ni **~92 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -202,10 +202,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 > loyiha va server qismini talab qiladi.
 
 - [x] 1. Ilova maqsadi — *desktop varianti*
-- [~] 2. Avtorizatsiya — *rol tanlash; parol ataylab yo'q 🔒 — baza fayli ochiq, parol himoya emas, ko'rinish bo'lardi; haqiqiy avtorizatsiya server bilan keladi*
+- [x] 2. Avtorizatsiya — *serverda haqiqiy: login va Argon2id parol, seans belgisi, rol bo'yicha huquq. Ilova ichida rol ish taqsimoti bo'lib qoladi (baza fayli ochiq) va bu ochiq aytiladi*
 - [x] 3. Bosh ekran
 - [x] 4. Mening vazifalarim — *bugungi ishlar*
-- [~] 5. Mobil GPR — *desktop GPR to'liq; mobil ko'rinish 🔒 — mobil klientga bog'liq*
+- [~] 5. Mobil GPR — *desktop GPR to'liq; telefon brauzeridan obyekt, o'zgarishlar, imzo va kunlik yozuv ochiladi; grafikning o'zi mobil ko'rinishda yo'q*
 - [x] 6. Kunlik hisobot
 - [ ] 🔒 7. Ovozli kiritish
 - [x] 8. Foto — *jurnal va yozuvlarga biriktirish*
@@ -236,7 +236,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 33. Ish kunining avtomatik yakunlanishi — *yakuniy tekshiruv ro'yxati*
 - [x] 34. Hisobotni yuborishdan oldin AI tekshiruvi
 - [x] 35. Prorabning bosh paneli
-- [~] 36. Platforma bilan bog'lanish — *fayl orqali paket*
+- [x] 36. Platforma bilan bog'lanish — *server orqali: paket avtomatik yuboriladi va olinadi; server bo'lmasa fayl orqali ishlaydi*
 - [x] 37. Ishlab chiqishning bosh tamoyili
 
 ---
@@ -307,7 +307,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 19. Ijro hujjatlari — *imzolanganlar va qabulga tayyorlik*
 - [x] 20. Ijro hujjatlarini AI tekshiruvi — *imzoga to'siqlar*
 - [x] 21. Ishlarni qabul qilish — *topshirildi → qabul/rad etildi, sabab bilan*
-- [~] 22. Elektron kelishuv — *ilova ichidagi qaror: kim va qachon; ERI tashqi omil*
+- [~] 22. Elektron kelishuv — *serverda masofadan imzolash: kim, qachon va qaysi matn (xesh bilan bog'lanadi); davlat ERI si 🔒*
 - [x] 23. Loyiha hujjatlari — *versiya va o'zgartirish belgisi bilan*
 - [x] 24. Loyiha versiyalarini AI solishtirishi — *kartochka ma'lumoti bo'yicha*
 - [x] 25. Loyiha xatolarini nazorat qilish — *kritik nomuvofiqliklar*
@@ -533,7 +533,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 4. Kirish/chiqishni hisobga olish
 - [ ] 🔒 5. Obyekt geozonasi
 - [ ] 🔒 6. QR-kirish
-- [~] 7. Prorabning mobil tabeli — *desktopda to'liq (tabel, smena, bo'sh turish); mobil 🔒 — mobil klientga bog'liq*
+- [~] 7. Prorabning mobil tabeli — *desktopda to'liq; telefondan kunlik yozuv (ishchi va texnika soni bilan) yuboriladi; tabel katakchalari mobil ko'rinishda yo'q*
 - [x] 8. **Brigadalar** — *brigadir, ish, ishchilar tarkibi*
 - [x] 9. Ishchilarni obyektlar bo'yicha taqsimlash
 - [x] 10. Ish vaqtini ishlar bo'yicha taqsimlash — *katakda «Ish» rejimi*
@@ -817,8 +817,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] Qurilmalar orasida paket almashish
 - [x] Baza migratsiyasi (eski baza ochilaveradi)
 - [x] **Bir necha obyekt bo'yicha konsolidatsiya** — *«Obyektlar» ekrani, vaznlangan bajarilish, Excel eksporti*
-- [ ] 🔒 **Server va jonli sinxronizatsiya**
-- [ ] 🔒 **Mobil klient**
+- [x] **Server va sinxronizatsiya** — *`server/` krati: kirish nazorati, paket navbati, masofadan imzolash; ilova sozlamada yoqiladi*
+- [~] **Mobil klient** — *telefon brauzeri uchun ko'rinish (server beradi); native ilova 🔒*
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
 - [x] **Excel va PDF eksporti** — *20 ta ekran jadvali, Ctrl+E; kengaytmaga qarab `.xlsx` yoki `.pdf` (A4 albom, sahifalash, tizim shrifti bilan kirill/lotin)*
 - [x] **Bildirishnomalar tizimi** — *ilova ichida: 9 modul signali, yon panelda son; SMS/Telegram tashqi omil*

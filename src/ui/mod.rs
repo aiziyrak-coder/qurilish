@@ -153,6 +153,9 @@ pub fn draw(ctx: &Context, app: &mut App) {
         app.restyle = false;
     }
 
+    // Fon oqimidagi sinxronizatsiya natijasi tayyor bo'lsa qo'llanadi.
+    app.poll_sync();
+
     // Bazada yozuv o'zgargan bo'lsa bildirishnomalarni qayta yig'amiz.
     // Tekshiruv — bitta atomik son bilan, hisob esa faqat kerak bo'lganda.
     if app.db.revision() != app.notices_rev {
