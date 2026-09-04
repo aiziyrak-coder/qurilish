@@ -1345,6 +1345,95 @@ mod screen_tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// Chekka ma'lumotda ham ekranlar yiqilmaydi.
+    ///
+    /// Nolga bo'lish, bo'sh matn, nol hajm va juda katta sonlar — bular
+    /// haqiqiy bazada uchraydi. «Ma'lumot yo'q — xulosa yo'q» qoidasi
+    /// shu yerda sinaladi: dastur jim qolishi kerak, yiqilmasligi.
+    #[test]
+    fn screens_survive_edge_case_data() {
+        use crate::model::{ObjectStatus, Project, Section, Task};
+
+        let (path, db) = temp_db();
+        let today = chrono::Local::now().date_naive();
+        let pid = db
+            .insert_project(&Project {
+                id: 0,
+                name: String::new(),
+                code: String::new(),
+                address: String::new(),
+                object_type: String::new(),
+                floors: 0,
+                area_total: 0.0,
+                status: ObjectStatus::Design,
+                start_date: today,
+                // Tugash sanasi boshlanishidan oldin — noto'g'ri kiritish.
+                planned_end: today - chrono::Duration::days(30),
+                contract_sum: 0.0,
+                paid_total: 0.0,
+                currency: String::new(),
+                funding_source: String::new(),
+                notes: String::new(),
+            })
+            .expect("obyekt");
+
+        // Nol hajm, nol davomiylik, nomsiz ish.
+        db.insert_task(&Task {
+            id: 0,
+            project_id: pid,
+            wbs: String::new(),
+            name: String::new(),
+            section: Section::None,
+            responsible: String::new(),
+            duration: 0,
+            plan_start: today,
+            fact_start: None,
+            fact_end: None,
+            progress: 0.0,
+            pinned: false,
+            volume: 0.0,
+            unit: String::new(),
+        })
+        .expect("ish");
+        // Juda katta son va 100 % dan oshgan bajarilish.
+        db.insert_task(&Task {
+            id: 0,
+            project_id: pid,
+            wbs: "1".into(),
+            name: "X".into(),
+            section: Section::Kj,
+            responsible: String::new(),
+            duration: 100_000,
+            plan_start: today - chrono::Duration::days(3650),
+            fact_start: Some(today),
+            fact_end: None,
+            progress: 250.0,
+            pinned: false,
+            volume: 1.0e12,
+            unit: "m3".into(),
+        })
+        .expect("ish");
+
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app);
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                app.screen = *s;
+                for tab in 0u8..TABS {
+                    for key in TAB_KEYS {
+                        ctx.data_mut(|d| d.insert_temp(egui::Id::new(*key), tab));
+                    }
+                    frame(&ctx, &mut app);
+                }
+            }
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
     /// Ekranni faqat-o'qish rolida ochish ham xavfsiz.
     #[test]
     fn every_screen_draws_for_a_read_only_role() {
