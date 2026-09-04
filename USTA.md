@@ -165,9 +165,40 @@ Qo'riqchi sinovlar (regressiyani ushlaydi):
 - rollar: jurnalga yozadigan rol uni haqiqatda o'zgartira oladi
 - yordamchi: har javobda manba bor, har ma'lumot ekranidan kirish bor
 
+## Server (`server/`)
+
+Alohida krat: `axum` + SQLite. Desktop ilovaga uning kutubxonalari kirmaydi.
+
+- **Kirish nazorati** — login va Argon2id parol xeshi, 32 baytli seans belgisi,
+  rol bo'yicha huquq (ko'rish / yozish / imzolash / boshqarish). Bu yerda rol
+  **haqiqiy chegara**: bazaga faqat server tegadi.
+- **Almashish** — qurilma paketni yuboradi, boshqalari tartib raqamidan keyingi
+  paketlarni oladi. Server paketni ochmaydi: format desktop ilovaniki.
+- **Masofadan imzolash** — kim, qachon va qaysi matnni tasdiqlagani; matn xeshi
+  bilan bog'lanadi. Bu davlat ERI si emas va shunday deb atalmaydi.
+- **Mobil ko'rinish** — telefon brauzeri uchun sahifalar (JavaScript yo'q):
+  obyektlar, o'zgarishlar, imzo va kunlik yozuv formasi.
+
+Ishga tushirish: `qurai-server --add-user prorab "Ism" foreman`, keyin
+`QURAI_BIND=0.0.0.0:8080 qurai-server`. Server HTTP beradi — internetga
+chiqarilganda HTTPS proksi ortida turishi shart (dastur buni ishga tushirishda
+ham aytadi).
+
+## Chizma va hujjatlarni o'qish
+
+- **IFC** (`src/ifc.rs`) — ochiq BIM formati: elementlar va bog'lanishlar.
+- **DXF** (`src/dxf.rs`) — CAD ning ochiq formati: matnlar (marka, xona nomi) va
+  qatlamlar. Geometriya olinmaydi va bu ochiq aytiladi.
+- **PDF** (`src/pdfread.rs`) — jadval matn parchalarining joylashuvidan
+  tiklanadi; shrift `ToUnicode` jadvali orqali o'qiladi.
+- **Skan** (`src/ocr.rs`) — mahalliy Tesseract ga ko'prik; o'rnatilmagan bo'lsa
+  nima kerakligi aytiladi. Hech narsa internetga chiqmaydi.
+- **DWG/RVT** — yopiq formatlar: CAD dan DXF eksport qilinadi.
+
 ## Keyingi qadamlar (ilovadan tashqarida)
 
-1. **Server**: jonli sinxronizatsiya, rollar bo'yicha kirish, masofadan imzolash.
-2. **DWG/RVT**: yopiq formatlar uchun kutubxona yoki konvertor.
-3. **Til modeli tanlovi**: qaysi model, qayerda ishlaydi (lokal yoki bulut),
+1. **Native mobil ilova** — hozir telefon brauzeri orqali ishlanadi.
+2. **Push bildirishnomalar** — SMS/Telegram yoki mobil ilova kerak.
+3. **Davlat ERI si** — kalitlar va akkreditatsiya masalasi.
+4. **Til modeli tanlovi**: qaysi model, qayerda ishlaydi (lokal yoki bulut),
    ma'lumot chetga chiqishi bo'yicha tashkiliy qaror.
