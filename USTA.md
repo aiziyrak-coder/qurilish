@@ -146,6 +146,25 @@ yozilgan va yoqishni foydalanuvchi o'zi tanlaydi. Modelga beriladigan ko'rsatma
 qat'iy: **sonni o'ylab topma, bilmasang ochiq ayt**. So'rov tuzish va javobni
 o'qish tarmoqsiz sinaladi.
 
+## Holat (2026-09-04)
+
+TZ bo'yicha **638 / 700 band to'liq**, 16 tasi qisman (har birida nima
+bloklagani TODO.md da yozilgan), 46 tasi tashqi omilga bog'liq.
+
+Tekshiruv: `cargo test` — 350 sinov o'tadi (`--no-default-features` bilan ham),
+`cargo clippy --all-targets` — ogohlantirishsiz, `cargo fmt --check` — toza,
+`cargo build --release` — yig'iladi.
+
+Qo'riqchi sinovlar (regressiyani ushlaydi):
+
+- har bir ekran va uning har bir tabi oynasiz chiziladi — namuna bazasi,
+  bo'sh baza, faqat-o'qish roli, tor oyna va chekka ma'lumotda
+- eksport qilinadigan har bir ekranda jadval bor va ustunlar mos
+- i18n: takroriy kalit yo'q, ishlatilgan kalitning tarjimasi bor, ruscha
+  matn nusxa emas, sanaladigan qiymatlarning nomi bor
+- rollar: jurnalga yozadigan rol uni haqiqatda o'zgartira oladi
+- yordamchi: har javobda manba bor, har ma'lumot ekranidan kirish bor
+
 ## Keyingi qadamlar (ilovadan tashqarida)
 
 1. **Server**: jonli sinxronizatsiya, rollar bo'yicha kirish, masofadan imzolash.
