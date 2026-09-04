@@ -91,13 +91,20 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "dash" => ("—", "—"),
 
         // ---------- Navigatsiya / Навигация ----------
-        "nav_ai" => ("AI TEKSHIRUV", "AI ПРОВЕРКА"),
-        "nav_exec" => ("IJRO VA NAZORAT", "ИСПОЛНЕНИЕ И КОНТРОЛЬ"),
+        "nav_today" => ("BUGUN", "СЕГОДНЯ"),
+        "nav_stage_design" => ("1 · LOYIHA VA SMETA", "1 · ПРОЕКТ И СМЕТА"),
+        "nav_stage_plan" => ("2 · REJA", "2 · ПЛАН"),
+        "nav_stage_supply" => ("3 · TA'MINOT", "3 · СНАБЖЕНИЕ"),
+        "nav_stage_build" => ("4 · QURILISH ISHLARI", "4 · СТРОИТЕЛЬНЫЕ РАБОТЫ"),
+        "nav_stage_control" => ("5 · NAZORAT", "5 · КОНТРОЛЬ"),
+        "nav_stage_docs" => ("6 · HUJJAT VA TOPSHIRISH", "6 · ДОКУМЕНТЫ И СДАЧА"),
+        "nav_stage_sales" => ("7 · SOTUV", "7 · ПРОДАЖИ"),
+        "nav_stage_review" => ("8 · TAHLIL", "8 · АНАЛИЗ"),
         "nav_system" => ("TIZIM", "СИСТЕМА"),
         "screen_dashboard" => ("Umumiy ko'rinish", "Обзор"),
         "screen_passport" => ("Obyekt pasporti", "Паспорт объекта"),
-        "screen_gantt" => ("GPR — ishlar grafigi", "ГПР — график работ"),
-        "screen_ppr" => ("PPR", "ППР"),
+        "screen_gantt" => ("Ishlar grafigi (GPR)", "График работ (ГПР)"),
+        "screen_ppr" => ("PPR — ish bajarish loyihasi", "ППР — проект производства работ"),
         "screen_ai_check" => ("AI loyiha tekshiruvi", "AI проверка проекта"),
         "screen_estimate" => ("AI smeta tekshiruvi", "AI проверка смет"),
         "screen_journal" => ("Ishlar jurnali", "Журнал работ"),
@@ -1361,15 +1368,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_docs_missing_hint" => ("talab qilinadi", "требуется по разделу"),
 
         // ---------- Navigatsiya guruhlari / Группы навигации ----------
-        "nav_object" => ("OBYEKT", "ОБЪЕКТ"),
-        "nav_cabinets" => ("KABINETLAR", "КАБИНЕТЫ"),
-        "nav_supply" => ("TA'MINOT", "СНАБЖЕНИЕ"),
-        "nav_resources" => ("RESURSLAR", "РЕСУРСЫ"),
-        "nav_analytics" => ("ANALITIKA", "АНАЛИТИКА"),
 
         // ---------- Modul ekranlari / Экраны модулей ----------
         "screen_safety" => ("Xavfsizlik", "Безопасность"),
-        "screen_foreman" => ("Prorab ilovasi", "Приложение прораба"),
+        "screen_foreman" => ("Prorab ish o'rni", "Рабочее место прораба"),
         "screen_tech_supervision" => ("Texnik nazorat", "Технадзор"),
         "screen_client" => ("Buyurtmachi kabineti", "Кабинет заказчика"),
         "screen_requests" => ("Arizalar", "Заявки"),
@@ -1377,7 +1379,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "screen_warehouse" => ("Ombor", "Склад"),
         "screen_materials" => ("Materiallar", "Материалы"),
         "screen_timesheet" => ("Tabel", "Табель"),
-        "screen_machines" => ("Mashinalar", "Машины"),
+        "screen_machines" => ("Texnika", "Техника"),
         "screen_analytics" => ("AI analitika", "AI аналитика"),
         "screen_copilot" => ("AI Copilot", "AI Copilot"),
 
@@ -3773,7 +3775,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "nt_accept_rejected_hint" => ("sabab hujjatda yozilgan", "причина указана в акте"),
 
         // ---------- VIII. Shartnomalar va to'lovlar ----------
-        "screen_contracts" => ("Shartnomalar", "Договоры"),
+        "screen_contracts" => ("Pudrat shartnomasi", "Подрядный договор"),
 
         "ck_general" => ("Bosh pudrat", "Генподряд"),
         "ck_sub" => ("Subpudrat", "Субподряд"),
@@ -5088,7 +5090,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "ct_comment" => ("Izoh", "Комментарий"),
 
         // ---------- VII. Texnik nazorat: tekshiruvlar ----------
-        "screen_inspections" => ("Tekshiruvlar", "Проверки"),
+        "screen_inspections" => ("Qabul va tekshiruv", "Приёмка и проверки"),
 
         "ik_hidden" => ("Yashirin ish", "Скрытые работы"),
         "ik_physical" => ("Jismoniy ko'rik", "Визуальный осмотр"),
@@ -5900,8 +5902,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
 
         // ---------- XIX–XX. Sotuv ----------
         "screen_sales" => ("Sotuv — shaxmatka", "Продажи — шахматка"),
-        "screen_deals" => ("Shartnomalar va to'lovlar", "Договоры и платежи"),
-        "nav_sales" => ("SOTUV", "ПРОДАЖИ"),
+        "screen_deals" => ("Sotuv shartnomalari", "Договоры продажи"),
 
         // Birlik turlari va holatlari
         "uk_flat" => ("Kvartira", "Квартира"),

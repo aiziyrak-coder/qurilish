@@ -549,19 +549,17 @@ fn nav_item(
         let cy = rect.center().y;
         let ready = screen.readiness();
 
-        // TZ raqami — doim bir xil ustunda turadi, shunda ro'yxat tekis ko'rinadi.
-        let numeral = screen.numeral();
-        if !numeral.is_empty() {
-            p.text(
-                pos2(rect.min.x + 34.0, cy),
-                Align2::RIGHT_CENTER,
-                numeral,
-                egui::FontId::monospace(10.5),
-                if active {
-                    theme::accent()
-                } else {
-                    theme::muted()
-                },
+        // Faol qatorni chap chekkadagi chiziq ko'rsatadi: TZ raqami bu
+        // yerda emas — u qurilishchiga hech narsa aytmaydi va ro'yxatni
+        // og'irlashtiradi. Raqam sichqoncha ustiga kelganda chiqadi.
+        if active {
+            p.rect_filled(
+                Rect::from_min_size(
+                    pos2(rect.min.x, rect.min.y + 4.0),
+                    egui::vec2(3.0, rect.height() - 8.0),
+                ),
+                1.5,
+                theme::accent(),
             );
         }
 
@@ -573,9 +571,9 @@ fn nav_item(
             theme::muted()
         };
         p.text(
-            pos2(rect.min.x + 44.0, cy),
+            pos2(rect.min.x + 14.0, cy),
             Align2::LEFT_CENTER,
-            truncate_nav(screen.label(), 24),
+            truncate_nav(screen.label(), 28),
             egui::FontId::proportional(13.5),
             name_color,
         );
@@ -681,13 +679,24 @@ fn side_bar(ctx: &Context, app: &mut App) {
                             if resp.clicked() {
                                 app.screen = screen;
                             }
+                            // Sichqoncha ustida: TZ bo'limi va (bo'lsa)
+                            // tayyorlik holati.
+                            let numeral = screen.numeral();
                             let hint = match screen.readiness() {
-                                Readiness::Ready => None,
-                                Readiness::Storage => Some(t("readiness_storage")),
-                                Readiness::Planned => Some(t("readiness_planned")),
+                                Readiness::Ready => String::new(),
+                                Readiness::Storage => t("readiness_storage").to_string(),
+                                Readiness::Planned => t("readiness_planned").to_string(),
                             };
-                            if let Some(h) = hint {
-                                resp.on_hover_text(h);
+                            let tip = match (numeral.is_empty(), hint.is_empty()) {
+                                (true, true) => String::new(),
+                                (true, false) => hint,
+                                (false, true) => format!("{} {numeral}", t("search_module")),
+                                (false, false) => {
+                                    format!("{} {numeral} · {hint}", t("search_module"))
+                                }
+                            };
+                            if !tip.is_empty() {
+                                resp.on_hover_text(tip);
                             }
                             ui.add_space(1.0);
                         }

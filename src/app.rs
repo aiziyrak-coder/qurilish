@@ -180,41 +180,24 @@ impl Screen {
 }
 
 /// Navigatsiya guruhlari — TZ ning mantiqiy bloklari.
+/// Yon paneldagi bo'limlar — **qurilish jarayoni ketma-ketligi bo'yicha**.
+///
+/// Tartib TZ modullarining raqami bo'yicha emas, ishning haqiqiy borishi
+/// bo'yicha: loyiha → reja → ta'minot → qurilish → nazorat → hujjat →
+/// sotuv → tahlil. Odam ekranni qidirmaydi: u qaysi bosqichda turgan
+/// bo'lsa, o'sha guruhga qaraydi.
+///
+/// Yuqoridagi «bugun» guruhi bosqich emas: bu har kuni ochiladigan ikki
+/// ekran, shuning uchun u raqamsiz turadi.
 pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
+    ("nav_today", &[Screen::Dashboard, Screen::Notices]),
     (
-        "nav_object",
-        &[
-            Screen::Dashboard,
-            Screen::Portfolio,
-            Screen::Notices,
-            Screen::Director,
-            Screen::Passport,
-            Screen::Gantt,
-            Screen::Ppr,
-        ],
+        "nav_stage_design",
+        &[Screen::Passport, Screen::AiCheck, Screen::Estimate],
     ),
-    ("nav_ai", &[Screen::AiCheck, Screen::Estimate]),
+    ("nav_stage_plan", &[Screen::Gantt, Screen::Ppr]),
     (
-        "nav_exec",
-        &[
-            Screen::ExecDocs,
-            Screen::Journal,
-            Screen::Quality,
-            Screen::Safety,
-        ],
-    ),
-    (
-        "nav_cabinets",
-        &[
-            Screen::Foreman,
-            Screen::TechSupervision,
-            Screen::Inspections,
-            Screen::Client,
-            Screen::Contracts,
-        ],
-    ),
-    (
-        "nav_supply",
+        "nav_stage_supply",
         &[
             Screen::Requests,
             Screen::Purchases,
@@ -222,9 +205,38 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
             Screen::Materials,
         ],
     ),
-    ("nav_sales", &[Screen::Sales, Screen::Deals]),
-    ("nav_resources", &[Screen::Timesheet, Screen::Machines]),
-    ("nav_analytics", &[Screen::Analytics, Screen::Copilot]),
+    (
+        "nav_stage_build",
+        &[
+            Screen::Foreman,
+            Screen::Journal,
+            Screen::Timesheet,
+            Screen::Machines,
+        ],
+    ),
+    (
+        "nav_stage_control",
+        &[
+            Screen::Quality,
+            Screen::Safety,
+            Screen::TechSupervision,
+            Screen::Inspections,
+        ],
+    ),
+    (
+        "nav_stage_docs",
+        &[Screen::ExecDocs, Screen::Contracts, Screen::Client],
+    ),
+    ("nav_stage_sales", &[Screen::Sales, Screen::Deals]),
+    (
+        "nav_stage_review",
+        &[
+            Screen::Analytics,
+            Screen::Director,
+            Screen::Portfolio,
+            Screen::Copilot,
+        ],
+    ),
     ("nav_system", &[Screen::Settings]),
 ];
 
