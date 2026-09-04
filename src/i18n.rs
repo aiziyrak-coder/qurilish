@@ -1759,6 +1759,18 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Skan qilingan PDF va rasmdagi matn shu kompyuterdagi Tesseract orqali o'qiladi. Hech narsa internetga jo'natilmaydi. Tanilgan matn — qoralama: uni tekshirib chiqish kerak.",
             "Текст со скана PDF и изображений читается локальным Tesseract. Ничего не отправляется в интернет. Распознанный текст — черновик: его нужно проверить.",
         ),
+        "dxf_failed" => ("DXF o'qilmadi", "DXF не прочитан"),
+        "dxf_empty" => (
+            "Chizmada matn topilmadi. Ikkilik DXF yoki DWG bo'lsa, CAD dan oddiy (ASCII) DXF eksport qiling.",
+            "В чертеже не найден текст. Если это двоичный DXF или DWG — экспортируйте из CAD обычный (ASCII) DXF.",
+        ),
+        "dxf_geometry" => ("geometriya olinmadi:", "геометрия не взята:"),
+        "dxf_import" => ("DXF chizma", "Чертёж DXF"),
+        "dxf_hint" => (
+            "AutoCAD, nanoCAD va boshqa CAD dasturlaridan «Save As → DXF». Matnlar (markalar, xona nomlari) va qatlamlar o'qiladi; chiziq va shtrixlar olinmaydi. DWG va RVT yopiq format — ular hujjat sifatida biriktiriladi.",
+            "Из AutoCAD, nanoCAD и других CAD: «Save As → DXF». Читаются тексты (марки, названия помещений) и слои; линии и штриховки не берутся. DWG и RVT — закрытые форматы, они прикладываются как документ.",
+        ),
+        "dxf_layer" => ("qatlam", "слой"),
         "ocr_ready" => (
             "Matnni tanish tayyor: Tesseract va pdftoppm topildi",
             "Распознавание готово: найдены Tesseract и pdftoppm",

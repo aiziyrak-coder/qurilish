@@ -1722,6 +1722,65 @@ impl App {
         ));
     }
 
+    /// DXF chizmasini o'qib, elementlarni bazaga qo'shadi (TZ II.1–2).
+    ///
+    /// IFC bilan bir xil qoida: allaqachon bor marka takrorlanmaydi, yangi
+    /// element esa varaq nomi bilan yoziladi. Bog'lanishlar chizmadan
+    /// olinmaydi — chizmada ular yozilmagan bo'ladi.
+    pub fn import_dxf(&mut self, path: &std::path::Path) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        let Some(pid) = self.current else { return };
+
+        let src = match std::fs::read(path) {
+            Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+            Err(e) => {
+                self.notify(format!("{}: {e}", t("dxf_failed")));
+                return;
+            }
+        };
+        let drawing = crate::dxf::parse(&src);
+        if drawing.entries.is_empty() {
+            self.notify(t("dxf_empty").to_string());
+            return;
+        }
+
+        // Varaq nomi — fayl nomi: element qaysi chizmadan kelgani ko'rinadi.
+        let sheet = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "DXF".to_string());
+        let elements = crate::dxf::to_elements(&drawing, pid, &sheet);
+
+        let mut added = 0usize;
+        let mut existing = 0usize;
+        for e in &elements {
+            let same = self.elements.iter().any(|x| {
+                x.sheet == e.sheet
+                    && ((!e.mark.is_empty() && x.mark == e.mark)
+                        || (!e.room.is_empty() && x.room == e.room))
+            });
+            if same {
+                existing += 1;
+                continue;
+            }
+            if self.db.insert_element(e) > 0 {
+                added += 1;
+            }
+        }
+
+        self.reload_modules();
+        self.notify(format!(
+            "{} {added} · {} {existing} · {} {}",
+            t("ifc_added"),
+            t("ifc_existing"),
+            t("dxf_geometry"),
+            drawing.skipped
+        ));
+    }
+
     /// TZ XVII: kesishgan tahlil uchun barcha modullardan ma'lumot yig'adi.
     ///
     /// Hisoblar shu yerda emas, `analytics` da bajariladi — ekran va hisobot

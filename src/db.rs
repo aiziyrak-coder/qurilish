@@ -11020,6 +11020,51 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         }
     }
 
+    /// TZ II.1-2: DXF chizmasidagi matnlar elementga aylanadi va
+    /// takroriy import yangi nusxa yaratmaydi.
+    #[test]
+    fn dxf_import_adds_elements_once() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let dxf =
+            "0\nSECTION\n2\nENTITIES\n0\nTEXT\n8\nAR-Markalar\n10\n10.0\n20\n20.0\n1\nOK-77\n\
+                   0\nTEXT\n8\nKJ-Kolonnalar\n10\n30.0\n20\n40.0\n1\nK-9\n\
+                   0\nLINE\n8\nAR-Devor\n10\n0.0\n20\n0.0\n0\nEOF\n";
+        let path = std::env::temp_dir().join(format!("qurai_t_{}.dxf", std::process::id()));
+        std::fs::write(&path, dxf).unwrap();
+
+        let before = app.elements.len();
+        app.import_dxf(&path);
+        assert_eq!(app.elements.len(), before + 2, "elementlar qo'shilmadi");
+
+        let ok = app
+            .elements
+            .iter()
+            .find(|e| e.mark == "OK-77")
+            .expect("marka");
+        assert_eq!(ok.section, crate::model::Section::Ar);
+        assert_eq!(ok.kind, crate::domain::ElementKind::Window);
+        // Qaysi varaqdan kelgani va qatlam nomi saqlanadi.
+        assert!(!ok.sheet.is_empty());
+        assert!(ok.note.contains("AR-Markalar"));
+
+        let k = app
+            .elements
+            .iter()
+            .find(|e| e.mark == "K-9")
+            .expect("marka");
+        assert_eq!(k.section, crate::model::Section::Kj);
+
+        // Ikkinchi marta import qilinganda nusxa paydo bo'lmaydi.
+        app.import_dxf(&path);
+        assert_eq!(app.elements.len(), before + 2, "takroriy nusxa qo'shildi");
+
+        let _ = std::fs::remove_file(&path);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

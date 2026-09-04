@@ -11,6 +11,7 @@ mod cpm;
 mod db;
 mod docgen;
 mod domain;
+mod dxf;
 mod i18n;
 mod ifc;
 mod import;

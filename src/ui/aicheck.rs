@@ -637,6 +637,7 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
 fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut add = false;
     let mut import = false;
+    let mut import_dxf = false;
     let mut removed: Option<i64> = None;
 
     ui.horizontal(|ui| {
@@ -650,6 +651,14 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
             .clicked()
         {
             import = true;
+        }
+        // DWG va RVT yopiq; DXF — o'sha CAD dasturlarining ochiq formati.
+        if ui
+            .button(t("dxf_import"))
+            .on_hover_text(t("dxf_hint"))
+            .clicked()
+        {
+            import_dxf = true;
         }
         ui.label(
             RichText::new(t("elements_hint"))
@@ -666,6 +675,16 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
             .pick_file()
         {
             app.import_ifc(&path);
+        }
+    }
+
+    if import_dxf {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title(t("dxf_import"))
+            .add_filter("DXF", &["dxf", "DXF"])
+            .pick_file()
+        {
+            app.import_dxf(&path);
         }
     }
 

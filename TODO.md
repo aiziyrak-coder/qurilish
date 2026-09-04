@@ -19,7 +19,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 22 | 20 | 0 | 2 | 2 |
+| II. AI loyiha tekshiruvi | 22 | 20 | 1 | 1 | 1 |
 | III. AI smeta tekshiruvi | 34 | 32 | 0 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 27 | 1 | 2 | 2 |
 | V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 12 | 0 | 2 | 2 |
-| **Jami** | **700** | **639** | **16** | **45** | **45** |
+| **Jami** | **700** | **639** | **17** | **44** | **44** |
 
 Ya'ni **~91 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
 
@@ -76,8 +76,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 17. AI ga majburiy talab — *normativni o'ylab topmaydi (II.17)*
 - [x] 18. Arxitektura — *bilimlar grafi tugun va qirralar bilan*
 - [x] 19. Interfeys: PROYEKT / AI CHECK / CLASH / ACTION
-- [x] 🔒 **IFC dan o'qish** — *ochiq format o'qiladi; DWG/RVT uchun kutubxona kerak*
-- [ ] 🔒 PDF va DWG dan chizmani tanish
+- [x] **IFC va DXF dan o'qish** — *ikkala ochiq format ham o'qiladi; DWG/RVT yopiq — ulardan CAD orqali DXF eksport qilinadi*
+- [~] PDF va DWG dan chizmani tanish — *PDF dagi matn va DXF chizma o'qiladi; DWG/RVT ning o'zi 🔒 (yopiq format)*
 - [ ] 🔒 3D geometriya bo'yicha haqiqiy kolliziya (clash) hisobi
 
 ---
