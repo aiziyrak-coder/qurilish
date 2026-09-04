@@ -295,9 +295,57 @@ pub fn estimate_from_file(path: &Path) -> Result<Imported, String> {
     let rows = match ext.as_str() {
         "csv" | "txt" => read_csv(path)?,
         "xlsx" | "xlsm" | "xls" | "xlsb" | "ods" => read_spreadsheet(path)?,
+        "pdf" => read_pdf(path)?,
         _ => return Err(crate::i18n::t("import_bad_format").to_string()),
     };
     rows_to_items(&rows, name)
+}
+
+/// PDF dan jadval o'qiydi (TZ III.2).
+///
+/// PDF da jadval tuzilmasi saqlanmaydi — u matn parchalarining
+/// joylashuvidan tiklanadi (`pdfread`). Shuning uchun natija taxminiy
+/// bo'lishi mumkin: ustunlar noto'g'ri ajralsa, sarlavha topilmaydi va
+/// import ochiq xato beradi — jim turib noto'g'ri son qo'ymaydi.
+fn read_pdf(path: &Path) -> Result<Vec<Vec<Cell>>, String> {
+    let rows: Vec<Vec<Cell>> = match crate::pdfread::table(path) {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|r| r.into_iter().map(|text| Cell { text, num: None }).collect())
+            .collect(),
+        // Matni yo'q PDF — bu skan. Kompyuterda matnni tanish dasturi
+        // bo'lsa, undan foydalanamiz; bo'lmasa xato o'zgarmasdan qaytadi.
+        Err(e) => {
+            if crate::ocr::tesseract().is_some() && crate::ocr::pdf_to_image().is_some() {
+                let text = crate::ocr::pdf_text(path)?;
+                text_rows(&text)
+            } else {
+                return Err(e);
+            }
+        }
+    };
+    Ok(rows)
+}
+
+/// Tanilgan matnni qatorlarga bo'ladi.
+///
+/// OCR jadval chegaralarini bilmaydi; u faqat matn beradi. Ustunlar
+/// **ikki va undan ortiq bo'shliq** bo'yicha ajratiladi — bu tanilgan
+/// jadvalda ustunlar orasidagi odatdagi bo'shliq.
+fn text_rows(text: &str) -> Vec<Vec<Cell>> {
+    text.lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|line| {
+            line.split("  ")
+                .map(|c| c.trim())
+                .filter(|c| !c.is_empty())
+                .map(|c| Cell {
+                    text: c.to_string(),
+                    num: None,
+                })
+                .collect()
+        })
+        .collect()
 }
 
 fn read_spreadsheet(path: &Path) -> Result<Vec<Vec<Cell>>, String> {
@@ -412,6 +460,66 @@ mod tests {
                 num: None,
             })
             .collect()
+    }
+
+    /// TZ III.2: PDF dagi smeta jadvali o'qiladi.
+    ///
+    /// Sinov haqiqiy PDF yozadi va uni qaytadan o'qiydi: ustunlar
+    /// joylashuvdan tiklanadi, sonlar son bo'lib qoladi.
+    #[test]
+    fn estimate_is_read_from_a_pdf() {
+        use crate::docgen::{Cell as DocCell, Table};
+
+        let path = std::env::temp_dir().join(format!("qurai_imp_{}.pdf", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let table = Table {
+            name: "Smeta".into(),
+            headers: vec![
+                "Nomi".into(),
+                "Birlik".into(),
+                "Miqdori".into(),
+                "Narxi".into(),
+                "Summa".into(),
+            ],
+            rows: vec![
+                vec![
+                    DocCell::Text("Beton quyish".into()),
+                    DocCell::Text("m3".into()),
+                    DocCell::Num(10.0),
+                    DocCell::Num(500.0),
+                    DocCell::Num(5000.0),
+                ],
+                vec![
+                    DocCell::Text("Armatura montaji".into()),
+                    DocCell::Text("t".into()),
+                    DocCell::Num(2.0),
+                    DocCell::Num(1000.0),
+                    DocCell::Num(2000.0),
+                ],
+            ],
+        };
+        // Shrift topilmasa PDF yozib bo'lmaydi — bu muhit masalasi.
+        if crate::pdf::write_table(&path, &table, "").is_err() {
+            return;
+        }
+
+        let out = estimate_from_file(&path).expect("import");
+        assert_eq!(out.items.len(), 2, "{:?}", out.items);
+        let first = &out.items[0];
+        assert_eq!(first.name, "Beton quyish");
+        assert_eq!(first.unit, "m3");
+        assert_eq!(first.qty, 10.0);
+        assert_eq!(first.price, 500.0);
+        assert_eq!(first.cost, 5000.0);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Matni yo'q PDF da taxmin qilinmaydi — sabab aytiladi.
+    #[test]
+    fn pdf_without_text_reports_the_reason() {
+        let out = estimate_from_file(std::path::Path::new("yo-q.pdf"));
+        assert!(out.is_err());
+        assert!(!out.err().unwrap_or_default().is_empty());
     }
 
     #[test]

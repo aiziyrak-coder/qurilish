@@ -1128,7 +1128,7 @@ fn header(ui: &mut egui::Ui, app: &mut App) {
             import_from = rfd::FileDialog::new()
                 .add_filter(
                     t("import_file_filter"),
-                    &["xlsx", "xlsm", "xls", "xlsb", "ods", "csv"],
+                    &["xlsx", "xlsm", "xls", "xlsb", "ods", "csv", "pdf"],
                 )
                 .pick_file();
         }

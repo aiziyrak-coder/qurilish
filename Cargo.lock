@@ -1997,6 +1997,7 @@ version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07c8e1b6184b1b32ea5f72f572ebdc40e5da1d2921fa469947ff7c480ad1f85a"
 dependencies = [
+ "chrono",
  "encoding_rs",
  "flate2",
  "itoa",
@@ -2854,6 +2855,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "image",
+ "lopdf",
  "printpdf",
  "rfd",
  "rusqlite",

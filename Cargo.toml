@@ -23,6 +23,7 @@ ureq = { version = "2", optional = true, default-features = false, features = ["
 # Excel yozish: KS-2, KS-3, M-29 va jadval eksporti uchun.
 rust_xlsxwriter = { version = "0.99.0", default-features = false }
 printpdf = { version = "0.7", default-features = false }
+lopdf = { version = "0.31", default-features = false, features = ["chrono_time", "pom_parser"] }
 
 [features]
 # OpenAI integratsiyasi yig'ilishga kiradi, lekin **ishlamaydi**: u sozlamada

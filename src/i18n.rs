@@ -1128,8 +1128,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         // ---------- Import / Импорт ----------
         "import_estimate" => ("Smetani import qilish", "Импорт сметы"),
         "import_hint" => (
-            "XLSX, XLS, ODS yoki CSV. Ustunlar nomi bo'yicha topiladi: nomi, birligi, miqdori, narxi, summasi.",
-            "XLSX, XLS, ODS или CSV. Колонки определяются по названию: наименование, единица, количество, цена, стоимость.",
+            "XLSX, XLS, ODS, CSV yoki PDF. Ustunlar nomi bo'yicha topiladi: nomi, birligi, miqdori, narxi, summasi. PDF da jadval matn joylashuvidan tiklanadi; skan (rasm) o'qilmaydi.",
+            "XLSX, XLS, ODS, CSV или PDF. Колонки определяются по названию: наименование, единица, количество, цена, стоимость. В PDF таблица восстанавливается по расположению текста; скан (изображение) не читается.",
         ),
         "import_done" => ("pozitsiya import qilindi", "позиций импортировано"),
         "import_skipped" => ("qator o'qilmadi", "строк не прочитано"),
@@ -1753,6 +1753,42 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "nt_col" => ("Izoh", "Комм."),
         "col_count" => ("Soni", "Кол-во"),
         "col_score" => ("Ball", "Балл"),
+        "set_group_ocr" => ("Matnni tanish (skan)", "Распознавание текста (скан)"),
+        "set_ocr_status" => ("Holat", "Состояние"),
+        "set_ocr_note" => (
+            "Skan qilingan PDF va rasmdagi matn shu kompyuterdagi Tesseract orqali o'qiladi. Hech narsa internetga jo'natilmaydi. Tanilgan matn — qoralama: uni tekshirib chiqish kerak.",
+            "Текст со скана PDF и изображений читается локальным Tesseract. Ничего не отправляется в интернет. Распознанный текст — черновик: его нужно проверить.",
+        ),
+        "ocr_ready" => (
+            "Matnni tanish tayyor: Tesseract va pdftoppm topildi",
+            "Распознавание готово: найдены Tesseract и pdftoppm",
+        ),
+        "ocr_images_only" => (
+            "Tesseract topildi, lekin pdftoppm yo'q — skan PDF emas, faqat rasm o'qiladi",
+            "Tesseract найден, но нет pdftoppm — читаются только изображения, не PDF-скан",
+        ),
+        "ocr_missing" => (
+            "Matnni tanish dasturi topilmadi. Tesseract OCR ni o'rnating (rus va o'zbek til paketlari bilan) — ilova uni shu kompyuterdan chaqiradi, hech narsa internetga chiqmaydi.",
+            "Программа распознавания не найдена. Установите Tesseract OCR (с языковыми пакетами для русского и узбекского) — приложение вызывает её локально, ничего не уходит в интернет.",
+        ),
+        "ocr_no_pdftoppm" => (
+            "PDF ni rasmga aylantiruvchi topilmadi: Poppler (pdftoppm) ni o'rnating",
+            "Не найден конвертер PDF в изображение: установите Poppler (pdftoppm)",
+        ),
+        "ocr_failed" => ("Matnni tanish bajarilmadi", "Распознавание не выполнено"),
+        "ocr_empty" => (
+            "Matn topilmadi: rasm sifati past bo'lishi mumkin",
+            "Текст не найден: возможно, низкое качество изображения",
+        ),
+        "ocr_recognized" => (
+            "Tanilgan matn — qoralama: uni tekshirib chiqing",
+            "Распознанный текст — черновик: проверьте его",
+        ),
+        "pdf_no_pages" => ("PDF bo'sh: sahifa yo'q", "PDF пуст: нет страниц"),
+        "pdf_no_text" => (
+            "PDF ichida matn topilmadi — bu skan bo'lishi mumkin. Skanni o'qish uchun matnni tanish (OCR) kerak; uni ilova qilmaydi.",
+            "В PDF не найден текст — возможно, это скан. Для скана нужно распознавание текста (OCR); приложение этого не делает.",
+        ),
         "pdf_no_font" => (
             "PDF uchun tizim shrifti topilmadi — fayl yozilmadi",
             "Системный шрифт для PDF не найден — файл не записан",

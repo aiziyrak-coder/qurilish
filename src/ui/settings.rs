@@ -227,6 +227,47 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(10.0);
 
         // ---------- Foydalanuvchilar va rollar ----------
+        // ---- Matnni tanish (OCR) ----
+        card_frame(ui, t("set_group_ocr"), w, |ui| {
+            ui.label(
+                RichText::new(t("set_ocr_note"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            let ready = crate::ocr::tesseract().is_some();
+            field(ui, t("set_ocr_status"), |ui| {
+                ui.label(
+                    RichText::new(crate::ocr::status())
+                        .size(12.0)
+                        .color(if ready { theme::ok() } else { theme::muted() }),
+                );
+            });
+            field(ui, "Tesseract", |ui| {
+                ui.label(
+                    RichText::new(
+                        crate::ocr::tesseract()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|| t("dash").to_string()),
+                    )
+                    .size(11.5)
+                    .color(theme::muted()),
+                );
+            });
+            field(ui, "pdftoppm", |ui| {
+                ui.label(
+                    RichText::new(
+                        crate::ocr::pdf_to_image()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_else(|| t("dash").to_string()),
+                    )
+                    .size(11.5)
+                    .color(theme::muted()),
+                );
+            });
+        });
+        ui.add_space(12.0);
+
         card_frame(ui, t("set_group_roles"), w, |ui| {
             ui.label(
                 RichText::new(t("set_roles_note"))
