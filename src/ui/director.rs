@@ -293,7 +293,7 @@ fn card(ui: &mut egui::Ui, c: &Card) -> bool {
             for (label, value, colour) in &c.rows {
                 ui.horizontal(|ui| {
                     ui.add_sized(
-                        [ui.available_width() - 110.0, 18.0],
+                        [(ui.available_width() - 110.0).max(60.0), 18.0],
                         egui::Label::new(RichText::new(label).size(11.5).color(theme::muted())),
                     );
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

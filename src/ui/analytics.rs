@@ -508,7 +508,7 @@ fn briefing_tab(ui: &mut egui::Ui, inp: &analytics::Input) -> Option<Screen> {
                     .fill(theme::card())
                     .inner_margin(10.0)
                     .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width() - 4.0);
+                        ui.set_min_width((ui.available_width() - 4.0).max(60.0));
                         ui.horizontal_wrapped(|ui| {
                             // Rangli nuqta — muhimlik darajasi.
                             let (rect, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());

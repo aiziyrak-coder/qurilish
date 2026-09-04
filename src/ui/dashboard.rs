@@ -35,7 +35,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         kpi_row(ui, app, &p);
         ui.add_space(14.0);
 
-        let avail = ui.available_width() - 24.0;
+        let avail = (ui.available_width() - 24.0).max(120.0);
         // Tor oynada ikki ustun siqilib ketadi — bloklarni ustma-ust qo'yamiz.
         let two_col = avail > 900.0;
         let right_w = if two_col {

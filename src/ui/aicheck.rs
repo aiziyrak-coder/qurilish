@@ -297,7 +297,7 @@ fn graph_tab(ui: &mut egui::Ui, app: &mut App) {
         .max()
         .unwrap_or(1);
     let need_h = 46.0 + rows_max as f32 * (NODE_H + GAP_Y) + 20.0;
-    let col_w = (ui.available_width() - 20.0) / sections.len() as f32;
+    let col_w = (ui.available_width() - 20.0).max(80.0) / sections.len() as f32;
     let need_w = (col_w * sections.len() as f32).max(NODE_W * sections.len() as f32 + 40.0);
 
     let mut clicked: Option<i64> = None;

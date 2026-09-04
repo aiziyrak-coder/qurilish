@@ -252,7 +252,7 @@ fn chat_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut retry = false;
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
-        .max_height(ui.available_height() - 96.0)
+        .max_height((ui.available_height() - 96.0).max(120.0))
         .stick_to_bottom(true)
         .show(ui, |ui| {
             if app.llm_chat.is_empty() {
@@ -477,7 +477,7 @@ fn actions_tab(ui: &mut egui::Ui, app: &mut App) {
                     .corner_radius(8)
                     .inner_margin(egui::Margin::symmetric(14, 12))
                     .show(ui, |ui| {
-                        ui.set_min_width(ui.available_width() - 4.0);
+                        ui.set_min_width((ui.available_width() - 4.0).max(60.0));
                         ui.horizontal_wrapped(|ui| {
                             ui.label(
                                 RichText::new(a.code)

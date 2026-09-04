@@ -1195,3 +1195,183 @@ mod tests {
         assert_eq!(money(f64::NEG_INFINITY), t("dash"));
     }
 }
+
+#[cfg(test)]
+mod screen_tests {
+    use super::*;
+    use crate::db::Db;
+
+    /// Vaqtinchalik baza — sinovlar bir-biriga xalaqit bermasligi uchun.
+    fn temp_db() -> (std::path::PathBuf, Db) {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("qurai_ui_{}_{n}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = Db::open(&path).expect("baza");
+        (path, db)
+    }
+
+    /// Ekranlardagi tab tanlovi shu kalitlar ostida saqlanadi.
+    ///
+    /// Ro'yxat qo'lda yuritiladi: yangi tab qo'shilganda shu yerga ham
+    /// qo'shiladi, aks holda u sinovdan o'tmay qoladi.
+    const TAB_KEYS: &[&str] = &[
+        "an_tab",
+        "cp_tab",
+        "ct_tab",
+        "ed_tab",
+        "estimate_tab_v2",
+        "in_tab",
+        "jr_tab",
+        "mat_tab",
+        "mch_tab",
+        "ppr_tab_v2",
+        "pu_tab",
+        "ql_tab",
+        "sales_tab",
+        "sf_tab",
+        "ts_tab",
+        "wh_tab",
+    ];
+
+    /// Eng ko'p tabli ekrandagi tab soni.
+    const TABS: u8 = 8;
+
+    /// Bitta kadrni oynasiz chizadi.
+    ///
+    /// egui immediate-mode: butun ekran har kadrda qaytadan quriladi,
+    /// shuning uchun kadrni oynasiz o'tkazish haqiqiy chizishning o'zi —
+    /// jadval ustunlari, identifikatorlar va hisoblar shu yerda ishlaydi.
+    fn frame(ctx: &egui::Context, app: &mut App) {
+        let _ = ctx.run(egui::RawInput::default(), |ctx| draw(ctx, app));
+    }
+
+    /// Har bir ekran namuna ma'lumotida chizilishi kerak.
+    ///
+    /// Bu sinov «ishlaydi shekilli» degan taxminni almashtiradi: ekran
+    /// haqiqatda chiziladi va uning ichidagi hisoblar bajariladi.
+    #[test]
+    fn every_screen_draws_with_demo_data() {
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        app.auto_check(crate::domain::IssueModule::Project);
+
+        let ctx = egui::Context::default();
+        // Birinchi kadr uslubni o'rnatadi.
+        frame(&ctx, &mut app);
+
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                app.screen = *s;
+                // Ekranning har bir tabi ham chiziladi: tab tanlovi
+                // `ui.data` da saqlanadi, shuning uchun uni sinovda
+                // to'g'ridan-to'g'ri qo'yamiz.
+                for tab in 0u8..TABS {
+                    for key in TAB_KEYS {
+                        ctx.data_mut(|d| d.insert_temp(egui::Id::new(*key), tab));
+                    }
+                    // Ikki kadr: birinchisida holat yoziladi, ikkinchisida
+                    // o'sha holat o'qiladi.
+                    frame(&ctx, &mut app);
+                    frame(&ctx, &mut app);
+                }
+            }
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Bo'sh bazada ham hech qaysi ekran yiqilmaydi.
+    ///
+    /// Namuna ma'lumotisiz ilova birinchi marta shunday ochiladi: har bir
+    /// ekran «ma'lumot yo'q» holatini o'zi ko'rsatishi kerak.
+    #[test]
+    fn every_screen_draws_on_an_empty_database() {
+        let (path, db) = temp_db();
+        drop(db);
+        let mut app = App::new(Db::open(&path).expect("baza"));
+
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app);
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                app.screen = *s;
+                for tab in 0u8..TABS {
+                    for key in TAB_KEYS {
+                        ctx.data_mut(|d| d.insert_temp(egui::Id::new(*key), tab));
+                    }
+                    frame(&ctx, &mut app);
+                    frame(&ctx, &mut app);
+                }
+            }
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Kichik oynada ham hech qaysi ekran yiqilmaydi.
+    ///
+    /// Tor oynada `available_width() - N` manfiy bo'lib qolishi mumkin —
+    /// egui bunday o'lchamda darhol to'xtaydi. Shuning uchun tor oyna
+    /// alohida sinaladi.
+    #[test]
+    fn every_screen_draws_in_a_small_window() {
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+
+        for (w, h) in [(1024.0_f32, 700.0_f32), (760.0, 560.0), (420.0, 340.0)] {
+            let ctx = egui::Context::default();
+            let input = || egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(w, h),
+                )),
+                ..Default::default()
+            };
+            for (_, screens) in NAV_GROUPS {
+                for s in *screens {
+                    app.screen = *s;
+                    let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+                    let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+                }
+            }
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Ekranni faqat-o'qish rolida ochish ham xavfsiz.
+    #[test]
+    fn every_screen_draws_for_a_read_only_role() {
+        use crate::roles::{Role, User};
+
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        let uid = app.db.insert_user(&User {
+            id: 0,
+            name: "Buyurtmachi".into(),
+            role: Role::Client,
+            note: String::new(),
+        });
+        app.reload_users();
+        app.set_user(Some(uid));
+
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app);
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                app.screen = *s;
+                frame(&ctx, &mut app);
+            }
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+}

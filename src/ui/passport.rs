@@ -46,7 +46,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         dirty |= status_pipeline(ui, &mut p);
         ui.add_space(14.0);
 
-        let avail = ui.available_width() - 24.0;
+        let avail = (ui.available_width() - 24.0).max(120.0);
         // Tor oynada ikki ustun siqilib, o'ng ustun kesilib qolardi —
         // shunda bloklar ustma-ust joylashadi.
         let two_col = avail > 900.0;
@@ -110,7 +110,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             dirty |= ui
                 .add(
                     egui::TextEdit::multiline(&mut p.notes)
-                        .desired_width(ui.available_width() - 20.0)
+                        .desired_width((ui.available_width() - 20.0).max(80.0))
                         .desired_rows(3),
                 )
                 .changed();
@@ -187,7 +187,7 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
     // To'xtatilganda oxirgi haqiqiy bosqich sifatida «qurilish» ko'rsatiladi.
     let cur = steps.iter().position(|s| *s == p.status).unwrap_or(2);
 
-    let w = ui.available_width() - 190.0;
+    let w = (ui.available_width() - 190.0).max(80.0);
     ui.horizontal(|ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(w.max(420.0), 52.0), Sense::hover());
         let painter = ui.painter();
@@ -558,8 +558,10 @@ fn completeness_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
 
     // Umumiy polosa.
     ui.horizontal(|ui| {
-        let (rect, _) =
-            ui.allocate_exact_size(vec2(ui.available_width() - 52.0, 10.0), Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(
+            vec2((ui.available_width() - 52.0).max(60.0), 10.0),
+            Sense::hover(),
+        );
         let painter = ui.painter();
         painter.rect_filled(rect, 4.0, theme::track());
         painter.rect_filled(

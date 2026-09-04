@@ -444,7 +444,7 @@ pub fn issue_detail(ui: &mut egui::Ui, app: &mut App, height: f32) {
                         .corner_radius(6)
                         .inner_margin(egui::Margin::symmetric(10, 8))
                         .show(ui, |ui| {
-                            ui.set_width(ui.available_width() - 8.0);
+                            ui.set_width((ui.available_width() - 8.0).max(80.0));
                             ui.label(
                                 RichText::new(t("issue_norm"))
                                     .size(11.0)

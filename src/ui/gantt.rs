@@ -35,7 +35,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     } else {
         0.0
     };
-    let avail = ui.available_size() - vec2(0.0, bottom);
+    // Tor oynada Gant maydoni manfiy bo'lib qolmasin.
+    let avail = egui::vec2(
+        ui.available_width(),
+        (ui.available_height() - bottom).max(120.0),
+    );
     let (rect, _) = ui.allocate_exact_size(avail, Sense::hover());
 
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect));

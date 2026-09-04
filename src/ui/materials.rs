@@ -1098,165 +1098,188 @@ fn trace_tab(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             // ---- Zanjir: qayerdan → qayerga → qaysi hujjatga.
-            card_frame(ui, t("trace_chain"), ui.available_width() - 20.0, |ui| {
-                let line = |ui: &mut egui::Ui, label: &str, value: String| {
-                    ui.horizontal(|ui| {
-                        ui.add_sized(
-                            [190.0, 18.0],
-                            egui::Label::new(RichText::new(label).size(11.5).color(theme::muted())),
-                        );
-                        ui.label(RichText::new(value).size(12.0));
-                    });
-                };
-                line(
-                    ui,
-                    t("trace_suppliers"),
-                    if trace.suppliers.is_empty() {
-                        t("dash").to_string()
-                    } else {
-                        trace.suppliers.join(", ")
-                    },
-                );
-                line(
-                    ui,
-                    t("trace_batches"),
-                    if trace.batches.is_empty() {
-                        t("dash").to_string()
-                    } else {
-                        trace
-                            .batches
-                            .iter()
-                            .filter_map(|id| app.batches.iter().find(|b| b.id == *id))
-                            .map(|b| b.number.clone())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    },
-                );
-                line(
-                    ui,
-                    t("trace_tasks"),
-                    if trace.tasks.is_empty() {
-                        t("dash").to_string()
-                    } else {
-                        trace
-                            .tasks
-                            .iter()
-                            .filter_map(|id| app.task(*id))
-                            .map(|x| format!("{} {}", x.wbs, x.name))
-                            .collect::<Vec<_>>()
-                            .join("; ")
-                    },
-                );
-                line(
-                    ui,
-                    t("trace_docs"),
-                    if trace.docs.is_empty() {
-                        // Hujjat yo'qligi ham javob: zanjir uzilgan.
-                        t("trace_no_docs").to_string()
-                    } else {
-                        trace
-                            .docs
-                            .iter()
-                            .filter_map(|id| app.exec_docs.iter().find(|d| d.id == *id))
-                            .map(|d| d.number.clone())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    },
-                );
-                line(ui, t("trace_checks"), trace.checks.len().to_string());
-            });
+            card_frame(
+                ui,
+                t("trace_chain"),
+                (ui.available_width() - 20.0).max(200.0),
+                |ui| {
+                    let line = |ui: &mut egui::Ui, label: &str, value: String| {
+                        ui.horizontal(|ui| {
+                            ui.add_sized(
+                                [190.0, 18.0],
+                                egui::Label::new(
+                                    RichText::new(label).size(11.5).color(theme::muted()),
+                                ),
+                            );
+                            ui.label(RichText::new(value).size(12.0));
+                        });
+                    };
+                    line(
+                        ui,
+                        t("trace_suppliers"),
+                        if trace.suppliers.is_empty() {
+                            t("dash").to_string()
+                        } else {
+                            trace.suppliers.join(", ")
+                        },
+                    );
+                    line(
+                        ui,
+                        t("trace_batches"),
+                        if trace.batches.is_empty() {
+                            t("dash").to_string()
+                        } else {
+                            trace
+                                .batches
+                                .iter()
+                                .filter_map(|id| app.batches.iter().find(|b| b.id == *id))
+                                .map(|b| b.number.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        },
+                    );
+                    line(
+                        ui,
+                        t("trace_tasks"),
+                        if trace.tasks.is_empty() {
+                            t("dash").to_string()
+                        } else {
+                            trace
+                                .tasks
+                                .iter()
+                                .filter_map(|id| app.task(*id))
+                                .map(|x| format!("{} {}", x.wbs, x.name))
+                                .collect::<Vec<_>>()
+                                .join("; ")
+                        },
+                    );
+                    line(
+                        ui,
+                        t("trace_docs"),
+                        if trace.docs.is_empty() {
+                            // Hujjat yo'qligi ham javob: zanjir uzilgan.
+                            t("trace_no_docs").to_string()
+                        } else {
+                            trace
+                                .docs
+                                .iter()
+                                .filter_map(|id| app.exec_docs.iter().find(|d| d.id == *id))
+                                .map(|d| d.number.clone())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        },
+                    );
+                    line(ui, t("trace_checks"), trace.checks.len().to_string());
+                },
+            );
             ui.add_space(10.0);
 
             // ---- Narx tarixi.
-            card_frame(ui, t("trace_prices"), ui.available_width() - 20.0, |ui| {
-                if hist.is_empty() {
-                    ui.label(
-                        RichText::new(t("trace_no_prices"))
-                            .size(12.0)
-                            .color(theme::muted()),
-                    );
-                    return;
-                }
-                egui::Grid::new("mat_prices")
-                    .num_columns(6)
-                    .spacing([10.0, 4.0])
-                    .striped(true)
-                    .show(ui, |ui| {
-                        for h in [
-                            t("col_date"),
-                            t("col_price"),
-                            t("col_change"),
-                            t("col_qty"),
-                            t("col_supplier"),
-                            t("col_document"),
-                        ] {
-                            ui.label(RichText::new(h).size(11.0).color(theme::muted()));
-                        }
-                        ui.end_row();
-                        for p in &hist {
-                            ui.label(
-                                RichText::new(p.date.format("%d.%m.%Y").to_string())
-                                    .size(11.5)
-                                    .monospace(),
-                            );
-                            ui.label(RichText::new(money(p.price)).size(12.0));
-                            match p.change_pct {
-                                Some(c) => {
-                                    ui.label(RichText::new(format!("{c:+.1}%")).size(11.5).color(
-                                        if c > 10.0 {
-                                            theme::danger()
-                                        } else if c > 0.0 {
-                                            theme::warn()
-                                        } else {
-                                            theme::ok()
-                                        },
-                                    ))
-                                }
-                                None => ui.label(
-                                    RichText::new(t("dash")).size(11.5).color(theme::muted()),
-                                ),
-                            };
-                            ui.label(RichText::new(trim_num(p.qty)).size(11.5));
-                            ui.label(RichText::new(&p.supplier).size(11.5));
-                            ui.label(RichText::new(&p.document).size(11.5).color(theme::muted()));
+            card_frame(
+                ui,
+                t("trace_prices"),
+                (ui.available_width() - 20.0).max(200.0),
+                |ui| {
+                    if hist.is_empty() {
+                        ui.label(
+                            RichText::new(t("trace_no_prices"))
+                                .size(12.0)
+                                .color(theme::muted()),
+                        );
+                        return;
+                    }
+                    egui::Grid::new("mat_prices")
+                        .num_columns(6)
+                        .spacing([10.0, 4.0])
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for h in [
+                                t("col_date"),
+                                t("col_price"),
+                                t("col_change"),
+                                t("col_qty"),
+                                t("col_supplier"),
+                                t("col_document"),
+                            ] {
+                                ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                            }
                             ui.end_row();
-                        }
-                    });
-            });
+                            for p in &hist {
+                                ui.label(
+                                    RichText::new(p.date.format("%d.%m.%Y").to_string())
+                                        .size(11.5)
+                                        .monospace(),
+                                );
+                                ui.label(RichText::new(money(p.price)).size(12.0));
+                                match p.change_pct {
+                                    Some(c) => ui.label(
+                                        RichText::new(format!("{c:+.1}%")).size(11.5).color(
+                                            if c > 10.0 {
+                                                theme::danger()
+                                            } else if c > 0.0 {
+                                                theme::warn()
+                                            } else {
+                                                theme::ok()
+                                            },
+                                        ),
+                                    ),
+                                    None => ui.label(
+                                        RichText::new(t("dash")).size(11.5).color(theme::muted()),
+                                    ),
+                                };
+                                ui.label(RichText::new(trim_num(p.qty)).size(11.5));
+                                ui.label(RichText::new(&p.supplier).size(11.5));
+                                ui.label(
+                                    RichText::new(&p.document).size(11.5).color(theme::muted()),
+                                );
+                                ui.end_row();
+                            }
+                        });
+                },
+            );
             ui.add_space(10.0);
 
             // ---- Brak.
             let defects =
                 crate::checks::defect_lines(&app.materials, &app.stock_moves, &app.quality);
             if let Some(d) = defects.iter().find(|d| d.material_id == mid) {
-                card_frame(ui, t("trace_defects"), ui.available_width() - 20.0, |ui| {
-                    ui.label(
-                        RichText::new(format!("{} {}", t("trace_rejected"), d.rejected))
-                            .size(12.0)
-                            .color(theme::danger()),
-                    );
-                    ui.label(
-                        RichText::new(format!(
-                            "{} {} · {} {}",
-                            t("mk_writeoff"),
-                            trim_num(d.written_off),
-                            t("mk_to_supplier"),
-                            trim_num(d.returned)
-                        ))
-                        .size(11.5)
-                        .color(theme::muted()),
-                    );
-                    if d.unresolved {
+                card_frame(
+                    ui,
+                    t("trace_defects"),
+                    (ui.available_width() - 20.0).max(200.0),
+                    |ui| {
                         ui.label(
-                            RichText::new(t("trace_unresolved"))
-                                .size(11.5)
+                            RichText::new(format!("{} {}", t("trace_rejected"), d.rejected))
+                                .size(12.0)
                                 .color(theme::danger()),
                         );
-                    }
-                    for r in &d.reasons {
-                        cell_l(ui, ui.available_width() - 10.0, RichText::new(r).size(11.5));
-                    }
-                });
+                        ui.label(
+                            RichText::new(format!(
+                                "{} {} · {} {}",
+                                t("mk_writeoff"),
+                                trim_num(d.written_off),
+                                t("mk_to_supplier"),
+                                trim_num(d.returned)
+                            ))
+                            .size(11.5)
+                            .color(theme::muted()),
+                        );
+                        if d.unresolved {
+                            ui.label(
+                                RichText::new(t("trace_unresolved"))
+                                    .size(11.5)
+                                    .color(theme::danger()),
+                            );
+                        }
+                        for r in &d.reasons {
+                            cell_l(
+                                ui,
+                                (ui.available_width() - 10.0).max(80.0),
+                                RichText::new(r).size(11.5),
+                            );
+                        }
+                    },
+                );
             }
         });
 }
