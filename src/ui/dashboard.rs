@@ -32,6 +32,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     egui::ScrollArea::vertical().show(ui, |ui| {
         header(ui, app, &p);
         ui.add_space(12.0);
+        // Birinchi bo'lib: bugun nima qilish kerak. Son va jadval keyin.
+        if let Some(screen) = next_steps(ui, app) {
+            goto_screen = Some(screen);
+        }
         kpi_row(ui, app, &p);
         ui.add_space(14.0);
 
@@ -171,6 +175,88 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 // ================================================================ Sarlavha
 
 /// Obyekt nomi, manzili va shartnoma muddati chizig'i: boshlanish — bugun — tugash.
+/// «Bugun nima qilish kerak» — ekranning eng tepasida.
+///
+/// Ro'yxat `notify::collect` dan olinadi: bu aynan «Bildirishnomalar»
+/// ekranidagi ro'yxat, shuning uchun ikki joyda ikki xil son bo'lishi
+/// mumkin emas. Bu yerda faqat eng muhim beshtasi turadi — ro'yxat emas,
+/// **keyingi qadam** kerak.
+///
+/// Hech narsa yo'q bo'lsa blok ham chiqmaydi: bo'sh ro'yxat ekranda joy
+/// egallab, «hammasi joyida» degan noto'g'ri taassurot qoldirardi —
+/// haqiqiy holat esa «bugun signal yo'q».
+fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
+    use crate::domain::Severity;
+
+    let mut goto = None;
+    let top: Vec<&crate::notify::Notice> = app.notices.iter().take(5).collect();
+    let w = (ui.available_width() - 24.0).max(120.0);
+
+    card_frame(ui, t("ns_title"), w, |ui| {
+        ui.label(RichText::new(t("ns_hint")).size(11.0).color(theme::muted()));
+        ui.add_space(6.0);
+
+        if top.is_empty() {
+            ui.label(RichText::new(t("ns_clear")).size(13.0).color(theme::ok()));
+            return;
+        }
+
+        for n in &top {
+            let colour = match n.severity {
+                Severity::Critical => theme::danger(),
+                Severity::Major => theme::warn(),
+                _ => theme::accent(),
+            };
+            let resp = ui.horizontal(|ui| {
+                // Rangli nuqta — jiddiylik darajasi.
+                let (rect, _) = ui.allocate_exact_size(vec2(10.0, 16.0), Sense::hover());
+                ui.painter().circle_filled(rect.center(), 4.0, colour);
+
+                ui.add_sized(
+                    [(ui.available_width() - 220.0).max(160.0), 20.0],
+                    egui::Label::new(RichText::new(&n.title).size(13.0)).truncate(),
+                );
+                ui.label(
+                    RichText::new(if n.days > 0 {
+                        format!("{} {} · {}", n.days, t("days_short"), n.count)
+                    } else {
+                        n.count.to_string()
+                    })
+                    .size(11.5)
+                    .color(theme::muted()),
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.small_button(t("ns_open")).clicked() {
+                        goto = Some(n.screen);
+                    }
+                    ui.label(
+                        RichText::new(n.source.label())
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                });
+            });
+            // Dalil — nima uchun shunday deyilayotgani.
+            if !n.detail.trim().is_empty() {
+                resp.response.on_hover_text(&n.detail);
+            }
+            ui.add_space(2.0);
+        }
+
+        if app.notices.len() > top.len() {
+            ui.add_space(4.0);
+            if ui
+                .small_button(format!("{} {}", t("ns_all"), app.notices.len() - top.len()))
+                .clicked()
+            {
+                goto = Some(Screen::Notices);
+            }
+        }
+    });
+    ui.add_space(14.0);
+    goto
+}
+
 fn header(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
     ui.horizontal(|ui| {
         ui.vertical(|ui| {

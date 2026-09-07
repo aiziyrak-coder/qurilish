@@ -91,6 +91,17 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "dash" => ("—", "—"),
 
         // ---------- Navigatsiya / Навигация ----------
+        "ns_title" => ("Bugun nima qilish kerak", "Что нужно сделать сегодня"),
+        "ns_hint" => (
+            "Barcha modullardan yig'ilgan eng muhim beshta signal. Har biri o'z ekranini ochadi.",
+            "Пять самых важных сигналов, собранных из всех модулей. Каждый открывает свой экран.",
+        ),
+        "ns_clear" => (
+            "Bugun e'tibor talab qiladigan signal yo'q",
+            "Сегодня нет сигналов, требующих внимания",
+        ),
+        "ns_open" => ("Ochish", "Открыть"),
+        "ns_all" => ("Yana ko'rish:", "Показать ещё:"),
         "header_numeral_hint" => ("TZ bo'limi", "Раздел ТЗ"),
         "purpose_dashboard" => (
             "Obyekt bo'yicha bugungi holat: bajarilish, kechikish va e'tibor talab qiladigan yozuvlar.",
