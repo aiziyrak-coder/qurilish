@@ -146,24 +146,36 @@ yozilgan va yoqishni foydalanuvchi o'zi tanlaydi. Modelga beriladigan ko'rsatma
 qat'iy: **sonni o'ylab topma, bilmasang ochiq ayt**. So'rov tuzish va javobni
 o'qish tarmoqsiz sinaladi.
 
-## Holat (2026-09-04)
+## Holat: 1.0.0 — ishlab chiqarishga tayyor (2026-09-07)
 
-TZ bo'yicha **638 / 700 band to'liq**, 16 tasi qisman (har birida nima
-bloklagani TODO.md da yozilgan), 46 tasi tashqi omilga bog'liq.
+TZ bo'yicha **647 / 702 band to'liq**, 13 tasi qisman, 42 tasi tashqi shartga
+bog'liq (DWG/RVT, 3D geometriya, push xizmati, davlat ERI si, ovoz, native
+mobil ilova). Qolganlarining har birida nima bloklagani TODO.md da yozilgan.
 
-Tekshiruv: `cargo test` — 350 sinov o'tadi (`--no-default-features` bilan ham),
-`cargo clippy --all-targets` — ogohlantirishsiz, `cargo fmt --check` — toza,
-`cargo build --release` — yig'iladi.
+Tekshiruv:
+
+| Nima | Natija |
+|---|---|
+| `cargo test --workspace` | 399 desktop + 36 server sinov o'tadi |
+| `cargo test --no-default-features` | 398 sinov (tarmoq kodisiz yig'ilish) |
+| `cargo clippy --workspace --all-targets -- -D warnings` | toza |
+| `cargo fmt --check` | toza |
+| `cargo build --release --workspace` | `qurai.exe` (~19 MB), `qurai-server.exe` (~3 MB) |
+| Yangi bazada ishga tushirish | baza yaratiladi va namuna bilan to'ladi |
 
 Qo'riqchi sinovlar (regressiyani ushlaydi):
 
-- har bir ekran va uning har bir tabi oynasiz chiziladi — namuna bazasi,
-  bo'sh baza, faqat-o'qish roli, tor oyna va chekka ma'lumotda
-- eksport qilinadigan har bir ekranda jadval bor va ustunlar mos
-- i18n: takroriy kalit yo'q, ishlatilgan kalitning tarjimasi bor, ruscha
-  matn nusxa emas, sanaladigan qiymatlarning nomi bor
-- rollar: jurnalga yozadigan rol uni haqiqatda o'zgartira oladi
-- yordamchi: har javobda manba bor, har ma'lumot ekranidan kirish bor
+- har ekran va uning har bo'limi oynasiz chiziladi — namuna bazasi, bo'sh baza,
+  faqat-o'qish roli, tor oyna va chekka ma'lumotda
+- yon panel ro'yxati surilgan joyida qoladi (xato qaytarib tekshirilgan)
+- eksport qilinadigan har ekranda jadval bor va ustunlar mos
+- `match tab` da ishlanadigan har bo'lim ro'yxatda ham bor
+- i18n: takroriy kalit yo'q, ishlatilgan kalitning tarjimasi bor, ruscha matn
+  nusxa emas, sanaladigan qiymatlarning nomi bor
+- hisobot sonlari modul funksiyalari bilan bir xil; «JAMI» qatori haqiqiy
+  yig'indi; Ctrl+E tanlangan hisobotni beradi
+- server: kim kira oladi, kim kira olmaydi, paket tartibi, imzo huquqi
+- desktop mijozi haqiqiy server dasturi bilan gaplashadi (boshdan-oxir)
 
 ## Server (`server/`)
 

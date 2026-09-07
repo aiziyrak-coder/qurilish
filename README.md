@@ -17,7 +17,8 @@ smetani tekshirish, ijro hujjatlari va kundalik ishlar jurnali.
 cargo run --release
 ```
 
-Tayyor fayl: `target/release/qurai.exe` (~7 MB, tashqi bog'liqliksiz).
+Tayyor fayl: `target/release/qurai.exe` (~19 MB, tashqi bog'liqliksiz —
+SQLite, Excel va PDF yozish, IFC/DXF/PDF o'qish hammasi ichida).
 Ma'lumotlar bazasi — exe yonidagi `data/qurai.db`; birinchi ishga tushirishda
 namoyish obyekti yaratiladi: «Navro'z» TJM, 20 ta ish, 25 ta bog'lanish,
 22 ta loyiha elementi, 10 pozitsiyali smeta, 4 ta PPR kartasi, jurnal yozuvlari
@@ -518,27 +519,103 @@ Sxema kelajakdagi sinxronizatsiyaga tayyorlangan: har bir yozuvda `updated_at` b
 identifikatorlar qayta ishlatilmaydi. Obyekt o'chirilganda bog'liq ma'lumot
 `FOREIGN KEY … ON DELETE CASCADE` bilan ketadi.
 
-## TZ bo'yicha keyingi bosqichlar
+## Ishlab chiqarishga tayyorlash
 
-TZ ning I–XVIII modullari va XIX–XX sotuv bo'limi qurilgan. Avval alohida qaror
-kutayotgan uch yo'nalish ham ilova ichida hal qilindi: **IFC** o'qish (II.1–2),
-**rollar** va **loyiha paketi** (VI–VIII), hamda **til modeli nuqtasi** (XVIII).
+### Yig'ish
 
-Ilovadan tashqarida qolgani:
+```bash
+cargo build --release
+```
 
-1. **Server**: jonli sinxronizatsiya, rollar bo'yicha kirish va masofadan
-   imzolash. Hozir ma'lumot qurilmalar orasida fayl orqali ko'chadi.
-2. **DWG va RVT**: yopiq formatlar, ular uchun kutubxona yoki konvertor kerak.
-   IFC esa o'qiladi.
-3. **Til modeli tanlovi**: qaysi model, lokal yoki bulut, ma'lumot chetga
-   chiqishi bo'yicha tashkiliy qaror. Integratsiya nuqtasi tayyor va o'chiq.
+Natija ikkita fayl:
 
-Uchta arxitektura qarori alohida hal qilinishi kerak:
+| Fayl | Nima |
+|---|---|
+| `target/release/qurai.exe` | Desktop ilova. Tashqi bog'liqliksiz ishlaydi |
+| `target/release/qurai-server.exe` | Server (ixtiyoriy): kirish nazorati, sinxronizatsiya, telefon ko'rinishi |
 
-1. **Server va rollar.** VI (prorab mobil ilovasi), VII (texnik nazorat kabineti)
-   va VIII (buyurtmachi kabineti) modullari ko'p foydalanuvchili ishni talab
-   qiladi. Desktop klient native holicha qoladi va serverga API orqali murojaat qiladi.
-2. **Chizmani tanish (TZ II.1–2).** PDF, DWG, DXF, RVT, IFC ni o'qish tashqi
-   kutubxona yoki xizmatni talab qiladi. Hozir loyiha elementlari qo'lda kiritiladi.
-3. **Ovozli kiritish va ovozli rejim (TZ V.26, VI.7).** Mikrofon va nutqni
-   tanish tashqi xizmatga bog'liq. Yozma suhbat OpenAI orqali ishlaydi.
+Tarmoq kodisiz yig'ish (ilova hech qayerga ulanmasligi kafolatlansin):
+
+```bash
+cargo build --release --no-default-features
+```
+
+### Tarqatish va birinchi ishga tushirish
+
+Ilovani ko'chirish uchun **bitta fayl** yetarli. U birinchi ochilishda yonidagi
+`data/qurai.db` faylini yaratadi va namoyish obyektini to'ldiradi. Namuna kerak
+bo'lmasa — «Sozlamalar → Namunani o'chirish».
+
+Papkaga yozish huquqi bo'lmasa (masalan `Program Files`), baza foydalanuvchi
+papkasiga tushadi. Aniq yo'l «Sozlamalar → Baza fayli» da ko'rinadi.
+
+### Ma'lumotni saqlash
+
+- **Zaxira nusxa** — «Sozlamalar → Zaxira nusxa». Nusxa `VACUUM INTO` orqali
+  olinadi: WAL rejimida ham hech narsa tushib qolmaydi. **Har kuni oling** —
+  kod git bilan qaytadi, ma'lumot qaytmaydi.
+- **Yangilash** — eski baza ustiga yangi versiyani qo'yish yetarli: sxema
+  o'zgarishi qo'shimcha ustunlar orqali qilinadi va eski baza ochilaveradi
+  (sinov bilan qoplangan).
+- **Ko'chirish** — `data/qurai.db` faylini nusxalash kifoya. Boshqa yo'l kerak
+  bo'lsa: `QURAI_DB=D:\qurai\baza.db qurai.exe`.
+
+### Server (ixtiyoriy)
+
+Server kerak bo'ladi, agar: bir necha qurilma bir obyektda ishlasa, telefondan
+kunlik yozuv kiritilsa yoki hujjat masofadan imzolansa.
+
+```bash
+qurai-server --add-user prorab "Ism Familiya" foreman
+QURAI_BIND=0.0.0.0:8080 QURAI_DB=/var/qurai/server.db qurai-server
+```
+
+Ilovada: «Sozlamalar → Server bilan sinxronizatsiya» — manzil, login va parol.
+Parol saqlanmaydi, faqat seans belgisi.
+
+**Xavfsizlik chegarasi ochiq aytiladi:**
+
+- Server **HTTP** beradi. Internetga chiqarilganda **HTTPS beruvchi teskari
+  proksi ortida** turishi shart (nginx, Caddy) — aks holda parol va seans
+  belgisi tarmoqda ochiq ketadi. Dastur buni ishga tushirishda ham eslatadi.
+- Ilova ichidagi rol — **ish taqsimoti**, himoya emas: baza fayli ochiq va uni
+  har kim o'qiy oladi. Haqiqiy kirish nazorati serverda: parol Argon2id bilan
+  xeshlanadi, seans belgisi tasodifiy, huquq har so'rovda tekshiriladi.
+- Til modeli (OpenAI) **sukut bo'yicha o'chiq**. Yoqilganda savol va unga
+  biriktirilgan sonlar tashqi xizmatga ketadi — buni foydalanuvchi o'zi
+  tanlaydi. Kalit faqat `Authorization` sarlavhasida ketadi va logga tushmaydi.
+
+### Tekshiruv
+
+Har o'zgarishdan keyin:
+
+```bash
+cargo test --workspace
+```
+
+```bash
+cargo clippy --workspace --all-targets -- -D warnings
+```
+
+Sinovlar orasida **haqiqiy ishni** tekshiradiganlari bor: har ekran oynasiz
+chiziladi (namuna, bo'sh baza, faqat-o'qish roli, tor oyna va chekka ma'lumot),
+server haqiqiy so'rovlarni qabul qiladi, desktop mijozi haqiqiy server bilan
+gaplashadi, PDF va Excel fayllari haqiqatda yoziladi va qayta o'qiladi.
+
+## Ilova ichida hal bo'lmaydigan narsalar
+
+Bular kod bilan emas, tashqi shart bilan hal bo'ladi va shu sababli ochiq
+qoldirilgan:
+
+1. **DWG va RVT** — yopiq formatlar. CAD dan **DXF** eksport qilinadi va u
+   o'qiladi; IFC ham o'qiladi.
+2. **3D ko'rinish (BIM)** — geometriya yadrosi talab qiladi. IFC dan elementlar,
+   bog'lanishlar va kolliziyalar ro'yxati olinadi.
+3. **Push bildirishnoma** (SMS, Telegram) — tashqi xizmat va shartnoma kerak.
+   Ilova ichidagi bildirishnomalar markazi va telefon sahifasi ishlaydi.
+4. **Davlat elektron raqamli imzosi** — kalitlar va akkreditatsiya masalasi.
+   Serverdagi imzo kim, qachon va qaysi matnni tasdiqlaganini qayd etadi.
+5. **Ovozli kiritish** — mikrofon va nutqni tanish xizmati kerak.
+6. **Native mobil ilova** — hozir telefon brauzeri orqali ishlanadi.
+7. **Skanni tanish (OCR)** — mahalliy Tesseract chaqiriladi; u o'rnatilmagan
+   bo'lsa ilova buni ochiq aytadi va taxmin qilmaydi.
