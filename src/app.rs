@@ -1962,9 +1962,22 @@ impl App {
         let tasks: Vec<crate::sync::TaskOut> = self
             .tasks
             .iter()
-            .map(|t| crate::sync::TaskOut {
-                wbs: t.wbs.clone(),
-                name: t.name.clone(),
+            .map(|t| {
+                // Tugash sanasi hisobdan olinadi: u grafikda ham shu
+                // yerdan chiqadi, ikkinchi hisob bo'lmasin.
+                let end = self
+                    .schedule
+                    .get(t.id)
+                    .map(|c| self.origin() + chrono::Duration::days(c.ef.max(0)))
+                    .unwrap_or(t.plan_start);
+                crate::sync::TaskOut {
+                    wbs: t.wbs.clone(),
+                    name: t.name.clone(),
+                    start: t.plan_start.to_string(),
+                    end: end.to_string(),
+                    progress: t.progress,
+                    section: t.section.code().to_string(),
+                }
             })
             .collect();
         // Faol ishchilar — telefondagi tabel shu ro'yxat bo'yicha

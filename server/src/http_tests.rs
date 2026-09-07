@@ -787,3 +787,76 @@ fn timesheet_says_when_the_worker_list_is_missing() {
         assert!(!html.contains("<button"), "{html}");
     });
 }
+
+/// Telefondagi grafik: muddat bo'yicha tartib va muddati o'tgani belgisi.
+#[test]
+fn phone_shows_the_schedule_by_deadline() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/tasks",
+                Some(&token),
+                json!({ "project": "OBY-1", "items": [
+                    { "wbs": "1", "name": "Tugagan ish", "start": "2020-01-01",
+                      "end": "2020-01-10", "progress": 100.0, "section": "KJ" },
+                    { "wbs": "2", "name": "Kechikkan ish", "start": "2020-02-01",
+                      "end": "2020-02-10", "progress": 30.0, "section": "AR" },
+                    { "wbs": "3", "name": "Kelasi ish", "start": "2090-01-01",
+                      "end": "2090-01-10", "progress": 0.0, "section": "VK" }
+                ] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=prorab&password=prorab-parol-1"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1/tasks")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+
+        // Tugallanmagan ishlar tugaganidan oldin turadi.
+        let late = html.find("Kechikkan ish").expect("kechikkan");
+        let future = html.find("Kelasi ish").expect("kelasi");
+        let done = html.find("Tugagan ish").expect("tugagan");
+        assert!(late < future, "muddat bo'yicha tartib buzilgan");
+        assert!(future < done, "tugagan ish oldinda turibdi");
+
+        // Muddati o'tgan ish ajratilgan, sana qisqa ko'rinishda.
+        assert!(html.contains("class=\"err\">10.02"), "{html}");
+        assert!(html.contains("10.01"), "sana ko'rsatilmadi");
+    });
+}

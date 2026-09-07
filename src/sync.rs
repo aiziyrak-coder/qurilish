@@ -190,6 +190,11 @@ pub fn notices_body(project: &str, items: &[NoticeOut]) -> String {
 pub struct TaskOut {
     pub wbs: String,
     pub name: String,
+    /// Reja sanalari — telefonda muddat ko'rinishi uchun.
+    pub start: String,
+    pub end: String,
+    pub progress: f64,
+    pub section: String,
 }
 
 /// Ishlar ro'yxati so'rovining tanasi.
@@ -198,9 +203,13 @@ pub fn tasks_body(project: &str, items: &[TaskOut]) -> String {
         .iter()
         .map(|t| {
             format!(
-                "{{\"wbs\":{},\"name\":{}}}",
+                "{{\"wbs\":{},\"name\":{},\"start\":{},\"end\":{},\"progress\":{},\"section\":{}}}",
                 json_string(&t.wbs),
-                json_string(&t.name)
+                json_string(&t.name),
+                json_string(&t.start),
+                json_string(&t.end),
+                t.progress,
+                json_string(&t.section)
             )
         })
         .collect();
@@ -664,6 +673,10 @@ mod tests {
             let tasks = vec![TaskOut {
                 wbs: "1.1".into(),
                 name: "Yer ishlari".into(),
+                start: "2026-09-01".into(),
+                end: "2026-09-10".into(),
+                progress: 40.0,
+                section: "KJ".into(),
             }];
             send_tasks(&cfg, "OBY-1", &tasks).map_err(|e| format!("ishlar: {e:?}"))?;
             let workers = vec![WorkerOut {

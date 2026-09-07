@@ -112,6 +112,14 @@ pub struct TaskItem {
     #[serde(default)]
     pub wbs: String,
     pub name: String,
+    #[serde(default)]
+    pub start: String,
+    #[serde(default)]
+    pub end: String,
+    #[serde(default)]
+    pub progress: f64,
+    #[serde(default)]
+    pub section: String,
 }
 
 /// Bir obyekt uchun qabul qilinadigan eng ko'p ish soni.
@@ -433,6 +441,10 @@ pub async fn tasks(
         .map(|t| crate::store::TaskRef {
             wbs: t.wbs,
             name: t.name,
+            start: t.start,
+            end: t.end,
+            progress: t.progress,
+            section: t.section,
         })
         .collect();
     match state.store.set_tasks(req.project.trim(), &items) {

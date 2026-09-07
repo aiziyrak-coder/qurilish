@@ -253,7 +253,7 @@ pub async fn object(
     // ---- Kunlik yozuv havolasi (yozish huquqi borlarga)
     if auth::can(&user.role, Access::Write) {
         body.push_str(&format!(
-            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{p}/journal\">Ochish</a></div><div class=\"card\"><b>Tabel</b><div class=\"muted\">Bugungi soat va kun turi</div><a href=\"/o/{p}/timesheet\">Ochish</a></div>",
+            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{p}/journal\">Ochish</a></div><div class=\"card\"><b>Tabel</b><div class=\"muted\">Bugungi soat va kun turi</div><a href=\"/o/{p}/timesheet\">Ochish</a></div><div class=\"card\"><b>Ishlar</b><div class=\"muted\">Muddat va bajarilish</div><a href=\"/o/{p}/tasks\">Ochish</a></div>",
             p = esc(&project)
         ));
     }
@@ -762,6 +762,83 @@ pub async fn timesheet_submit(
         .push_change(project.trim(), &body, &user.login, &at, rows.len() as i64);
     state.store.log(&user.login, "tabel", project.trim(), &at);
     Redirect::to(&format!("/o/{project}")).into_response()
+}
+
+// ================================================================ Grafik
+
+/// `GET /o/{project}/tasks` — ishlar grafigi telefonda (faqat ko'rish).
+///
+/// Grafikning chizmasi telefonda ko'rsatilmaydi: kichik ekranda u
+/// o'qilmaydi. Buning o'rniga muddat bo'yicha tartiblangan ro'yxat
+/// beriladi — maydonchada aynan shu kerak: nima ketyapti va nimaning
+/// muddati o'tgan.
+pub async fn tasks_page(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    let tasks = state.store.tasks(&project);
+    let today = crate::now().split('T').next().unwrap_or("").to_string();
+
+    let mut body = format!(
+        "<div class=\"row\"><h1>Ishlar</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">{obj} · {name}</p>",
+        p = esc(&project),
+        obj = esc(&project),
+        name = esc(&user.name)
+    );
+
+    if tasks.is_empty() {
+        body.push_str(
+            "<p class=\"muted\">Ishlar ro'yxati hali kelmagan. Ofisdagi ilova \
+sinxronizatsiya qilgach, ro'yxat shu yerda chiqadi.</p>",
+        );
+        return page("QURAi — ishlar", &body).into_response();
+    }
+
+    // Tugallanmaganlari oldinda, muddat bo'yicha.
+    let mut list = tasks;
+    list.sort_by(|a, b| {
+        (a.progress >= 99.99)
+            .cmp(&(b.progress >= 99.99))
+            .then(a.end.cmp(&b.end))
+    });
+
+    body.push_str("<table><tr><th>Ish</th><th>Muddat</th><th>%</th></tr>");
+    for t in list.iter().take(100) {
+        // Muddati o'tgan va tugallanmagan ish ajratib ko'rsatiladi.
+        let late = !t.end.is_empty() && t.end < today && t.progress < 99.99;
+        let name = if t.wbs.trim().is_empty() {
+            t.name.clone()
+        } else {
+            format!("{} {}", t.wbs, t.name)
+        };
+        body.push_str(&format!(
+            "<tr><td>{}<div class=\"muted\">{}</div></td>\
+<td class=\"{}\">{}</td><td>{:.0}</td></tr>",
+            esc(&name),
+            esc(&t.section),
+            if late { "err" } else { "" },
+            esc(&short_date(&t.end)),
+            t.progress
+        ));
+    }
+    body.push_str("</table>");
+    page("QURAi — ishlar", &body).into_response()
+}
+
+/// `2026-09-07` → `07.09`. Bo'sh yoki boshqa ko'rinishdagi sana
+/// o'zgarmasdan qoladi: taxmin qilib format o'zgartirish xato beradi.
+fn short_date(iso: &str) -> String {
+    let parts: Vec<&str> = iso.split('-').collect();
+    if parts.len() == 3 && parts[1].len() == 2 && parts[2].len() == 2 {
+        format!("{}.{}", parts[2], parts[1])
+    } else {
+        iso.to_string()
+    }
 }
 
 /// Rol kodining o'qiladigan nomi.

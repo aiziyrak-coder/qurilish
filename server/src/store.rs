@@ -82,6 +82,13 @@ pub struct Notice {
 pub struct TaskRef {
     pub wbs: String,
     pub name: String,
+    /// Reja bo'yicha boshlanish va tugash sanasi (`YYYY-MM-DD`).
+    pub start: String,
+    pub end: String,
+    /// Bajarilish foizi.
+    pub progress: f64,
+    /// Bo'lim kodi: AR, KJ, VK va h.k.
+    pub section: String,
 }
 
 /// Tabel uchun ishchi.
@@ -469,8 +476,9 @@ impl Store {
             .map_err(|e| e.to_string())?;
         for t in items {
             tx.execute(
-                "INSERT INTO task_ref (project,wbs,name) VALUES (?1,?2,?3)",
-                params![project, t.wbs, t.name],
+                "INSERT INTO task_ref (project,wbs,name,start,finish,progress,section)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![project, t.wbs, t.name, t.start, t.end, t.progress, t.section],
             )
             .map_err(|e| e.to_string())?;
         }
@@ -480,15 +488,21 @@ impl Store {
 
     pub fn tasks(&self, project: &str) -> Vec<TaskRef> {
         let conn = self.lock();
-        let mut st =
-            match conn.prepare("SELECT wbs,name FROM task_ref WHERE project=?1 ORDER BY id") {
-                Ok(s) => s,
-                Err(_) => return Vec::new(),
-            };
+        let mut st = match conn.prepare(
+            "SELECT wbs,name,start,finish,progress,section FROM task_ref
+             WHERE project=?1 ORDER BY id",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
         let rows = st.query_map(params![project], |r| {
             Ok(TaskRef {
                 wbs: r.get(0)?,
                 name: r.get(1)?,
+                start: r.get(2)?,
+                end: r.get(3)?,
+                progress: r.get(4)?,
+                section: r.get(5)?,
             })
         });
         rows.map(|it| it.filter_map(|x| x.ok()).collect())
@@ -613,7 +627,11 @@ CREATE TABLE IF NOT EXISTS task_ref (
     id INTEGER PRIMARY KEY,
     project TEXT NOT NULL,
     wbs TEXT NOT NULL DEFAULT '',
-    name TEXT NOT NULL
+    name TEXT NOT NULL,
+    start TEXT NOT NULL DEFAULT '',
+    finish TEXT NOT NULL DEFAULT '',
+    progress REAL NOT NULL DEFAULT 0,
+    section TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS task_ref_project ON task_ref(project);
 CREATE TABLE IF NOT EXISTS worker_ref (
@@ -766,6 +784,10 @@ mod tests {
         let t = |wbs: &str, name: &str| TaskRef {
             wbs: wbs.into(),
             name: name.into(),
+            start: "2026-09-01".into(),
+            end: "2026-09-10".into(),
+            progress: 40.0,
+            section: "AR".into(),
         };
         s.set_tasks("OBY-1", &[t("1", "Yer ishlari"), t("2", "Poydevor")])
             .unwrap();
@@ -773,6 +795,9 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].name, "Yer ishlari");
         assert_eq!(list[1].wbs, "2");
+        // Muddat va bajarilish ham saqlanadi.
+        assert_eq!(list[0].start, "2026-09-01");
+        assert_eq!(list[0].progress, 40.0);
 
         s.set_tasks("OBY-1", &[t("3", "Karkas")]).unwrap();
         let list = s.tasks("OBY-1");

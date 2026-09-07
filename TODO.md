@@ -23,7 +23,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | III. AI smeta tekshiruvi | 34 | 32 | 0 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 27 | 1 | 2 | 2 |
 | V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
-| VI. Prorab ilovasi | 37 | 27 | 3 | 7 | 7 |
+| VI. Prorab ilovasi | 37 | 28 | 2 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
 | VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 13 | 1 | 0 | 0 |
-| **Jami** | **700** | **643** | **15** | **42** | **42** |
+| **Jami** | **700** | **644** | **14** | **42** | **42** |
 
 Ya'ni **~92 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
 
@@ -205,7 +205,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 2. Avtorizatsiya — *serverda haqiqiy: login va Argon2id parol, seans belgisi, rol bo'yicha huquq. Ilova ichida rol ish taqsimoti bo'lib qoladi (baza fayli ochiq) va bu ochiq aytiladi*
 - [x] 3. Bosh ekran
 - [x] 4. Mening vazifalarim — *bugungi ishlar*
-- [~] 5. Mobil GPR — *telefondan ishlar ro'yxati ko'rinadi va kunlik yozuvda tanlanadi; grafikning o'zi (chizma, bog'lanishlar) mobil ko'rinishda yo'q*
+- [x] 5. Mobil GPR — *telefonda ishlar muddat bo'yicha ro'yxat sifatida: bajarilish foizi, bo'lim, muddati o'tgani ajratilgan. Grafik chizmasi ataylab yo'q — kichik ekranda o'qilmaydi*
 - [x] 6. Kunlik hisobot
 - [ ] 🔒 7. Ovozli kiritish
 - [x] 8. Foto — *jurnal va yozuvlarga biriktirish*

@@ -241,6 +241,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/notices", post(api::notices))
         .route("/api/tasks", post(api::tasks))
         .route("/api/workers", post(api::workers))
+        .route("/o/{project}/tasks", get(web::tasks_page))
         .route("/o/{project}/timesheet", get(web::timesheet_form))
         .route("/o/{project}/timesheet", post(web::timesheet_submit))
         .route("/api/signatures", get(api::signatures))
