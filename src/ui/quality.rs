@@ -231,12 +231,17 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     let mut open_points: Option<i64> = None;
     let mut open_notes: Option<i64> = None;
     let today = app.today;
+    // Tor oynada material va tekshiruvchi ustunlari yashiriladi: ular
+    // ikkilamchi va ko'pincha bo'sh turadi, asosiy ish esa natija,
+    // nuqson va muddat ustunlarida. Yashirilgan qiymatlar yo'qolmaydi —
+    // oyna kengaysa qaytadan ko'rinadi.
+    let wide = ui.available_width() > 1450.0;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("quality_grid")
-                .num_columns(13)
+                .num_columns(if wide { 13 } else { 11 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -245,8 +250,10 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                     head_l(ui, 130.0, t("col_result"));
                     head_l(ui, 210.0, t("col_subject"));
                     head_l(ui, 170.0, t("col_task"));
-                    head_l(ui, 170.0, t("col_material"));
-                    head_l(ui, 140.0, t("col_inspector"));
+                    if wide {
+                        head_l(ui, 170.0, t("col_material"));
+                        head_l(ui, 140.0, t("col_inspector"));
+                    }
                     head_l(ui, 200.0, t("col_defect"));
                     head_l(ui, 130.0, t("col_fix_deadline"));
                     head_l(ui, 110.0, t("col_fixed"));
@@ -287,33 +294,38 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
 
                         // Material faqat kirish nazoratida ma'noga ega, lekin
                         // boshqa bosqichda ham bog'lash mumkin.
-                        egui::ComboBox::from_id_salt(("qc_mat", q.id))
-                            .selected_text(super::issues::truncate(
-                                &match q.material_id {
-                                    Some(id) => material_label(app, id),
-                                    None => t("dash").to_string(),
-                                },
-                                22,
-                            ))
-                            .width(170.0)
-                            .show_ui(ui, |ui| {
-                                changed |= ui
-                                    .selectable_value(&mut q.material_id, None, t("dash"))
-                                    .changed();
-                                for m in &app.materials {
+                        if wide {
+                            egui::ComboBox::from_id_salt(("qc_mat", q.id))
+                                .selected_text(super::issues::truncate(
+                                    &match q.material_id {
+                                        Some(id) => material_label(app, id),
+                                        None => t("dash").to_string(),
+                                    },
+                                    22,
+                                ))
+                                .width(170.0)
+                                .show_ui(ui, |ui| {
                                     changed |= ui
-                                        .selectable_value(
-                                            &mut q.material_id,
-                                            Some(m.id),
-                                            material_label(app, m.id),
-                                        )
+                                        .selectable_value(&mut q.material_id, None, t("dash"))
                                         .changed();
-                                }
-                            });
+                                    for m in &app.materials {
+                                        changed |= ui
+                                            .selectable_value(
+                                                &mut q.material_id,
+                                                Some(m.id),
+                                                material_label(app, m.id),
+                                            )
+                                            .changed();
+                                    }
+                                });
 
-                        changed |= ui
-                            .add_sized([140.0, 22.0], egui::TextEdit::singleline(&mut q.inspector))
-                            .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [140.0, 22.0],
+                                    egui::TextEdit::singleline(&mut q.inspector),
+                                )
+                                .changed();
+                        }
                         changed |= ui
                             .add_sized([200.0, 22.0], egui::TextEdit::singleline(&mut q.defect))
                             .changed();

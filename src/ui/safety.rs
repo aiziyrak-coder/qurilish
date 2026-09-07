@@ -743,11 +743,15 @@ fn work_permits_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
         let mut edited: Option<WorkPermit> = None;
         let mut removed: Option<i64> = None;
 
+        // Tor oynada naryadni beruvchi va nazoratchi yashiriladi: kunlik
+        // ishda muddat, holat va e'tirozlar muhim.
+        let wide = ui.available_width() > 1450.0;
+
         egui::ScrollArea::both()
             .auto_shrink([false, false])
             .show(ui, |ui| {
                 egui::Grid::new("sf_work_permits")
-                    .num_columns(12)
+                    .num_columns(if wide { 12 } else { 10 })
                     .spacing([8.0, 5.0])
                     .striped(true)
                     .show(ui, |ui| {
@@ -757,8 +761,10 @@ fn work_permits_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                         head_l(ui, 150.0, t("col_place"));
                         head_l(ui, 110.0, t("col_from"));
                         head_l(ui, 110.0, t("col_to"));
-                        head_l(ui, 140.0, t("col_issuer"));
-                        head_l(ui, 140.0, t("col_supervisor"));
+                        if wide {
+                            head_l(ui, 140.0, t("col_issuer"));
+                            head_l(ui, 140.0, t("col_supervisor"));
+                        }
                         head_l(ui, 200.0, t("col_executors"));
                         head_l(ui, 120.0, t("col_status"));
                         head_l(ui, 240.0, t("col_permit_issues"));
@@ -797,15 +803,20 @@ fn work_permits_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                                 &format!("wpt{}", p.id),
                                 &mut p.date_to,
                             );
-                            changed |= ui
-                                .add_sized([140.0, 22.0], egui::TextEdit::singleline(&mut p.issuer))
-                                .changed();
-                            changed |= ui
-                                .add_sized(
-                                    [140.0, 22.0],
-                                    egui::TextEdit::singleline(&mut p.supervisor),
-                                )
-                                .changed();
+                            if wide {
+                                changed |= ui
+                                    .add_sized(
+                                        [140.0, 22.0],
+                                        egui::TextEdit::singleline(&mut p.issuer),
+                                    )
+                                    .changed();
+                                changed |= ui
+                                    .add_sized(
+                                        [140.0, 22.0],
+                                        egui::TextEdit::singleline(&mut p.supervisor),
+                                    )
+                                    .changed();
+                            }
 
                             // Bajaruvchilar — ro'yxatdan belgilanadi.
                             let mut ids = p.worker_ids();

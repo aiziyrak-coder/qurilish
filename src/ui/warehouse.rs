@@ -1223,11 +1223,16 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut removed: Option<i64> = None;
     let mut open_notes: Option<i64> = None;
 
+    // Tor oynada hujjat raqami va kontragent yashiriladi: kunlik ishda
+    // material, miqdor va ombor muhim. Qiymatlar yo'qolmaydi — oyna
+    // kengaysa qaytadan ko'rinadi.
+    let wide = ui.available_width() > 1400.0;
+
     egui::ScrollArea::both()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             egui::Grid::new("wh_moves")
-                .num_columns(12)
+                .num_columns(if wide { 12 } else { 10 })
                 .spacing([8.0, 5.0])
                 .striped(true)
                 .show(ui, |ui| {
@@ -1239,8 +1244,10 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                     head_r(ui, 86.0, t("col_qty"));
                     head_r(ui, 110.0, t("col_price"));
                     head_r(ui, 120.0, t("col_sum"));
-                    head_l(ui, 120.0, t("col_document"));
-                    head_l(ui, 150.0, t("col_counterparty"));
+                    if wide {
+                        head_l(ui, 120.0, t("col_document"));
+                        head_l(ui, 150.0, t("col_counterparty"));
+                    }
                     head_l(ui, 200.0, t("col_task"));
                     head_l(ui, 24.0, "");
                     ui.end_row();
@@ -1299,15 +1306,20 @@ fn moves_tab(ui: &mut egui::Ui, app: &mut App) {
                                 .size(12.0)
                                 .color(theme::muted()),
                         );
-                        changed |= ui
-                            .add_sized([120.0, 22.0], egui::TextEdit::singleline(&mut m.document))
-                            .changed();
-                        changed |= ui
-                            .add_sized(
-                                [150.0, 22.0],
-                                egui::TextEdit::singleline(&mut m.counterparty),
-                            )
-                            .changed();
+                        if wide {
+                            changed |= ui
+                                .add_sized(
+                                    [120.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.document),
+                                )
+                                .changed();
+                            changed |= ui
+                                .add_sized(
+                                    [150.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.counterparty),
+                                )
+                                .changed();
+                        }
                         changed |= task_picker(ui, app, ("wh_task", m.id), &mut m.task_id, 200.0);
 
                         // Ombor fotosi va izohi (TZ XI.44): kirim va chiqim

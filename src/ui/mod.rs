@@ -1436,8 +1436,16 @@ mod screen_tests {
             for (_, screens) in NAV_GROUPS {
                 for s in *screens {
                     app.screen = *s;
-                    let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
-                    let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+                    // Har bo'lim ham chiziladi: tor oynada jadvallar
+                    // ikkilamchi ustunlarni yashiradi va bu tarmoq ham
+                    // sinovdan o'tishi kerak.
+                    for tab in 0u8..TABS {
+                        for key in TAB_KEYS {
+                            ctx.data_mut(|d| d.insert_temp(egui::Id::new(*key), tab));
+                        }
+                        let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+                        let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+                    }
                 }
             }
         }
