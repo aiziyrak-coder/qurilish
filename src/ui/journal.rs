@@ -839,6 +839,10 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<JournalEntry> = None;
     let mut removed: Option<i64> = None;
     let mut add_today = false;
+    // Qaysi kunga surilgani eslab qolinadi — takror surilmasin.
+    let jump_key = egui::Id::new("jr_jumped_to");
+    let jumped = ui.data(|d| d.get_temp::<chrono::NaiveDate>(jump_key));
+    let mut scroll_done: Option<chrono::NaiveDate> = None;
 
     // Bugungi holat — ro'yxatning tepasida. Prorab ekranni ochganda
     // birinchi savoli shu: «bugungi yozuv bormi?». Ilgari bunga javob
@@ -1060,8 +1064,12 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                             }
                         }
                     });
-                if focused {
+                // Topilgan kun bir marta ko'rinishga suriladi. Har kadrda
+                // surish ro'yxatni qulflab qo'yardi: qidiruvdan keyin
+                // boshqa yozuvga o'tib bo'lmasdi.
+                if focused && jumped != Some(e.date) {
                     frame.response.scroll_to_me(Some(egui::Align::Center));
+                    scroll_done = Some(e.date);
                 }
                 ui.add_space(8.0);
 
@@ -1083,5 +1091,8 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
     }
     if add_today {
         add_entry(app);
+    }
+    if let Some(day) = scroll_done {
+        ui.data_mut(|d| d.insert_temp(jump_key, day));
     }
 }

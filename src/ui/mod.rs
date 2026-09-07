@@ -706,12 +706,17 @@ fn side_bar(ctx: &Context, app: &mut App) {
             let bottom_h = 92.0;
             let list_h = (ui.available_height() - bottom_h).max(120.0);
 
-            egui::ScrollArea::vertical()
+            let list = egui::ScrollArea::vertical()
                 .max_height(list_h)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     // Ro'yxat App da keshlangan: uni har kadrda qayta yig'ish
                     // o'nlab SQL so'rovni anglatardi.
+                    // Oxirgi marta qaysi modulga surilgani: shu modul
+                    // ochiq turganda ro'yxat boshqa surilmaydi.
+                    let jump_key = egui::Id::new("nav_jumped_to");
+                    let jumped = ui.data(|d| d.get_temp::<Screen>(jump_key));
+
                     let notice_count = app.notices.len();
                     let notice_color = match crate::notify::top_severity(&app.notices) {
                         Some(crate::domain::Severity::Critical) => theme::danger(),
@@ -740,10 +745,16 @@ fn side_bar(ctx: &Context, app: &mut App) {
                                 (n > 0).then_some((n, notice_color))
                             });
                             let resp = nav_item(ui, screen, active, badge);
-                            // Ochiq modul ro'yxatdan tashqarida qolmasin:
-                            // ilova ochilganda yoki oyna kichrayganda uni
-                            // ko'rinadigan joyga suramiz.
-                            if active && !ui.is_rect_visible(resp.rect) {
+                            // Ochiq modul ro'yxatdan tashqarida qolib
+                            // ketmasin — lekin bu **faqat modul
+                            // almashganda** qilinadi.
+                            //
+                            // Ilgari tekshiruv har kadrda ishlardi:
+                            // foydalanuvchi ro'yxatni pastga surganda faol
+                            // qator ko'rinishdan chiqar, keyingi kadrda
+                            // ro'yxat o'zi tepaga qaytib ketardi va pastga
+                            // tushib bo'lmasdi.
+                            if active && jumped != Some(screen) && !ui.is_rect_visible(resp.rect) {
                                 resp.scroll_to_me(Some(egui::Align::Center));
                             }
                             if resp.clicked() {
@@ -771,6 +782,10 @@ fn side_bar(ctx: &Context, app: &mut App) {
                             ui.add_space(1.0);
                         }
                     }
+
+                    // Joriy modul belgilanadi: keyingi kadrlarda ro'yxat
+                    // erkin suriladi.
+                    ui.data_mut(|d| d.insert_temp(jump_key, app.screen));
 
                     // Belgilar izohi — nuqtalar nimani bildirishini aytadi.
                     ui.add_space(14.0);
@@ -807,6 +822,9 @@ fn side_bar(ctx: &Context, app: &mut App) {
                     }
                     ui.add_space(10.0);
                 });
+            // Sinov ro'yxat haqiqatan erkin surilishini tekshirishi uchun
+            // uning belgisi eslab qolinadi.
+            ui.data_mut(|d| d.insert_temp(egui::Id::new("nav_scroll_id"), list.id));
 
             ui.add_space(6.0);
             ui.separator();
@@ -1507,6 +1525,107 @@ mod screen_tests {
         for (i, a) in all.iter().enumerate() {
             assert!(!all[i + 1..].contains(a), "{a:?} ro'yxatda ikki marta");
         }
+    }
+
+    /// Yon panel ro'yxati erkin suriladi.
+    ///
+    /// Xato shunday edi: faol modul ko'rinishdan chiqishi bilan ro'yxat
+    /// o'zi tepaga qaytardi va pastdagi modullarga yetib bo'lmasdi.
+    /// Sinov aynan shuni tekshiradi — ro'yxat surib qo'yiladi va bir
+    /// necha kadrdan keyin o'sha joyda turganiga ishonch hosil qilinadi.
+    #[test]
+    fn sidebar_list_stays_where_it_was_scrolled() {
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        // Birinchi modul tanlangan bo'lsin: u ro'yxat boshida turadi.
+        app.screen = Screen::Dashboard;
+
+        let ctx = egui::Context::default();
+        // Ro'yxat sig'masligi uchun oyna past bo'lishi kerak.
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(1100.0, 420.0),
+            )),
+            ..Default::default()
+        };
+        let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+        let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+
+        let id: egui::Id = ctx
+            .data(|d| d.get_temp(egui::Id::new("nav_scroll_id")))
+            .expect("ro'yxat belgisi");
+        let mut state = egui::scroll_area::State::load(&ctx, id).expect("holat");
+        // Foydalanuvchi ro'yxatni pastga suradi.
+        state.offset.y = 300.0;
+        state.store(&ctx, id);
+
+        // Ko'p kadr: avtomatik surish silliq bajariladi, shuning uchun
+        // bitta kadrda emas, bir necha kadrda sezilarli suriladi.
+        for _ in 0..40 {
+            let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+        }
+
+        let after = egui::scroll_area::State::load(&ctx, id).expect("holat");
+        assert!(
+            after.offset.y > 250.0,
+            "ro'yxat o'zi tepaga qaytib ketdi: 300 dan {} ga",
+            after.offset.y
+        );
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Boshqa ekranga o'tilganda ro'yxat o'sha modulga suriladi.
+    ///
+    /// Tuzatish keragidan ko'p narsani o'chirib qo'ymasligi kerak:
+    /// «Ochish» tugmasi bilan pastdagi modulga o'tilganda u ro'yxatda
+    /// ko'rinishi shart.
+    #[test]
+    fn sidebar_follows_when_the_screen_changes() {
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        app.screen = Screen::Dashboard;
+
+        let ctx = egui::Context::default();
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(1100.0, 420.0),
+            )),
+            ..Default::default()
+        };
+        for _ in 0..3 {
+            let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+        }
+        let id: egui::Id = ctx
+            .data(|d| d.get_temp(egui::Id::new("nav_scroll_id")))
+            .expect("ro'yxat belgisi");
+        let start = egui::scroll_area::State::load(&ctx, id)
+            .expect("holat")
+            .offset
+            .y;
+
+        // Ro'yxatning oxiridagi modulga o'tamiz (dasturdagi boshqa
+        // tugma orqali o'tilgandek).
+        app.screen = Screen::Settings;
+        for _ in 0..40 {
+            let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+        }
+        let after = egui::scroll_area::State::load(&ctx, id)
+            .expect("holat")
+            .offset
+            .y;
+        assert!(
+            after > start + 50.0,
+            "ro'yxat yangi modulga surilmadi: {start} → {after}"
+        );
+        drop(app);
+        let _ = std::fs::remove_file(&path);
     }
 
     /// Ko'rsatilmagan bo'lim qolib ketmasin.
