@@ -490,6 +490,11 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/docgen.rs` | KS-2, KS-3, M-29, AOSR va jadvallarni `.xlsx` ga yozish |
 | `src/pdf.rs` | Ekran jadvalini PDF ga chiqarish (A4 albom, sahifalash) |
 | `src/actions.rs` | Yordamchining qoralama amallari va ularni bajarish |
+| `src/dxf.rs` | DXF chizmasini o'qish (CAD ning ochiq formati) |
+| `src/pdfread.rs` | PDF dagi jadvalni matn joylashuvidan tiklash |
+| `src/ocr.rs` | Skan uchun mahalliy Tesseract ko'prigi va sertifikat maydonlari |
+| `src/sync.rs` | Server bilan sinxronizatsiya (sukut bo'yicha o'chiq) |
+| `server/` | Server: kirish nazorati, paket navbati, imzo, mobil ko'rinish |
 | `src/ui/analytics.rs` | AI analitika ekrani |
 | `src/ui/copilot.rs` | Yordamchi ekrani |
 | `src/ui/foreman.rs` | Prorab ish o'rni |

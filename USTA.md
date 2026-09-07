@@ -177,7 +177,12 @@ Alohida krat: `axum` + SQLite. Desktop ilovaga uning kutubxonalari kirmaydi.
 - **Masofadan imzolash** — kim, qachon va qaysi matnni tasdiqlagani; matn xeshi
   bilan bog'lanadi. Bu davlat ERI si emas va shunday deb atalmaydi.
 - **Mobil ko'rinish** — telefon brauzeri uchun sahifalar (JavaScript yo'q):
-  obyektlar, o'zgarishlar, imzo va kunlik yozuv formasi.
+  obyektlar, «bugun nima qilish kerak», ishlar grafigi (muddat bo'yicha
+  ro'yxat), kunlik yozuv, tabel va imzo.
+- **Ma'lumot yo'nalishi bir tomonlama.** Grafik, ishchilar ro'yxati va signal
+  ilovada hisoblanadi va serverga **nusxa** sifatida chiqadi; telefon ularni
+  qayta hisoblamaydi. Teskari yo'nalishda esa faqat maydonchada tug'iladigan
+  narsa keladi: kunlik yozuv, tabel va imzo.
 
 Ishga tushirish: `qurai-server --add-user prorab "Ism" foreman`, keyin
 `QURAI_BIND=0.0.0.0:8080 qurai-server`. Server HTTP beradi — internetga
@@ -192,7 +197,9 @@ ham aytadi).
 - **PDF** (`src/pdfread.rs`) — jadval matn parchalarining joylashuvidan
   tiklanadi; shrift `ToUnicode` jadvali orqali o'qiladi.
 - **Skan** (`src/ocr.rs`) — mahalliy Tesseract ga ko'prik; o'rnatilmagan bo'lsa
-  nima kerakligi aytiladi. Hech narsa internetga chiqmaydi.
+  nima kerakligi aytiladi. Hech narsa internetga chiqmaydi. Sertifikat
+  skanidan raqam, muddat va me'yoriy hujjat ajratiladi — **qoralama sifatida**,
+  to'ldirilgan maydon ustiga yozilmaydi.
 - **DWG/RVT** — yopiq formatlar: CAD dan DXF eksport qilinadi.
 
 ## Keyingi qadamlar (ilovadan tashqarida)
