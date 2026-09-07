@@ -27,26 +27,20 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     };
     let today = app.today;
 
+    // Sana va yordamchi bitta qatorda: ekran nomi va izohi tepada,
+    // umumiy sarlavhada turadi va bu yerda takrorlanmaydi.
     ui.horizontal(|ui| {
         ui.label(
-            RichText::new(format!(
-                "{} — {}",
-                t("foreman_today"),
-                today.format("%d.%m.%Y")
-            ))
-            .size(14.0)
-            .strong(),
+            RichText::new(today.format("%d.%m.%Y").to_string())
+                .size(13.5)
+                .strong(),
         );
         ui.label(
-            RichText::new(t("foreman_hint"))
-                .size(11.0)
+            RichText::new(crate::i18n::weekday_name(today))
+                .size(12.0)
                 .color(theme::muted()),
         );
-    });
-    ui.add_space(8.0);
-
-    // Modul yordamchisi (TZ: har modul uchun AI-yordamchi).
-    ui.horizontal(|ui| {
+        ui.add_space(10.0);
         super::assistant_button(ui, app);
     });
     ui.add_space(6.0);
@@ -57,22 +51,32 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         .auto_shrink([false, false])
         .show(ui, |ui| {
             ui.vertical(|ui| {
-                today_tasks(ui, app);
-                ui.add_space(12.0);
-                journal_block(ui, app, pid);
-                ui.add_space(12.0);
-                crew_block(ui, app, pid);
-                ui.add_space(12.0);
-                machines_block(ui, app, pid);
-                ui.add_space(12.0);
+                // Ekran prorabning kun tartibi bo'yicha joylashgan:
+                // avval nima to'sqinlik qilyapti, keyin bugungi ish,
+                // keyin yozib qo'yish, oxirida kunni yopish. Ilgari
+                // bloklar modul tartibida turardi — bu ekranni uzun
+                // ro'yxatga aylantirib, «endi nima qilay?» degan savolni
+                // ochiq qoldirardi.
+                stage(ui, 1, t("fm_stage_start"));
                 attention_block(ui, app);
-                ui.add_space(12.0);
-                requests_block(ui, app);
-                ui.add_space(12.0);
+                ui.add_space(10.0);
                 hidden_block(ui, app);
-                ui.add_space(12.0);
+                ui.add_space(10.0);
+                requests_block(ui, app);
+                ui.add_space(10.0);
                 drawings_block(ui, app);
-                ui.add_space(12.0);
+
+                stage(ui, 2, t("fm_stage_work"));
+                today_tasks(ui, app);
+
+                stage(ui, 3, t("fm_stage_record"));
+                journal_block(ui, app, pid);
+                ui.add_space(10.0);
+                crew_block(ui, app, pid);
+                ui.add_space(10.0);
+                machines_block(ui, app, pid);
+
+                stage(ui, 4, t("fm_stage_close"));
                 day_close_block(ui, app);
                 ui.add_space(20.0);
             });
@@ -153,6 +157,31 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
 }
 
 /// Sarlavhali blok — barcha bo'limlar bir xil ko'rinishda.
+/// Kun tartibidagi bosqich sarlavhasi.
+///
+/// Raqam ataylab: prorab ekranni yuqoridan pastga o'qiydi va shu tartibda
+/// ishlaydi. Bo'sh bloklar o'zini ko'rsatmaydi, shuning uchun sarlavha
+/// ostida hech narsa bo'lmasligi ham mumkin — bu «bu bosqichda ish yo'q»
+/// degani.
+fn stage(ui: &mut egui::Ui, number: u8, title: &str) {
+    ui.add_space(16.0);
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(format!("{number}"))
+                .size(11.0)
+                .monospace()
+                .color(theme::accent()),
+        );
+        ui.label(
+            RichText::new(title)
+                .size(11.5)
+                .strong()
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(6.0);
+}
+
 fn block(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::new()
         .fill(theme::card())

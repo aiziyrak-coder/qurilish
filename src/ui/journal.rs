@@ -110,26 +110,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
 
     if add {
-        if let Some(pid) = app.current {
-            let id = app.db.insert_journal(&JournalEntry {
-                id: 0,
-                project_id: pid,
-                date: app.today,
-                author: String::new(),
-                weather: String::new(),
-                temperature: 0.0,
-                workers: 0,
-                machines: 0,
-                task_id: None,
-                volume: 0.0,
-                unit: String::new(),
-                text: String::new(),
-                remarks: String::new(),
-                photos: String::new(),
-            });
-            app.reload_modules();
-            let _ = id;
-        }
+        // Bitta joyda yaratiladi: tepadagi tugma ham, ro'yxatdagi tugma
+        // ham bir xil yozuvni ochsin.
+        add_entry(app);
     }
     if apply {
         app.apply_journal_to_tasks();
@@ -774,9 +757,93 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     );
 }
 
+/// Bugungi yozuv holati va uni qo'shish tugmasi.
+///
+/// Jurnal kunlik hujjat: bugungi yozuv bo'lmasa, bu birinchi navbatdagi
+/// ish. Kechagi yozuv ham yo'q bo'lsa — bu allaqachon uzilish va u
+/// ko'rinib turishi kerak.
+fn today_line(ui: &mut egui::Ui, app: &App, add: &mut bool) {
+    let has_today = app.journal.iter().any(|e| e.date == app.today);
+    let last = app.journal.iter().map(|e| e.date).max();
+    let gap = last.map(|d| (app.today - d).num_days());
+    let writes = app.role().journal_role() == crate::roles::JournalRole::Writes
+        && app.can_edit(Screen::Journal);
+
+    let (text, colour) = if has_today {
+        (t("jr_today_done").to_string(), theme::ok())
+    } else {
+        match gap {
+            // Kechagi yozuv bor: bugungisi hali yozilmagan.
+            Some(1) => (t("jr_today_missing").to_string(), theme::warn()),
+            // Bir necha kun yozilmagan — bu uzilish.
+            Some(days) if days > 1 => (
+                format!("{} {days} {}", t("jr_gap"), t("days_short")),
+                theme::danger(),
+            ),
+            _ => (t("jr_today_missing").to_string(), theme::warn()),
+        }
+    };
+
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::line()))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "{} · {}",
+                        app.today.format("%d.%m.%Y"),
+                        crate::i18n::weekday_name(app.today)
+                    ))
+                    .size(13.0)
+                    .strong(),
+                );
+                ui.label(RichText::new(text).size(12.5).color(colour));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if !has_today && writes && ui.button(t("jr_add_today")).clicked() {
+                        *add = true;
+                    }
+                });
+            });
+        });
+    ui.add_space(10.0);
+}
+
+/// Yangi yozuv qo'shadi va uni bugungi sana bilan ochadi.
+fn add_entry(app: &mut App) {
+    let Some(pid) = app.current else { return };
+    app.db.insert_journal(&JournalEntry {
+        id: 0,
+        project_id: pid,
+        date: app.today,
+        author: app.user_name(),
+        weather: String::new(),
+        temperature: 0.0,
+        workers: 0,
+        machines: 0,
+        task_id: None,
+        volume: 0.0,
+        unit: String::new(),
+        text: String::new(),
+        remarks: String::new(),
+        photos: String::new(),
+    });
+    app.reload_modules();
+    // Yangi yozuv ro'yxat boshida turadi va ajratib ko'rsatiladi.
+    app.journal_focus = Some(app.today);
+}
+
 fn entries(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<JournalEntry> = None;
     let mut removed: Option<i64> = None;
+    let mut add_today = false;
+
+    // Bugungi holat — ro'yxatning tepasida. Prorab ekranni ochganda
+    // birinchi savoli shu: «bugungi yozuv bormi?». Ilgari bunga javob
+    // ro'yxatni ko'rib chiqib topilardi.
+    today_line(ui, app, &mut add_today);
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -1013,5 +1080,8 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
     if let Some(id) = removed {
         app.db.del("journal", id);
         app.reload_modules();
+    }
+    if add_today {
+        add_entry(app);
     }
 }

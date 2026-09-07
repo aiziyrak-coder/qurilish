@@ -117,11 +117,10 @@ fn keyboard(ui: &egui::Ui, app: &mut App) {
 }
 
 fn toolbar(ui: &mut egui::Ui, app: &mut App) {
-    // Tor oynada hamma narsa bitta qatorga sig'maydi va ustma-ust chiqadi,
-    // shuning uchun panel ikkiga bo'linadi.
-    let wide = ui.available_width() > 1180.0;
-
-    ui.horizontal(|ui| {
+    // Panel ikki qatorga bo'lingan: yuqorisi — **nima qilaman**, pastkisi —
+    // **qanday ko'raman**. Ilgari o'n ikkita boshqaruv bitta qatorda turardi
+    // va kerakli tugmani topish qiyin edi.
+    ui.horizontal_wrapped(|ui| {
         if ui.button(t("add_task")).clicked() {
             app.add_task();
         }
@@ -137,19 +136,8 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
             btn.on_hover_text(t("link_hint"));
         }
 
-        ui.separator();
-        ui.label(RichText::new(t("scale")).color(theme::muted()));
-        for sc in GanttScale::ALL {
-            if ui.selectable_label(app.scale == sc, sc.label()).clicked() {
-                app.scale = sc;
-                app.px_per_day = sc.px_per_day();
-                app.fit_timeline = false;
-                app.scroll_to_today();
-            }
-        }
-
-        // Mahkamlangan ishlar grafikni CPM dan uzib qo'yadi — ularni bir joyda
-        // ko'rsatib, bir bosishda bo'shatish imkonini beramiz.
+        // Mahkamlangan ishlar grafikni CPM dan uzib qo'yadi — ular
+        // amallar qatorida turadi, chunki bu tuzatiladigan holat.
         let pinned = app.tasks.iter().filter(|x| x.pinned).count();
         if pinned > 0 {
             ui.separator();
@@ -162,10 +150,6 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
             }
         }
 
-        if wide {
-            filters(ui, app);
-        }
-
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             // TZ I.2: «kim aybdor, nima qilish kerak» — tahlil oynasi.
             let an = ui.selectable_label(
@@ -175,26 +159,37 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App) {
             if an.on_hover_text(t("an_hint")).clicked() {
                 app.gantt_analysis = !app.gantt_analysis;
             }
-            ui.separator();
-            if ui.button(t("today_btn")).clicked() {
-                app.scroll_to_today();
-            }
-            if ui
-                .button(t("fit_btn"))
-                .on_hover_text(t("fit_hint"))
-                .clicked()
-            {
-                app.fit_timeline = true;
-            }
         });
     });
 
-    if !wide {
-        ui.add_space(4.0);
-        ui.horizontal_wrapped(|ui| {
-            filters(ui, app);
-        });
-    }
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(t("gantt_view"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        for sc in GanttScale::ALL {
+            if ui.selectable_label(app.scale == sc, sc.label()).clicked() {
+                app.scale = sc;
+                app.px_per_day = sc.px_per_day();
+                app.fit_timeline = false;
+                app.scroll_to_today();
+            }
+        }
+        if ui.button(t("today_btn")).clicked() {
+            app.scroll_to_today();
+        }
+        if ui
+            .button(t("fit_btn"))
+            .on_hover_text(t("fit_hint"))
+            .clicked()
+        {
+            app.fit_timeline = true;
+        }
+        ui.separator();
+        filters(ui, app);
+    });
 }
 
 /// Filtrlar va qidiruv — keng oynada asosiy qatorda, torida pastda.

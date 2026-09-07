@@ -64,6 +64,23 @@ pub fn t(key: &str) -> &'static str {
     }
 }
 
+/// Sananing hafta kuni nomi.
+///
+/// Qurilishda hafta kuni sanadan kam ahamiyatli emas: yakshanba ish kuni
+/// emas va tabelda ham shunday ko'rinadi.
+pub fn weekday_name(date: chrono::NaiveDate) -> &'static str {
+    use chrono::Datelike;
+    match date.weekday() {
+        chrono::Weekday::Mon => t("wdl_mon"),
+        chrono::Weekday::Tue => t("wdl_tue"),
+        chrono::Weekday::Wed => t("wdl_wed"),
+        chrono::Weekday::Thu => t("wdl_thu"),
+        chrono::Weekday::Fri => t("wdl_fri"),
+        chrono::Weekday::Sat => t("wdl_sat"),
+        chrono::Weekday::Sun => t("wdl_sun"),
+    }
+}
+
 /// Ikkala tildagi matn. Yangi satr qo'shganda shu ro'yxatga qo'shiladi.
 fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
     let pair = match key {
@@ -91,6 +108,25 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "dash" => ("—", "—"),
 
         // ---------- Navigatsiya / Навигация ----------
+        "gantt_view" => ("KO'RINISH", "ВИД"),
+        "jr_today_done" => ("bugungi yozuv bor", "запись за сегодня есть"),
+        "jr_today_missing" => ("bugungi yozuv yo'q", "записи за сегодня нет"),
+        "jr_gap" => ("jurnal yozilmagan:", "журнал не заполнялся:"),
+        "jr_add_today" => ("Bugungi yozuvni qo'shish", "Добавить запись за сегодня"),
+        "fm_stage_start" => (
+            "KUN BOSHLANISHI — NIMA TO'SQINLIK QILYAPTI",
+            "НАЧАЛО ДНЯ — ЧТО МЕШАЕТ",
+        ),
+        "fm_stage_work" => ("BUGUNGI ISHLAR", "СЕГОДНЯШНИЕ РАБОТЫ"),
+        "fm_stage_record" => ("YOZIB QO'YISH", "ЗАПИСАТЬ"),
+        "fm_stage_close" => ("KUNNI YOPISH", "ЗАКРЫТЬ ДЕНЬ"),
+        "wdl_mon" => ("dushanba", "понедельник"),
+        "wdl_tue" => ("seshanba", "вторник"),
+        "wdl_wed" => ("chorshanba", "среда"),
+        "wdl_thu" => ("payshanba", "четверг"),
+        "wdl_fri" => ("juma", "пятница"),
+        "wdl_sat" => ("shanba", "суббота"),
+        "wdl_sun" => ("yakshanba", "воскресенье"),
         "ns_title" => ("Bugun nima qilish kerak", "Что нужно сделать сегодня"),
         "ns_hint" => (
             "Barcha modullardan yig'ilgan eng muhim beshta signal. Har biri o'z ekranini ochadi.",
