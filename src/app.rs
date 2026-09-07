@@ -625,6 +625,12 @@ pub struct App {
     pub sync_status: Option<(String, bool)>,
     /// Modul ekranidan yordamchiga uzatilgan savol (TZ VI.30 va h.k.).
     pub copilot_intent: Option<crate::copilot::Intent>,
+    /// Hisobotlar ekranida tanlangan hisobot va davr.
+    ///
+    /// Tanlov ekran xotirasida emas, ilova holatida turadi: Ctrl+E ham
+    /// aynan ko'rinib turgan hisobotni saqlashi kerak.
+    pub report_kind: usize,
+    pub report_preset: usize,
     /// Qidiruvdan kelingan jurnal yozuvining sanasi (TZ V.30).
     ///
     /// Jurnal yozuvi alohida tanlanmaydi — u kunlik yozuv, shuning uchun
@@ -813,6 +819,9 @@ impl App {
             sync_pending: None,
             sync_status: None,
             copilot_intent: None,
+            report_kind: 0,
+            // Sukut bo'yicha oy: kunlik hisobot juda tor, yillik juda keng.
+            report_preset: 2,
             journal_focus: None,
             work_schedule: checks::WorkSchedule::default(),
             machine_checks: Vec::new(),

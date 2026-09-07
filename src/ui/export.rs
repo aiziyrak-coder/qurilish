@@ -36,6 +36,9 @@ pub fn table_of(app: &App, screen: Screen) -> Option<Table> {
         Screen::Deals => deals(app),
         Screen::Sales => units(app),
         Screen::Analytics => analytics(app),
+        // Hisobotlar ekranida Ctrl+E tanlangan hisobotni saqlaydi:
+        // ekranda ko'rinib turgan narsa chiqadi, boshqasi emas.
+        Screen::Reports => return Some(current_report(app)),
         Screen::Notices => notices(app),
         Screen::Director => director(app),
         _ => return None,
@@ -56,6 +59,25 @@ pub fn file_name(app: &App, screen: Screen) -> String {
         .collect();
     let safe = safe.trim_matches('-').to_lowercase();
     format!("qurai-{safe}-{}.xlsx", app.today.format("%Y-%m-%d"))
+}
+
+/// «Hisobotlar» ekranida tanlangan hisobot.
+///
+/// Tanlov ilova holatida turadi, shuning uchun Ctrl+E aynan ko'rinib
+/// turgan hisobotni saqlaydi — boshqasini emas.
+fn current_report(app: &App) -> Table {
+    use crate::reports::{Kind, Preset};
+
+    let kind = Kind::ALL
+        .get(app.report_kind)
+        .copied()
+        .unwrap_or(Kind::Journal);
+    let preset = Preset::ALL
+        .get(app.report_preset)
+        .copied()
+        .unwrap_or(Preset::Month);
+    let start = app.project().map(|p| p.start_date).unwrap_or(app.today);
+    crate::reports::build(app, kind, preset.period(app.today, start))
 }
 
 fn txt(s: impl Into<String>) -> Cell {

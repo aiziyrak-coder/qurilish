@@ -142,10 +142,16 @@ pub enum Kind {
     Deals,
     /// XX. Qarzdorlik muddati bo'yicha.
     Debts,
+    /// XIX. Qavatlar kesimi.
+    Floors,
+    /// XIX. Menejerlar kesimi.
+    Managers,
+    /// Obyekt yakuni: har modulning bosh soni bitta varaqda.
+    Summary,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 20] = [
+    pub const ALL: [Kind; 23] = [
         Kind::Schedule,
         Kind::Ppr,
         Kind::Project,
@@ -166,6 +172,9 @@ impl Kind {
         Kind::Sales,
         Kind::Deals,
         Kind::Debts,
+        Kind::Floors,
+        Kind::Managers,
+        Kind::Summary,
     ];
 
     /// Hisobot nomi.
@@ -191,6 +200,9 @@ impl Kind {
             Kind::Sales => t("rp_sales"),
             Kind::Deals => t("rp_deals"),
             Kind::Debts => t("rp_debts"),
+            Kind::Floors => t("rp_floors"),
+            Kind::Managers => t("rp_managers"),
+            Kind::Summary => t("rp_summary"),
         }
     }
 
@@ -217,6 +229,9 @@ impl Kind {
             Kind::Sales => "XIX",
             Kind::Deals => "XX",
             Kind::Debts => "XX",
+            Kind::Floors => "XIX",
+            Kind::Managers => "XIX",
+            Kind::Summary => "—",
         }
     }
 
@@ -229,7 +244,7 @@ impl Kind {
     pub fn uses_period(self) -> bool {
         !matches!(
             self,
-            Kind::Ppr | Kind::Project | Kind::Estimate | Kind::Sales | Kind::Debts
+            Kind::Ppr | Kind::Project | Kind::Estimate | Kind::Sales | Kind::Debts | Kind::Floors
         )
     }
 }
@@ -246,6 +261,49 @@ fn table(name: String, headers: &[&str], rows: Vec<Vec<Cell>>) -> Table {
     }
 }
 
+/// Jadval oxiriga «JAMI» qatorini qo'shadi.
+///
+/// Ustunlar **ataylab qo'lda ko'rsatiladi**: hamma sonni qo'shib bo'lmaydi.
+/// Foizni, qavat raqamini yoki narxni qo'shish ma'nosiz son beradi va
+/// hisobotga ishonchni yo'qotadi. Shuning uchun har hisobot o'zi qaysi
+/// ustun yig'ilishini aytadi.
+fn with_totals(mut table: Table, columns: &[usize]) -> Table {
+    if table.rows.is_empty() || columns.is_empty() {
+        return table;
+    }
+    let mut row: Vec<Cell> = Vec::with_capacity(table.headers.len());
+    for i in 0..table.headers.len() {
+        if !columns.contains(&i) {
+            // Birinchi ustunda «JAMI» yozuvi turadi.
+            row.push(if i == 0 {
+                txt(t("rp_total"))
+            } else {
+                Cell::Empty
+            });
+            continue;
+        }
+        let mut sum = 0.0;
+        let mut money = false;
+        for r in &table.rows {
+            match r.get(i) {
+                Some(Cell::Num(v)) => sum += v,
+                Some(Cell::Money(v)) => {
+                    sum += v;
+                    money = true;
+                }
+                _ => {}
+            }
+        }
+        row.push(if money {
+            Cell::Money(sum)
+        } else {
+            Cell::Num(sum)
+        });
+    }
+    table.rows.push(row);
+    table
+}
+
 /// Hisobotni tuzadi.
 pub fn build(app: &App, kind: Kind, period: Period) -> Table {
     let name = format!("{} · {}", kind.label(), period.label());
@@ -253,23 +311,26 @@ pub fn build(app: &App, kind: Kind, period: Period) -> Table {
         Kind::Schedule => schedule(app, name),
         Kind::Ppr => ppr(app, name),
         Kind::Project => project(app, name),
-        Kind::Estimate => estimate(app, name),
+        Kind::Estimate => with_totals(estimate(app, name), &[4, 7]),
         Kind::ExecDocs => exec_docs(app, name, period),
-        Kind::Journal => journal(app, name, period),
+        Kind::Journal => with_totals(journal(app, name, period), &[3]),
         Kind::Inspections => inspections(app, name, period),
-        Kind::Contract => contract(app, name, period),
+        Kind::Contract => with_totals(contract(app, name, period), &[2, 4]),
         Kind::Requests => requests(app, name, period),
-        Kind::Purchases => purchases(app, name, period),
-        Kind::Stock => stock(app, name, period),
-        Kind::Materials => materials(app, name, period),
-        Kind::Timesheet => timesheet(app, name, period),
+        Kind::Purchases => with_totals(purchases(app, name, period), &[6]),
+        Kind::Stock => with_totals(stock(app, name, period), &[5]),
+        Kind::Materials => with_totals(materials(app, name, period), &[4]),
+        Kind::Timesheet => with_totals(timesheet(app, name, period), &[3, 4, 5, 7]),
         Kind::Quality => quality(app, name, period),
         Kind::Safety => safety(app, name, period),
-        Kind::Machines => machines(app, name, period),
+        Kind::Machines => with_totals(machines(app, name, period), &[4, 5, 6, 7]),
         Kind::Analytics => analytics(app, name),
-        Kind::Sales => sales(app, name),
-        Kind::Deals => deals(app, name, period),
-        Kind::Debts => debts(app, name),
+        Kind::Sales => with_totals(sales(app, name), &[5, 7]),
+        Kind::Deals => with_totals(deals(app, name, period), &[5, 6, 7]),
+        Kind::Debts => with_totals(debts(app, name), &[3, 4, 5]),
+        Kind::Floors => with_totals(floors(app, name), &[1, 2, 4]),
+        Kind::Managers => with_totals(managers(app, name), &[1, 2, 3, 4]),
+        Kind::Summary => summary(app, name, period),
     }
 }
 
@@ -1096,6 +1157,174 @@ fn debts(app: &App, name: String) -> Table {
     )
 }
 
+/// Qavatlar kesimi: qoldiq va o'rtacha narx (TZ XIX).
+fn floors(app: &App, name: String) -> Table {
+    let rows = crate::sales::by_floor(&app.units, &app.deals)
+        .into_iter()
+        .map(|f| {
+            vec![
+                Cell::Num(f.floor as f64),
+                Cell::Num(f.units as f64),
+                Cell::Num(f.free as f64),
+                Cell::Money(f.avg_price_m2),
+                Cell::Num(f.area_free),
+            ]
+        })
+        .collect();
+    table(
+        name,
+        &[
+            t("col_floor"),
+            t("col_units"),
+            t("col_free"),
+            t("col_price_m2"),
+            t("col_area_free"),
+        ],
+        rows,
+    )
+}
+
+/// Menejerlar kesimi (TZ XIX).
+fn managers(app: &App, name: String) -> Table {
+    let rows = crate::sales::by_manager(&app.deals, &app.payments, app.today)
+        .into_iter()
+        .map(|m| {
+            vec![
+                txt(if m.manager.is_empty() {
+                    t("sl_no_manager").to_string()
+                } else {
+                    m.manager
+                }),
+                Cell::Num(m.deals as f64),
+                Cell::Money(m.amount),
+                Cell::Money(m.paid),
+                Cell::Money(m.debt),
+            ]
+        })
+        .collect();
+    table(
+        name,
+        &[
+            t("col_manager"),
+            t("col_deals"),
+            t("col_total"),
+            t("col_paid"),
+            t("col_debt"),
+        ],
+        rows,
+    )
+}
+
+/// Obyekt yakuni: har modulning bosh soni bitta varaqda.
+///
+/// Bu **yig'ma**, yangi hisob emas: har qator o'z modulining
+/// funksiyasidan olinadi. Shuning uchun yakundagi son modul ekranidagi
+/// son bilan bir xil bo'ladi.
+fn summary(app: &App, name: String, p: Period) -> Table {
+    let mut rows: Vec<Vec<Cell>> = Vec::new();
+    let mut add = |module: &str, what: &str, value: Cell| {
+        rows.push(vec![txt(module), txt(what), value]);
+    };
+
+    // ---- I. Grafik
+    add("I.2", t("kpi_plan_today"), Cell::Num(app.progress.plan_pct));
+    add("I.2", t("kpi_fact"), Cell::Num(app.progress.fact_pct));
+    add(
+        "I.2",
+        t("kpi_delay"),
+        Cell::Num(app.progress.delay_days as f64),
+    );
+    add(
+        "I.2",
+        t("att_overdue_tasks"),
+        Cell::Num(app.progress.overdue.len() as f64),
+    );
+
+    // ---- II-III. Tekshiruvlar
+    add("II", t("col_findings"), Cell::Num(app.issues.len() as f64));
+    let cost = app.cost_summary();
+    add("III", t("cl_estimate"), Cell::Money(cost.total));
+
+    // ---- IV-V. Ijro
+    add(
+        "IV",
+        t("rp_execdocs"),
+        Cell::Num(app.exec_docs.len() as f64),
+    );
+    add(
+        "V",
+        t("rp_journal"),
+        Cell::Num(app.journal.iter().filter(|e| p.has(e.date)).count() as f64),
+    );
+
+    // ---- IX-XII. Ta'minot
+    add(
+        "IX",
+        t("rp_requests"),
+        Cell::Num(app.requests.iter().filter(|q| p.has(q.date)).count() as f64),
+    );
+    add(
+        "X",
+        t("rp_purchases"),
+        Cell::Money(
+            app.purchases
+                .iter()
+                .filter(|x| p.has(x.date))
+                .map(|x| x.amount())
+                .sum(),
+        ),
+    );
+
+    // ---- XIII. Tabel
+    let wages = crate::checks::wages(&app.workers, &app.timesheet, p.from, p.to);
+    add(
+        "XIII",
+        t("col_hours"),
+        Cell::Num(wages.iter().map(|w| w.hours).sum()),
+    );
+    add(
+        "XIII",
+        t("col_wage"),
+        Cell::Money(wages.iter().map(|w| w.wage).sum()),
+    );
+
+    // ---- XIV-XV. Sifat va xavfsizlik
+    add(
+        "XIV",
+        t("kpi_defects"),
+        Cell::Num(app.quality.iter().filter(|q| q.open_defect()).count() as f64),
+    );
+    add(
+        "XV",
+        t("kpi_safety_open"),
+        Cell::Num(
+            app.safety
+                .iter()
+                .filter(|s| {
+                    matches!(
+                        s.status,
+                        crate::domain::IssueStatus::Open | crate::domain::IssueStatus::InWork
+                    )
+                })
+                .count() as f64,
+        ),
+    );
+
+    // ---- XIX-XX. Sotuv
+    let funnel = crate::sales::funnel(&app.units, &app.deals);
+    add("XIX", t("kpi_units"), Cell::Num(funnel.total as f64));
+    add("XIX", t("sl_sold_pct"), Cell::Num(funnel.sold_pct()));
+    let sales = app.sales();
+    add("XX", t("kpi_received"), Cell::Money(sales.received));
+    add("XX", t("kpi_debt"), Cell::Money(sales.debt));
+
+    table(
+        name,
+        &[t("col_module"), t("col_indicator"), t("col_value")],
+        rows,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1188,11 +1417,24 @@ mod tests {
             build(&app, Kind::Schedule, period).rows.len(),
             app.tasks.len()
         );
-        // Kvartiralar: qatorlar soni kvartiralar soniga teng.
-        assert_eq!(build(&app, Kind::Sales, period).rows.len(), app.units.len());
+        // Kvartiralar: qatorlar soni kvartiralar soni + «JAMI» qatori.
+        let sales = build(&app, Kind::Sales, period);
+        assert_eq!(sales.rows.len(), app.units.len() + 1);
         // Qarz hisoboti sotuv moduli bilan bir xil.
         let aging = crate::sales::aging(&app.deals, &app.payments, app.today);
-        assert_eq!(build(&app, Kind::Debts, period).rows.len(), aging.len());
+        assert_eq!(build(&app, Kind::Debts, period).rows.len(), aging.len() + 1);
+
+        // «JAMI» qatori haqiqatan yig'indi: maydonlar ustuni tekshiriladi.
+        let area: f64 = app.units.iter().map(|u| u.area).sum();
+        let last = sales.rows.last().expect("jami qatori");
+        match last.get(5) {
+            Some(crate::docgen::Cell::Num(v)) => {
+                assert!((v - area).abs() < 0.01, "jami {v} ≠ {area}")
+            }
+            other => panic!("jami qatori noto'g'ri: {other:?}"),
+        }
+        // Birinchi katakda «JAMI» yozuvi turadi.
+        assert!(matches!(last.first(), Some(crate::docgen::Cell::Text(s)) if !s.is_empty()));
         drop(app);
         let _ = std::fs::remove_file(&path);
     }
@@ -1214,6 +1456,64 @@ mod tests {
         assert!(size > 5_000, "fayl juda kichik: {size}");
         let _ = std::fs::remove_file(&file);
 
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Ctrl+E hisobotlar ekranida aynan tanlangan hisobotni beradi.
+    #[test]
+    fn export_follows_the_selected_report() {
+        let (path, mut app) = app();
+        app.screen = crate::app::Screen::Reports;
+        // «Kvartiralar» hisoboti tanlanadi.
+        let index = Kind::ALL.iter().position(|k| *k == Kind::Sales).unwrap();
+        app.report_kind = index;
+
+        let table =
+            crate::ui::export::table_of(&app, crate::app::Screen::Reports).expect("hisobot");
+        assert!(
+            table.name.starts_with(Kind::Sales.label()),
+            "{}",
+            table.name
+        );
+        // Kvartiralar soni + «JAMI» qatori.
+        assert_eq!(table.rows.len(), app.units.len() + 1);
+
+        // Boshqa hisobot tanlansa, eksport ham o'zgaradi.
+        app.report_kind = Kind::ALL.iter().position(|k| *k == Kind::Summary).unwrap();
+        let other =
+            crate::ui::export::table_of(&app, crate::app::Screen::Reports).expect("hisobot");
+        assert!(
+            other.name.starts_with(Kind::Summary.label()),
+            "{}",
+            other.name
+        );
+        assert_ne!(other.rows.len(), table.rows.len());
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Obyekt yakuni har modulning sonini modul funksiyasidan oladi.
+    #[test]
+    fn summary_matches_the_modules() {
+        let (path, app) = app();
+        let period = all_period(&app);
+        let table = build(&app, Kind::Summary, period);
+        assert!(table.rows.len() >= 15, "yakunda {} qator", table.rows.len());
+
+        // Kvartiralar soni sotuv modulidagi bilan bir xil.
+        let funnel = crate::sales::funnel(&app.units, &app.deals);
+        let row = table
+            .rows
+            .iter()
+            .find(|r| matches!(r.first(), Some(crate::docgen::Cell::Text(s)) if s == "XIX"))
+            .expect("sotuv qatori");
+        match row.get(2) {
+            Some(crate::docgen::Cell::Num(v)) => {
+                assert_eq!(*v as usize, funnel.total, "kvartira soni farq qildi")
+            }
+            other => panic!("qiymat noto'g'ri: {other:?}"),
+        }
         drop(app);
         let _ = std::fs::remove_file(&path);
     }

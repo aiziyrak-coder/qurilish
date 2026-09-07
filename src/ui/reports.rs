@@ -27,17 +27,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
-    // Tanlangan hisobot va davr ekran xotirasida saqlanadi: foydalanuvchi
-    // boshqa ekranga o'tib qaytganda tanlovi joyida qoladi.
-    let kind_key = egui::Id::new("rp_kind");
-    let preset_key = egui::Id::new("rp_preset");
-    let mut kind = ui
-        .data(|d| d.get_temp::<usize>(kind_key))
-        .and_then(|i| Kind::ALL.get(i).copied())
+    // Tanlov ilova holatida turadi: Ctrl+E ham aynan shu hisobotni
+    // saqlaydi va boshqa ekranga o'tib qaytganda tanlov joyida qoladi.
+    let mut kind = Kind::ALL
+        .get(app.report_kind)
+        .copied()
         .unwrap_or(Kind::Journal);
-    let mut preset = ui
-        .data(|d| d.get_temp::<usize>(preset_key))
-        .and_then(|i| Preset::ALL.get(i).copied())
+    let mut preset = Preset::ALL
+        .get(app.report_preset)
+        .copied()
         .unwrap_or(Preset::Month);
 
     let start = app.project().map(|p| p.start_date).unwrap_or(app.today);
@@ -53,7 +51,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         for (i, p) in Preset::ALL.iter().enumerate() {
             if ui.selectable_label(preset == *p, p.label()).clicked() {
                 preset = *p;
-                ui.data_mut(|d| d.insert_temp(preset_key, i));
+                app.report_preset = i;
             }
         }
         ui.separator();
@@ -84,7 +82,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                         );
                         if resp.clicked() {
                             kind = *k;
-                            ui.data_mut(|d| d.insert_temp(kind_key, i));
+                            app.report_kind = i;
                         }
                         // Davrga bog'liq emasligi darrov ko'rinsin.
                         if !k.uses_period() {
