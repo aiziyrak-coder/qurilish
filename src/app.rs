@@ -1944,10 +1944,25 @@ impl App {
         let pkg = self.export_package();
         let rows = pkg.row_count() as i64;
         let body = crate::package::write(&pkg);
+        // Signal ro'yxati ham yuboriladi: telefon uni qayta hisoblamaydi.
+        let notices: Vec<crate::sync::NoticeOut> = self
+            .notices
+            .iter()
+            .map(|n| crate::sync::NoticeOut {
+                code: n.code,
+                severity: n.severity.code(),
+                title: n.title.clone(),
+                detail: n.detail.clone(),
+                count: n.count as i64,
+                days: n.days,
+                source: n.source.label(),
+            })
+            .collect();
         self.sync_pending = Some(crate::sync::spawn(
             self.sync.clone(),
             project,
             Some((body, rows)),
+            notices,
         ));
         self.sync_status = Some((t("sync_running").to_string(), false));
     }

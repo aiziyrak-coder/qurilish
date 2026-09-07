@@ -71,6 +71,35 @@ pub struct SignReq {
     pub rejected: String,
 }
 
+#[derive(Deserialize)]
+pub struct NoticesReq {
+    pub project: String,
+    #[serde(default)]
+    pub items: Vec<NoticeItem>,
+}
+
+#[derive(Deserialize)]
+pub struct NoticeItem {
+    #[serde(default)]
+    pub code: String,
+    #[serde(default)]
+    pub severity: String,
+    pub title: String,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub count: i64,
+    #[serde(default)]
+    pub days: i64,
+    #[serde(default)]
+    pub source: String,
+}
+
+/// Bir obyekt uchun qabul qilinadigan eng ko'p signal soni.
+///
+/// Chegara bo'lmasa, xato hisob butun jadvalni to'ldirib yuborardi.
+pub const MAX_NOTICES: usize = 200;
+
 /// Xatoni bir xil ko'rinishda qaytaradi.
 fn err(code: StatusCode, message: &str) -> axum::response::Response {
     (code, Json(json!({ "error": message }))).into_response()
@@ -300,6 +329,52 @@ pub async fn signatures(
         })
         .collect();
     Json(json!({ "signatures": list })).into_response()
+}
+
+/// `POST /api/notices` — desktop hisoblagan signal ro'yxati.
+///
+/// Server signalni o'zi hisoblamaydi va o'zgartirmaydi: u ilova
+/// yuborgan ro'yxatni saqlaydi va telefonga ko'rsatadi. Shuning uchun
+/// telefondagi son ofisdagi ekran bilan bir xil bo'ladi.
+pub async fn notices(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<NoticesReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt ko'rsatilmagan");
+    }
+    if req.items.len() > MAX_NOTICES {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "signal juda ko'p");
+    }
+
+    let items: Vec<crate::store::Notice> = req
+        .items
+        .into_iter()
+        .filter(|i| !i.title.trim().is_empty())
+        .map(|i| crate::store::Notice {
+            code: i.code,
+            severity: i.severity,
+            title: i.title,
+            detail: i.detail,
+            count: i.count,
+            days: i.days,
+            source: i.source,
+        })
+        .collect();
+    match state
+        .store
+        .set_notices(req.project.trim(), &crate::now(), &items)
+    {
+        Ok(n) => Json(json!({ "saved": n })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
 }
 
 /// `GET /api/health` — server tirikmi.

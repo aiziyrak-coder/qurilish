@@ -157,6 +157,46 @@ pub fn sign_body(project: &str, document: &str, text: &str, rejected: &str) -> S
     )
 }
 
+/// Signal ro'yxati so'rovining tanasi.
+///
+/// Signal serverda hisoblanmaydi: ilova o'zi hisoblab, tayyor ro'yxatni
+/// yuboradi. Shu sababli telefonda ko'ringan son ofisdagi ekran bilan
+/// bir xil bo'ladi.
+pub fn notices_body(project: &str, items: &[NoticeOut]) -> String {
+    let rows: Vec<String> = items
+        .iter()
+        .map(|n| {
+            format!(
+                "{{\"code\":{},\"severity\":{},\"title\":{},\"detail\":{},\"count\":{},\"days\":{},\"source\":{}}}",
+                json_string(n.code),
+                json_string(n.severity),
+                json_string(&n.title),
+                json_string(&n.detail),
+                n.count,
+                n.days,
+                json_string(n.source)
+            )
+        })
+        .collect();
+    format!(
+        "{{\"project\":{},\"items\":[{}]}}",
+        json_string(project),
+        rows.join(",")
+    )
+}
+
+/// Serverga yuboriladigan bitta signal.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NoticeOut {
+    pub code: &'static str,
+    pub severity: &'static str,
+    pub title: String,
+    pub detail: String,
+    pub count: i64,
+    pub days: i64,
+    pub source: &'static str,
+}
+
 /// Matnni JSON satriga aylantiradi.
 fn json_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
@@ -260,6 +300,22 @@ pub fn pull(cfg: &Config, project: &str, since: i64) -> Result<Pulled, Error> {
     parse_pull(&text)
 }
 
+/// Signal ro'yxatini serverga yuboradi.
+#[cfg(feature = "sync")]
+pub fn send_notices(cfg: &Config, project: &str, items: &[NoticeOut]) -> Result<(), Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    send(
+        cfg,
+        "POST",
+        "api/notices",
+        Some(&cfg.token),
+        Some(&notices_body(project, items)),
+    )?;
+    Ok(())
+}
+
 /// Hujjatni masofadan imzolaydi.
 #[cfg(feature = "sync")]
 pub fn sign(
@@ -344,6 +400,7 @@ pub fn spawn(
     cfg: Config,
     project: String,
     outgoing: Option<(String, i64)>,
+    notices: Vec<NoticeOut>,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -354,6 +411,9 @@ pub fn spawn(
                     pushed = push(&cfg, &project, &body, rows)?;
                 }
             }
+            // Signal ro'yxati — har safar to'liq: bartaraf etilgani
+            // telefonda ham yo'qolishi kerak.
+            send_notices(&cfg, &project, &notices)?;
             let pulled = pull(&cfg, &project, cfg.last_pull)?;
             Ok(Outcome { pushed, pulled })
         })();
@@ -368,6 +428,7 @@ pub fn spawn(
     _cfg: Config,
     _project: String,
     _outgoing: Option<(String, i64)>,
+    _notices: Vec<NoticeOut>,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = tx.send(Err(Error::NotConfigured));
@@ -493,6 +554,20 @@ mod tests {
                 return Err("paket ikki marta keldi".into());
             }
 
+            // ---- Signal ro'yxati yuboriladi
+            let notices = vec![NoticeOut {
+                code: "NT-1",
+                severity: "major",
+                title: "Muddati o'tgan ish".into(),
+                detail: "3 ta ish".into(),
+                count: 3,
+                days: 5,
+                source: "Grafik",
+            }];
+            send_notices(&cfg, "OBY-1", &notices).map_err(|e| format!("signal: {e:?}"))?;
+            // Bo'sh ro'yxat ham qabul qilinadi: «hisoblandi, signal yo'q».
+            send_notices(&cfg, "OBY-1", &[]).map_err(|e| format!("bo'sh signal: {e:?}"))?;
+
             // ---- Prorab imzolamaydi: server rad etadi
             match sign(&cfg, "OBY-1", "AOSR-1", "matn", "") {
                 Err(Error::Forbidden) => {}
@@ -511,6 +586,45 @@ mod tests {
         let _ = server.wait();
         let _ = std::fs::remove_dir_all(&dir);
         result.expect("boshdan-oxir sinov");
+    }
+
+    /// Signal ro'yxati to'g'ri JSON bo'lib ketadi va matndagi belgilar
+    /// so'rovni buzmaydi.
+    #[test]
+    fn notices_body_is_valid_json() {
+        let items = vec![
+            NoticeOut {
+                code: "NT-1",
+                severity: "critical",
+                title: "Muddati o'tgan \"ish\"".into(),
+                detail: "3 ta\tish".into(),
+                count: 3,
+                days: 5,
+                source: "Grafik",
+            },
+            NoticeOut {
+                code: "NT-2",
+                severity: "major",
+                title: "Sertifikat".into(),
+                detail: String::new(),
+                count: 1,
+                days: 0,
+                source: "Ombor",
+            },
+        ];
+        let body = notices_body("OBY-1", &items);
+        let v: serde_json::Value = serde_json::from_str(&body).expect("to'g'ri JSON");
+        assert_eq!(v["project"], "OBY-1");
+        let arr = v["items"].as_array().expect("ro'yxat");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["title"], "Muddati o'tgan \"ish\"");
+        assert_eq!(arr[0]["days"], 5);
+        assert_eq!(arr[1]["detail"], "");
+
+        // Bo'sh ro'yxat ham to'g'ri so'rov: «hisoblandi, signal yo'q».
+        let empty = notices_body("OBY-1", &[]);
+        let v: serde_json::Value = serde_json::from_str(&empty).expect("to'g'ri JSON");
+        assert!(v["items"].as_array().unwrap().is_empty());
     }
 
     #[test]

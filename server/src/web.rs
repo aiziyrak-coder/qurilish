@@ -209,6 +209,47 @@ pub async fn object(
         esc(&role_name(&user.role))
     );
 
+    // ---- Bugun nima qilish kerak (ilova hisoblagan signal)
+    let (notices, computed) = state.store.notices(&project);
+    if notices.is_empty() {
+        body.push_str(&format!(
+            "<div class=\"card\"><b>Bugun nima qilish kerak</b>\
+<div class=\"muted\">{}</div></div>",
+            if computed.is_empty() {
+                "Ilova hali signal yubormagan.".to_string()
+            } else {
+                format!("Signal yo'q · {}", esc(&computed))
+            }
+        ));
+    } else {
+        body.push_str(&format!(
+            "<h2>Bugun nima qilish kerak</h2>\
+<p class=\"muted\">Ilova hisoblab yuborgan ro'yxat · {}</p>",
+            esc(&computed)
+        ));
+        for n in notices.iter().take(10) {
+            let colour = match n.severity.as_str() {
+                "critical" => "#b91c1c",
+                "major" => "#b45309",
+                _ => "#2563eb",
+            };
+            let extra = if n.days > 0 {
+                format!("{} kun · {}", n.days, n.count)
+            } else {
+                n.count.to_string()
+            };
+            body.push_str(&format!(
+                "<div class=\"card\"><div class=\"row\">\
+<b style=\"color:{colour}\">{}</b><span class=\"muted\">{}</span></div>\
+<div class=\"muted\">{} · {}</div></div>",
+                esc(&n.title),
+                esc(&extra),
+                esc(&n.source),
+                esc(&n.detail)
+            ));
+        }
+    }
+
     // ---- Kunlik yozuv havolasi (yozish huquqi borlarga)
     if auth::can(&user.role, Access::Write) {
         body.push_str(&format!(

@@ -229,7 +229,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. Texnika xavfsizligi
 - [x] 27. Instruktaj
 - [ ] 🔒 28. Internetsiz ishlash — *lokal baza; sinxronizatsiya paket orqali*
-- [~] 29. Bildirishnomalar — *ilova ichida bildirishnomalar markazi; push tashqi omil*
+- [~] 29. Bildirishnomalar — *ilova ichida markaz; server orqali telefonda ham ko'rinadi (ilova hisoblaydi, server saqlaydi); push (SMS/Telegram) 🔒*
 - [x] 30. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 31. AI aniq obyektni bilishi
 - [ ] 🔒 32. Ofis bilan chat
@@ -712,7 +712,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 42. Samaradorlik tahlili — *foydalanish, ishonchlilik va yoqilg'i intizomi*
 - [x] 43. «Ta'mirlash yoki almashtirish» — *ta'mir qiymati balansning 40 % idan oshsa belgilanadi*
 - [x] 44. Mashina hujjatlari — *texnik ko'rik va kunlik ko'rik yozuvlari*
-- [~] 45. Bildirishnomalar — *TX muddati markazga chiqadi; push tashqi omil*
+- [~] 45. Bildirishnomalar — *TX muddati markazga va telefon sahifasiga chiqadi; push 🔒*
 - [x] 46. Mexanik kabineti
 - [x] 47. Direktor kabineti — *«Rahbar» ekranida*
 - [x] 48. XVI ning bosh zanjiri

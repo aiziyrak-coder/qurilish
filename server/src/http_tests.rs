@@ -453,3 +453,121 @@ fn read_only_role_cannot_open_the_journal_form() {
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     });
 }
+
+/// Signal ro'yxati ilovadan keladi va telefon sahifasida ko'rinadi.
+#[test]
+fn notices_come_from_the_app_and_show_on_the_phone() {
+    runtime().block_on(async {
+        let (app, state) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+
+        let (code, body) = send(
+            &app,
+            post(
+                "/api/notices",
+                Some(&token),
+                json!({ "project": "OBY-1", "items": [
+                    { "code": "NT-1", "severity": "critical", "title": "Muddati o'tgan ish",
+                      "detail": "3 ta ish", "count": 3, "days": 5, "source": "Grafik" },
+                    { "code": "NT-2", "severity": "major", "title": "Sertifikat muddati",
+                      "detail": "2 ta material", "count": 2, "days": 0, "source": "Ombor" }
+                ] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK, "{body}");
+        assert_eq!(body["saved"], 2);
+        // Bazada haqiqatan turibdimi.
+        let (stored, at) = state.store.notices("OBY-1");
+        assert_eq!(stored.len(), 2, "bazada yo'q; at={at}");
+
+        // Telefon sahifasida ko'rinadi.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=prorab&password=prorab-parol-1"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(html.contains("Muddati o&#39;tgan ish"), "{html}");
+        assert!(html.contains("Sertifikat muddati"));
+        assert!(html.contains("5 kun"), "kun ko'rsatilmadi");
+
+        // Ikkinchi yuborishda eski signal qolmaydi.
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/notices",
+                Some(&token),
+                json!({ "project": "OBY-1", "items": [] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(!html.contains("Sertifikat muddati"), "eski signal qoldi");
+        assert!(
+            html.contains("Signal yo'q") || html.contains("Signal yo&#39;q"),
+            "{html}"
+        );
+    });
+}
+
+/// Faqat ko'ruvchi rol signal yubora olmaydi.
+#[test]
+fn read_only_role_cannot_send_notices() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let mijoz = login(&app, "mijoz", "mijoz-parol-11").await;
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/notices",
+                Some(&mijoz),
+                json!({ "project": "OBY-1", "items": [] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::FORBIDDEN);
+    });
+}

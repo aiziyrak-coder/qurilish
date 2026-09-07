@@ -238,6 +238,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/push", post(api::push))
         .route("/api/pull", get(api::pull))
         .route("/api/sign", post(api::sign))
+        .route("/api/notices", post(api::notices))
         .route("/api/signatures", get(api::signatures))
         .with_state(state)
 }

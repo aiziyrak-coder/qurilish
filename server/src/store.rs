@@ -56,6 +56,23 @@ pub struct Signature {
     pub rejected: String,
 }
 
+/// Obyekt bo'yicha bitta signal.
+///
+/// Signal serverda **hisoblanmaydi**: uni desktop ilova hisoblab yuboradi.
+/// Shu sababli telefonda ko'ringan son ofisdagi ekrandagi son bilan bir
+/// xil bo'ladi — ikkinchi hisob bo'lsa, ular albatta bir-biridan farq
+/// qilib qolardi.
+#[derive(Debug, Clone)]
+pub struct Notice {
+    pub code: String,
+    pub severity: String,
+    pub title: String,
+    pub detail: String,
+    pub count: i64,
+    pub days: i64,
+    pub source: String,
+}
+
 /// Baza. Bitta ulanish mutex ostida: server kichik va yozuvlar qisqa.
 pub struct Store {
     conn: Mutex<Connection>,
@@ -346,6 +363,78 @@ impl Store {
             .unwrap_or_default()
     }
 
+    // -------------------------------------------------------------- Signal
+
+    /// Obyektning signal ro'yxatini **butunlay almashtiradi**.
+    ///
+    /// Signal — bu holat surati, tarix emas: eskisi saqlanib qolsa,
+    /// bartaraf etilgan muammo telefonda turaverardi. Shuning uchun
+    /// ro'yxat har safar to'liq qayta yoziladi.
+    pub fn set_notices(&self, project: &str, at: &str, items: &[Notice]) -> Result<usize, String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM notice WHERE project=?1", params![project])
+            .map_err(|e| e.to_string())?;
+        // Hisob vaqti alohida saqlanadi: bo'sh ro'yxat ham **javob** —
+        // «hisoblandi, signal yo'q». Vaqt signal qatorlarida tursa, ro'yxat
+        // tozalangach «hech qachon yuborilmagan» bilan chalkashib ketardi.
+        tx.execute(
+            "INSERT INTO notice_state (project,at) VALUES (?1,?2)
+             ON CONFLICT(project) DO UPDATE SET at=excluded.at",
+            params![project, at],
+        )
+        .map_err(|e| e.to_string())?;
+        for n in items {
+            tx.execute(
+                "INSERT INTO notice (project,code,severity,title,detail,count,days,source,at)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+                params![
+                    project, n.code, n.severity, n.title, n.detail, n.count, n.days, n.source, at
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(items.len())
+    }
+
+    /// Obyekt signallari va ular qachon hisoblangani.
+    pub fn notices(&self, project: &str) -> (Vec<Notice>, String) {
+        let conn = self.lock();
+        let at: String = conn
+            .query_row(
+                "SELECT at FROM notice_state WHERE project=?1",
+                params![project],
+                |r| r.get(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let mut st = match conn.prepare(
+            "SELECT code,severity,title,detail,count,days,source FROM notice
+             WHERE project=?1 ORDER BY id",
+        ) {
+            Ok(s) => s,
+            Err(_) => return (Vec::new(), at),
+        };
+        let rows = st.query_map(params![project], |r| {
+            Ok(Notice {
+                code: r.get(0)?,
+                severity: r.get(1)?,
+                title: r.get(2)?,
+                detail: r.get(3)?,
+                count: r.get(4)?,
+                days: r.get(5)?,
+                source: r.get(6)?,
+            })
+        });
+        let list = rows
+            .map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default();
+        (list, at)
+    }
+
     // --------------------------------------------------------------- Jurnal
 
     /// Amallar jurnali: kim, qachon, nima qildi.
@@ -409,6 +498,23 @@ CREATE TABLE IF NOT EXISTS signature (
     digest TEXT NOT NULL,
     rejected TEXT NOT NULL DEFAULT '',
     UNIQUE(project, document, user)
+);
+CREATE TABLE IF NOT EXISTS notice (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    code TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    title TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    count INTEGER NOT NULL DEFAULT 0,
+    days INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS notice_project ON notice(project);
+CREATE TABLE IF NOT EXISTS notice_state (
+    project TEXT PRIMARY KEY,
+    at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS server_log (
     id INTEGER PRIMARY KEY,
@@ -500,6 +606,46 @@ mod tests {
         other.user = "nazorat".into();
         s.sign(&other).unwrap();
         assert_eq!(s.signatures("OBY-1").len(), 2);
+    }
+
+    /// Signal ro'yxati to'liq almashtiriladi: eski signal qolib ketmaydi.
+    #[test]
+    fn notices_are_replaced_not_appended() {
+        let s = store();
+        let n = |code: &str| Notice {
+            code: code.into(),
+            severity: "major".into(),
+            title: format!("{code} sarlavhasi"),
+            detail: String::new(),
+            count: 2,
+            days: 3,
+            source: "schedule".into(),
+        };
+        s.set_notices("OBY-1", "t1", &[n("A"), n("B")]).unwrap();
+        let (list, at) = s.notices("OBY-1");
+        assert_eq!(list.len(), 2);
+        assert_eq!(at, "t1");
+
+        // Ikkinchi yuborishda faqat yangi ro'yxat qoladi.
+        s.set_notices("OBY-1", "t2", &[n("C")]).unwrap();
+        let (list, at) = s.notices("OBY-1");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].code, "C");
+        assert_eq!(at, "t2");
+
+        // Bo'sh ro'yxat — hammasi bartaraf etilgan. Bu «hisoblanmagan»
+        // emas: hisob vaqti saqlanib qoladi.
+        s.set_notices("OBY-1", "t3", &[]).unwrap();
+        let (list, at) = s.notices("OBY-1");
+        assert!(list.is_empty());
+        assert_eq!(at, "t3", "hisob vaqti yo'qoldi");
+        // Umuman yuborilmagan obyektda vaqt ham bo'lmaydi.
+        assert_eq!(s.notices("YUBORILMAGAN").1, "");
+
+        // Boshqa obyekt tegilmaydi.
+        s.set_notices("OBY-2", "t1", &[n("D")]).unwrap();
+        assert_eq!(s.notices("OBY-2").0.len(), 1);
+        assert!(s.notices("OBY-1").0.is_empty());
     }
 
     #[test]
