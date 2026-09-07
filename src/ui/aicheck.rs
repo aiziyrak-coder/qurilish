@@ -20,13 +20,31 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     app.auto_check(IssueModule::Project);
 
-    ui.horizontal(|ui| {
-        for tab in CheckTab::ALL {
-            if ui
-                .selectable_label(app.check_tab == tab, tab.label())
-                .clicked()
-            {
+    /// Har kuni ochiladigan bo'limlar.
+    const DAILY: [CheckTab; 3] = [CheckTab::Issues, CheckTab::Clash, CheckTab::Action];
+
+    // Kunlik: topilmalar, kolliziyalar va nima qilish kerakligi.
+    // Qolganlari — ma'lumot kiritish va sozlash uchun, ajratgichdan keyin.
+    ui.horizontal_wrapped(|ui| {
+        let mut pick = |ui: &mut egui::Ui, tab: CheckTab, dim: bool| {
+            let text = if dim && app.check_tab != tab {
+                RichText::new(tab.label()).color(theme::muted())
+            } else {
+                RichText::new(tab.label())
+            };
+            if ui.selectable_label(app.check_tab == tab, text).clicked() {
                 app.check_tab = tab;
+            }
+        };
+        for tab in DAILY {
+            pick(ui, tab, false);
+        }
+        ui.separator();
+        // Qolganlari ro'yxatdan **hisoblab** olinadi: yangi bo'lim
+        // qo'shilsa, u qo'lda yozilmagani uchun ko'rinmay qolmaydi.
+        for tab in CheckTab::ALL {
+            if !DAILY.contains(&tab) {
+                pick(ui, tab, true);
             }
         }
     });

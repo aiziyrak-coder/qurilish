@@ -29,11 +29,6 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     };
 
-    // Modul yordamchisi (TZ: har modul uchun AI-yordamchi).
-    ui.horizontal(|ui| {
-        super::assistant_button(ui, app);
-    });
-    ui.add_space(6.0);
     kpi_row(ui, app);
     ui.add_space(10.0);
 

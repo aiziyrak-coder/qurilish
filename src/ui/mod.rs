@@ -628,7 +628,7 @@ fn truncate_nav(s: &str, n: usize) -> String {
 /// Izoh ataylab har doim ko'rinadi va yashirilmaydi: ekran ko'p va
 /// ularning nomi hammaga bir xil tushunarli emas. Bir qator o'qishga bir
 /// soniya ketadi, noto'g'ri ekranda ish qilish esa yarim kunni oladi.
-fn screen_header(ui: &mut egui::Ui, app: &App) {
+fn screen_header(ui: &mut egui::Ui, app: &mut App) {
     let screen = app.screen;
     ui.horizontal(|ui| {
         ui.label(RichText::new(screen.label()).size(19.0).strong());
@@ -642,6 +642,11 @@ fn screen_header(ui: &mut egui::Ui, app: &App) {
             )
             .on_hover_text(t("header_numeral_hint"));
         }
+        // Modul yordamchisi shu yerda: ilgari u har ekranda alohida
+        // qator egallab turardi va bir xil tugma ikki xil joyda edi.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            assistant_button(ui, app);
+        });
     });
     ui.label(
         RichText::new(screen.purpose())
@@ -1475,6 +1480,32 @@ mod screen_tests {
                 // Izoh gap bo'lishi kerak, sarlavha emas.
                 assert!(purpose.ends_with('.'), "{s:?} izohi gap emas: {purpose}");
             }
+        }
+    }
+
+    /// AI tekshiruv ekranida hech qaysi bo'lim ko'rinishdan tushib
+    /// qolmaydi.
+    ///
+    /// Bu ekran raqam emas, sanaladigan tur ishlatadi. Qo'lda yozilgan
+    /// ikkinchi ro'yxat xavfli bo'lardi: yangi bo'lim qo'shilib, unga
+    /// yo'l qolmay ketishi mumkin. Shuning uchun ro'yxat `CheckTab::ALL`
+    /// dan hisoblab olinadi va sinov shu tuzilishni qo'riqlaydi.
+    #[test]
+    fn check_tabs_are_derived_from_the_full_list() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui/aicheck.rs");
+        let src = std::fs::read_to_string(&path).expect("aicheck.rs");
+        assert!(
+            src.contains("for tab in CheckTab::ALL"),
+            "bo'limlar to'liq ro'yxatdan olinmayapti"
+        );
+        assert!(
+            src.contains("!DAILY.contains(&tab)"),
+            "kunlik bo'limlar qolganidan ajratilmayapti"
+        );
+        // Ro'yxat bo'sh emas va takrorlanmaydi.
+        let all = crate::app::CheckTab::ALL;
+        for (i, a) in all.iter().enumerate() {
+            assert!(!all[i + 1..].contains(a), "{a:?} ro'yxatda ikki marta");
         }
     }
 

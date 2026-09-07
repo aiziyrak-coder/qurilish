@@ -39,11 +39,6 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(8.0);
 
-    // Modul yordamchisi (TZ: har modul uchun AI-yordamchi).
-    ui.horizontal(|ui| {
-        super::assistant_button(ui, app);
-    });
-    ui.add_space(6.0);
     kpi_row(ui, app);
     ui.add_space(6.0);
 
@@ -83,20 +78,21 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("sf_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("sf_tab_events")),
-            (1, t("sf_tab_permits")),
-            (2, t("sf_tab_ppe")),
+    // Kunlik: hodisalar, naryad-ruxsat va himoya vositalari.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[
+            (0, t("sf_tab_events")),
             (3, t("sf_tab_work_permits")),
+            (2, t("sf_tab_ppe")),
+        ],
+        &[
+            (1, t("sf_tab_permits")),
             (4, t("sf_tab_zones")),
             (5, t("sf_tab_analysis")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

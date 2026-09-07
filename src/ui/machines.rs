@@ -44,11 +44,6 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(8.0);
 
-    // Modul yordamchisi (TZ: har modul uchun AI-yordamchi).
-    ui.horizontal(|ui| {
-        super::assistant_button(ui, app);
-    });
-    ui.add_space(6.0);
     kpi_row(ui, app);
     ui.add_space(10.0);
 
@@ -62,21 +57,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             );
         });
     } else {
-        ui.horizontal_wrapped(|ui| {
-            for (i, label) in [
-                (0u8, t("mch_tab_park")),
+        // Kunlik: park holati, smenalar va mexanik ko'rigi.
+        super::tab_row(
+            ui,
+            &mut tab,
+            &[
+                (0, t("mch_tab_park")),
                 (1, t("mch_tab_logs")),
+                (5, t("mch_tab_mech")),
+            ],
+            &[
                 (2, t("mch_tab_usage")),
                 (3, t("mch_tab_plan")),
                 (4, t("mch_tab_repairs")),
-                (5, t("mch_tab_mech")),
                 (6, t("mch_tab_chain")),
-            ] {
-                if ui.selectable_label(tab == i, label).clicked() {
-                    tab = i;
-                }
-            }
-        });
+            ],
+        );
         ui.data_mut(|d| d.insert_temp(tab_key, tab));
         ui.add_space(8.0);
 

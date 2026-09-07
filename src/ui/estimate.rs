@@ -31,22 +31,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     header(ui, app);
     ui.add_space(6.0);
 
-    ui.horizontal(|ui| {
-        let tabs = [
-            (0u8, t("tab_estimate_items")),
-            (1, t("tab_cost_control")),
+    // Kunlik: pozitsiyalar, topilmalar va qiymat nazorati.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[
+            (0, t("tab_estimate_items")),
             (2, t("tab_issues")),
+            (1, t("tab_cost_control")),
+        ],
+        &[
             (3, t("tab_structure")),
             (4, t("tab_chain")),
             (5, t("tab_deep")),
             (6, t("tab_volumes")),
-        ];
-        for (i, label) in tabs {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 
