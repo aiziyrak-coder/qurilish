@@ -1958,11 +1958,21 @@ impl App {
                 source: n.source.label(),
             })
             .collect();
+        // Ishlar ro'yxati — telefonda qo'lda yozish o'rniga tanlash uchun.
+        let tasks: Vec<crate::sync::TaskOut> = self
+            .tasks
+            .iter()
+            .map(|t| crate::sync::TaskOut {
+                wbs: t.wbs.clone(),
+                name: t.name.clone(),
+            })
+            .collect();
         self.sync_pending = Some(crate::sync::spawn(
             self.sync.clone(),
             project,
             Some((body, rows)),
             notices,
+            tasks,
         ));
         self.sync_status = Some((t("sync_running").to_string(), false));
     }

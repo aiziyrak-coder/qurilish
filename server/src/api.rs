@@ -100,6 +100,23 @@ pub struct NoticeItem {
 /// Chegara bo'lmasa, xato hisob butun jadvalni to'ldirib yuborardi.
 pub const MAX_NOTICES: usize = 200;
 
+#[derive(Deserialize)]
+pub struct TasksReq {
+    pub project: String,
+    #[serde(default)]
+    pub items: Vec<TaskItem>,
+}
+
+#[derive(Deserialize)]
+pub struct TaskItem {
+    #[serde(default)]
+    pub wbs: String,
+    pub name: String,
+}
+
+/// Bir obyekt uchun qabul qilinadigan eng ko'p ish soni.
+pub const MAX_TASKS: usize = 2_000;
+
 /// Xatoni bir xil ko'rinishda qaytaradi.
 fn err(code: StatusCode, message: &str) -> axum::response::Response {
     (code, Json(json!({ "error": message }))).into_response()
@@ -372,6 +389,39 @@ pub async fn notices(
         .store
         .set_notices(req.project.trim(), &crate::now(), &items)
     {
+        Ok(n) => Json(json!({ "saved": n })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
+/// `POST /api/tasks` — grafikdagi ishlar ro'yxati (telefonda tanlash uchun).
+pub async fn tasks(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<TasksReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt ko'rsatilmagan");
+    }
+    if req.items.len() > MAX_TASKS {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "ish juda ko'p");
+    }
+    let items: Vec<crate::store::TaskRef> = req
+        .items
+        .into_iter()
+        .filter(|t| !t.name.trim().is_empty())
+        .map(|t| crate::store::TaskRef {
+            wbs: t.wbs,
+            name: t.name,
+        })
+        .collect();
+    match state.store.set_tasks(req.project.trim(), &items) {
         Ok(n) => Json(json!({ "saved": n })).into_response(),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }

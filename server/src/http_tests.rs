@@ -571,3 +571,79 @@ fn read_only_role_cannot_send_notices() {
         assert_eq!(code, StatusCode::FORBIDDEN);
     });
 }
+
+/// Ish ro'yxati kelgach, telefonda ish yozilmaydi — tanlanadi.
+#[test]
+fn journal_form_offers_the_task_list() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+
+        // Kirish (cookie) — sahifa uchun.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=prorab&password=prorab-parol-1"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        let form_html = |cookie: String| {
+            let app = app.clone();
+            async move {
+                let resp = app
+                    .oneshot(
+                        Request::builder()
+                            .method("GET")
+                            .uri("/o/OBY-1/journal")
+                            .header(header::COOKIE, cookie)
+                            .body(Body::empty())
+                            .expect("so'rov"),
+                    )
+                    .await
+                    .expect("javob");
+                let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+                String::from_utf8_lossy(&bytes).to_string()
+            }
+        };
+
+        // Ro'yxat yo'q — oddiy maydon.
+        let html = form_html(cookie.clone()).await;
+        assert!(html.contains("name=\"task\""), "{html}");
+        assert!(!html.contains("<select"), "ro'yxatsiz select chiqdi");
+
+        // Ilova ishlarni yuboradi.
+        let (code, body) = send(
+            &app,
+            post(
+                "/api/tasks",
+                Some(&token),
+                json!({ "project": "OBY-1", "items": [
+                    { "wbs": "1.1", "name": "Yer ishlari, kotlovan" },
+                    { "wbs": "2.1", "name": "Monolit karkas" }
+                ] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK, "{body}");
+        assert_eq!(body["saved"], 2);
+
+        // Endi forma tanlov beradi va qiymat aynan grafikdagi nom bo'ladi.
+        let html = form_html(cookie).await;
+        assert!(html.contains("<select name=\"task\""), "{html}");
+        assert!(html.contains("value=\"Monolit karkas\""), "{html}");
+        assert!(html.contains("1.1 Yer ishlari, kotlovan"), "{html}");
+    });
+}

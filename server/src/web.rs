@@ -490,12 +490,38 @@ pub async fn journal_form(
             .into_response();
     }
     let today = crate::now().split('T').next().unwrap_or("").to_string();
+    // Ish grafikdan tanlanadi: qo'lda yozilgan nom keyin grafikka
+    // ulanmay qolardi. Ro'yxat bo'sh bo'lsa — oddiy maydon.
+    let tasks = state.store.tasks(&project);
+    let task_field = if tasks.is_empty() {
+        "<label>Ish (grafikdagi nomi)<input name=\"task\" placeholder=\"Monolit karkas, 4-6 qavat\"></label>"
+            .to_string()
+    } else {
+        let options: String = tasks
+            .iter()
+            .map(|t| {
+                let label = if t.wbs.trim().is_empty() {
+                    t.name.clone()
+                } else {
+                    format!("{} {}", t.wbs, t.name)
+                };
+                format!(
+                    "<option value=\"{}\">{}</option>",
+                    esc(&t.name),
+                    esc(&label)
+                )
+            })
+            .collect();
+        format!(
+            "<label>Ish<select name=\"task\"><option value=\"\">— tanlanmagan —</option>{options}</select></label>"
+        )
+    };
     let body = format!(
         "<div class=\"row\"><h1>Kunlik yozuv</h1><a href=\"/o/{p}\">Ortga</a></div>\
 <p class=\"muted\">{obj} · {name}</p>\
 <form method=\"post\" action=\"/o/{p}/journal\">\
 <label>Sana<input type=\"date\" name=\"date\" value=\"{today}\" required></label>\
-<label>Ish (grafikdagi nomi)<input name=\"task\" placeholder=\"Monolit karkas, 4-6 qavat\"></label>\
+{task_field}\
 <div class=\"row\"><label style=\"flex:1\">Hajm<input name=\"volume\" inputmode=\"decimal\"></label>\
 <label style=\"flex:1\">Birlik<input name=\"unit\" placeholder=\"m3\"></label></div>\
 <div class=\"row\"><label style=\"flex:1\">Ishchi<input name=\"workers\" inputmode=\"numeric\"></label>\
@@ -509,6 +535,7 @@ pub async fn journal_form(
         obj = esc(&project),
         name = esc(&user.name),
         today = esc(&today),
+        task_field = task_field,
     );
     page("QURAi — kunlik yozuv", &body).into_response()
 }

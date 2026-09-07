@@ -73,6 +73,17 @@ pub struct Notice {
     pub source: String,
 }
 
+/// Ish ro'yxatidagi bitta qator.
+///
+/// Ish nomini prorab qo'lda yozsa, u grafikdagi nom bilan mos kelmaydi va
+/// keyin hajm qaysi ishga tegishli ekani noma'lum bo'lib qoladi. Shuning
+/// uchun telefonga tayyor ro'yxat beriladi va u yerdan **tanlanadi**.
+#[derive(Debug, Clone)]
+pub struct TaskRef {
+    pub wbs: String,
+    pub name: String,
+}
+
 /// Baza. Bitta ulanish mutex ostida: server kichik va yozuvlar qisqa.
 pub struct Store {
     conn: Mutex<Connection>,
@@ -435,6 +446,45 @@ impl Store {
         (list, at)
     }
 
+    // ------------------------------------------------------------ Ishlar
+
+    /// Obyektning ish ro'yxatini almashtiradi.
+    ///
+    /// Ro'yxat grafikning nusxasi: u serverda o'zgartirilmaydi va
+    /// hisoblanmaydi — faqat telefonda tanlash uchun ko'rsatiladi.
+    pub fn set_tasks(&self, project: &str, items: &[TaskRef]) -> Result<usize, String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM task_ref WHERE project=?1", params![project])
+            .map_err(|e| e.to_string())?;
+        for t in items {
+            tx.execute(
+                "INSERT INTO task_ref (project,wbs,name) VALUES (?1,?2,?3)",
+                params![project, t.wbs, t.name],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(items.len())
+    }
+
+    pub fn tasks(&self, project: &str) -> Vec<TaskRef> {
+        let conn = self.lock();
+        let mut st =
+            match conn.prepare("SELECT wbs,name FROM task_ref WHERE project=?1 ORDER BY id") {
+                Ok(s) => s,
+                Err(_) => return Vec::new(),
+            };
+        let rows = st.query_map(params![project], |r| {
+            Ok(TaskRef {
+                wbs: r.get(0)?,
+                name: r.get(1)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
     // --------------------------------------------------------------- Jurnal
 
     /// Amallar jurnali: kim, qachon, nima qildi.
@@ -512,6 +562,13 @@ CREATE TABLE IF NOT EXISTS notice (
     at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS notice_project ON notice(project);
+CREATE TABLE IF NOT EXISTS task_ref (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    wbs TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_ref_project ON task_ref(project);
 CREATE TABLE IF NOT EXISTS notice_state (
     project TEXT PRIMARY KEY,
     at TEXT NOT NULL
@@ -646,6 +703,28 @@ mod tests {
         s.set_notices("OBY-2", "t1", &[n("D")]).unwrap();
         assert_eq!(s.notices("OBY-2").0.len(), 1);
         assert!(s.notices("OBY-1").0.is_empty());
+    }
+
+    /// Ish ro'yxati almashtiriladi va tartibi saqlanadi.
+    #[test]
+    fn task_list_is_replaced_and_keeps_order() {
+        let s = store();
+        let t = |wbs: &str, name: &str| TaskRef {
+            wbs: wbs.into(),
+            name: name.into(),
+        };
+        s.set_tasks("OBY-1", &[t("1", "Yer ishlari"), t("2", "Poydevor")])
+            .unwrap();
+        let list = s.tasks("OBY-1");
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "Yer ishlari");
+        assert_eq!(list[1].wbs, "2");
+
+        s.set_tasks("OBY-1", &[t("3", "Karkas")]).unwrap();
+        let list = s.tasks("OBY-1");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "Karkas");
+        assert!(s.tasks("BOSHQA").is_empty());
     }
 
     #[test]
