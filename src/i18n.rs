@@ -91,6 +91,123 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "dash" => ("—", "—"),
 
         // ---------- Navigatsiya / Навигация ----------
+        "header_numeral_hint" => ("TZ bo'limi", "Раздел ТЗ"),
+        "purpose_dashboard" => (
+            "Obyekt bo'yicha bugungi holat: bajarilish, kechikish va e'tibor talab qiladigan yozuvlar.",
+            "Сегодняшнее состояние объекта: выполнение, отставание и записи, требующие внимания.",
+        ),
+        "purpose_portfolio" => (
+            "Bir necha obyekt bir ekranda: qaysi biri orqada, qayerda pul va odam ko'proq ketyapti.",
+            "Несколько объектов на одном экране: какой отстаёт, где больше уходит денег и людей.",
+        ),
+        "purpose_notices" => (
+            "Barcha modullardan yig'ilgan signal — bugun nimaga qarash kerakligi shu yerda.",
+            "Сигналы, собранные из всех модулей — здесь видно, на что смотреть сегодня.",
+        ),
+        "purpose_director" => (
+            "Rahbar uchun yig'ma: har modulning bosh soni va qaror talab qiladigan savollar.",
+            "Сводка для руководителя: главная цифра каждого модуля и вопросы, требующие решения.",
+        ),
+        "purpose_passport" => (
+            "Obyekt haqidagi asosiy ma'lumot: manzil, muddat, shartnoma summasi, ishtirokchilar va loyiha hujjatlari.",
+            "Основные данные объекта: адрес, сроки, сумма договора, участники и проектная документация.",
+        ),
+        "purpose_ai_check" => (
+            "Loyiha bo'limlari bir-biriga mos keladimi: element, bog'lanish va topilgan ziddiyatlar.",
+            "Согласованы ли разделы проекта: элементы, связи и найденные противоречия.",
+        ),
+        "purpose_estimate" => (
+            "Smeta: hajm, narx va uning loyiha bilan mosligi. Tushib qolgan ish ham shu yerda ko'rinadi.",
+            "Смета: объём, цена и соответствие проекту. Пропущенные работы тоже видны здесь.",
+        ),
+        "purpose_gantt" => (
+            "Ishlar grafigi: qaysi ish qachon, kim bajaradi, nimaga bog'liq va qaysi biri kechikyapti.",
+            "График работ: какая работа когда, кто выполняет, от чего зависит и какая отстаёт.",
+        ),
+        "purpose_ppr" => (
+            "Ish qanday bajarilishi: texnologiya kartasi, resurs va tasdiqlash. Ish boshlanishidan oldin tayyor bo'lishi kerak.",
+            "Как выполняется работа: технологическая карта, ресурсы и утверждение. Должен быть готов до начала работ.",
+        ),
+        "purpose_requests" => (
+            "Materialga ehtiyoj shu yerdan boshlanadi: ariza → kelishuv → xarid.",
+            "Потребность в материале начинается здесь: заявка → согласование → закупка.",
+        ),
+        "purpose_purchases" => (
+            "Xaridlar: yetkazib beruvchi, narx, muddat va omborga kirim.",
+            "Закупки: поставщик, цена, срок и приход на склад.",
+        ),
+        "purpose_warehouse" => (
+            "Ombor qoldig'i harakatlardan hisoblanadi: kirim, chiqim, ko'chirish va inventarizatsiya.",
+            "Остаток склада считается из движений: приход, расход, перемещение и инвентаризация.",
+        ),
+        "purpose_materials" => (
+            "Material katalogi: sertifikat, sarf normasi, narx tarixi va almashtirish varianti.",
+            "Каталог материалов: сертификат, норма расхода, история цен и замены.",
+        ),
+        "purpose_foreman" => (
+            "Prorabning kuni bir ekranda: bugungi ishlar, jurnal, tabel, ariza va kunni yopish.",
+            "День прораба на одном экране: сегодняшние работы, журнал, табель, заявки и закрытие дня.",
+        ),
+        "purpose_journal" => (
+            "Kunlik ijro: bajarilgan hajm, odam va texnika soni, ob-havo, muammolar. Grafikdagi foiz shundan chiqadi.",
+            "Дневное исполнение: объём, число людей и техники, погода, проблемы. Процент в графике берётся отсюда.",
+        ),
+        "purpose_timesheet" => (
+            "Tabel: kim qaysi kuni, necha soat va qaysi ishda ishlagan. Ish haqi va tannarx shundan hisoblanadi.",
+            "Табель: кто, в какой день, сколько часов и на какой работе. Зарплата и себестоимость считаются отсюда.",
+        ),
+        "purpose_machines" => (
+            "Texnika: smenalar, motosoat, yoqilg'i, texnik ko'rik va ta'mir.",
+            "Техника: смены, моточасы, топливо, техосмотр и ремонт.",
+        ),
+        "purpose_quality" => (
+            "Sifat nazorati: tekshiruv natijasi, nuqson va uni bartaraf etish muddati.",
+            "Контроль качества: результат проверки, дефект и срок его устранения.",
+        ),
+        "purpose_safety" => (
+            "Mehnat xavfsizligi: hodisa, naryad-ruxsat, o'qitish va himoya vositalari.",
+            "Охрана труда: происшествия, наряды-допуски, обучение и средства защиты.",
+        ),
+        "purpose_tech_supervision" => (
+            "Texnik nazorat kabineti: ko'rib chiqish navbati, qaror va ko'rsatmalar.",
+            "Кабинет технадзора: очередь на рассмотрение, решения и предписания.",
+        ),
+        "purpose_inspections" => (
+            "Bosqichni qabul qilish: tekshiruv, nuqson ro'yxati va yakuniy tayyorlik.",
+            "Приёмка этапа: проверка, список дефектов и итоговая готовность.",
+        ),
+        "purpose_exec_docs" => (
+            "Ijro hujjatlari: AOSR, ijro sxemasi, sertifikat va imzo yo'li. Imzodan oldin tekshiruv shu yerda.",
+            "Исполнительная документация: АОСР, исполнительные схемы, сертификаты и маршрут подписи. Проверка перед подписью здесь.",
+        ),
+        "purpose_contracts" => (
+            "Pudrat shartnomasi: hajm, o'zgarishlar, to'lov jadvali va bajarilgan ishni qabul qilish.",
+            "Подрядный договор: объёмы, изменения, график платежей и приёмка выполненных работ.",
+        ),
+        "purpose_client" => (
+            "Buyurtmachi ko'radigan hisobot: bajarilish, to'lov, hujjat va savollar. Bu yerda hech narsa o'zgartirilmaydi.",
+            "Отчёт для заказчика: выполнение, оплата, документы и вопросы. Здесь ничего не изменяется.",
+        ),
+        "purpose_sales" => (
+            "Shaxmatka: qavat va kvartiralar, ularning holati va narxi.",
+            "Шахматка: этажи и квартиры, их статус и цена.",
+        ),
+        "purpose_deals" => (
+            "Kvartira sotuvi: shartnoma, to'lov turi, to'lov grafigi va qarz.",
+            "Продажа квартир: договор, вид оплаты, график платежей и задолженность.",
+        ),
+        "purpose_analytics" => (
+            "Modullar kesishgan joyi: nima nimaga sabab bo'lgani, sog'lomlik indeksi va hisobot.",
+            "Пересечение модулей: что чему причина, индекс здоровья и отчёт.",
+        ),
+        "purpose_copilot" => (
+            "Savol bering — javob shu bazadagi hisobdan chiqadi va manbasi ko'rsatiladi.",
+            "Задайте вопрос — ответ считается по этой базе, источник указывается.",
+        ),
+        "purpose_settings" => (
+            "Til, mavzu, baza va zaxira nusxa, rollar, server bilan sinxronizatsiya va matnni tanish.",
+            "Язык, тема, база и резервная копия, роли, синхронизация с сервером и распознавание текста.",
+        ),
         "nav_today" => ("BUGUN", "СЕГОДНЯ"),
         "nav_stage_design" => ("1 · LOYIHA VA SMETA", "1 · ПРОЕКТ И СМЕТА"),
         "nav_stage_plan" => ("2 · REJA", "2 · ПЛАН"),

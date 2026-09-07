@@ -167,6 +167,8 @@ pub fn draw(ctx: &Context, app: &mut App) {
     side_bar(ctx, app);
 
     egui::CentralPanel::default().show(ctx, |ui| {
+        // Har ekran o'zini tanishtiradi: nomi va nima uchun kerakligi.
+        screen_header(ui, app);
         // Rol bu ekranni o'zgartira olmasa — buni yashirmaymiz, ochiq aytamiz.
         if !app.can_edit(app.screen) {
             readonly_banner(ui, app);
@@ -619,6 +621,34 @@ fn truncate_nav(s: &str, n: usize) -> String {
         out.push('…');
         out
     }
+}
+
+/// Ekran sarlavhasi: nomi, TZ bo'limi va bir qatorlik izoh.
+///
+/// Izoh ataylab har doim ko'rinadi va yashirilmaydi: ekran ko'p va
+/// ularning nomi hammaga bir xil tushunarli emas. Bir qator o'qishga bir
+/// soniya ketadi, noto'g'ri ekranda ish qilish esa yarim kunni oladi.
+fn screen_header(ui: &mut egui::Ui, app: &App) {
+    let screen = app.screen;
+    ui.horizontal(|ui| {
+        ui.label(RichText::new(screen.label()).size(19.0).strong());
+        let numeral = screen.numeral();
+        if !numeral.is_empty() {
+            ui.label(
+                RichText::new(numeral)
+                    .size(11.0)
+                    .monospace()
+                    .color(theme::muted()),
+            )
+            .on_hover_text(t("header_numeral_hint"));
+        }
+    });
+    ui.label(
+        RichText::new(screen.purpose())
+            .size(12.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(8.0);
 }
 
 fn side_bar(ctx: &Context, app: &mut App) {
@@ -1393,6 +1423,24 @@ mod screen_tests {
         }
         drop(app);
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Har ekran o'zini tanishtiradi: nomi bor, izohi bor va ular
+    /// bir-birini takrorlamaydi.
+    #[test]
+    fn every_screen_explains_itself() {
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                let label = s.label();
+                let purpose = s.purpose();
+                assert!(!label.is_empty(), "{s:?} nomsiz");
+                assert_ne!(purpose, "?", "{s:?} izohi tarjimasiz");
+                assert!(purpose.len() > 30, "{s:?} izohi juda qisqa: {purpose}");
+                assert_ne!(purpose, label, "{s:?} izohi nomning takrori");
+                // Izoh gap bo'lishi kerak, sarlavha emas.
+                assert!(purpose.ends_with('.'), "{s:?} izohi gap emas: {purpose}");
+            }
+        }
     }
 
     /// Tab kalitlari ro'yxati kod bilan mos turishi kerak.

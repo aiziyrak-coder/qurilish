@@ -111,6 +111,45 @@ impl Screen {
         }
     }
 
+    /// Ekran nima uchun kerakligi — bir qatorda.
+    ///
+    /// Ro'yxatda nom bor, lekin nom ekranni tushuntirmaydi: «Arizalar» —
+    /// bu nima, kim to'ldiradi, keyin nima bo'ladi? Shu qator har ekran
+    /// tepasida turadi va shu savolga javob beradi.
+    pub fn purpose(self) -> &'static str {
+        match self {
+            Screen::Dashboard => t("purpose_dashboard"),
+            Screen::Portfolio => t("purpose_portfolio"),
+            Screen::Notices => t("purpose_notices"),
+            Screen::Director => t("purpose_director"),
+            Screen::Inspections => t("purpose_inspections"),
+            Screen::Contracts => t("purpose_contracts"),
+            Screen::Passport => t("purpose_passport"),
+            Screen::Gantt => t("purpose_gantt"),
+            Screen::Ppr => t("purpose_ppr"),
+            Screen::AiCheck => t("purpose_ai_check"),
+            Screen::Estimate => t("purpose_estimate"),
+            Screen::ExecDocs => t("purpose_exec_docs"),
+            Screen::Journal => t("purpose_journal"),
+            Screen::Quality => t("purpose_quality"),
+            Screen::Safety => t("purpose_safety"),
+            Screen::Foreman => t("purpose_foreman"),
+            Screen::TechSupervision => t("purpose_tech_supervision"),
+            Screen::Client => t("purpose_client"),
+            Screen::Requests => t("purpose_requests"),
+            Screen::Purchases => t("purpose_purchases"),
+            Screen::Warehouse => t("purpose_warehouse"),
+            Screen::Materials => t("purpose_materials"),
+            Screen::Timesheet => t("purpose_timesheet"),
+            Screen::Machines => t("purpose_machines"),
+            Screen::Analytics => t("purpose_analytics"),
+            Screen::Copilot => t("purpose_copilot"),
+            Screen::Sales => t("purpose_sales"),
+            Screen::Deals => t("purpose_deals"),
+            Screen::Settings => t("purpose_settings"),
+        }
+    }
+
     /// TZ dagi bo'lim raqami. Umumiy ko'rinish va sozlamalar TZ moduli emas.
     pub fn numeral(self) -> &'static str {
         match self {
