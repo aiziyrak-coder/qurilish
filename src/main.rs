@@ -23,6 +23,7 @@ mod package;
 mod pdf;
 mod pdfread;
 mod portfolio;
+mod reports;
 mod roles;
 mod sales;
 mod store;

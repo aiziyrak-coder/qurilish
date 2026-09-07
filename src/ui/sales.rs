@@ -57,21 +57,213 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("sales_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal(|ui| {
-        for (i, label) in [(0u8, t("sales_tab_board")), (1, t("sales_tab_list"))] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[(0, t("sales_tab_board")), (1, t("sales_tab_list"))],
+        &[(2, t("sales_tab_review"))],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 
-    if tab == 1 {
-        list_tab(ui, app);
-    } else {
-        board_tab(ui, app);
+    match tab {
+        1 => list_tab(ui, app),
+        2 => review_tab(ui, app),
+        _ => board_tab(ui, app),
     }
+}
+
+// ================================================================ Tahlil
+
+/// Sotuv tahlili (TZ XIX): voronka, qavatlar, menejerlar va bronlar.
+///
+/// Barcha sonlar `sales` modulidan olinadi — shaxmatkadagi rang ham
+/// o'sha yerdan chiqadi, shuning uchun ikki ko'rinish bir-biriga zid
+/// bo'lishi mumkin emas.
+fn review_tab(ui: &mut egui::Ui, app: &mut App) {
+    use super::warehouse::{cell_l, cell_r};
+
+    let funnel = crate::sales::funnel(&app.units, &app.deals);
+    let floors = crate::sales::by_floor(&app.units, &app.deals);
+    let managers = crate::sales::by_manager(&app.deals, &app.payments, app.today);
+    let stale = crate::sales::stale_reserves(&app.units, &app.deals, app.today);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // ---- Voronka
+            stat_row(
+                ui,
+                vec![
+                    stat(
+                        t("sl_funnel_total"),
+                        funnel.total.to_string(),
+                        t("sl_funnel_total_hint"),
+                        theme::accent(),
+                    ),
+                    stat(
+                        t("us_free"),
+                        funnel.free.to_string(),
+                        t("sl_free_hint"),
+                        if funnel.free == 0 {
+                            theme::ok()
+                        } else {
+                            theme::text()
+                        },
+                    ),
+                    stat(
+                        t("us_reserved"),
+                        funnel.reserved.to_string(),
+                        t("sl_reserved_hint"),
+                        theme::warn(),
+                    ),
+                    stat(
+                        t("us_contract"),
+                        funnel.contracted.to_string(),
+                        t("sl_contract_hint"),
+                        theme::accent(),
+                    ),
+                    stat(
+                        t("us_sold"),
+                        funnel.sold.to_string(),
+                        t("sl_sold_hint"),
+                        theme::ok(),
+                    ),
+                    stat(
+                        t("sl_sold_pct"),
+                        format!("{:.0} %", funnel.sold_pct()),
+                        t("sl_sold_pct_hint"),
+                        theme::ok(),
+                    ),
+                ],
+            );
+            ui.add_space(14.0);
+
+            // ---- Muddati o'tgan bronlar
+            ui.label(RichText::new(t("sl_stale")).size(13.5).strong());
+            ui.label(
+                RichText::new(t("sl_stale_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(4.0);
+            if stale.is_empty() {
+                ui.label(
+                    RichText::new(t("sl_stale_none"))
+                        .size(12.5)
+                        .color(theme::ok()),
+                );
+            } else {
+                for r in stale.iter().take(12) {
+                    ui.label(
+                        RichText::new(format!(
+                            "· {} — {} · {} {}",
+                            r.number,
+                            r.client,
+                            r.days,
+                            t("days_short")
+                        ))
+                        .size(12.0)
+                        .color(theme::warn()),
+                    );
+                }
+            }
+            ui.add_space(14.0);
+
+            // ---- Qavatlar kesimi
+            ui.label(RichText::new(t("sl_floors")).size(13.5).strong());
+            ui.add_space(4.0);
+            egui::Grid::new("sl_floors")
+                .num_columns(5)
+                .spacing([12.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 90.0, t("col_floor"));
+                    head_r(ui, 90.0, t("col_units"));
+                    head_r(ui, 90.0, t("col_free"));
+                    head_r(ui, 120.0, t("col_area_free"));
+                    head_r(ui, 140.0, t("col_price_m2"));
+                    ui.end_row();
+                    for f in &floors {
+                        cell_l(ui, 90.0, RichText::new(f.floor.to_string()).size(12.0));
+                        cell_r(ui, 90.0, RichText::new(f.units.to_string()).size(12.0));
+                        cell_r(
+                            ui,
+                            90.0,
+                            RichText::new(f.free.to_string())
+                                .size(12.0)
+                                .color(if f.free == 0 {
+                                    theme::ok()
+                                } else {
+                                    theme::text()
+                                }),
+                        );
+                        cell_r(
+                            ui,
+                            120.0,
+                            RichText::new(super::materials::trim_num(f.area_free)).size(12.0),
+                        );
+                        cell_r(ui, 140.0, RichText::new(money(f.avg_price_m2)).size(12.0));
+                        ui.end_row();
+                    }
+                });
+            ui.add_space(14.0);
+
+            // ---- Menejerlar
+            ui.label(RichText::new(t("sl_managers")).size(13.5).strong());
+            ui.add_space(4.0);
+            if managers.is_empty() {
+                ui.label(
+                    RichText::new(t("sl_no_deals"))
+                        .size(12.5)
+                        .color(theme::muted()),
+                );
+                return;
+            }
+            egui::Grid::new("sl_managers")
+                .num_columns(5)
+                .spacing([12.0, 4.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    head_l(ui, 190.0, t("col_manager"));
+                    head_r(ui, 90.0, t("col_deals"));
+                    head_r(ui, 150.0, t("col_total"));
+                    head_r(ui, 150.0, t("col_paid"));
+                    head_r(ui, 150.0, t("col_debt"));
+                    ui.end_row();
+                    for m in &managers {
+                        cell_l(
+                            ui,
+                            190.0,
+                            RichText::new(if m.manager.is_empty() {
+                                t("sl_no_manager").to_string()
+                            } else {
+                                m.manager.clone()
+                            })
+                            .size(12.5),
+                        );
+                        cell_r(ui, 90.0, RichText::new(m.deals.to_string()).size(12.0));
+                        cell_r(ui, 150.0, RichText::new(money(m.amount)).size(12.0));
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(m.paid)).size(12.0).color(theme::ok()),
+                        );
+                        cell_r(
+                            ui,
+                            150.0,
+                            RichText::new(money(m.debt))
+                                .size(12.0)
+                                .color(if m.debt > 0.0 {
+                                    theme::warn()
+                                } else {
+                                    theme::muted()
+                                }),
+                        );
+                        ui.end_row();
+                    }
+                });
+        });
 }
 
 // ================================================================ Yuqori panel

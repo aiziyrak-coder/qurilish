@@ -225,9 +225,501 @@ pub fn by_pay_kind(deals: &[Deal]) -> Vec<(PayKind, f64, usize)> {
         .collect()
 }
 
+// ================================================================ Qarz muddati
+
+/// Qarzning kechikish guruhi (TZ XX).
+///
+/// Qarz «bor yoki yo'q» degan savol emas: bugun muddati kelgan to'lov
+/// bilan uch oylik qarz bir xil emas va ular bilan ishlash ham har xil.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bucket {
+    /// Muddati hali kelmagan.
+    Future,
+    /// 1-30 kun.
+    Days30,
+    /// 31-60 kun.
+    Days60,
+    /// 61-90 kun.
+    Days90,
+    /// 90 kundan ortiq.
+    Over90,
+}
+
+impl Bucket {
+    pub const ALL: [Bucket; 5] = [
+        Bucket::Future,
+        Bucket::Days30,
+        Bucket::Days60,
+        Bucket::Days90,
+        Bucket::Over90,
+    ];
+
+    /// Kechikish kunidan guruh.
+    pub fn of(days: i64) -> Bucket {
+        match days {
+            d if d <= 0 => Bucket::Future,
+            d if d <= 30 => Bucket::Days30,
+            d if d <= 60 => Bucket::Days60,
+            d if d <= 90 => Bucket::Days90,
+            _ => Bucket::Over90,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Bucket::Future => crate::i18n::t("bk_future"),
+            Bucket::Days30 => crate::i18n::t("bk_30"),
+            Bucket::Days60 => crate::i18n::t("bk_60"),
+            Bucket::Days90 => crate::i18n::t("bk_90"),
+            Bucket::Over90 => crate::i18n::t("bk_over"),
+        }
+    }
+}
+
+/// Bitta shartnoma bo'yicha qarz holati.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Aging {
+    pub deal_id: i64,
+    pub unit_id: i64,
+    pub number: String,
+    pub client: String,
+    pub manager: String,
+    pub total: f64,
+    pub paid: f64,
+    /// Muddati o'tgan qarz.
+    pub overdue: f64,
+    /// Eng eski to'lanmagan to'lov necha kun kechikkan.
+    pub days: i64,
+    pub bucket: Bucket,
+}
+
+/// TZ XX: qarzlarni kechikish muddati bo'yicha guruhlaydi.
+///
+/// Faqat **qarzi borlari** qaytadi: to'liq to'langan shartnoma ro'yxatda
+/// turishi kerak emas. Bekor qilingan shartnoma ham chiqmaydi — undan
+/// pul kutilmaydi.
+pub fn aging(deals: &[Deal], payments: &[Payment], today: NaiveDate) -> Vec<Aging> {
+    let mut out: Vec<Aging> = deals
+        .iter()
+        .filter(|d| d.status != DealStatus::Cancelled)
+        .filter_map(|d| {
+            let state = deal_state(d, payments, today);
+            if state.remaining <= 0.01 {
+                return None;
+            }
+            // Eng eski to'lanmagan to'lov kechikishni belgilaydi.
+            let days = payments
+                .iter()
+                .filter(|p| p.deal_id == d.id && p.paid + 0.01 < p.planned && p.due <= today)
+                .map(|p| (today - p.due).num_days())
+                .max()
+                .unwrap_or(0);
+            Some(Aging {
+                deal_id: d.id,
+                unit_id: d.unit_id,
+                number: d.number.clone(),
+                client: d.client.clone(),
+                manager: d.manager.clone(),
+                total: d.total(),
+                paid: state.paid,
+                overdue: state.overdue,
+                days,
+                bucket: Bucket::of(days),
+            })
+        })
+        .collect();
+    // Eng uzoq kechikkanlari oldinda.
+    out.sort_by(|a, b| b.days.cmp(&a.days).then(b.overdue.total_cmp(&a.overdue)));
+    out
+}
+
+/// Guruh bo'yicha yig'indi: nechta shartnoma va qancha summa.
+pub fn aging_totals(rows: &[Aging]) -> Vec<(Bucket, usize, f64)> {
+    Bucket::ALL
+        .iter()
+        .map(|b| {
+            let mine: Vec<&Aging> = rows.iter().filter(|r| r.bucket == *b).collect();
+            let sum: f64 = mine
+                .iter()
+                .map(|r| {
+                    if *b == Bucket::Future {
+                        r.total - r.paid
+                    } else {
+                        r.overdue
+                    }
+                })
+                .sum();
+            (*b, mine.len(), sum)
+        })
+        .collect()
+}
+
+// ================================================================ Voronka
+
+/// Sotuv voronkasi (TZ XIX).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Funnel {
+    pub total: usize,
+    pub free: usize,
+    pub reserved: usize,
+    pub contracted: usize,
+    pub sold: usize,
+    /// Sotuvdan chiqarilganlar.
+    pub off: usize,
+    /// Sotilgan maydon va jami maydon.
+    pub area_sold: f64,
+    pub area_total: f64,
+}
+
+impl Funnel {
+    /// Sotilgan ulush, foizda. Kvartira bo'lmasa — nol.
+    pub fn sold_pct(&self) -> f64 {
+        if self.total == 0 {
+            0.0
+        } else {
+            (self.sold + self.contracted) as f64 * 100.0 / self.total as f64
+        }
+    }
+}
+
+/// TZ XIX: kvartiralar holati bo'yicha voronka.
+///
+/// Holat shartnomadan olinadi (`status_for`), kvartira yozuvidan emas:
+/// shartnoma bor bo'lsa u haqiqatni ko'rsatadi.
+pub fn funnel(units: &[Unit], deals: &[Deal]) -> Funnel {
+    let mut f = Funnel {
+        total: units.len(),
+        area_total: units.iter().map(|u| u.area).sum(),
+        ..Default::default()
+    };
+    for u in units {
+        let status = status_for(active_deal(deals, u.id)).unwrap_or(u.status);
+        match status {
+            UnitStatus::Free => f.free += 1,
+            UnitStatus::Reserved => f.reserved += 1,
+            UnitStatus::Contract => {
+                f.contracted += 1;
+                f.area_sold += u.area;
+            }
+            UnitStatus::Sold => {
+                f.sold += 1;
+                f.area_sold += u.area;
+            }
+            UnitStatus::Unavailable => f.off += 1,
+        }
+    }
+    f
+}
+
+// ================================================================ Bron va narx
+
+/// Bron muddati: shuncha kundan keyin band qilingan kvartira bo'shatiladi.
+///
+/// Bron muddatsiz bo'lsa, kvartira oylab band turib qolishi mumkin — bu
+/// sotuvni to'xtatadi. Bir oy — odatdagi muddat.
+pub const RESERVE_DAYS: i64 = 30;
+
+/// Muddati o'tgan bron (TZ XIX).
+#[derive(Debug, Clone, PartialEq)]
+pub struct StaleReserve {
+    pub unit_id: i64,
+    pub number: String,
+    pub client: String,
+    pub days: i64,
+}
+
+/// Uzoq turib qolgan bronlarni topadi.
+pub fn stale_reserves(units: &[Unit], deals: &[Deal], today: NaiveDate) -> Vec<StaleReserve> {
+    let mut out: Vec<StaleReserve> = units
+        .iter()
+        .filter_map(|u| {
+            let deal = active_deal(deals, u.id)?;
+            if deal.status != DealStatus::Reserved {
+                return None;
+            }
+            let days = (today - deal.date).num_days();
+            (days > RESERVE_DAYS).then(|| StaleReserve {
+                unit_id: u.id,
+                number: u.number.clone(),
+                client: deal.client.clone(),
+                days,
+            })
+        })
+        .collect();
+    out.sort_by_key(|r| std::cmp::Reverse(r.days));
+    out
+}
+
+/// Menejer kesimi (TZ XIX).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManagerStat {
+    pub manager: String,
+    pub deals: usize,
+    pub amount: f64,
+    pub paid: f64,
+    pub debt: f64,
+}
+
+/// TZ XIX: menejerlar bo'yicha sotuv.
+///
+/// Ism bo'sh bo'lsa alohida qator sifatida qoladi — «kim sotgani noma'lum»
+/// ham javob, uni boshqa menejerga qo'shib yuborish noto'g'ri bo'lardi.
+pub fn by_manager(deals: &[Deal], payments: &[Payment], today: NaiveDate) -> Vec<ManagerStat> {
+    let mut out: Vec<ManagerStat> = Vec::new();
+    for d in deals.iter().filter(|d| d.status != DealStatus::Cancelled) {
+        let state = deal_state(d, payments, today);
+        let name = d.manager.trim().to_string();
+        match out.iter_mut().find(|m| m.manager == name) {
+            Some(m) => {
+                m.deals += 1;
+                m.amount += d.total();
+                m.paid += state.paid;
+                m.debt += state.remaining;
+            }
+            None => out.push(ManagerStat {
+                manager: name,
+                deals: 1,
+                amount: d.total(),
+                paid: state.paid,
+                debt: state.remaining,
+            }),
+        }
+    }
+    out.sort_by(|a, b| b.amount.total_cmp(&a.amount));
+    out
+}
+
+/// Qavat bo'yicha narx va qoldiq (TZ XIX).
+#[derive(Debug, Clone, PartialEq)]
+pub struct FloorStat {
+    pub floor: i64,
+    pub units: usize,
+    pub free: usize,
+    /// O'rtacha kvadrat metr narxi.
+    pub avg_price_m2: f64,
+    pub area_free: f64,
+}
+
+/// TZ XIX: qavatlar kesimida qoldiq va narx.
+pub fn by_floor(units: &[Unit], deals: &[Deal]) -> Vec<FloorStat> {
+    let mut out: Vec<FloorStat> = Vec::new();
+    for u in units {
+        let status = status_for(active_deal(deals, u.id)).unwrap_or(u.status);
+        let free = status == UnitStatus::Free;
+        match out.iter_mut().find(|f| f.floor == u.floor) {
+            Some(f) => {
+                f.units += 1;
+                if free {
+                    f.free += 1;
+                    f.area_free += u.area;
+                }
+                // O'rtacha narx qatorlar soniga qarab qayta hisoblanadi.
+                f.avg_price_m2 =
+                    (f.avg_price_m2 * (f.units - 1) as f64 + u.price_per_m2) / f.units as f64;
+            }
+            None => out.push(FloorStat {
+                floor: u.floor,
+                units: 1,
+                free: usize::from(free),
+                avg_price_m2: u.price_per_m2,
+                area_free: if free { u.area } else { 0.0 },
+            }),
+        }
+    }
+    out.sort_by_key(|f| f.floor);
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// TZ XX: qarz kechikish muddati bo'yicha guruhlanadi va to'liq
+    /// to'langan shartnoma ro'yxatga tushmaydi.
+    #[test]
+    fn debts_are_grouped_by_how_late_they_are() {
+        let today = NaiveDate::from_ymd_opt(2026, 9, 7).unwrap();
+        let deal = |id: i64, price: f64| Deal {
+            id,
+            project_id: 1,
+            unit_id: id,
+            number: format!("D-{id}"),
+            date: today - chrono::Duration::days(200),
+            client: format!("Mijoz {id}"),
+            phone: String::new(),
+            client_doc: String::new(),
+            pay_kind: PayKind::Installment,
+            price,
+            discount: 0.0,
+            prepayment: 0.0,
+            months: 6,
+            status: DealStatus::Signed,
+            manager: "Menejer".into(),
+            note: String::new(),
+        };
+        let pay = |deal_id: i64, days_ago: i64, planned: f64, paid: f64| Payment {
+            id: 0,
+            project_id: 1,
+            deal_id,
+            due: today - chrono::Duration::days(days_ago),
+            planned,
+            paid,
+            paid_date: None,
+            kind: PayKind::Installment,
+            document: String::new(),
+            note: String::new(),
+        };
+
+        let deals = vec![deal(1, 100.0), deal(2, 100.0), deal(3, 100.0)];
+        let payments = vec![
+            // 1 — 100 kun kechikkan.
+            pay(1, 100, 100.0, 0.0),
+            // 2 — 10 kun kechikkan.
+            pay(2, 10, 100.0, 0.0),
+            // 3 — to'liq to'langan.
+            pay(3, 40, 100.0, 100.0),
+        ];
+
+        let rows = aging(&deals, &payments, today);
+        assert_eq!(rows.len(), 2, "to'langan shartnoma ro'yxatga tushdi");
+        // Eng uzoq kechikkani oldinda.
+        assert_eq!(rows[0].deal_id, 1);
+        assert_eq!(rows[0].bucket, Bucket::Over90);
+        assert_eq!(rows[1].bucket, Bucket::Days30);
+
+        let totals = aging_totals(&rows);
+        let over = totals
+            .iter()
+            .find(|(b, _, _)| *b == Bucket::Over90)
+            .unwrap();
+        assert_eq!(over.1, 1);
+        assert_eq!(over.2, 100.0);
+        // Guruhlar chegarasi.
+        assert_eq!(Bucket::of(0), Bucket::Future);
+        assert_eq!(Bucket::of(30), Bucket::Days30);
+        assert_eq!(Bucket::of(31), Bucket::Days60);
+        assert_eq!(Bucket::of(91), Bucket::Over90);
+    }
+
+    /// TZ XIX: voronka holatni shartnomadan oladi, kvartira yozuvidan emas.
+    #[test]
+    fn funnel_counts_status_from_the_deal() {
+        let unit = |id: i64, status: UnitStatus| Unit {
+            id,
+            project_id: 1,
+            block_id: 1,
+            number: format!("{id}"),
+            floor: 1,
+            position: id,
+            kind: crate::domain::UnitKind::Flat,
+            rooms: 2,
+            area: 50.0,
+            area_living: 30.0,
+            price_per_m2: 10.0,
+            status,
+            layout: String::new(),
+            note: String::new(),
+        };
+        let today = NaiveDate::from_ymd_opt(2026, 9, 7).unwrap();
+        let mut deal = Deal {
+            id: 1,
+            project_id: 1,
+            unit_id: 1,
+            number: "D-1".into(),
+            date: today,
+            client: "Mijoz".into(),
+            phone: String::new(),
+            client_doc: String::new(),
+            pay_kind: PayKind::Cash,
+            price: 500.0,
+            discount: 0.0,
+            prepayment: 0.0,
+            months: 0,
+            status: DealStatus::Signed,
+            manager: String::new(),
+            note: String::new(),
+        };
+
+        // Kvartira «bo'sh» deb yozilgan, lekin shartnoma bor.
+        let units = vec![unit(1, UnitStatus::Free), unit(2, UnitStatus::Free)];
+        let f = funnel(&units, std::slice::from_ref(&deal));
+        assert_eq!(f.total, 2);
+        assert_eq!(f.free, 1, "shartnomali kvartira bo'sh deb sanaldi");
+        assert_eq!(f.contracted, 1);
+        assert_eq!(f.area_sold, 50.0);
+        assert_eq!(f.sold_pct(), 50.0);
+
+        // Bekor qilingan shartnoma kvartirani bo'shatadi.
+        deal.status = DealStatus::Cancelled;
+        let f = funnel(&units, std::slice::from_ref(&deal));
+        assert_eq!(f.free, 2);
+        assert_eq!(f.sold_pct(), 0.0);
+
+        // Kvartira yo'q bo'lsa foiz nolga bo'linmaydi.
+        assert_eq!(funnel(&[], &[]).sold_pct(), 0.0);
+    }
+
+    /// TZ XIX: uzoq turib qolgan bron ko'rinadi.
+    #[test]
+    fn stale_reservations_are_found() {
+        let today = NaiveDate::from_ymd_opt(2026, 9, 7).unwrap();
+        let unit = Unit {
+            id: 1,
+            project_id: 1,
+            block_id: 1,
+            number: "12".into(),
+            floor: 3,
+            position: 1,
+            kind: crate::domain::UnitKind::Flat,
+            rooms: 2,
+            area: 60.0,
+            area_living: 40.0,
+            price_per_m2: 10.0,
+            status: UnitStatus::Reserved,
+            layout: String::new(),
+            note: String::new(),
+        };
+        let mut deal = Deal {
+            id: 1,
+            project_id: 1,
+            unit_id: 1,
+            number: "D-1".into(),
+            date: today - chrono::Duration::days(RESERVE_DAYS + 5),
+            client: "Mijoz".into(),
+            phone: String::new(),
+            client_doc: String::new(),
+            pay_kind: PayKind::Cash,
+            price: 600.0,
+            discount: 0.0,
+            prepayment: 0.0,
+            months: 0,
+            status: DealStatus::Reserved,
+            manager: String::new(),
+            note: String::new(),
+        };
+
+        let rows = stale_reserves(
+            std::slice::from_ref(&unit),
+            std::slice::from_ref(&deal),
+            today,
+        );
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].days, RESERVE_DAYS + 5);
+
+        // Yangi bron hali muddatida.
+        deal.date = today - chrono::Duration::days(3);
+        assert!(stale_reserves(
+            std::slice::from_ref(&unit),
+            std::slice::from_ref(&deal),
+            today
+        )
+        .is_empty());
+
+        // Imzolangan shartnoma bron emas.
+        deal.date = today - chrono::Duration::days(100);
+        deal.status = DealStatus::Signed;
+        assert!(stale_reserves(&[unit], &[deal], today).is_empty());
+    }
 
     fn deal(price: f64, prepayment: f64, months: i64) -> Deal {
         Deal {

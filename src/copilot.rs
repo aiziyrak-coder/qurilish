@@ -144,6 +144,7 @@ impl Intent {
             Screen::Foreman | Screen::Journal => Intent::Attention,
             Screen::Dashboard | Screen::Director | Screen::Portfolio => Intent::Overview,
             Screen::Notices | Screen::Analytics => Intent::Attention,
+            Screen::Reports => Intent::Overview,
             Screen::TechSupervision => Intent::Docs,
             Screen::Passport | Screen::AiCheck => Intent::Project,
             _ => return None,

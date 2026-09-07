@@ -45,6 +45,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
 
     kpi_row(ui, app);
+    ui.add_space(8.0);
+    debts_row(ui, app);
     ui.add_space(10.0);
 
     if app.deals.is_empty() {
@@ -76,6 +78,66 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             });
     }
     list(ui, app);
+}
+
+/// Qarzdorlik kechikish muddati bo'yicha (TZ XX).
+///
+/// Qarzning umumiy summasi kam narsa aytadi: bugun muddati kelgan
+/// to'lov bilan uch oylik qarz bir xil emas. Shuning uchun qarz
+/// guruhlarga bo'lib ko'rsatiladi va eng eskisi ajratiladi.
+fn debts_row(ui: &mut egui::Ui, app: &App) {
+    use crate::sales::Bucket;
+
+    let rows = crate::sales::aging(&app.deals, &app.payments, app.today);
+    if rows.is_empty() {
+        return;
+    }
+    let totals = crate::sales::aging_totals(&rows);
+
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::line()))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::symmetric(14, 10))
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(t("dl_aging")).size(12.5).strong());
+                ui.label(
+                    RichText::new(t("dl_aging_hint"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+            });
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                for (bucket, count, sum) in &totals {
+                    if *count == 0 {
+                        continue;
+                    }
+                    // Kechikish qancha uzoq bo'lsa, rang shuncha kuchli.
+                    let colour = match bucket {
+                        Bucket::Future => theme::muted(),
+                        Bucket::Days30 => theme::text(),
+                        Bucket::Days60 => theme::warn(),
+                        _ => theme::danger(),
+                    };
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new(bucket.label())
+                                .size(10.5)
+                                .color(theme::muted()),
+                        );
+                        ui.label(RichText::new(money(*sum)).size(13.0).strong().color(colour));
+                        ui.label(
+                            RichText::new(format!("{count} {}", t("dl_deals")))
+                                .size(10.5)
+                                .color(theme::muted()),
+                        );
+                    });
+                    ui.add_space(18.0);
+                }
+            });
+        });
 }
 
 fn kpi_row(ui: &mut egui::Ui, app: &App) {

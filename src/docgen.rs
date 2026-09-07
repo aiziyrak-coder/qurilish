@@ -1067,64 +1067,88 @@ pub enum Cell {
 
 /// Jadvalni `.xlsx` ga yozadi.
 pub fn write_table(path: &Path, table: &Table) -> Result<(), XlsxError> {
+    write_book(path, std::slice::from_ref(table))
+}
+
+/// Bir necha jadvalni bitta kitobga yozadi: har jadval — alohida varaq.
+///
+/// Hisobotlar shu orqali bitta faylga yig'iladi: modullar bo'yicha
+/// hisobotni alohida-alohida yuborish o'rniga, bitta kitob beriladi va
+/// unda har modul o'z varag'ida turadi.
+pub fn write_book(path: &Path, tables: &[Table]) -> Result<(), XlsxError> {
     let st = Styles::new();
     let mut wb = Workbook::new();
-    let sh = wb.add_worksheet();
-    // Excel varaq nomida `:\/?*[]` bo'lmasligi kerak va 31 belgidan oshmasligi.
-    sh.set_name(sheet_name(&table.name))?;
+    let mut used: Vec<String> = Vec::new();
 
-    for (i, h) in table.headers.iter().enumerate() {
-        sh.write_string_with_format(0, i as u16, h, &st.head)?;
-        // Ustun kengligi sarlavha va qiymatlarga qarab.
-        let w = table
-            .rows
-            .iter()
-            .filter_map(|r| r.get(i))
-            .map(|c| match c {
-                Cell::Text(s) => s.chars().count(),
-                Cell::Money(_) => 14,
-                _ => 10,
-            })
-            .max()
-            .unwrap_or(0)
-            .max(h.chars().count())
-            .min(50);
-        sh.set_column_width(i as u16, w as f64 + 2.0)?;
-    }
-    sh.set_row_height(0, 26.0)?;
-
-    let date_fmt = Format::new()
-        .set_border(FormatBorder::Thin)
-        .set_num_format("dd.mm.yyyy");
-    for (ri, row) in table.rows.iter().enumerate() {
-        let r = ri as u32 + 1;
-        for (ci, cell) in row.iter().enumerate() {
-            let c = ci as u16;
-            match cell {
-                Cell::Text(s) => sh.write_string_with_format(r, c, s, &st.cell)?,
-                Cell::Num(v) => sh.write_number_with_format(r, c, *v, &st.cell_num)?,
-                Cell::Money(v) => sh.write_number_with_format(r, c, *v, &st.cell_money)?,
-                Cell::Date(d) => {
-                    let d = rust_xlsxwriter::ExcelDateTime::from_ymd(
-                        chrono::Datelike::year(d) as u16,
-                        chrono::Datelike::month(d) as u8,
-                        chrono::Datelike::day(d) as u8,
-                    )?;
-                    sh.write_datetime_with_format(r, c, &d, &date_fmt)?
-                }
-                Cell::Empty => sh.write_string_with_format(r, c, "", &st.cell)?,
-            };
+    for table in tables {
+        let sh = wb.add_worksheet();
+        // Excel varaq nomida `:\/?*[]` bo'lmasligi kerak, 31 belgidan
+        // oshmasligi va **takrorlanmasligi** kerak.
+        let mut name = sheet_name(&table.name);
+        if used.contains(&name) {
+            let base: String = name.chars().take(28).collect();
+            let mut n = 2;
+            while used.contains(&format!("{base} {n}")) {
+                n += 1;
+            }
+            name = format!("{base} {n}");
         }
-    }
-    // Sarlavha qatori qotib turadi va filtr qo'yiladi — katta jadvalda kerak.
-    sh.set_freeze_panes(1, 0)?;
-    if !table.rows.is_empty() && !table.headers.is_empty() {
-        sh.autofilter(
-            0,
-            0,
-            table.rows.len() as u32,
-            table.headers.len() as u16 - 1,
-        )?;
+        used.push(name.clone());
+        sh.set_name(&name)?;
+
+        for (i, h) in table.headers.iter().enumerate() {
+            sh.write_string_with_format(0, i as u16, h, &st.head)?;
+            // Ustun kengligi sarlavha va qiymatlarga qarab.
+            let w = table
+                .rows
+                .iter()
+                .filter_map(|r| r.get(i))
+                .map(|c| match c {
+                    Cell::Text(s) => s.chars().count(),
+                    Cell::Money(_) => 14,
+                    _ => 10,
+                })
+                .max()
+                .unwrap_or(0)
+                .max(h.chars().count())
+                .min(50);
+            sh.set_column_width(i as u16, w as f64 + 2.0)?;
+        }
+        sh.set_row_height(0, 26.0)?;
+
+        let date_fmt = Format::new()
+            .set_border(FormatBorder::Thin)
+            .set_num_format("dd.mm.yyyy");
+        for (ri, row) in table.rows.iter().enumerate() {
+            let r = ri as u32 + 1;
+            for (ci, cell) in row.iter().enumerate() {
+                let c = ci as u16;
+                match cell {
+                    Cell::Text(s) => sh.write_string_with_format(r, c, s, &st.cell)?,
+                    Cell::Num(v) => sh.write_number_with_format(r, c, *v, &st.cell_num)?,
+                    Cell::Money(v) => sh.write_number_with_format(r, c, *v, &st.cell_money)?,
+                    Cell::Date(d) => {
+                        let d = rust_xlsxwriter::ExcelDateTime::from_ymd(
+                            chrono::Datelike::year(d) as u16,
+                            chrono::Datelike::month(d) as u8,
+                            chrono::Datelike::day(d) as u8,
+                        )?;
+                        sh.write_datetime_with_format(r, c, &d, &date_fmt)?
+                    }
+                    Cell::Empty => sh.write_string_with_format(r, c, "", &st.cell)?,
+                };
+            }
+        }
+        // Sarlavha qatori qotib turadi va filtr qo'yiladi — katta jadvalda kerak.
+        sh.set_freeze_panes(1, 0)?;
+        if !table.rows.is_empty() && !table.headers.is_empty() {
+            sh.autofilter(
+                0,
+                0,
+                table.rows.len() as u32,
+                table.headers.len() as u16 - 1,
+            )?;
+        }
     }
     wb.save(path)?;
     Ok(())

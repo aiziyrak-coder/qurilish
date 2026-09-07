@@ -36,8 +36,8 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
-| Umumiy (TZ dan tashqari) | 14 | 13 | 1 | 0 | 0 |
-| **Jami** | **700** | **645** | **13** | **42** | **42** |
+| Umumiy (TZ dan tashqari) | 16 | 15 | 1 | 0 | 0 |
+| **Jami** | **702** | **647** | **13** | **42** | **42** |
 
 Ya'ni **~92 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
 
@@ -820,6 +820,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] **Server va sinxronizatsiya** — *`server/` krati: kirish nazorati, paket navbati, masofadan imzolash; ilova sozlamada yoqiladi*
 - [~] **Mobil klient** — *telefon brauzeri uchun ko'rinish (server beradi); native ilova 🔒*
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
+- [x] **Hisobotlar bo'limi** — *20 ta hisobot, har biri o'z moduli funksiyasidan; davr (bugun/hafta/oy/chorak/yil/butun), ekranda ko'rish, Excel yoki PDF ga saqlash, «hammasi bitta kitobda» — har modul alohida varaqda*
+- [x] **Sotuv tahlili** — *voronka (bo'sh/band/shartnoma/sotilgan va sotuv ulushi), qavatlar kesimi, menejerlar kesimi, muddati o'tgan bronlar, qarzdorlik kechikish muddati bo'yicha (30/60/90/90+)*
 - [x] **Excel va PDF eksporti** — *20 ta ekran jadvali, Ctrl+E; kengaytmaga qarab `.xlsx` yoki `.pdf` (A4 albom, sahifalash, tizim shrifti bilan kirill/lotin)*
 - [x] **Bildirishnomalar tizimi** — *ilova ichida: 9 modul signali, yon panelda son; SMS/Telegram tashqi omil*
 - [x] **Amallar tarixi (audit log)** — *har bir qo'shish, o'zgartirish va o'chirish; 50 000 yozuv saqlanadi*

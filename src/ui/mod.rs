@@ -26,6 +26,7 @@ mod portfolio;
 mod ppr;
 mod purchases;
 mod quality;
+mod reports;
 mod requests;
 mod safety;
 mod sales;
@@ -198,6 +199,7 @@ pub fn draw(ctx: &Context, app: &mut App) {
             Screen::Safety => safety::show(ui, app),
             Screen::Machines => machines::show(ui, app),
             Screen::Analytics => analytics::show(ui, app),
+            Screen::Reports => reports::show(ui, app),
             Screen::Foreman => foreman::show(ui, app),
             Screen::TechSupervision => supervision::show(ui, app),
             Screen::Client => client::show(ui, app),

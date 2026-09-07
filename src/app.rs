@@ -57,6 +57,8 @@ pub enum Screen {
     Machines,
     // XVII-XVIII. Analitika
     Analytics,
+    /// Har modul bo'yicha hisobot (umumiy talab).
+    Reports,
     Copilot,
     Director,
     // XIX-XX. Sotuv
@@ -104,6 +106,7 @@ impl Screen {
             Screen::Timesheet => t("screen_timesheet"),
             Screen::Machines => t("screen_machines"),
             Screen::Analytics => t("screen_analytics"),
+            Screen::Reports => t("screen_reports"),
             Screen::Copilot => t("screen_copilot"),
             Screen::Sales => t("screen_sales"),
             Screen::Deals => t("screen_deals"),
@@ -143,6 +146,7 @@ impl Screen {
             Screen::Timesheet => t("purpose_timesheet"),
             Screen::Machines => t("purpose_machines"),
             Screen::Analytics => t("purpose_analytics"),
+            Screen::Reports => t("purpose_reports"),
             Screen::Copilot => t("purpose_copilot"),
             Screen::Sales => t("purpose_sales"),
             Screen::Deals => t("purpose_deals"),
@@ -157,6 +161,9 @@ impl Screen {
             | Screen::Portfolio
             | Screen::Notices
             | Screen::Director
+            // Hisobotlar TZ da alohida modul emas — u barcha modullardan
+            // yig'iladi, shuning uchun raqami ham yo'q.
+            | Screen::Reports
             | Screen::Settings => "",
             Screen::Passport => "I.1",
             Screen::Gantt => "I.2",
@@ -213,6 +220,7 @@ impl Screen {
             | Screen::TechSupervision
             | Screen::Client
             | Screen::Copilot
+            | Screen::Reports
             | Screen::Settings => Readiness::Ready,
         }
     }
@@ -270,6 +278,7 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
     (
         "nav_stage_review",
         &[
+            Screen::Reports,
             Screen::Analytics,
             Screen::Director,
             Screen::Portfolio,
