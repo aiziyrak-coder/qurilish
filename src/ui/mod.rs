@@ -651,6 +651,41 @@ fn screen_header(ui: &mut egui::Ui, app: &App) {
     ui.add_space(8.0);
 }
 
+/// Bo'limlar qatori: kunlik ishlaydiganlari oldinda.
+///
+/// Ekranlarda sakkiztagacha bo'lim bor va ular bir xil ko'rinardi — kerakli
+/// bo'limni topish uchun hammasini o'qib chiqishga to'g'ri kelardi. Endi
+/// har kuni ochiladiganlari oldinda, vaqti-vaqti bilan kerak bo'ladiganlari
+/// ajratgichdan keyin turadi. Raqamlar o'zgarmaydi: faqat ko'rinish tartibi
+/// boshqacha, shuning uchun eski holat ham to'g'ri ochiladi.
+pub fn tab_row(ui: &mut egui::Ui, tab: &mut u8, daily: &[(u8, &str)], rare: &[(u8, &str)]) {
+    ui.horizontal_wrapped(|ui| {
+        for (i, label) in daily {
+            if ui.selectable_label(*tab == *i, *label).clicked() {
+                *tab = *i;
+            }
+        }
+        if !rare.is_empty() {
+            ui.separator();
+            for (i, label) in rare {
+                if ui
+                    .selectable_label(
+                        *tab == *i,
+                        RichText::new(*label).color(if *tab == *i {
+                            theme::text()
+                        } else {
+                            theme::muted()
+                        }),
+                    )
+                    .clicked()
+                {
+                    *tab = *i;
+                }
+            }
+        }
+    });
+}
+
 fn side_bar(ctx: &Context, app: &mut App) {
     egui::SidePanel::left("nav")
         .exact_width(266.0)
@@ -1441,6 +1476,75 @@ mod screen_tests {
                 assert!(purpose.ends_with('.'), "{s:?} izohi gap emas: {purpose}");
             }
         }
+    }
+
+    /// Ko'rsatilmagan bo'lim qolib ketmasin.
+    ///
+    /// Bo'lim raqamlari `match tab` da ishlanadi, ro'yxatda esa boshqa
+    /// tartibda turadi. Ro'yxatga qo'shilmagan raqam ekranda ochilmaydi:
+    /// kod ishlaydi, lekin bo'limga yo'l yo'q. Shuning uchun ikkalasi
+    /// manbadan o'qib solishtiriladi.
+    #[test]
+    fn every_handled_tab_is_reachable() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui");
+        let mut checked = 0usize;
+        for entry in std::fs::read_dir(&dir).expect("src/ui") {
+            let path = entry.expect("fayl").path();
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            // Bu fayl ekran emas: yordamchi shu yerda ta'riflangan va
+            // sinovning o'zi ham shu yerda turadi.
+            if path.file_name().is_some_and(|n| n == "mod.rs") {
+                continue;
+            }
+            let src = std::fs::read_to_string(&path).expect("o'qish");
+            let Some(call) = src.find("super::tab_row(") else {
+                continue;
+            };
+            // Ro'yxatdagi raqamlar qavs ichida, vergulgacha turadi.
+            let list_end = src[call..]
+                .find(");")
+                .map(|i| call + i)
+                .unwrap_or(src.len());
+            let mut shown: Vec<u8> = Vec::new();
+            for part in src[call..list_end].split('(').skip(1) {
+                if let Some(num) = part.split(',').next() {
+                    if let Ok(n) = num.trim().trim_end_matches("u8").parse::<u8>() {
+                        shown.push(n);
+                    }
+                }
+            }
+            assert!(!shown.is_empty(), "{path:?}: ro'yxat bo'sh");
+
+            // `match tab {` ichidagi raqamlar.
+            let Some(m) = src.find("match tab {") else {
+                continue;
+            };
+            let block_end = src[m..].find("\n    }").map(|i| m + i).unwrap_or(src.len());
+            let mut handled: Vec<u8> = Vec::new();
+            for line in src[m..block_end].lines().skip(1) {
+                let line = line.trim();
+                let Some((head, _)) = line.split_once("=>") else {
+                    continue;
+                };
+                if let Ok(n) = head.trim().parse::<u8>() {
+                    handled.push(n);
+                }
+            }
+
+            for n in &handled {
+                assert!(
+                    shown.contains(n),
+                    "{path:?}: {n}-bo'lim ishlanadi, lekin ro'yxatda yo'q"
+                );
+            }
+            checked += 1;
+        }
+        assert!(
+            checked >= 5,
+            "tab_row ishlatgan ekranlar topilmadi: {checked}"
+        );
     }
 
     /// Tab kalitlari ro'yxati kod bilan mos turishi kerak.

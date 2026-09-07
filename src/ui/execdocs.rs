@@ -23,19 +23,17 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("ed_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("ed_tab_docs")),
-            (1, t("ed_tab_review")),
+    // Kunlik: hujjatlar ro'yxati va imzodan oldingi tekshiruv.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[(0, t("ed_tab_docs")), (1, t("ed_tab_review"))],
+        &[
             (2, t("ed_tab_schemes")),
             (3, t("ed_tab_author")),
             (4, t("ed_tab_matrix")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
     if tab == 1 {

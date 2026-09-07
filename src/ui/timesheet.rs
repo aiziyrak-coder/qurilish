@@ -85,20 +85,18 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     kpi_row(ui, app, week);
     ui.add_space(10.0);
 
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("ts_tab_sheet")),
-            (1, t("ts_tab_brigades")),
+    // Kunlik: tabel katakchalari va brigadalar.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[(0, t("ts_tab_sheet")), (1, t("ts_tab_brigades"))],
+        &[
             (2, t("ts_tab_cost")),
             (3, t("ts_tab_periods")),
             (4, t("ts_tab_staff")),
             (5, t("ts_tab_objects")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

@@ -61,22 +61,23 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     kpi_row(ui, app);
     ui.add_space(10.0);
 
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("wh_tab_balance")),
+    // Kunlik: qoldiq, harakat, yetishmovchilik va nazorat.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[
+            (0, t("wh_tab_balance")),
             (1, t("wh_tab_moves")),
+            (6, t("wh_tab_shortage")),
+            (7, t("wh_tab_control")),
+        ],
+        &[
             (2, t("wh_tab_batches")),
             (3, t("wh_tab_reserve")),
             (4, t("wh_tab_inventory")),
             (5, t("wh_tab_tools")),
-            (6, t("wh_tab_shortage")),
-            (7, t("wh_tab_control")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

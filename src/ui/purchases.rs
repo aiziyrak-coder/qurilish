@@ -62,21 +62,22 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("pu_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("pu_tab_orders")),
-            (1, t("pu_tab_plan")),
+    // Kunlik: buyurtma, taklif, ta'minotchi va zanjir nazorati.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[
+            (0, t("pu_tab_orders")),
             (2, t("pu_tab_quotes")),
             (3, t("pu_tab_suppliers")),
+            (6, t("pu_tab_chain")),
+        ],
+        &[
+            (1, t("pu_tab_plan")),
             (4, t("pu_tab_budget")),
             (5, t("pu_tab_risks")),
-            (6, t("pu_tab_chain")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

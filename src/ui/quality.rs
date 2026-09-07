@@ -49,22 +49,23 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("ql_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("ql_tab_checks")),
-            (1, t("ql_tab_checklists")),
+    // Kunlik: tekshiruv, nuqson, sinov va chek-list.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[
+            (0, t("ql_tab_checks")),
             (2, t("ql_tab_defects")),
-            (3, t("ql_tab_blocks")),
             (4, t("ql_tab_tests")),
+            (1, t("ql_tab_checklists")),
+        ],
+        &[
+            (3, t("ql_tab_blocks")),
             (5, t("ql_tab_risks")),
             (6, t("ql_tab_week")),
             (7, t("ql_tab_sections")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

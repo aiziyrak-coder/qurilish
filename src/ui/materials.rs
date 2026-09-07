@@ -51,22 +51,23 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         // Uch ko'rinish: katalog, sarf normalari va normativ/fakt taqqoslash.
         let tab_key = egui::Id::new("mat_tab");
         let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-        ui.horizontal_wrapped(|ui| {
-            for (i, label) in [
-                (0u8, t("mat_tab_catalog")),
+        // Kunlik: katalog, tayyorlik va loyihaga moslik.
+        super::tab_row(
+            ui,
+            &mut tab,
+            &[
+                (0, t("mat_tab_catalog")),
+                (5, t("mat_tab_ready")),
+                (6, t("mat_tab_fit")),
+            ],
+            &[
                 (1, t("mat_tab_norms")),
                 (2, t("mat_tab_usage")),
                 (3, t("mat_tab_alts")),
                 (4, t("mat_tab_trace")),
-                (5, t("mat_tab_ready")),
-                (6, t("mat_tab_fit")),
                 (7, t("mat_tab_kits")),
-            ] {
-                if ui.selectable_label(tab == i, label).clicked() {
-                    tab = i;
-                }
-            }
-        });
+            ],
+        );
         ui.data_mut(|d| d.insert_temp(tab_key, tab));
         ui.add_space(8.0);
         match tab {
