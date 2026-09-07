@@ -163,9 +163,303 @@ pub fn pdf_text(path: &Path) -> Result<String, String> {
     Ok(text)
 }
 
+// ================================================================ Sertifikat
+
+/// Skandan o'qilgan sertifikat maydonlari (TZ IV.11).
+///
+/// Har maydon **ixtiyoriy**: topilmagani bo'sh qoladi va bu ochiq
+/// ko'rsatiladi. Topilmagan maydonni taxmin qilib to'ldirish eng yomon
+/// yechim bo'lardi — sertifikat raqami xato bo'lsa, hujjat yaroqsiz.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Certificate {
+    /// Sertifikat raqami.
+    pub number: String,
+    /// Berilgan sana.
+    pub issued: Option<chrono::NaiveDate>,
+    /// Amal qilish muddati.
+    pub until: Option<chrono::NaiveDate>,
+    /// Me'yoriy hujjat: GOST, O'z DSt, SNiP.
+    pub standard: String,
+    /// Ishlab chiqaruvchi.
+    pub maker: String,
+}
+
+impl Certificate {
+    /// Kamida bitta maydon topilganmi.
+    pub fn found(&self) -> bool {
+        !self.number.is_empty()
+            || self.issued.is_some()
+            || self.until.is_some()
+            || !self.standard.is_empty()
+            || !self.maker.is_empty()
+    }
+}
+
+/// Raqam qidiriladigan so'zlar (o'zbekcha va ruscha).
+const NUMBER_WORDS: [&str; 6] = [
+    "sertifikat",
+    "сертификат",
+    "guvohnoma",
+    "паспорт",
+    "pasport",
+    "protokol",
+];
+
+/// «Berilgan» ma'nosidagi so'zlar.
+const ISSUED_WORDS: [&str; 5] = ["berilgan", "выдан", "выдано", "sana", "дата"];
+
+/// «Amal qiladi» ma'nosidagi so'zlar.
+const UNTIL_WORDS: [&str; 6] = [
+    "amal qiladi",
+    "действителен",
+    "действительно",
+    "срок",
+    "muddat",
+    "до",
+];
+
+/// Ishlab chiqaruvchi so'zlari.
+const MAKER_WORDS: [&str; 5] = [
+    "ishlab chiqaruvchi",
+    "изготовитель",
+    "производитель",
+    "завод",
+    "zavod",
+];
+
+/// Tanilgan matndan sertifikat maydonlarini ajratadi.
+///
+/// Bu «tushunish» emas, **qidirish**: har maydon o'ziga xos so'z yonidan
+/// izlanadi. Shuning uchun natija qoralama sifatida beriladi va uni odam
+/// tekshiradi.
+pub fn certificate(text: &str) -> Certificate {
+    let mut out = Certificate::default();
+
+    for raw in text.lines() {
+        let line = raw.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let low = line.to_lowercase();
+
+        // ---- Raqam: «Сертификат № 1234-56»
+        if out.number.is_empty() && NUMBER_WORDS.iter().any(|w| low.contains(w)) {
+            if let Some(num) = after_number_sign(line) {
+                out.number = num;
+            }
+        }
+
+        // ---- Me'yoriy hujjat
+        if out.standard.is_empty() {
+            if let Some(std) = standard_of(line) {
+                out.standard = std;
+            }
+        }
+
+        // ---- Ishlab chiqaruvchi: «Изготовитель: ...»
+        if out.maker.is_empty() && MAKER_WORDS.iter().any(|w| low.contains(w)) {
+            if let Some(rest) = line.split_once(':').map(|(_, r)| r.trim()) {
+                if !rest.is_empty() {
+                    out.maker = rest.to_string();
+                }
+            }
+        }
+
+        // ---- Sanalar: qaysi so'z yonida turgani muhim.
+        let dates = dates_in(line);
+        if dates.is_empty() {
+            continue;
+        }
+        let has_until = UNTIL_WORDS.iter().any(|w| low.contains(w));
+        let has_issued = ISSUED_WORDS.iter().any(|w| low.contains(w));
+        if has_until && out.until.is_none() {
+            // Ikki sana bir qatorda bo'lsa, keyingisi — muddat.
+            out.until = dates.last().copied();
+            if has_issued && dates.len() > 1 && out.issued.is_none() {
+                out.issued = dates.first().copied();
+            }
+        } else if has_issued && out.issued.is_none() {
+            out.issued = dates.first().copied();
+        }
+    }
+
+    // Sanalar tartibi teskari bo'lsa, ular almashtiriladi: sertifikat
+    // berilishidan oldin tugay olmaydi.
+    if let (Some(a), Some(b)) = (out.issued, out.until) {
+        if b < a {
+            out.issued = Some(b);
+            out.until = Some(a);
+        }
+    }
+    out
+}
+
+/// `№` yoki `#` dan keyingi raqamni oladi.
+///
+/// Sertifikat raqami ichida bo'shliq bo'lishi mumkin («ROSS RU.АГ99.H01234»),
+/// shuning uchun qator oxirigacha olinadi va faqat ajratgichlarda
+/// to'xtatiladi. Uzun matn raqam bo'la olmaydi — chegara qo'yilgan.
+fn after_number_sign(line: &str) -> Option<String> {
+    let pos = line.find(['№', '#'])?;
+    let rest = line[pos..].trim_start_matches(['№', '#', ' ', ':']);
+    // Vergul, qavs yoki «от/dan» so'zi raqamning oxiri.
+    let mut value = rest;
+    for stop in [",", "(", " от ", " ot ", " dan ", " berilgan"] {
+        if let Some(i) = value.find(stop) {
+            value = &value[..i];
+        }
+    }
+    let value: String = value.trim().chars().take(40).collect();
+    let value = value.trim_matches(['.', '-', '/', ' ']).to_string();
+    // Raqamsiz matn — bu raqam emas, sarlavhaning davomi.
+    let has_digit = value.chars().any(|c| c.is_ascii_digit());
+    (!value.is_empty() && has_digit).then_some(value)
+}
+
+/// Me'yoriy hujjat belgisi: `GOST 12345-89`, `O'z DSt 1234:2020`.
+fn standard_of(line: &str) -> Option<String> {
+    const MARKS: [&str; 6] = ["ГОСТ", "GOST", "O'z DSt", "Oz DSt", "СНиП", "ШНК"];
+    let upper = line.to_uppercase();
+    let mark = MARKS.iter().find(|m| upper.contains(&m.to_uppercase()))?;
+    let pos = upper.find(&mark.to_uppercase())?;
+    let rest = &line[pos..];
+    let value: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '.' | ':' | '\''))
+        .collect();
+    let value = value.trim().to_string();
+    (value.len() > mark.len()).then_some(value)
+}
+
+/// Qatordagi barcha sanalar: `dd.mm.yyyy`, `dd/mm/yyyy`, `yyyy-mm-dd`.
+fn dates_in(line: &str) -> Vec<chrono::NaiveDate> {
+    let mut out = Vec::new();
+    let bytes: Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < bytes.len() {
+        if !bytes[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        while i < bytes.len() && (bytes[i].is_ascii_digit() || matches!(bytes[i], '.' | '/' | '-'))
+        {
+            i += 1;
+        }
+        let token: String = bytes[start..i].iter().collect();
+        if let Some(d) = parse_date(&token) {
+            out.push(d);
+        }
+    }
+    out
+}
+
+/// Bitta sana matnini o'qiydi.
+fn parse_date(token: &str) -> Option<chrono::NaiveDate> {
+    let token = token.trim_matches(['.', '-', '/']);
+    for sep in ['.', '/', '-'] {
+        let parts: Vec<&str> = token.split(sep).collect();
+        if parts.len() != 3 {
+            continue;
+        }
+        let nums: Vec<u32> = parts.iter().filter_map(|p| p.parse().ok()).collect();
+        if nums.len() != 3 {
+            continue;
+        }
+        // `yyyy-mm-dd` yoki `dd.mm.yyyy` — qaysi qism yil ekani uzunligidan.
+        let (y, m, d) = if parts[0].len() == 4 {
+            (nums[0], nums[1], nums[2])
+        } else {
+            (nums[2], nums[1], nums[0])
+        };
+        // Ikki raqamli yil: 2000 yillar deb olinadi.
+        let y = if y < 100 { 2000 + y } else { y };
+        if let Some(date) = chrono::NaiveDate::from_ymd_opt(y as i32, m, d) {
+            return Some(date);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Sertifikat maydonlari tanilgan matndan ajratiladi.
+    #[test]
+    fn certificate_fields_are_extracted() {
+        let text = "\
+СЕРТИФИКАТ СООТВЕТСТВИЯ № ROSS RU.АГ99.H01234\n\
+Выдан 12.03.2026\n\
+Действителен до 12.03.2028\n\
+Продукция: цемент портландский ГОСТ 31108-2020\n\
+Изготовитель: ООО \"Ohangaron sement\"\n";
+        let c = certificate(text);
+        assert!(c.found());
+        assert_eq!(c.number, "ROSS RU.АГ99.H01234");
+        assert_eq!(c.issued, chrono::NaiveDate::from_ymd_opt(2026, 3, 12));
+        assert_eq!(c.until, chrono::NaiveDate::from_ymd_opt(2028, 3, 12));
+        assert_eq!(c.standard, "ГОСТ 31108-2020");
+        assert!(c.maker.contains("Ohangaron"), "{}", c.maker);
+    }
+
+    /// O'zbekcha matn ham o'qiladi.
+    #[test]
+    fn uzbek_certificate_is_read() {
+        let text = "\
+Muvofiqlik sertifikati № UZ-123/45\n\
+Berilgan sana: 01.02.2026\n\
+Amal qiladi: 01.02.2027\n\
+O'z DSt 901:2019\n";
+        let c = certificate(text);
+        assert_eq!(c.number, "UZ-123/45");
+        assert_eq!(c.issued, chrono::NaiveDate::from_ymd_opt(2026, 2, 1));
+        assert_eq!(c.until, chrono::NaiveDate::from_ymd_opt(2027, 2, 1));
+        assert!(c.standard.starts_with("O'z DSt"), "{}", c.standard);
+    }
+
+    /// Topilmagan maydon taxmin qilinmaydi.
+    #[test]
+    fn nothing_is_invented_when_the_text_has_no_fields() {
+        let c = certificate("shunchaki matn, hech qanday sertifikat yo'q");
+        assert!(!c.found());
+        assert!(c.number.is_empty());
+        assert!(c.issued.is_none());
+        assert!(c.until.is_none());
+
+        // Bo'sh matn ham xavfsiz.
+        assert!(!certificate("").found());
+    }
+
+    /// Sana tartibi teskari yozilgan bo'lsa to'g'rilanadi: sertifikat
+    /// berilishidan oldin tugay olmaydi.
+    #[test]
+    fn reversed_dates_are_swapped() {
+        let text = "Выдан 10.10.2027\nДействителен до 10.10.2026\n";
+        let c = certificate(text);
+        assert_eq!(c.issued, chrono::NaiveDate::from_ymd_opt(2026, 10, 10));
+        assert_eq!(c.until, chrono::NaiveDate::from_ymd_opt(2027, 10, 10));
+    }
+
+    /// Sana ko'rinishlari: nuqta, chiziq va ISO.
+    #[test]
+    fn date_formats_are_understood() {
+        assert_eq!(
+            parse_date("12.03.2026"),
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 12)
+        );
+        assert_eq!(
+            parse_date("2026-03-12"),
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 12)
+        );
+        assert_eq!(
+            parse_date("12/03/26"),
+            chrono::NaiveDate::from_ymd_opt(2026, 3, 12)
+        );
+        // Mavjud bo'lmagan sana qabul qilinmaydi.
+        assert_eq!(parse_date("32.13.2026"), None);
+        assert_eq!(parse_date("shunchaki"), None);
+    }
 
     /// Dastur o'rnatilmagan bo'lsa ham modul yiqilmaydi va sabab aytadi.
     #[test]

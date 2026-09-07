@@ -198,11 +198,88 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
     );
 }
 
+/// Sertifikat skanini o'qib, maydonlarni **qoralama** sifatida to'ldiradi.
+///
+/// Tanilgan matn hech qachon tayyor javob emas: OCR harfni adashtiradi,
+/// shuning uchun natija maydonga qo'yiladi va odam uni tekshiradi.
+/// Mavjud qiymat ustiga yozilmaydi — faqat bo'sh maydon to'ldiriladi.
+fn scan_certificate(app: &mut App, material_id: i64) {
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t("cert_scan"))
+        .add_filter(
+            t("cert_scan_files"),
+            &["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp"],
+        )
+        .pick_file()
+    else {
+        return;
+    };
+
+    let pdf = path
+        .extension()
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+    let text = if pdf {
+        crate::ocr::pdf_text(&path)
+    } else {
+        crate::ocr::image_text(&path)
+    };
+    let text = match text {
+        Ok(t) => t,
+        Err(e) => {
+            app.notify(e);
+            return;
+        }
+    };
+
+    let found = crate::ocr::certificate(&text);
+    if !found.found() {
+        app.notify(t("cert_scan_empty").to_string());
+        return;
+    }
+    let Some(mut m) = app.materials.iter().find(|m| m.id == material_id).cloned() else {
+        return;
+    };
+
+    let mut filled = Vec::new();
+    if m.cert_no.trim().is_empty() && !found.number.is_empty() {
+        m.cert_no = found.number.clone();
+        filled.push(t("col_cert"));
+    }
+    if m.cert_until.is_none() {
+        if let Some(until) = found.until {
+            m.cert_until = Some(until);
+            filled.push(t("col_cert_until"));
+        }
+    }
+    // Me'yoriy hujjat tavsifga qo'shiladi, agar u yerda hali bo'lmasa.
+    if !found.standard.is_empty() && !m.spec.contains(&found.standard) {
+        if m.spec.trim().is_empty() {
+            m.spec = found.standard.clone();
+        } else {
+            m.spec = format!("{}, {}", m.spec.trim(), found.standard);
+        }
+        filled.push(t("col_spec"));
+    }
+
+    if filled.is_empty() {
+        // Hammasi allaqachon to'ldirilgan — hech narsa o'zgartirilmaydi.
+        app.notify(t("cert_scan_nothing_new").to_string());
+        return;
+    }
+    app.db.update_material(&m);
+    if let Some(slot) = app.materials.iter_mut().find(|x| x.id == m.id) {
+        *slot = m;
+    }
+    app.notify(format!("{} {}", t("cert_scan_done"), filled.join(", ")));
+}
+
 fn table(ui: &mut egui::Ui, app: &mut App) {
     let card_key = egui::Id::new("mat_card");
     let mut open_card: Option<i64> = None;
     let mut edited: Option<Material> = None;
     let mut removed: Option<i64> = None;
+    // Sertifikat skanini o'qish so'ralgan material.
+    let mut scan_for: Option<i64> = None;
     let lines = app.stock();
     let today = app.today;
     // Tor ekranda loyiha havolalari yashiriladi: ular bir marta to'ldiriladi,
@@ -271,9 +348,23 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                                     .hint_text(t("col_spec_hint")),
                             )
                             .changed();
-                        changed |= ui
-                            .add_sized([110.0, 22.0], egui::TextEdit::singleline(&mut m.cert_no))
-                            .changed();
+                        ui.horizontal(|ui| {
+                            changed |= ui
+                                .add_sized(
+                                    [110.0, 22.0],
+                                    egui::TextEdit::singleline(&mut m.cert_no),
+                                )
+                                .changed();
+                            // Skandan o'qish: OCR o'rnatilgan bo'lsagina.
+                            if crate::ocr::tesseract().is_some()
+                                && ui
+                                    .small_button(t("cert_scan"))
+                                    .on_hover_text(t("cert_scan_hint"))
+                                    .clicked()
+                            {
+                                scan_for = Some(m.id);
+                            }
+                        });
 
                         // Sertifikat muddati: belgilanmagan bo'lishi mumkin.
                         ui.horizontal(|ui| {
@@ -429,6 +520,9 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
     if let Some(id) = removed {
         app.db.del("material", id);
         app.reload_modules();
+    }
+    if let Some(id) = scan_for {
+        scan_certificate(app, id);
     }
 
     // Kartochka jadval ostida ochiladi; o'sha tugma qayta bosilsa yopiladi.

@@ -21,7 +21,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 20 | 1 | 1 | 1 |
 | III. AI smeta tekshiruvi | 34 | 32 | 0 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 27 | 1 | 2 | 2 |
+| IV. Ijro hujjatlari | 30 | 28 | 0 | 2 | 2 |
 | V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
 | VI. Prorab ilovasi | 37 | 28 | 2 | 7 | 7 |
 | VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 13 | 1 | 0 | 0 |
-| **Jami** | **700** | **644** | **14** | **42** | **42** |
+| **Jami** | **700** | **645** | **13** | **42** | **42** |
 
 Ya'ni **~92 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
 
@@ -133,7 +133,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. Fotolar — *hujjatga biriktiriladi*
 - [ ] 🔒 9. Geolokatsiya va vaqt
 - [x] 10. Material sertifikatlari — *muddat nazorati va kirim tekshiruvi*
-- [~] 11. AI sertifikat tekshiruvi (OCR) — *matnni tanish ko'prigi bor (mahalliy Tesseract); sertifikat maydonlarini avtomatik ajratish 🔒*
+- [x] 11. AI sertifikat tekshiruvi (OCR) — *skandan raqam, berilgan sana, amal muddati, GOST/O'z DSt va ishlab chiqaruvchi ajratiladi; natija qoralama va to'ldirilgan maydon ustiga yozilmaydi*
 - [x] 12. Beton pasporti
 - [x] 13. Laboratoriya sinovlari
 - [x] 14. Jurnallar — *umumiy + maxsus jurnallar (beton, payvand, yashirin, geodeziya) mavjud yozuvlar ko'rinishi sifatida*

@@ -1956,6 +1956,21 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Ответ сервера не распознан",
         ),
         "dxf_layer" => ("qatlam", "слой"),
+        "cert_scan" => ("Skandan o'qish", "Прочитать со скана"),
+        "cert_scan_hint" => (
+            "Sertifikat skanidan raqam, muddat va me'yoriy hujjatni o'qiydi. Natija — qoralama: uni tekshirib chiqing. To'ldirilgan maydon ustiga yozilmaydi.",
+            "Читает со скана сертификата номер, срок и нормативный документ. Результат — черновик: проверьте его. Заполненные поля не перезаписываются.",
+        ),
+        "cert_scan_files" => ("Skan yoki rasm", "Скан или изображение"),
+        "cert_scan_empty" => (
+            "Skanda sertifikat maydonlari topilmadi",
+            "На скане не найдены поля сертификата",
+        ),
+        "cert_scan_nothing_new" => (
+            "Yangi ma'lumot yo'q: maydonlar allaqachon to'ldirilgan",
+            "Нового нет: поля уже заполнены",
+        ),
+        "cert_scan_done" => ("Skandan to'ldirildi:", "Заполнено со скана:"),
         "ocr_ready" => (
             "Matnni tanish tayyor: Tesseract va pdftoppm topildi",
             "Распознавание готово: найдены Tesseract и pdftoppm",
