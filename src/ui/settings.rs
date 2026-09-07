@@ -34,7 +34,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         ui.heading(t("settings_title"));
         ui.add_space(10.0);
 
-        let w = (ui.available_width() - 26.0).min(820.0);
+        // Sozlamalar — forma, shuning uchun u ataylab bitta ustunda
+        // qoladi: keng formada ko'z chapdan o'ngga uzoq yuguradi va
+        // o'qish qiyinlashadi. Shu sababli o'ng tomondagi bo'sh joy
+        // kamchilik emas — bu tanlangan yechim.
+        let w = (ui.available_width() - 26.0).min(880.0);
 
         // ---------- Interfeys ----------
         card_frame(ui, t("set_group_ui"), w, |ui| {

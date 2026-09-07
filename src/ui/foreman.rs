@@ -795,8 +795,15 @@ fn attention_block(ui: &mut egui::Ui, app: &mut App) {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label(RichText::new("·").color(theme::warn()).strong());
-                ui.label(
-                    RichText::new(format!("{}: {}", t("an_below_min"), low.join(", "))).size(12.0),
+                // Ro'yxat uzun bo'lishi mumkin (o'nlab material) — matn
+                // qatorga o'raladi, aks holda u ekrandan chiqib ketardi
+                // va oxiri ko'rinmasdi.
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(format!("{}: {}", t("an_below_min"), low.join(", ")))
+                            .size(12.0),
+                    )
+                    .wrap(),
                 );
                 if ui.small_button(t("an_open")).clicked() {
                     go = Some(Screen::Warehouse);

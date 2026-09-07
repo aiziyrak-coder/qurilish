@@ -121,6 +121,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             .color(theme::muted()),
     );
     ui.add_space(4.0);
+    // Ekran bo'sh ochilmasin. Savol tanlanmagan bo'lsa umumiy holat
+    // ko'rsatiladi — bu har kuni birinchi beriladigan savol. Ilgari bu
+    // yerda «savol tanlang» yozuvi turar va ekranning yarmi bo'sh qolardi.
+    if intent.is_none() && text.trim().is_empty() {
+        intent = Some(Intent::Overview);
+    }
     ui.horizontal_wrapped(|ui| {
         for i in Intent::ALL {
             if ui
@@ -591,7 +597,9 @@ fn answer_card(
 
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, true])
-                    .max_height(460.0)
+                    // Javob qolgan joyni egallaydi: qat'iy balandlikda
+                    // ekranning pastki qismi bo'sh turardi.
+                    .max_height((ui.available_height() - 60.0).clamp(220.0, 900.0))
                     .show(ui, |ui| {
                         for l in &a.lines {
                             ui.horizontal(|ui| {

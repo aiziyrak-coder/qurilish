@@ -1453,6 +1453,88 @@ mod screen_tests {
         let _ = std::fs::remove_file(&path);
     }
 
+    /// Diagnostika: ekranlar joyni qanchalik to'ldiradi.
+    ///
+    /// Sinov emas — o'lchov: `cargo test -- --ignored screen_fill
+    /// --nocapture`. Har ekran uchun chizilgan tarkibning eni va bo'yi
+    /// mavjud joyga nisbatan foizda beriladi. Bo'sh joy ko'p bo'lsa,
+    /// ekranda joylashuv noto'g'ri; eni oshib ketsa — gorizontal surish
+    /// kerak bo'ladi va bu ham noqulaylik.
+    #[test]
+    #[ignore = "diagnostika: ekran to'ldirilishini o'lchaydi"]
+    fn screen_fill() {
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        app.auto_check(crate::domain::IssueModule::Project);
+
+        // Odatdagi noutbuk ekrani.
+        let (w, h) = (1366.0_f32, 768.0_f32);
+        let ctx = egui::Context::default();
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(w, h),
+            )),
+            ..Default::default()
+        };
+
+        println!("{:<28} {:>6} {:>6}  izoh", "ekran", "en %", "bo'y %");
+        for (_, screens) in NAV_GROUPS {
+            for s in *screens {
+                app.screen = *s;
+                let _ = ctx.run(input(), |ctx| draw(ctx, &mut app));
+                let out = ctx.run(input(), |ctx| draw(ctx, &mut app));
+
+                // Markaziy panel taxminan yon panel va yuqori paneldan keyin.
+                let panel = egui::Rect::from_min_max(egui::pos2(280.0, 60.0), egui::pos2(w, h));
+                // Faqat **matn** hisobga olinadi: fon to'rtburchagi doim
+                // butun panelni qoplaydi va u joy to'lganini bildirmaydi.
+                let mut used = egui::Rect::NOTHING;
+                let mut overflow = 0.0_f32;
+                let mut widest = String::new();
+                for shape in &out.shapes {
+                    let egui::Shape::Text(text) = &shape.shape else {
+                        continue;
+                    };
+                    // Faqat **ko'rinadigan** qism hisobga olinadi: surish
+                    // maydonidagi matn kesilib turadi va u ekrandan
+                    // chiqib ketgan deb sanalmasligi kerak.
+                    let r = text.visual_bounding_rect().intersect(shape.clip_rect);
+                    if !r.is_positive() || r.max.x < panel.min.x || r.max.y < panel.min.y {
+                        continue;
+                    }
+                    if r.max.x - panel.max.x > overflow {
+                        overflow = r.max.x - panel.max.x;
+                        widest = text.galley.text().chars().take(60).collect();
+                    }
+                    used = used.union(r.intersect(panel));
+                }
+                let (fw, fh) = if used.is_positive() {
+                    (
+                        used.width() / panel.width() * 100.0,
+                        used.height() / panel.height() * 100.0,
+                    )
+                } else {
+                    (0.0, 0.0)
+                };
+                let note = if overflow > 1.0 {
+                    format!("eniga sig'maydi: +{overflow:.0} px · «{widest}»")
+                } else if fw < 70.0 {
+                    "o'ng tomon bo'sh".to_string()
+                } else if fh < 60.0 {
+                    "pasti bo'sh".to_string()
+                } else {
+                    String::new()
+                };
+                println!("{:<28} {fw:>6.0} {fh:>6.0}  {note}", s.label());
+            }
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
     /// Diagnostika: har bir ekranning kadr vaqti.
     ///
     /// Sinov emas — o'lchov: `cargo test -- --ignored screen_timing
