@@ -64,22 +64,23 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("an_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("an_tab_findings")),
+    // Kunlik: topilmalar, pul oqimi, «nega shunday» va brifing.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[
+            (0, t("an_tab_findings")),
             (1, t("an_tab_cash")),
+            (7, t("an_tab_why")),
             (2, t("an_tab_briefing")),
+        ],
+        &[
             (3, t("an_tab_forecast")),
             (4, t("an_tab_scenario")),
             (5, t("an_tab_losses")),
             (6, t("an_tab_cuts")),
-            (7, t("an_tab_why")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+        ],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(10.0);
 

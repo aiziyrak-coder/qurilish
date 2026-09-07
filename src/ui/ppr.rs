@@ -39,19 +39,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     kpi_row(ui, app);
     ui.add_space(10.0);
 
-    ui.horizontal(|ui| {
-        let tabs = [
-            (0u8, t("tab_ppr_cards")),
-            (1, t("tab_ppr_resources")),
-            (2, t("tab_ppr_coverage")),
-            (3, t("tab_issues")),
-        ];
-        for (i, label) in tabs {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+    // Kunlik: kartalar va qamrov — qaysi ishda PPR yo'q.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[(0, t("tab_ppr_cards")), (2, t("tab_ppr_coverage"))],
+        &[(1, t("tab_ppr_resources")), (3, t("tab_issues"))],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

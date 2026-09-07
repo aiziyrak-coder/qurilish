@@ -25,10 +25,9 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(t("sv_title")).size(14.0).strong());
-        ui.label(RichText::new(t("sv_hint")).size(11.0).color(theme::muted()));
-    });
+    // Ekran nomi tepada, umumiy sarlavhada turadi; bu yerda faqat
+    // chegara haqidagi izoh qoladi.
+    ui.label(RichText::new(t("sv_hint")).size(11.0).color(theme::muted()));
     ui.add_space(8.0);
 
     kpi_row(ui, app);

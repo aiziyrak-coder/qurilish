@@ -36,18 +36,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     let tab_key = egui::Id::new("ct_tab");
     let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
-    ui.horizontal_wrapped(|ui| {
-        for (i, label) in [
-            (0u8, t("ct_tab_contracts")),
-            (1, t("ct_tab_changes")),
-            (2, t("ct_tab_stages")),
-            (3, t("ct_tab_accept")),
-        ] {
-            if ui.selectable_label(tab == i, label).clicked() {
-                tab = i;
-            }
-        }
-    });
+    // Kunlik: shartnomalar va bajarilgan ishni qabul qilish.
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[(0, t("ct_tab_contracts")), (3, t("ct_tab_accept"))],
+        &[(1, t("ct_tab_changes")), (2, t("ct_tab_stages"))],
+    );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 

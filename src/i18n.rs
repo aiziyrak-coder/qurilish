@@ -2800,8 +2800,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         // ---------- VII. Texnik nazorat kabineti ----------
         "sv_title" => ("Ko'rib chiqish navbati", "Очередь на рассмотрение"),
         "sv_hint" => (
-            "Qaror shu ilovada qayd etiladi; masofadan imzolash server qismini talab qiladi.",
-            "Решение фиксируется в этом приложении; удаленная подпись требует серверной части.",
+            "Qaror shu ilovada qayd etiladi. Server ulangan bo'lsa, hujjatni telefondan ham imzolash mumkin — imzo matnga bog'lanadi.",
+            "Решение фиксируется в этом приложении. Если подключён сервер, документ можно подписать и с телефона — подпись привязывается к тексту.",
         ),
         "sv_kpi_docs" => ("Imzo kutmoqda", "Ждут подписи"),
         "sv_kpi_docs_hint" => ("ijro hujjatlari", "исполнительная документация"),

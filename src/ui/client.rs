@@ -35,7 +35,6 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             );
         }
     });
-    ui.label(RichText::new(t("cl_hint")).size(11.0).color(theme::muted()));
     ui.add_space(10.0);
 
     egui::ScrollArea::vertical()
