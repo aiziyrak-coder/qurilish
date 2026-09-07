@@ -1967,12 +1967,24 @@ impl App {
                 name: t.name.clone(),
             })
             .collect();
+        // Faol ishchilar — telefondagi tabel shu ro'yxat bo'yicha
+        // to'ldiriladi.
+        let workers: Vec<crate::sync::WorkerOut> = self
+            .workers
+            .iter()
+            .filter(|w| w.active)
+            .map(|w| crate::sync::WorkerOut {
+                name: w.name.clone(),
+                position: w.position.clone(),
+            })
+            .collect();
         self.sync_pending = Some(crate::sync::spawn(
             self.sync.clone(),
             project,
             Some((body, rows)),
             notices,
             tasks,
+            workers,
         ));
         self.sync_status = Some((t("sync_running").to_string(), false));
     }

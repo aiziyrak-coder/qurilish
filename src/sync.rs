@@ -211,6 +211,32 @@ pub fn tasks_body(project: &str, items: &[TaskOut]) -> String {
     )
 }
 
+/// Tabel uchun yuboriladigan ishchi.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WorkerOut {
+    pub name: String,
+    pub position: String,
+}
+
+/// Ishchilar ro'yxati so'rovining tanasi.
+pub fn workers_body(project: &str, items: &[WorkerOut]) -> String {
+    let rows: Vec<String> = items
+        .iter()
+        .map(|w| {
+            format!(
+                "{{\"name\":{},\"position\":{}}}",
+                json_string(&w.name),
+                json_string(&w.position)
+            )
+        })
+        .collect();
+    format!(
+        "{{\"project\":{},\"items\":[{}]}}",
+        json_string(project),
+        rows.join(",")
+    )
+}
+
 /// Serverga yuboriladigan bitta signal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NoticeOut {
@@ -358,6 +384,22 @@ pub fn send_tasks(cfg: &Config, project: &str, items: &[TaskOut]) -> Result<(), 
     Ok(())
 }
 
+/// Ishchilar ro'yxatini serverga yuboradi.
+#[cfg(feature = "sync")]
+pub fn send_workers(cfg: &Config, project: &str, items: &[WorkerOut]) -> Result<(), Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    send(
+        cfg,
+        "POST",
+        "api/workers",
+        Some(&cfg.token),
+        Some(&workers_body(project, items)),
+    )?;
+    Ok(())
+}
+
 /// Hujjatni masofadan imzolaydi.
 #[cfg(feature = "sync")]
 pub fn sign(
@@ -444,6 +486,7 @@ pub fn spawn(
     outgoing: Option<(String, i64)>,
     notices: Vec<NoticeOut>,
     tasks: Vec<TaskOut>,
+    workers: Vec<WorkerOut>,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -460,6 +503,7 @@ pub fn spawn(
             // Ish ro'yxati — telefonda tanlash uchun; grafik ofisda
             // yuritiladi, shuning uchun yo'nalish bir tomonlama.
             send_tasks(&cfg, &project, &tasks)?;
+            send_workers(&cfg, &project, &workers)?;
             let pulled = pull(&cfg, &project, cfg.last_pull)?;
             Ok(Outcome { pushed, pulled })
         })();
@@ -476,6 +520,7 @@ pub fn spawn(
     _outgoing: Option<(String, i64)>,
     _notices: Vec<NoticeOut>,
     _tasks: Vec<TaskOut>,
+    _workers: Vec<WorkerOut>,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = tx.send(Err(Error::NotConfigured));
@@ -621,6 +666,11 @@ mod tests {
                 name: "Yer ishlari".into(),
             }];
             send_tasks(&cfg, "OBY-1", &tasks).map_err(|e| format!("ishlar: {e:?}"))?;
+            let workers = vec![WorkerOut {
+                name: "Alisher".into(),
+                position: "Beton quyuvchi".into(),
+            }];
+            send_workers(&cfg, "OBY-1", &workers).map_err(|e| format!("ishchilar: {e:?}"))?;
 
             // ---- Prorab imzolamaydi: server rad etadi
             match sign(&cfg, "OBY-1", "AOSR-1", "matn", "") {

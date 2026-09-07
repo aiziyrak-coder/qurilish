@@ -11105,6 +11105,39 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(skipped >= 1);
     }
 
+    /// Telefondan kelgan tabel ilovaga tushadi va soat to'g'ri o'qiladi.
+    #[test]
+    fn timesheet_from_the_phone_reaches_the_desktop() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Namunadagi haqiqiy ishchi nomi olinadi: paket ism bo'yicha
+        // ulanadi, shuning uchun mavjud ishchi bo'lishi kerak.
+        let worker = app.workers.first().cloned().expect("ishchi");
+        let day = app.today;
+        let text = format!(
+            "QURAI-PACKAGE\t1\nPROJECT\tOBY-1\nCREATED\t2026-09-07T10:00:00Z\n\n\
+             #timesheet\ndate\tworker\thours\tkind\tshift\n\
+             {}\t{}\t7.5\twork\tday\n",
+            day, worker.name
+        );
+
+        let pkg = crate::package::read(&text).expect("paket");
+        let (added, _) = app.import_package(&pkg);
+        assert!(added >= 1, "tabel qatori qo'shilmadi");
+        app.reload_modules();
+
+        let entry = app
+            .timesheet
+            .iter()
+            .find(|e| e.worker_id == worker.id && e.date == day)
+            .expect("tabel katagi");
+        assert_eq!(entry.hours, 7.5);
+        assert_eq!(entry.kind, crate::domain::DayKind::Work);
+    }
+
     /// TZ XI.21: qaytarish qoldiqni oshiradi.
     #[test]
     fn return_increases_the_balance() {

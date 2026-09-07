@@ -647,3 +647,143 @@ fn journal_form_offers_the_task_list() {
         assert!(html.contains("1.1 Yer ishlari, kotlovan"), "{html}");
     });
 }
+
+/// Telefondan to'ldirilgan tabel paketga aylanadi; bo'sh katak
+/// yuborilmaydi.
+#[test]
+fn timesheet_from_the_phone_skips_empty_cells() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+
+        // Ishchilar ro'yxati ilovadan keladi.
+        let (code, body) = send(
+            &app,
+            post(
+                "/api/workers",
+                Some(&token),
+                json!({ "project": "OBY-1", "items": [
+                    { "name": "Alisher", "position": "Beton quyuvchi" },
+                    { "name": "Bekzod", "position": "Armaturachi" },
+                    { "name": "Davron", "position": "Payvandchi" }
+                ] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK, "{body}");
+        assert_eq!(body["saved"], 3);
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=prorab&password=prorab-parol-1"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        // Forma ishchilarni ko'rsatadi.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1/timesheet")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(html.contains("Alisher"), "{html}");
+        assert!(html.contains("name=\"h_Bekzod\""), "{html}");
+
+        // Ikkitasiga soat kiritamiz, uchinchisi bo'sh qoladi.
+        let form = "date=2026-09-07&h_Alisher=8&k_Alisher=work\
+&h_Bekzod=4%2C5&k_Bekzod=downtime&h_Davron=&k_Davron=work";
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/timesheet")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(form))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+
+        // Paket ilova formatida va faqat to'ldirilganlar bor.
+        let (_, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
+        let changes = body["changes"].as_array().expect("ro'yxat");
+        assert_eq!(changes.len(), 1);
+        let text = changes[0]["body"].as_str().expect("matn");
+        assert!(text.contains("#timesheet"), "{text}");
+        assert!(text.contains("Alisher\t8\twork"), "{text}");
+        // Vergul nuqtaga o'giriladi.
+        assert!(text.contains("Bekzod\t4.5\tdowntime"), "{text}");
+        assert!(!text.contains("Davron"), "bo'sh katak yuborildi: {text}");
+        assert_eq!(changes[0]["rows"], 2);
+    });
+}
+
+/// Ishchilar ro'yxati kelmagan bo'lsa, sahifa buni ochiq aytadi.
+#[test]
+fn timesheet_says_when_the_worker_list_is_missing() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=prorab&password=prorab-parol-1"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1/timesheet")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(html.contains("ro'yxati hali kelmagan"), "{html}");
+        // Bo'sh forma ko'rsatilmaydi.
+        assert!(!html.contains("<button"), "{html}");
+    });
+}

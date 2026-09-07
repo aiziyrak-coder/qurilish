@@ -30,14 +30,14 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | X. Xaridlar | 48 | 46 | 0 | 2 | 2 |
 | XI. Ombor | 48 | 47 | 0 | 1 | 1 |
 | XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
-| XIII. Tabel | 44 | 37 | 1 | 6 | 6 |
+| XIII. Tabel | 44 | 38 | 0 | 6 | 6 |
 | XIV. Sifat | 41 | 39 | 0 | 2 | 2 |
 | XV. Xavfsizlik | 41 | 38 | 0 | 3 | 3 |
 | XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 14 | 13 | 1 | 0 | 0 |
-| **Jami** | **700** | **642** | **16** | **42** | **42** |
+| **Jami** | **700** | **643** | **15** | **42** | **42** |
 
 Ya'ni **~92 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
 
@@ -205,7 +205,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 2. Avtorizatsiya — *serverda haqiqiy: login va Argon2id parol, seans belgisi, rol bo'yicha huquq. Ilova ichida rol ish taqsimoti bo'lib qoladi (baza fayli ochiq) va bu ochiq aytiladi*
 - [x] 3. Bosh ekran
 - [x] 4. Mening vazifalarim — *bugungi ishlar*
-- [~] 5. Mobil GPR — *desktop GPR to'liq; telefon brauzeridan obyekt, o'zgarishlar, imzo va kunlik yozuv ochiladi; grafikning o'zi mobil ko'rinishda yo'q*
+- [~] 5. Mobil GPR — *telefondan ishlar ro'yxati ko'rinadi va kunlik yozuvda tanlanadi; grafikning o'zi (chizma, bog'lanishlar) mobil ko'rinishda yo'q*
 - [x] 6. Kunlik hisobot
 - [ ] 🔒 7. Ovozli kiritish
 - [x] 8. Foto — *jurnal va yozuvlarga biriktirish*
@@ -533,7 +533,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [ ] 🔒 4. Kirish/chiqishni hisobga olish
 - [ ] 🔒 5. Obyekt geozonasi
 - [ ] 🔒 6. QR-kirish
-- [~] 7. Prorabning mobil tabeli — *desktopda to'liq; telefondan kunlik yozuv (ishchi va texnika soni bilan) yuboriladi; tabel katakchalari mobil ko'rinishda yo'q*
+- [x] 7. Prorabning mobil tabeli — *telefondan ishchilar ro'yxati bo'yicha soat va kun turi kiritiladi; bo'sh katak yuborilmaydi; yozuv ilovaning tabeliga tushadi*
 - [x] 8. **Brigadalar** — *brigadir, ish, ishchilar tarkibi*
 - [x] 9. Ishchilarni obyektlar bo'yicha taqsimlash
 - [x] 10. Ish vaqtini ishlar bo'yicha taqsimlash — *katakda «Ish» rejimi*

@@ -253,8 +253,8 @@ pub async fn object(
     // ---- Kunlik yozuv havolasi (yozish huquqi borlarga)
     if auth::can(&user.role, Access::Write) {
         body.push_str(&format!(
-            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{}/journal\">Ochish</a></div>",
-            esc(&project)
+            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{p}/journal\">Ochish</a></div><div class=\"card\"><b>Tabel</b><div class=\"muted\">Bugungi soat va kun turi</div><a href=\"/o/{p}/timesheet\">Ochish</a></div>",
+            p = esc(&project)
         ));
     }
 
@@ -576,6 +576,191 @@ pub async fn journal_submit(
     state
         .store
         .log(&user.login, "kunlik-yozuv", project.trim(), &at);
+    Redirect::to(&format!("/o/{project}")).into_response()
+}
+
+// ================================================================ Tabel
+
+/// Telefondan kiritilgan tabel (TZ XIII.7).
+///
+/// Forma ishchilar ro'yxati bo'yicha to'ldiriladi: har ishchi uchun soat
+/// va kun turi. Bo'sh qoldirilgan qator **yuborilmaydi** — bo'sh katak
+/// «ishlamagan» degani emas, «to'ldirilmagan» degani.
+#[derive(Deserialize)]
+pub struct TimesheetForm {
+    pub date: String,
+    /// `hours[<ishchi nomi>]` ko'rinishidagi maydonlar.
+    #[serde(flatten)]
+    pub fields: std::collections::BTreeMap<String, String>,
+}
+
+/// Tabel paketini tuzadi.
+///
+/// Ustunlar desktop ilovaning paketidagi bilan aynan bir xil: sana,
+/// ishchi, soat, kun turi va smena.
+pub fn timesheet_package(
+    project: &str,
+    at: &str,
+    date: &str,
+    rows: &[(String, String, String)],
+) -> String {
+    let mut out = format!(
+        "QURAI-PACKAGE\t1\nPROJECT\t{}\nCREATED\t{}\n\n#timesheet\ndate\tworker\thours\tkind\tshift\n",
+        pkg_escape(project),
+        pkg_escape(at)
+    );
+    for (worker, hours, kind) in rows {
+        out.push_str(&format!(
+            "{}\t{}\t{}\t{}\tday\n",
+            pkg_escape(date),
+            pkg_escape(worker),
+            pkg_escape(hours),
+            pkg_escape(kind)
+        ));
+    }
+    out
+}
+
+/// `GET /o/{project}/timesheet`
+pub async fn timesheet_form(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Sizning rolingiz tabel to'ldirmaydi.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+
+    let workers = state.store.workers(&project);
+    if workers.is_empty() {
+        return page(
+            "QURAi — tabel",
+            &format!(
+                "<div class=\"row\"><h1>Tabel</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">Ishchilar ro'yxati hali kelmagan. Ofisdagi ilova sinxronizatsiya qilgach, \
+ro'yxat shu yerda chiqadi.</p>",
+                p = esc(&project)
+            ),
+        )
+        .into_response();
+    }
+
+    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let mut rows = String::new();
+    for w in &workers {
+        rows.push_str(&format!(
+            "<div class=\"card\"><div class=\"row\"><b>{}</b>\
+<span class=\"muted\">{}</span></div>\
+<div class=\"row\">\
+<label style=\"flex:1\">Soat<input name=\"h_{key}\" inputmode=\"decimal\" placeholder=\"—\"></label>\
+<label style=\"flex:1\">Kun turi<select name=\"k_{key}\">\
+<option value=\"work\">Ish</option>\
+<option value=\"downtime\">Bo'sh turish</option>\
+<option value=\"absent\">Kelmadi</option>\
+<option value=\"sick\">Kasal</option>\
+<option value=\"vacation\">Ta'til</option>\
+<option value=\"trip\">Xizmat safari</option>\
+</select></label></div></div>",
+            esc(&w.name),
+            esc(&w.position),
+            key = esc(&w.name)
+        ));
+    }
+
+    let body = format!(
+        "<div class=\"row\"><h1>Tabel</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">{obj} · {name}</p>\
+<form method=\"post\" action=\"/o/{p}/timesheet\">\
+<label>Sana<input type=\"date\" name=\"date\" value=\"{today}\" required></label>\
+{rows}\
+<button type=\"submit\">Yuborish</button></form>\
+<p class=\"muted\">Soat kiritilmagan ishchi yuborilmaydi: bo'sh katak «ishlamagan» emas, \
+«to'ldirilmagan» degani.</p>",
+        p = esc(&project),
+        obj = esc(&project),
+        name = esc(&user.name),
+        today = esc(&today),
+        rows = rows,
+    );
+    page("QURAi — tabel", &body).into_response()
+}
+
+/// `POST /o/{project}/timesheet`
+pub async fn timesheet_submit(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+    Form(form): Form<TimesheetForm>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Huquq yo'q.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    if form.date.trim().is_empty() {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Sana to'ldirilmagan.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+
+    // `h_<ism>` — soat, `k_<ism>` — kun turi.
+    let mut rows: Vec<(String, String, String)> = Vec::new();
+    for (key, value) in &form.fields {
+        let Some(worker) = key.strip_prefix("h_") else {
+            continue;
+        };
+        let hours = value.trim().replace(',', ".");
+        if hours.is_empty() {
+            continue;
+        }
+        // Son bo'lmagan qiymat qabul qilinmaydi: noto'g'ri soat tabelga
+        // nol bo'lib tushib, ish haqini buzardi.
+        if hours.parse::<f64>().is_err() {
+            continue;
+        }
+        let kind = form
+            .fields
+            .get(&format!("k_{worker}"))
+            .map(|k| k.trim().to_string())
+            .filter(|k| !k.is_empty())
+            .unwrap_or_else(|| "work".to_string());
+        rows.push((worker.to_string(), hours, kind));
+    }
+
+    if rows.is_empty() {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Hech kimga soat kiritilmadi.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+
+    let at = crate::now();
+    let body = timesheet_package(&project, &at, form.date.trim(), &rows);
+    let _ = state
+        .store
+        .push_change(project.trim(), &body, &user.login, &at, rows.len() as i64);
+    state.store.log(&user.login, "tabel", project.trim(), &at);
     Redirect::to(&format!("/o/{project}")).into_response()
 }
 

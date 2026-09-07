@@ -117,6 +117,20 @@ pub struct TaskItem {
 /// Bir obyekt uchun qabul qilinadigan eng ko'p ish soni.
 pub const MAX_TASKS: usize = 2_000;
 
+#[derive(Deserialize)]
+pub struct WorkersReq {
+    pub project: String,
+    #[serde(default)]
+    pub items: Vec<WorkerItem>,
+}
+
+#[derive(Deserialize)]
+pub struct WorkerItem {
+    pub name: String,
+    #[serde(default)]
+    pub position: String,
+}
+
 /// Xatoni bir xil ko'rinishda qaytaradi.
 fn err(code: StatusCode, message: &str) -> axum::response::Response {
     (code, Json(json!({ "error": message }))).into_response()
@@ -422,6 +436,39 @@ pub async fn tasks(
         })
         .collect();
     match state.store.set_tasks(req.project.trim(), &items) {
+        Ok(n) => Json(json!({ "saved": n })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
+/// `POST /api/workers` — tabel uchun ishchilar ro'yxati.
+pub async fn workers(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<WorkersReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt ko'rsatilmagan");
+    }
+    if req.items.len() > MAX_TASKS {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "ishchi juda ko'p");
+    }
+    let items: Vec<crate::store::WorkerRef> = req
+        .items
+        .into_iter()
+        .filter(|w| !w.name.trim().is_empty())
+        .map(|w| crate::store::WorkerRef {
+            name: w.name,
+            position: w.position,
+        })
+        .collect();
+    match state.store.set_workers(req.project.trim(), &items) {
         Ok(n) => Json(json!({ "saved": n })).into_response(),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }

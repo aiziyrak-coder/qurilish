@@ -84,6 +84,16 @@ pub struct TaskRef {
     pub name: String,
 }
 
+/// Tabel uchun ishchi.
+///
+/// Ish ro'yxati kabi bu ham grafik va tabelning nusxasi: serverda
+/// o'zgartirilmaydi, faqat telefonda tanlash uchun ko'rsatiladi.
+#[derive(Debug, Clone)]
+pub struct WorkerRef {
+    pub name: String,
+    pub position: String,
+}
+
 /// Baza. Bitta ulanish mutex ostida: server kichik va yozuvlar qisqa.
 pub struct Store {
     conn: Mutex<Connection>,
@@ -485,6 +495,43 @@ impl Store {
             .unwrap_or_default()
     }
 
+    // ----------------------------------------------------------- Ishchilar
+
+    /// Ishchilar ro'yxatini almashtiradi.
+    pub fn set_workers(&self, project: &str, items: &[WorkerRef]) -> Result<usize, String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM worker_ref WHERE project=?1", params![project])
+            .map_err(|e| e.to_string())?;
+        for w in items {
+            tx.execute(
+                "INSERT INTO worker_ref (project,name,position) VALUES (?1,?2,?3)",
+                params![project, w.name, w.position],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(items.len())
+    }
+
+    pub fn workers(&self, project: &str) -> Vec<WorkerRef> {
+        let conn = self.lock();
+        let mut st = match conn
+            .prepare("SELECT name,position FROM worker_ref WHERE project=?1 ORDER BY id")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project], |r| {
+            Ok(WorkerRef {
+                name: r.get(0)?,
+                position: r.get(1)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
     // --------------------------------------------------------------- Jurnal
 
     /// Amallar jurnali: kim, qachon, nima qildi.
@@ -569,6 +616,13 @@ CREATE TABLE IF NOT EXISTS task_ref (
     name TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS task_ref_project ON task_ref(project);
+CREATE TABLE IF NOT EXISTS worker_ref (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS worker_ref_project ON worker_ref(project);
 CREATE TABLE IF NOT EXISTS notice_state (
     project TEXT PRIMARY KEY,
     at TEXT NOT NULL
