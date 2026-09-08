@@ -164,6 +164,7 @@ Tekshiruv:
 | `cargo test --workspace` | 458 desktop + 53 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
+| `cargo test --no-default-features` | 457 sinov (tarmoq kodisiz yig'ilish) |
 | `cargo build --release --workspace` | `qurai.exe` (~20 MB), `qurai-server.exe` (~4 MB) |
 | Yangi bazada ishga tushirish | baza yaratiladi va namuna bilan to'ladi |
 | Server sahifalari | `/manifest.webmanifest`, `/sw.js`, `/icon.svg`, `/offline` — 200 |
