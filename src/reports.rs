@@ -1728,7 +1728,10 @@ mod tests {
             .iter()
             .find(|r| matches!(r.first(), Some(crate::docgen::Cell::Text(s)) if *s == m.name))
             .expect("material qatori");
-        let verdict = crate::prices::compare(m.price, app.market_range(&m));
+        let verdict = app
+            .price_check(m.id)
+            .map(|c| c.verdict)
+            .expect("solishtirish");
         assert!(
             verdict.outside(),
             "sinov ma'lumotida chetlanish yo'q: {verdict:?}"

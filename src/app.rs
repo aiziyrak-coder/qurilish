@@ -580,6 +580,12 @@ pub struct App {
     pub chat_draft: String,
     /// Keyingi sinxronizatsiyada yuboriladigan xabar.
     pub chat_outgoing: String,
+    /// Shu sinxronizatsiyada yuborilgan xabar.
+    ///
+    /// Kerak, chunki maydonni **faqat o'sha xabar** yuborilganda
+    /// tozalash mumkin: boshqa sabab bilan boshlangan sinxronizatsiya
+    /// odam yozayotgan matnni o'chirib yuborardi.
+    chat_sent: String,
     /// Imzo daftari (TZ IV.18, V.28).
     pub sign_log: Vec<crate::domain::SignEntry>,
     /// Serverda qayd etilgan zanjir belgilari.
@@ -833,6 +839,7 @@ impl App {
             messages: Vec::new(),
             chat_draft: String::new(),
             chat_outgoing: String::new(),
+            chat_sent: String::new(),
             sign_log: Vec::new(),
             chain_marks: Vec::new(),
             clashes: Vec::new(),
@@ -2257,7 +2264,10 @@ impl App {
                 },
             },
             crate::sync::Chat {
-                outgoing: std::mem::take(&mut self.chat_outgoing),
+                outgoing: {
+                    self.chat_sent = std::mem::take(&mut self.chat_outgoing);
+                    self.chat_sent.clone()
+                },
                 since,
             },
         ));
@@ -2310,8 +2320,15 @@ impl App {
                         self.messages = self.db.messages(pid);
                     }
                 }
-                // Xabar yuborilgan bo'lsa maydon bo'shaydi.
-                self.chat_draft.clear();
+                // Maydon **faqat o'sha xabar yuborilgan bo'lsa** bo'shaydi.
+                // Boshqa sabab bilan boshlangan sinxronizatsiya odam
+                // yozayotgan matnni o'chirib yuborishi mumkin emas.
+                if !self.chat_sent.trim().is_empty() {
+                    if self.chat_draft.trim() == self.chat_sent.trim() {
+                        self.chat_draft.clear();
+                    }
+                    self.chat_sent.clear();
+                }
                 // Imzo zanjiri: serverdagi belgilar saqlanadi va
                 // ziddiyat darrov aytiladi — bu jimgina o'tadigan narsa
                 // emas.
@@ -2344,9 +2361,10 @@ impl App {
             Err(e) => {
                 // Yuborilmagan xabar maydonda qoladi: «yuborildi» deb
                 // aldab qo'yilmaydi.
-                if !self.chat_outgoing.trim().is_empty() && self.chat_draft.trim().is_empty() {
-                    self.chat_draft = std::mem::take(&mut self.chat_outgoing);
+                if !self.chat_sent.trim().is_empty() && self.chat_draft.trim().is_empty() {
+                    self.chat_draft = std::mem::take(&mut self.chat_sent);
                 }
+                self.chat_sent.clear();
                 // Seans tugagan bo'lsa, belgi foydasiz — qayta kirish kerak.
                 if e == crate::sync::Error::Auth {
                     self.sync.token.clear();
@@ -3042,12 +3060,21 @@ impl App {
     /// o'chirilgan bo'lishi mumkin va bu boshqa masala.
     pub fn sign_breaks(&self) -> Vec<crate::signlog::Break> {
         let today_report = self.day_report_number();
+        // Kunlik hisobot matni **bir marta** hisoblanadi: uning ichida
+        // butun kunning yozuvlari sanaladi va uni har yozuv uchun qayta
+        // hisoblash ekranni sekinlashtirardi. Imzo bo'lmasa umuman
+        // hisoblanmaydi.
+        let today_text = self
+            .sign_log
+            .iter()
+            .any(|e| e.document == today_report)
+            .then(|| self.day_report_text());
         crate::signlog::verify_with_text(&self.sign_log, |e| {
             // Kunlik hisobot: matni qayta hisoblanadi. Faqat **bugungi**
             // hisobot tekshiriladi — o'tgan kunning ma'lumotini qayta
             // tuzish uchun o'sha kundagi holat kerak va u saqlanmaydi.
             if e.document == today_report {
-                return Some(self.day_report_text());
+                return today_text.clone();
             }
             if e.document.starts_with("KUN-") {
                 return None;
@@ -3246,16 +3273,35 @@ impl App {
     /// natijani o'qiydi — u har kadrda qayta chiziladi va u yerda
     /// minglab qatorni solishtirish mumkin emas.
     pub fn recompute_price_checks(&mut self) {
+        // Baza bir marta tayyorlanadi va kirimlar bir marta guruhlanadi:
+        // aks holda har material butun bazani va butun ombor tarixini
+        // qayta ko'rib chiqardi.
+        let index = crate::prices::Index::build(&self.price_book);
+        let mut history: std::collections::BTreeMap<i64, Vec<(chrono::NaiveDate, f64)>> =
+            Default::default();
+        for m in self
+            .stock_moves
+            .iter()
+            .filter(|m| m.kind == crate::domain::MoveKind::In && m.price > 0.0)
+        {
+            history
+                .entry(m.material_id)
+                .or_default()
+                .push((m.date, m.price));
+        }
+
         self.price_checks = self
             .materials
             .iter()
             .map(|m| {
-                let range = self.market_range(m);
+                let found =
+                    crate::prices::find_with(&self.price_book, &index, &m.name, &m.code, &m.unit);
+                let range = crate::prices::range(&found);
                 PriceCheck {
                     material_id: m.id,
                     range,
                     verdict: crate::prices::compare(m.price, range),
-                    trend: self.price_trend(m.id),
+                    trend: history.get(&m.id).and_then(|h| crate::prices::trend(h)),
                 }
             })
             .collect();
@@ -3266,35 +3312,6 @@ impl App {
         self.price_checks
             .iter()
             .find(|c| c.material_id == material_id)
-    }
-
-    /// Material uchun bazadagi narx diapazoni (TZ XII.20, III.14.3).
-    pub fn market_range(&self, material: &crate::domain::Material) -> Option<crate::prices::Range> {
-        let found = crate::prices::find(
-            &self.price_book,
-            &material.name,
-            &material.code,
-            &material.unit,
-        );
-        crate::prices::range(&found)
-    }
-
-    /// Materialning o'z kirimlaridagi narx yo'nalishi (TZ X.44).
-    ///
-    /// Faqat kirimlar olinadi: chiqim narxi hisob narxi bo'lib, u bozor
-    /// haqida hech nima aytmaydi.
-    pub fn price_trend(&self, material_id: i64) -> Option<crate::prices::Trend> {
-        let history: Vec<(chrono::NaiveDate, f64)> = self
-            .stock_moves
-            .iter()
-            .filter(|m| {
-                m.material_id == material_id
-                    && m.kind == crate::domain::MoveKind::In
-                    && m.price > 0.0
-            })
-            .map(|m| (m.date, m.price))
-            .collect();
-        crate::prices::trend(&history)
     }
 
     /// Sertifikat nazorati (TZ IV.11, XII.27).

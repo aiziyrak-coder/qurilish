@@ -535,11 +535,15 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
     //
     // Baza yuklanmagan bo'lsa tekshiruv umuman o'tkazilmaydi: bu «narx
     // to'g'ri» degani emas, «solishtiradigan narsa yo'q» degani.
+    // Baza bir marta tayyorlanadi: har pozitsiya uchun qayta tuzish
+    // katta smetada butun tekshiruvni sekinlashtirardi.
+    let price_index = crate::prices::Index::build(ctx.prices);
     for it in ctx.items {
         if it.price <= 0.0 {
             continue;
         }
-        let found = crate::prices::find(ctx.prices, &it.name, &it.code, &it.unit);
+        let found =
+            crate::prices::find_with(ctx.prices, &price_index, &it.name, &it.code, &it.unit);
         let Some(range) = crate::prices::range(&found) else {
             continue;
         };

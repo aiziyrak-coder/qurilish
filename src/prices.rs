@@ -150,57 +150,132 @@ fn words(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// Bazadan materialga mos qatorlarni topadi.
+/// Tayyorlangan baza: nomlar bir marta oddiy ko'rinishga keltiriladi.
 ///
-/// Uch bosqich: kod bo'yicha aniq moslik, keyin nom bo'yicha aniq
-/// moslik, keyin so'zlarning yarmidan ko'pi mos kelishi. Shundan
-/// pastga tushilmaydi: «sement» bilan «sementli qorishma» bir narsa
-/// emas va ularni chalkashtirish narxni buzardi.
-pub fn find<'a>(rows: &'a [PriceRow], name: &str, code: &str, unit: &str) -> Vec<&'a PriceRow> {
-    let unit_ok = |r: &PriceRow| {
-        // Birlik ko'rsatilmagan bo'lsa cheklamaymiz; ko'rsatilgan bo'lsa
-        // u mos kelishi kerak — «tonna» va «kg» narxi solishtirilmaydi.
-        unit.trim().is_empty() || r.unit.trim().is_empty() || normal(&r.unit) == normal(unit)
+/// Kerakligi sababi oddiy hisobda: katalogda yuzlab material, bazada
+/// minglab qator bo'lishi mumkin, va har materialni har qator bilan
+/// solishtirish har yozuvdan keyin qayta bajarilardi. Indeks bilan esa
+/// nomlar bir marta tayyorlanadi va har material uchun faqat **umumiy
+/// so'zi bor** qatorlar ko'rib chiqiladi.
+///
+/// Natija o'zgarmaydi: so'zlarning yarmidan ko'pi mos kelishi sharti
+/// kamida bitta umumiy so'zni talab qiladi, ya'ni indeks hech qanday
+/// mos qatorni tashlab ketmaydi.
+#[derive(Debug, Default)]
+pub struct Index {
+    rows: Vec<Prepared>,
+    /// Aniq nom → qator o'rni.
+    by_name: std::collections::BTreeMap<String, Vec<usize>>,
+    /// Kod → qator o'rni.
+    by_code: std::collections::BTreeMap<String, Vec<usize>>,
+    /// Ma'noli so'z → qator o'rni.
+    by_word: std::collections::BTreeMap<String, Vec<usize>>,
+}
+
+#[derive(Debug)]
+struct Prepared {
+    unit: String,
+    words: Vec<String>,
+}
+
+impl Index {
+    pub fn build(rows: &[PriceRow]) -> Index {
+        let mut idx = Index::default();
+        for (i, r) in rows.iter().enumerate() {
+            let name = normal(&r.name);
+            let code = normal(&r.code);
+            let words = words(&r.name);
+            if !name.is_empty() {
+                idx.by_name.entry(name).or_default().push(i);
+            }
+            if !code.is_empty() {
+                idx.by_code.entry(code).or_default().push(i);
+            }
+            for w in &words {
+                idx.by_word.entry(w.clone()).or_default().push(i);
+            }
+            idx.rows.push(Prepared {
+                unit: normal(&r.unit),
+                words,
+            });
+        }
+        idx
+    }
+
+    /// Indeksdagi qatorlar soni — ro'yxat bilan mosligini tekshirish
+    /// uchun.
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+}
+
+/// Tayyorlangan indeks bilan izlaydi.
+pub fn find_with<'a>(
+    rows: &'a [PriceRow],
+    index: &Index,
+    name: &str,
+    code: &str,
+    unit: &str,
+) -> Vec<&'a PriceRow> {
+    if rows.len() != index.len() {
+        // Indeks boshqa ro'yxatdan tuzilgan — bunda taxmin qilmaymiz.
+        return Vec::new();
+    }
+    let unit_key = normal(unit);
+    let unit_ok = |i: usize| {
+        unit_key.is_empty() || index.rows[i].unit.is_empty() || index.rows[i].unit == unit_key
     };
 
-    if !code.trim().is_empty() {
-        let by_code: Vec<&PriceRow> = rows
-            .iter()
-            .filter(|r| !r.code.trim().is_empty() && normal(&r.code) == normal(code))
-            .collect();
-        if !by_code.is_empty() {
-            return by_code;
+    // 1. Kod bo'yicha aniq moslik.
+    let code_key = normal(code);
+    if !code_key.is_empty() {
+        if let Some(hits) = index.by_code.get(&code_key) {
+            if !hits.is_empty() {
+                return hits.iter().map(|i| &rows[*i]).collect();
+            }
         }
     }
 
-    let target = normal(name);
-    if target.is_empty() {
+    // 2. Nom bo'yicha aniq moslik.
+    let name_key = normal(name);
+    if name_key.is_empty() {
         return Vec::new();
     }
-    let exact: Vec<&PriceRow> = rows
-        .iter()
-        .filter(|r| normal(&r.name) == target && unit_ok(r))
-        .collect();
-    if !exact.is_empty() {
-        return exact;
+    if let Some(hits) = index.by_name.get(&name_key) {
+        let exact: Vec<&PriceRow> = hits
+            .iter()
+            .filter(|i| unit_ok(**i))
+            .map(|i| &rows[*i])
+            .collect();
+        if !exact.is_empty() {
+            return exact;
+        }
     }
 
+    // 3. So'zlarning yarmidan ko'pi mos kelsa.
     let want = words(name);
     if want.is_empty() {
         return Vec::new();
     }
-    rows.iter()
-        .filter(|r| {
-            if !unit_ok(r) {
+    let mut seen: std::collections::BTreeSet<usize> = Default::default();
+    for w in &want {
+        if let Some(hits) = index.by_word.get(w) {
+            seen.extend(hits.iter().copied());
+        }
+    }
+    seen.into_iter()
+        .filter(|i| {
+            if !unit_ok(*i) {
                 return false;
             }
-            let have = words(&r.name);
+            let have = &index.rows[*i].words;
             if have.is_empty() {
                 return false;
             }
             let hits = want.iter().filter(|w| have.contains(w)).count();
             hits * 2 > want.len()
         })
+        .map(|i| &rows[i])
         .collect()
 }
 
@@ -329,22 +404,125 @@ mod tests {
             row("Sementli qorishma", "m3", 400_000.0),
             row("G'isht qizil M150", "dona", 900.0),
         ];
-        let found = find(&rows, "Sement M400", "", "kg");
+        let index = Index::build(&rows);
+        let found = find_with(&rows, &index, "Sement M400", "", "kg");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].name, "Sement M400");
 
         // Birlik boshqa — solishtirilmaydi.
-        assert!(find(&rows, "Sement M400", "", "tonna").is_empty());
+        assert!(find_with(&rows, &index, "Sement M400", "", "tonna").is_empty());
 
         // Umuman yo'q material.
-        assert!(find(&rows, "Armatura A500C", "", "kg").is_empty());
+        assert!(find_with(&rows, &index, "Armatura A500C", "", "kg").is_empty());
 
         // Kod aniq moslik beradi va nomga qaramaydi.
         let mut coded = rows.clone();
         coded[2].code = "GOST-530".into();
-        let found = find(&coded, "boshqa nom", "gost 530", "");
+        let coded_index = Index::build(&coded);
+        let found = find_with(&coded, &coded_index, "boshqa nom", "gost 530", "");
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].name, "G'isht qizil M150");
+    }
+
+    /// Indeks bilan izlash indekssiz izlash bilan bir xil natija beradi.
+    ///
+    /// Tezlik uchun qilingan indeks natijani o'zgartirmasligi kerak —
+    /// aks holda ekrandagi son bilan hisobotdagi son ajralib qolardi.
+    #[test]
+    fn the_index_finds_exactly_what_a_full_scan_would() {
+        let names = [
+            "Sement M400",
+            "Sement M500",
+            "Sementli qorishma",
+            "G'isht qizil M150",
+            "G'isht silikat",
+            "Armatura A500C d12",
+            "Armatura A500C d16",
+            "Qum karyer",
+        ];
+        let rows: Vec<PriceRow> = names
+            .iter()
+            .enumerate()
+            .map(|(i, n)| {
+                let mut r = row(
+                    n,
+                    if i % 2 == 0 { "kg" } else { "" },
+                    1000.0 + i as f64 * 10.0,
+                );
+                if i == 5 {
+                    r.code = "A500-12".into();
+                }
+                r
+            })
+            .collect();
+        let index = Index::build(&rows);
+        assert_eq!(index.len(), rows.len());
+
+        // Indekssiz hisob: shu yerda mustaqil yozilgan sodda variant.
+        // U har qatorni ko'rib chiqadi va indeksning kodiga tegmaydi —
+        // shundagina solishtirish ma'noli bo'ladi.
+        let brute = |name: &str, code: &str, unit: &str| -> Vec<String> {
+            let unit_key = normal(unit);
+            let fits = |r: &PriceRow| {
+                unit_key.is_empty() || r.unit.trim().is_empty() || normal(&r.unit) == unit_key
+            };
+            let code_key = normal(code);
+            let mut out: Vec<&PriceRow> = if !code_key.is_empty() {
+                rows.iter()
+                    .filter(|r| !r.code.trim().is_empty() && normal(&r.code) == code_key)
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            if out.is_empty() {
+                let name_key = normal(name);
+                if !name_key.is_empty() {
+                    out = rows
+                        .iter()
+                        .filter(|r| normal(&r.name) == name_key && fits(r))
+                        .collect();
+                    if out.is_empty() {
+                        let want = words(name);
+                        if !want.is_empty() {
+                            out = rows
+                                .iter()
+                                .filter(|r| {
+                                    let have = words(&r.name);
+                                    fits(r)
+                                        && !have.is_empty()
+                                        && want.iter().filter(|w| have.contains(w)).count() * 2
+                                            > want.len()
+                                })
+                                .collect();
+                        }
+                    }
+                }
+            }
+            let mut names: Vec<String> = out.iter().map(|r| r.name.clone()).collect();
+            names.sort();
+            names
+        };
+
+        for (name, code, unit) in [
+            ("Sement M400", "", "kg"),
+            ("Sement M400", "", ""),
+            ("Armatura A500C d12", "", ""),
+            ("Armatura A500C d12", "A500-12", ""),
+            ("G'isht qizil M150", "", "kg"),
+            ("Yo'q material", "", ""),
+            ("", "", ""),
+        ] {
+            let mut fast: Vec<String> = find_with(&rows, &index, name, code, unit)
+                .iter()
+                .map(|r| r.name.clone())
+                .collect();
+            fast.sort();
+            assert_eq!(fast, brute(name, code, unit), "{name} / {code} / {unit}");
+        }
+
+        // Boshqa ro'yxatdan tuzilgan indeks bilan taxmin qilinmaydi.
+        let other = Index::build(&rows[..3]);
+        assert!(find_with(&rows, &other, "Sement M400", "", "").is_empty());
     }
 
     /// Ikkita nuqtadan yo'nalish chiqarilmaydi.

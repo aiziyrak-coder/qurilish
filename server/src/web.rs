@@ -422,7 +422,7 @@ pub async fn sign(
         &format!("{} / {}", sig.project, sig.document),
         &crate::now(),
     );
-    Redirect::to(&format!("/o/{project}")).into_response()
+    Redirect::to(&object_url(&project, "")).into_response()
 }
 
 // ================================================================ Kunlik yozuv
@@ -724,7 +724,7 @@ pub async fn journal_submit(
     let at = crate::now();
     // Aloqasiz navbatdan qayta kelgan forma ikkinchi yozuv yaratmaydi.
     if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
-        return Redirect::to(&format!("/o/{project}")).into_response();
+        return Redirect::to(&object_url(&project, "")).into_response();
     }
     let body = journal_package(&project, &user.name, &at, &form);
     let _ = state
@@ -733,7 +733,7 @@ pub async fn journal_submit(
     state
         .store
         .log(&user.login, "kunlik-yozuv", project.trim(), &at);
-    Redirect::to(&format!("/o/{project}")).into_response()
+    Redirect::to(&object_url(&project, "")).into_response()
 }
 
 // ================================================================ Tabel
@@ -918,14 +918,14 @@ pub async fn timesheet_submit(
     // Aloqasiz navbatdan qayta kelgan forma ikkinchi yozuv yaratmaydi.
     let nonce = form.fields.get("nonce").cloned().unwrap_or_default();
     if !nonce.trim().is_empty() && !state.store.use_nonce(&nonce, &at) {
-        return Redirect::to(&format!("/o/{project}")).into_response();
+        return Redirect::to(&object_url(&project, "")).into_response();
     }
     let body = timesheet_package(&project, &at, form.date.trim(), &rows);
     let _ = state
         .store
         .push_change(project.trim(), &body, &user.login, &at, rows.len() as i64);
     state.store.log(&user.login, "tabel", project.trim(), &at);
-    Redirect::to(&format!("/o/{project}")).into_response()
+    Redirect::to(&object_url(&project, "")).into_response()
 }
 
 // ================================================================ Grafik
@@ -1364,11 +1364,11 @@ pub async fn chat_submit(
     }
     let text = form.text.trim();
     if text.is_empty() {
-        return Redirect::to(&format!("/o/{project}/chat")).into_response();
+        return Redirect::to(&object_url(&project, "/chat")).into_response();
     }
     let at = crate::now();
     if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
-        return Redirect::to(&format!("/o/{project}/chat")).into_response();
+        return Redirect::to(&object_url(&project, "/chat")).into_response();
     }
     let _ = state.store.add_message(&crate::store::Message {
         id: 0,
@@ -1380,7 +1380,7 @@ pub async fn chat_submit(
         at: at.clone(),
     });
     state.store.log(&user.login, "xabar", project.trim(), &at);
-    Redirect::to(&format!("/o/{project}/chat")).into_response()
+    Redirect::to(&object_url(&project, "/chat")).into_response()
 }
 
 /// Vaqtdan «08.09 07:41».
@@ -1557,14 +1557,14 @@ pub async fn request_submit(
     }
     let at = crate::now();
     if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
-        return Redirect::to(&format!("/o/{project}")).into_response();
+        return Redirect::to(&object_url(&project, "")).into_response();
     }
     let body = request_package(&project, &at, &user.name, &form);
     let _ = state
         .store
         .push_change(project.trim(), &body, &user.login, &at, 1);
     state.store.log(&user.login, "ariza", project.trim(), &at);
-    Redirect::to(&format!("/o/{project}")).into_response()
+    Redirect::to(&object_url(&project, "")).into_response()
 }
 
 // ================================================================ Texnika
@@ -1739,14 +1739,14 @@ pub async fn machine_submit(
 
     let at = crate::now();
     if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
-        return Redirect::to(&format!("/o/{project}")).into_response();
+        return Redirect::to(&object_url(&project, "")).into_response();
     }
     let body = machine_package(&project, &at, &user.name, &form);
     let _ = state
         .store
         .push_change(project.trim(), &body, &user.login, &at, 1);
     state.store.log(&user.login, "texnika", project.trim(), &at);
-    Redirect::to(&format!("/o/{project}")).into_response()
+    Redirect::to(&object_url(&project, "")).into_response()
 }
 
 // ================================================== Kirish/chiqish va QR
@@ -1990,7 +1990,7 @@ pub async fn checkin_submit(
     };
     let at = crate::now();
     if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
-        return Redirect::to(&format!("/o/{project}/checkin")).into_response();
+        return Redirect::to(&object_url(&project, "/checkin")).into_response();
     }
     let record = crate::store::Attendance {
         project: project.trim().to_string(),
@@ -2016,7 +2016,17 @@ pub async fn checkin_submit(
         .store
         .push_change(project.trim(), &body, &user.login, &at, 1);
     state.store.log(&user.login, "belgi", project.trim(), &at);
-    Redirect::to(&format!("/o/{project}/checkin")).into_response()
+    Redirect::to(&object_url(&project, "/checkin")).into_response()
+}
+
+/// Obyektga qayta yo'naltirish manzili.
+///
+/// Obyekt nomi manzilga **qochirilgan holda** qo'shiladi. Sababi
+/// jiddiy: nomda qator ko'chirish belgisi bo'lsa (manzilga `%0A` deb
+/// yozish yetarli), sarlavha buzilgan bo'lardi va javob tayyorlash
+/// paytida dastur to'xtardi. Nom bizdan emas, tashqaridan keladi.
+fn object_url(project: &str, tail: &str) -> String {
+    format!("/o/{}{tail}", urlencode(project.trim()))
 }
 
 /// Manzil uchun matnni xavfsiz ko'rinishga keltiradi.
@@ -2157,10 +2167,9 @@ pub async fn find_page(
 
     // Ishchi — darrov belgilash sahifasiga.
     if kind == "worker" {
-        return Redirect::to(&format!(
-            "/o/{}/checkin?w={}&src=qr",
-            project,
-            urlencode(&number)
+        return Redirect::to(&object_url(
+            &project,
+            &format!("/checkin?w={}&src=qr", urlencode(&number)),
         ))
         .into_response();
     }

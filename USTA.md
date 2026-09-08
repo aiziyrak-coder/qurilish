@@ -161,7 +161,7 @@ Tekshiruv:
 
 | Nima | Natija |
 |---|---|
-| `cargo test --workspace` | 468 desktop + 53 server + 3 xesh sinov o'tadi |
+| `cargo test --workspace` | 474 desktop + 54 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
 | `cargo test --no-default-features` | 457 sinov (tarmoq kodisiz yig'ilish) |
@@ -187,6 +187,10 @@ Qo'riqchi sinovlar (regressiyani ushlaydi):
 - namunadagi «rigelni kesib o'tuvchi quvur» ikki mustaqil yo'l bilan
   topiladi: qoidalar bo'yicha va o'lcham bo'yicha — natijalar bir xil
 - yangi hisobotlar sonni qayta hisoblamaydi: ular o'z modulidan o'qiydi
+- narx indeksi bilan izlash indekssiz izlash bilan bir xil natija beradi
+- obyekt nomidagi qator ko'chirish belgisi javobni buzmaydi (xato
+  qaytarib tekshirilgan: tuzatishsiz 500 qaytardi)
+- sinxronizatsiya odam yozayotgan xabarni o'chirmaydi
 - EXIF o'quvchi haqiqiy bayt tartibidagi JPEG da sinaladi
 - aloqasiz navbatdan qayta kelgan forma ikkinchi yozuv yaratmaydi
 - server: kim kira oladi, kim kira olmaydi, paket tartibi, imzo huquqi

@@ -1068,6 +1068,51 @@ mod tests {
             }];
             send_summary(&cfg, "OBY-1", &summary).map_err(|e| format!("yakun: {e:?}"))?;
 
+            // ---- QR yorliqlar va texnika ro'yxati
+            let labels = vec![LabelOut {
+                kind: "batch".into(),
+                number: "P-12".into(),
+                title: "Sement M400".into(),
+                note: "Qizilqum".into(),
+            }];
+            send_labels(&cfg, "OBY-1", &labels).map_err(|e| format!("yorliq: {e:?}"))?;
+            let machines = vec![MachineOut {
+                name: "Ekskavator".into(),
+                reg_no: "01A123BB".into(),
+            }];
+            send_machines(&cfg, "OBY-1", &machines).map_err(|e| format!("texnika: {e:?}"))?;
+
+            // ---- Yozishma: yuboriladi va qaytarib olinadi
+            send_message(&cfg, "OBY-1", "Sement tugadi").map_err(|e| format!("xabar: {e:?}"))?;
+            let messages =
+                fetch_messages(&cfg, "OBY-1", 0).map_err(|e| format!("xabarlar: {e:?}"))?;
+            if messages.len() != 1 || messages[0].text != "Sement tugadi" {
+                return Err(format!("xabar qaytmadi: {messages:?}"));
+            }
+            // Belgidan keyin takrorlanmaydi.
+            let again =
+                fetch_messages(&cfg, "OBY-1", messages[0].id).map_err(|e| format!("{e:?}"))?;
+            if !again.is_empty() {
+                return Err("xabar ikki marta keldi".into());
+            }
+
+            // ---- Imzo zanjiri: birinchi belgi qabul qilinadi, o'sha
+            // uzunlikdagi boshqa uch esa ziddiyat beradi.
+            if send_chain(&cfg, "OBY-1", 3, "aaa")
+                .map_err(|e| format!("zanjir: {e:?}"))?
+                .is_some()
+            {
+                return Err("birinchi belgi ziddiyat berdi".into());
+            }
+            match send_chain(&cfg, "OBY-1", 3, "bbb").map_err(|e| format!("{e:?}"))? {
+                Some(old) if old == "aaa" => {}
+                other => return Err(format!("zanjir ziddiyati sezilmadi: {other:?}")),
+            }
+            let marks = fetch_chain(&cfg, "OBY-1").map_err(|e| format!("{e:?}"))?;
+            if marks.len() != 1 || marks[0].head != "aaa" {
+                return Err(format!("belgi o'zgarib qolgan: {marks:?}"));
+            }
+
             // ---- Prorab imzolamaydi: server rad etadi
             match sign(&cfg, "OBY-1", "AOSR-1", "matn", "") {
                 Err(Error::Forbidden) => {}

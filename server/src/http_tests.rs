@@ -1560,3 +1560,50 @@ fn an_empty_request_is_refused() {
         assert!(state.store.changes_since("OBY-1", 0, 10).is_empty());
     });
 }
+
+/// Obyekt nomidagi qator ko'chirish belgisi dasturni to'xtatmaydi.
+///
+/// Manzilga `%0A` yozish yetarli edi: nom qayta yo'naltirish
+/// sarlavhasiga qochirilmasdan qo'shilardi va javob tayyorlashda dastur
+/// to'xtardi. Nom tashqaridan keladi, shuning uchun u har doim
+/// qochiriladi.
+#[test]
+fn a_newline_in_the_object_name_does_not_break_the_answer() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        for uri in [
+            // Nom **o'rtasida** qator ko'chirish: chetdagi bo'shliqni
+            // kesish bunda yordam bermaydi.
+            "/o/a%0Ab/journal",
+            "/o/%0Ax/journal",
+            "/o/%0Dx/journal",
+            "/o/a%20b/journal",
+            "/o/%22x%22/journal",
+        ] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(uri)
+                        .header(header::COOKIE, &cookie)
+                        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                        .body(Body::from("date=2026-09-08&text=Sinov"))
+                        .expect("so'rov"),
+                )
+                .await
+                .expect("javob");
+            assert_eq!(resp.status(), StatusCode::SEE_OTHER, "{uri}");
+            let to = resp
+                .headers()
+                .get(header::LOCATION)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default();
+            assert!(
+                !to.contains(char::from(10)) && !to.contains(char::from(13)),
+                "{uri}: {to}"
+            );
+        }
+    });
+}

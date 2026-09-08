@@ -2847,6 +2847,36 @@ date	kind	title	qty	unit	requester	need_date	note	gps
         assert_eq!(app.db.price_book().len(), rows, "baza tozalandi");
     }
 
+    /// Sinxronizatsiya odam yozayotgan xabarni o'chirmaydi (TZ VI.32).
+    ///
+    /// Maydon faqat **o'sha xabar** yuborilganda bo'shaydi. Avval har
+    /// muvaffaqiyatli sinxronizatsiya uni tozalab yuborardi: odam xabar
+    /// yozib turganda «Yangilash» bosilsa, matn yo'qolardi.
+    #[test]
+    fn a_sync_does_not_wipe_the_message_being_typed() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        app.chat_draft = "Sement kerak".into();
+
+        // Xabarsiz sinxronizatsiya natijasi keldi.
+        let (tx, rx) = std::sync::mpsc::channel();
+        tx.send(Ok(crate::sync::Outcome {
+            pushed: 1,
+            pulled: crate::sync::Pulled::default(),
+            messages: Vec::new(),
+            chain_marks: Vec::new(),
+            chain_conflict: None,
+        }))
+        .expect("kanal");
+        app.sync_pending = Some(rx);
+        app.poll_sync();
+
+        assert_eq!(app.chat_draft, "Sement kerak", "yozilayotgan matn o'chdi");
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {
