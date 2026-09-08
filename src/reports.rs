@@ -497,9 +497,14 @@ fn prices(app: &App, name: String) -> Table {
         .materials
         .iter()
         .map(|m| {
-            let range = app.market_range(m);
-            let verdict = crate::prices::compare(m.price, range);
-            let trend = app.price_trend(m.id);
+            // Ekranda ko'ringan natija bilan bir xil bo'lishi uchun
+            // hisobot ham tayyor natijadan o'qiydi.
+            let check = app.price_check(m.id);
+            let range = check.and_then(|c| c.range);
+            let verdict = check
+                .map(|c| c.verdict)
+                .unwrap_or(crate::prices::Verdict::NoData);
+            let trend = check.and_then(|c| c.trend);
             vec![
                 txt(&m.name),
                 txt(&m.unit),
@@ -1716,6 +1721,7 @@ mod tests {
             region: String::new(),
         }]);
         app.price_book = app.db.price_book();
+        app.recompute_price_checks();
         let report = build(&app, Kind::Prices, period);
         let row = report
             .rows
@@ -1723,6 +1729,10 @@ mod tests {
             .find(|r| matches!(r.first(), Some(crate::docgen::Cell::Text(s)) if *s == m.name))
             .expect("material qatori");
         let verdict = crate::prices::compare(m.price, app.market_range(&m));
+        assert!(
+            verdict.outside(),
+            "sinov ma'lumotida chetlanish yo'q: {verdict:?}"
+        );
         match row.get(6) {
             Some(crate::docgen::Cell::Text(s)) => assert_eq!(*s, verdict.text()),
             other => panic!("holat ustuni noto'g'ri: {other:?}"),

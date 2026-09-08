@@ -2214,8 +2214,14 @@ fn prices_tab(ui: &mut egui::Ui, app: &mut App) {
                     ui.end_row();
 
                     for m in &materials {
-                        let range = app.market_range(m);
-                        let verdict = crate::prices::compare(m.price, range);
+                        // Tayyor natija: solishtirish katalog yuklanganda
+                        // bir marta bajarilgan.
+                        let check = app.price_check(m.id).cloned();
+                        let range = check.as_ref().and_then(|c| c.range);
+                        let verdict = check
+                            .as_ref()
+                            .map(|c| c.verdict)
+                            .unwrap_or(crate::prices::Verdict::NoData);
                         ui.label(RichText::new(&m.name).size(12.0))
                             .on_hover_text(&m.unit);
                         ui.label(RichText::new(super::money(m.price)).size(12.0));
@@ -2237,7 +2243,7 @@ fn prices_tab(ui: &mut egui::Ui, app: &mut App) {
                             })
                             .size(12.0),
                         );
-                        match app.price_trend(m.id) {
+                        match check.as_ref().and_then(|c| c.trend) {
                             Some(tr) => {
                                 ui.label(
                                     RichText::new(format!(

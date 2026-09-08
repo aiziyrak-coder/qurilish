@@ -496,8 +496,7 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
                 .iter()
                 .find(|m| m.id == *material_id)
                 .ok_or_else(|| t("ac_no_material").to_string())?;
-            let n = app.requests.len() + 1;
-            let number = format!("Z-{n:03}");
+            let number = app.next_request_number(0);
             app.db.insert_request(&Request {
                 id: 0,
                 project_id: pid,
@@ -742,8 +741,7 @@ pub fn perform(app: &mut App, action: &Action) -> Result<String, String> {
         }
 
         ActionKind::HireRequest { count } => {
-            let n = app.requests.len() + 1;
-            let number = format!("Z-{n:03}");
+            let number = app.next_request_number(0);
             app.db.insert_request(&Request {
                 id: 0,
                 project_id: pid,

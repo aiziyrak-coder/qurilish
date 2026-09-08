@@ -84,9 +84,17 @@ td, th { text-align:left; padding:6px 4px; border-bottom:1px solid #e5e7eb; }
 /// U bo'lmasa ham sahifalar ishlaydi: bu qo'shimcha qatlam, shart emas.
 /// Har ochilganda navbat ham tekshiriladi — aloqa qaytgan bo'lsa
 /// yuborilmagan yozuvlar o'zi ketadi.
+/// Telefon xotirasidagi sahifalarni tozalaydigan skript.
+///
+/// Kirish sahifasida turadi. Sababi: xizmat ishchisi ochilgan sahifalarni
+/// aloqasiz ko'rish uchun saqlaydi, va telefonni boshqa odam olsa yoki
+/// boshqa hisob bilan kirsa, o'sha sahifalar unga ko'rinib qolardi.
+/// Chiqish ham shu sahifaga olib keladi, shuning uchun bitta joy yetarli.
+const FORGET_CACHE: &str = "<script>if('serviceWorker' in navigator&&navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage('forget');}if(window.caches){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n);});});}</script>";
+
 const SW_REGISTER: &str = "<script>\
 if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').then(function(r){\
-if(navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage('drain');}\
+if(navigator.serviceWorker.controller){navigator.serviceWorker.controller.postMessage('drain');var q=document.getElementById('queued');if(q&&window.MessageChannel){var ch=new MessageChannel();ch.port1.onmessage=function(m){q.textContent=m.data>0?('Navbatda: '+m.data+' ta yuborilmagan yozuv. Aloqa qaytganda avtomatik yuboriladi.'):'';};navigator.serviceWorker.controller.postMessage('queued',[ch.port2]);}}\
 if(r.sync){try{r.sync.register('qurai-queue');}catch(e){}}}).catch(function(){});}\
 </script>";
 
@@ -132,7 +140,7 @@ fn login_page(message: &str) -> Html<String> {
 <form method=\"post\" action=\"/login\">\
 <label>Login<input name=\"login\" autocomplete=\"username\" autocapitalize=\"none\" required></label>\
 <label>Parol<input name=\"password\" type=\"password\" autocomplete=\"current-password\" required></label>\
-<button type=\"submit\">Kirish</button></form>"
+<button type=\"submit\">Kirish</button></form>{}", FORGET_CACHE
         ),
     )
 }
@@ -147,7 +155,7 @@ pub async fn index(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Re
         "<div class=\"row\"><h1>Obyektlar</h1>\
 <form method=\"post\" action=\"/logout\" style=\"width:auto\">\
 <button class=\"ghost\" style=\"width:auto;margin:0\">Chiqish</button></form></div>\
-<p class=\"muted\">{} · {}</p>",
+<p class=\"muted\">{} · {}</p><p class=\"muted\" id=\"queued\"></p>",
         esc(&user.name),
         esc(&role_name(&user.role))
     );
@@ -1186,22 +1194,51 @@ async function drain() {
         body: items[i].body,
         credentials: 'include',
       });
-      // Server javob bergan bo'lsa — yozuv yetdi. Takror yuborilsa ham
-      // server uni `nonce` bo'yicha rad etadi, shuning uchun o'chirish
-      // xavfsiz.
-      if (r.ok || r.status === 303 || r.status === 302) {
+      // Nima qabul qilinganini **javob turi** aytadi:
+      //
+      // * qayta yo'naltirish — forma qabul qilindi (hamma yozuv formasi
+      //   muvaffaqiyatda `Redirect` beradi);
+      // * 4xx/5xx — server rad etdi va qayta yuborish foyda bermaydi;
+      // * qayta yo'naltirishsiz 200 — bu kirish sahifasi yoki forma
+      //   xatosi. Bunda yozuv **navbatda qoladi** va navbat to'xtaydi:
+      //   seans tugagan bo'lsa, qolganlari ham shu holatga tushardi.
+      //
+      // Takror yuborilishdan qo'rqmaymiz: har formaning bir martalik
+      // belgisi bor va server ikkinchi marta qabul qilmaydi.
+      if (r.redirected || r.status >= 400) {
         const d2 = await db();
         await new Promise(ok2 => {
           const tx = d2.transaction('q', 'readwrite');
           tx.objectStore('q').delete(keys[i]);
           tx.oncomplete = ok2; tx.onerror = ok2;
         });
+      } else {
+        return;
       }
     } catch (e) { return; } // aloqa hali yo'q — keyingi safar
   }
 }
+async function queued() {
+  const d = await db();
+  return await new Promise((ok, no) => {
+    const tx = d.transaction('q', 'readonly');
+    const rq = tx.objectStore('q').count();
+    rq.onsuccess = () => ok(rq.result || 0);
+    rq.onerror = () => no(rq.error);
+  });
+}
 self.addEventListener('sync', e => { if (e.tag === 'qurai-queue') e.waitUntil(drain()); });
-self.addEventListener('message', e => { if (e.data === 'drain') e.waitUntil ? e.waitUntil(drain()) : drain(); });
+self.addEventListener('message', e => {
+  if (e.data === 'drain') { drain(); }
+  // Navbatdagi yozuvlar soni sahifaga qaytariladi: yuborilmagan yozuv
+  // borligini odam ko'rib turishi kerak.
+  if (e.data === 'queued' && e.ports && e.ports[0]) {
+    queued().then(n => e.ports[0].postMessage(n)).catch(() => e.ports[0].postMessage(0));
+  }
+  // Kirish yoki chiqishda xotira tozalanadi: boshqa odam shu telefonda
+  // avvalgi foydalanuvchining sahifalarini ko'rmasligi kerak.
+  if (e.data === 'forget') { caches.delete(CACHE); }
+});
 
 self.addEventListener('fetch', e => {
   const req = e.request;
@@ -1762,12 +1799,27 @@ pub fn attendance_package(project: &str, at: &str, a: &crate::store::Attendance)
     )
 }
 
-/// Vaqtdan soat-daqiqa.
+/// Vaqtdan soat-daqiqa; boshqa kun bo'lsa sana ham qo'shiladi.
+///
+/// Faqat soatni ko'rsatish xato edi: kechagi belgi bugungidek
+/// ko'rinardi va «kim bugun keldi» degan savolga yolg'on javob berardi.
 fn short_time(iso: &str) -> String {
-    iso.split('T')
-        .nth(1)
-        .map(|t| t.chars().take(5).collect())
-        .unwrap_or_default()
+    let (day, time) = iso.split_once('T').unwrap_or((iso, ""));
+    let hm: String = time.chars().take(5).collect();
+    if day == today() {
+        return hm;
+    }
+    let parts: Vec<&str> = day.split('-').collect();
+    if parts.len() == 3 {
+        format!("{}.{} {hm}", parts[2], parts[1])
+    } else {
+        format!("{day} {hm}")
+    }
+}
+
+/// Bugungi sana, `YYYY-MM-DD`.
+fn today() -> String {
+    crate::now().split('T').next().unwrap_or("").to_string()
 }
 
 /// `GET /o/{project}/checkin` — maydonchaga kirish va undan chiqish.
@@ -1802,7 +1854,14 @@ pub async fn checkin_page(
     let body = if !chosen.is_empty() && known {
         // QR dan yoki ro'yxatdan tanlangan bitta ishchi.
         let last = state.store.last_attendance(&project, &chosen);
-        let next = match last.as_ref().map(|a| a.kind.as_str()) {
+        // Keyingi belgi **bugungi** holatdan aniqlanadi. Kecha kirib,
+        // chiqmagan bo'lsa ham bugun tugma «Kirdim» bo'lishi kerak:
+        // aks holda odam ertalab kelib «Chiqdim» tugmasini ko'rardi.
+        let today_mark = last
+            .as_ref()
+            .filter(|a| a.at.starts_with(&today()))
+            .map(|a| a.kind.as_str());
+        let next = match today_mark {
             Some("in") => "out",
             _ => "in",
         };

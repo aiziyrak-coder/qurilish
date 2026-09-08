@@ -654,12 +654,12 @@ pub fn create_request_from(app: &mut App, r: &crate::checks::JournalRequest) {
     let material = app.materials.iter().find(|m| m.id == r.material_id);
     let title = material.map(|m| m.name.clone()).unwrap_or_default();
     let unit = material.map(|m| m.unit.clone()).unwrap_or_default();
-    let n = app.requests.len() + 1;
+    let number = app.next_request_number(0);
 
     app.db.insert_request(&crate::domain::Request {
         id: 0,
         project_id: pid,
-        number: format!("Z-{n:03}"),
+        number,
         date: app.today,
         kind: crate::domain::RequestKind::Material,
         title,

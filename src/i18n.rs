@@ -6521,6 +6521,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "pb_imported" => ("Yuklandi:", "Загружено:"),
         "pb_cleared" => ("Tozalandi:", "Очищено:"),
+        "pb_repeated" => ("takror:", "повторов:"),
         "chk_market_title" => (
             "Narx bazadagi diapazondan tashqarida",
             "Цена вне диапазона базы цен",

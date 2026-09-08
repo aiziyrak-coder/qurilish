@@ -1351,6 +1351,16 @@ fn the_phone_can_install_the_app() {
         let (_, html) = page_text(&app, "/", &cookie).await;
         assert!(html.contains("manifest.webmanifest"), "{html}");
         assert!(html.contains("serviceWorker"), "{html}");
+        // Yuborilmagan yozuvlar soni uchun joy bor: navbat jimgina
+        // turmasligi kerak.
+        assert!(html.contains("id=\"queued\""), "{html}");
+
+        // Kirish sahifasi telefon xotirasini tozalaydi: boshqa odam
+        // avvalgi foydalanuvchining sahifalarini ko'rmasligi kerak.
+        let (_, html) = page_text(&app, "/", "").await;
+        assert!(html.contains("Kirish"), "{html}");
+        assert!(html.contains("'forget'"), "{html}");
+        assert!(html.contains("caches.delete"), "{html}");
     });
 }
 

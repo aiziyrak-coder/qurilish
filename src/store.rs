@@ -3567,27 +3567,39 @@ impl Db {
             .unwrap_or_default()
     }
 
-    /// Narx ro'yxatini bazaga qo'shadi va nechta qator qo'shilganini
-    /// qaytaradi.
+    /// Narx ro'yxatini bazaga qo'shadi: `(qo'shildi, takror)`.
     ///
     /// Eski qatorlar o'chirilmaydi: bir necha ta'minotchining ro'yxati
     /// birga turgani **diapazon** beradi va TZ dagi «bozor diapazoni»
     /// aynan shu.
-    pub fn add_prices(&self, rows: &[crate::prices::PriceRow]) -> usize {
+    ///
+    /// Lekin **aynan bir xil qator** ikkinchi marta qo'shilmaydi. Bir
+    /// faylni ikki marta yuklash oson va u diapazonni o'zgartirmasa ham,
+    /// «nechta manbadan» degan sonni buzardi va narx ishonchliroq
+    /// ko'rinib qolardi.
+    pub fn add_prices(&self, rows: &[crate::prices::PriceRow]) -> (usize, usize) {
         let mut added = 0;
+        let mut repeated = 0;
         for r in rows {
+            let date = r.date.map(|d| d.to_string()).unwrap_or_default();
+            let exists: bool = self
+                .conn()
+                .query_row(
+                    "SELECT 1 FROM price_book
+                     WHERE code=?1 AND name=?2 AND unit=?3 AND price=?4
+                       AND source=?5 AND date=?6 AND region=?7 LIMIT 1",
+                    params![r.code, r.name, r.unit, r.price, r.source, date, r.region],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+            if exists {
+                repeated += 1;
+                continue;
+            }
             let ok = self.conn().execute(
                 "INSERT INTO price_book (code,name,unit,price,source,date,region)
                  VALUES (?1,?2,?3,?4,?5,?6,?7)",
-                params![
-                    r.code,
-                    r.name,
-                    r.unit,
-                    r.price,
-                    r.source,
-                    r.date.map(|d| d.to_string()).unwrap_or_default(),
-                    r.region
-                ],
+                params![r.code, r.name, r.unit, r.price, r.source, date, r.region],
             );
             if ok.is_ok() {
                 added += 1;
@@ -3596,7 +3608,7 @@ impl Db {
         if added > 0 {
             self.audit(AuditAction::Insert, "price_book", 0);
         }
-        added
+        (added, repeated)
     }
 
     /// Bazani tozalaydi.

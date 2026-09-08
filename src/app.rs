@@ -513,6 +513,19 @@ const SCHEDULE_DAYS: i64 = 30;
 /// Xarid rejasi shuncha kun oldinga qaraydi (TZ X.6, XVII.10).
 const PLAN_HORIZON: i64 = 45;
 
+/// Bitta materialning narx bazasiga nisbatan holati (TZ XII.20, X.44).
+///
+/// Hisob **bir marta** bajariladi: bazada minglab qator, katalogda
+/// yuzlab material bo'lishi mumkin va ularni har kadrda solishtirish
+/// interfeysni sekinlashtirardi.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PriceCheck {
+    pub material_id: i64,
+    pub range: Option<crate::prices::Range>,
+    pub verdict: crate::prices::Verdict,
+    pub trend: Option<crate::prices::Trend>,
+}
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -578,6 +591,8 @@ pub struct App {
     pub clashes: Vec<crate::clash::Clash>,
     /// Narxlar bazasi (TZ III.15). Obyektga bog'liq emas.
     pub price_book: Vec<crate::prices::PriceRow>,
+    /// Materiallarning bazaga nisbatan holati — bir marta hisoblanadi.
+    pub price_checks: Vec<PriceCheck>,
     /// Narxlar bazasini tozalash tasdig'i kutilyaptimi.
     pub confirm_clear_prices: bool,
     /// Oxirgi foto-nazorat natijasi (TZ V.9). Tugma bosilganda hisoblanadi:
@@ -822,6 +837,7 @@ impl App {
             chain_marks: Vec::new(),
             clashes: Vec::new(),
             price_book: Vec::new(),
+            price_checks: Vec::new(),
             confirm_clear_prices: false,
             photo_report: None,
             materials: Vec::new(),
@@ -1223,6 +1239,10 @@ impl App {
         {
             self.selected_issue = None;
         }
+
+        // Narx solishtirish katalog va kirimlarga bog'liq — ikkalasi ham
+        // yuklangandan keyin bir marta hisoblanadi.
+        self.recompute_price_checks();
 
         // Bildirishnomalar barcha modul ma'lumotidan yig'iladi — shuning
         // uchun ular oxirida, hamma narsa yuklangandan keyin hisoblanadi.
@@ -1695,7 +1715,7 @@ impl App {
                     continue;
                 }
                 let need = m.get("need_date").copied().unwrap_or("");
-                let number = format!("Z-{:03}", self.requests.len() + added + 1);
+                let number = self.next_request_number(added);
                 self.db.insert_request(&crate::domain::Request {
                     id: 0,
                     project_id: pid,
@@ -2758,6 +2778,9 @@ impl App {
         if answer.is_empty() {
             return false;
         }
+        if !self.writable() {
+            return false;
+        }
         let Some(mut entry) = self.journal.iter().find(|j| j.date == self.today).cloned() else {
             self.notify(t("q_needs_journal").to_string());
             return false;
@@ -2958,6 +2981,11 @@ impl App {
     /// va yozuv oldingisiga bog'lanadi. Davlat elektron raqamli imzosi
     /// emas — kim imzolagani ism bilan yoziladi, kalit bilan emas.
     pub fn sign_document(&mut self, document: &str, subject: &str, text: &str, rejected: &str) {
+        // Rol — ish taqsimoti va u yerda ham hurmat qilinadi: faqat
+        // ko'ruvchi rol daftarga yozmaydi. Haqiqiy chegara serverda.
+        if !self.writable() {
+            return;
+        }
         let Some(pid) = self.project().map(|p| p.id) else {
             return;
         };
@@ -3164,6 +3192,9 @@ impl App {
 
     /// Narx ro'yxatini fayldan yuklaydi (TZ III.15).
     pub fn import_prices(&mut self) {
+        if !self.writable() {
+            return;
+        }
         let Some(path) = rfd::FileDialog::new()
             .set_title(t("pb_import"))
             .add_filter(
@@ -3176,9 +3207,20 @@ impl App {
         };
         match crate::import::prices_from_file(&path) {
             Ok(rows) => {
-                let n = self.db.add_prices(&rows);
+                let (added, repeated) = self.db.add_prices(&rows);
                 self.price_book = self.db.price_book();
-                self.notify(format!("{} {n}", t("pb_imported")));
+                self.recompute_price_checks();
+                // Takrorlar jimgina tashlanmaydi: odam bir faylni ikki
+                // marta yuklaganini bilishi kerak.
+                self.notify(if repeated == 0 {
+                    format!("{} {added}", t("pb_imported"))
+                } else {
+                    format!(
+                        "{} {added} · {} {repeated}",
+                        t("pb_imported"),
+                        t("pb_repeated")
+                    )
+                });
             }
             Err(e) => self.notify(format!("{}: {e}", t("import_failed"))),
         }
@@ -3189,9 +3231,41 @@ impl App {
     /// Bu **qaytarilmaydigan** amal, shuning uchun tasdiqdan keyin
     /// bajariladi: tugma faqat so'roqni ochadi.
     pub fn clear_prices(&mut self) {
+        if !self.writable() {
+            return;
+        }
         let n = self.db.clear_price_book();
         self.price_book.clear();
+        self.recompute_price_checks();
         self.notify(format!("{} {n}", t("pb_cleared")));
+    }
+
+    /// Materiallarni narx bazasi bilan solishtiradi va natijani saqlaydi.
+    ///
+    /// Katalog yoki baza o'zgarganda chaqiriladi. Ekran esa tayyor
+    /// natijani o'qiydi — u har kadrda qayta chiziladi va u yerda
+    /// minglab qatorni solishtirish mumkin emas.
+    pub fn recompute_price_checks(&mut self) {
+        self.price_checks = self
+            .materials
+            .iter()
+            .map(|m| {
+                let range = self.market_range(m);
+                PriceCheck {
+                    material_id: m.id,
+                    range,
+                    verdict: crate::prices::compare(m.price, range),
+                    trend: self.price_trend(m.id),
+                }
+            })
+            .collect();
+    }
+
+    /// Tayyor natijani beradi; hisoblanmagan bo'lsa — bo'sh.
+    pub fn price_check(&self, material_id: i64) -> Option<&PriceCheck> {
+        self.price_checks
+            .iter()
+            .find(|c| c.material_id == material_id)
     }
 
     /// Material uchun bazadagi narx diapazoni (TZ XII.20, III.14.3).
@@ -3680,6 +3754,23 @@ impl App {
         )
     }
 
+    /// Keyingi ariza raqami (TZ IX.2).
+    ///
+    /// Raqam **mavjudlaridan** olinadi, ro'yxat uzunligidan emas: ariza
+    /// o'chirilgan bo'lsa uzunlik kamayadi va yangi ariza eski raqamni
+    /// takrorlab qo'yardi. `extra` — shu importda allaqachon
+    /// yaratilganlar soni.
+    pub fn next_request_number(&self, extra: usize) -> String {
+        let max = self
+            .requests
+            .iter()
+            .filter_map(|q| q.number.rsplit('-').next())
+            .filter_map(|n| n.trim().parse::<usize>().ok())
+            .max()
+            .unwrap_or(0);
+        format!("Z-{:03}", max + extra + 1)
+    }
+
     /// Kunlik hisobotning imzolanadigan matni (TZ V.28).
     ///
     /// Matn **bitta joyda** tuziladi: imzolashda ham, keyin tekshirishda
@@ -3689,11 +3780,11 @@ impl App {
     pub fn day_report_text(&self) -> String {
         let d = self.day_report();
         format!(
-            "{date} · {running}/{logged} · {workers} · {hours:.1} · {machines} · \
+            "{date} · {logged}/{running} · {workers} · {hours:.1} · {machines} · \
 {material:.0} · {safety} · {quality} · {docs}",
             date = d.day,
-            running = d.logged,
-            logged = d.running,
+            logged = d.logged,
+            running = d.running,
             workers = d.workers,
             hours = d.hours,
             machines = d.machines,
@@ -3716,10 +3807,18 @@ impl App {
         self.sign_document(&number, t("jr_day_report"), &text, "");
     }
 
-    /// Bugungi hisobot imzolanganmi.
+    /// Bugungi hisobot **hozirgi holatida** imzolanganmi.
+    ///
+    /// Faqat «imzo bormi» degan savol yetarli emas: imzodan keyin kun
+    /// ma'lumoti o'zgargan bo'lishi mumkin va u holda eski imzo boshqa
+    /// narsani tasdiqlaydi. Shuning uchun matn xeshi ham solishtiriladi
+    /// va o'zgargan bo'lsa qayta imzolash mumkin bo'ladi.
     pub fn day_report_signed(&self) -> bool {
         let number = self.day_report_number();
-        self.sign_log.iter().any(|e| e.document == number)
+        let digest = qurai_hash::text(&self.day_report_text());
+        self.sign_log
+            .iter()
+            .any(|e| e.document == number && e.digest == digest)
     }
 
     /// Bugungi jurnal yozuvidan ariza takliflari (TZ V.17).

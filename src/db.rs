@@ -2667,6 +2667,186 @@ date	kind	title	qty	unit	requester	need_date	note	gps
         }));
     }
 
+    /// Ariza raqami mavjudlaridan olinadi, ro'yxat uzunligidan emas.
+    ///
+    /// Ariza o'chirilganda uzunlik kamayadi va yangi ariza eski raqamni
+    /// takrorlab qo'yardi — hujjatda ikkita «Z-002» paydo bo'lardi.
+    #[test]
+    fn a_request_number_is_never_reused() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Ro'yxatni ma'lum holatga keltiramiz.
+        for q in app.requests.clone() {
+            app.db.del("request", q.id);
+        }
+        app.reload_modules();
+        for _ in 0..3 {
+            let number = app.next_request_number(0);
+            let mut q = crate::domain::Request {
+                id: 0,
+                project_id: pid,
+                number,
+                date: app.today,
+                kind: crate::domain::RequestKind::Material,
+                title: "Sement".into(),
+                material_id: None,
+                qty: 1.0,
+                unit: "kg".into(),
+                requester: String::new(),
+                need_date: app.today,
+                priority: crate::domain::Priority::Normal,
+                status: crate::domain::RequestStatus::New,
+                task_id: None,
+                reject_reason: String::new(),
+                note: String::new(),
+            };
+            q.id = app.db.insert_request(&q);
+            app.reload_modules();
+        }
+        let mut numbers: Vec<String> = app.requests.iter().map(|q| q.number.clone()).collect();
+        numbers.sort();
+        assert_eq!(numbers, ["Z-001", "Z-002", "Z-003"], "{numbers:?}");
+
+        // O'rtadagini o'chiramiz va yangisini yaratamiz.
+        let middle = app.requests[1].id;
+        app.db.del("request", middle);
+        app.reload_modules();
+        let next = app.next_request_number(0);
+        assert_eq!(next, "Z-004", "eski raqam qayta ishlatildi");
+
+        // Bir importda bir nechta ariza — raqamlar takrorlanmaydi.
+        assert_eq!(app.next_request_number(1), "Z-005");
+        assert_eq!(app.next_request_number(2), "Z-006");
+    }
+
+    /// Bir xil narx qatori ikkinchi marta qo'shilmaydi.
+    ///
+    /// Bir faylni ikki marta yuklash oson. Qatorlar ikkilanса diapazon
+    /// o'zgarmaydi, lekin «nechta manbadan» degan son ikki barobar
+    /// bo'lib, narx ishonchliroq ko'rinib qolardi.
+    #[test]
+    fn loading_the_same_price_list_twice_does_not_double_it() {
+        let t = TempDb::new();
+        let db = Db::open(&t.path).unwrap();
+        let row = |price: f64| crate::prices::PriceRow {
+            id: 0,
+            code: "C-400".into(),
+            name: "Sement M400".into(),
+            unit: "kg".into(),
+            price,
+            source: "Prays".into(),
+            date: None,
+            region: String::new(),
+        };
+
+        let (added, repeated) = db.add_prices(&[row(1000.0), row(1200.0)]);
+        assert_eq!((added, repeated), (2, 0));
+
+        // Xuddi shu fayl yana.
+        let (added, repeated) = db.add_prices(&[row(1000.0), row(1200.0)]);
+        assert_eq!((added, repeated), (0, 2));
+        assert_eq!(db.price_book().len(), 2);
+
+        // Boshqa narx — bu yangi ma'lumot va qo'shiladi.
+        let (added, _) = db.add_prices(&[row(1300.0)]);
+        assert_eq!(added, 1);
+        assert_eq!(db.price_book().len(), 3);
+    }
+
+    /// Kun ma'lumoti o'zgarsa qayta imzolash mumkin bo'ladi.
+    ///
+    /// «Imzolangan» belgisi imzoning **borligiga** emas, uning hozirgi
+    /// hisobotga mosligiga qarab qo'yiladi.
+    #[test]
+    fn a_changed_day_can_be_signed_again() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        app.sign_day_report();
+        assert!(app.day_report_signed());
+
+        app.db.insert_journal(&crate::domain::JournalEntry {
+            id: 0,
+            project_id: pid,
+            date: app.today,
+            author: "Prorab".into(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers: 2,
+            machines: 0,
+            task_id: None,
+            volume: 15.0,
+            unit: "m3".into(),
+            text: "Yana hajm".into(),
+            remarks: String::new(),
+            photos: String::new(),
+            gps: String::new(),
+        });
+        app.reload_modules();
+
+        assert!(
+            !app.day_report_signed(),
+            "o'zgargan kun imzolangan deb ko'rsatildi"
+        );
+        app.sign_day_report();
+        assert!(app.day_report_signed());
+        // Ikkita yozuv qoldi: eski imzo o'chirilmaydi.
+        let number = app.day_report_number();
+        assert_eq!(
+            app.sign_log.iter().filter(|e| e.document == number).count(),
+            2
+        );
+        // Zanjir baribir butun.
+        assert!(app
+            .sign_breaks()
+            .iter()
+            .all(|b| !matches!(b, crate::signlog::Break::Chain { .. })));
+    }
+
+    /// Faqat ko'ruvchi rol yangi yozuvchi amallarni ham bajarmaydi.
+    ///
+    /// Rol bu yerda **ish taqsimoti**, himoya emas (baza fayli ochiq) —
+    /// lekin ish taqsimoti sifatida u izchil bo'lishi kerak: imzo,
+    /// savolga javob va narx bazasi ham xuddi shu qoidaga bo'ysunadi.
+    #[test]
+    fn a_read_only_role_cannot_use_the_new_write_actions() {
+        use crate::roles::{Role, User};
+
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let uid = app.db.insert_user(&User {
+            id: 0,
+            name: "Buyurtmachi".into(),
+            role: Role::Client,
+            note: String::new(),
+        });
+        app.reload_users();
+        app.current_user = Some(uid);
+        assert_eq!(app.role(), Role::Client);
+
+        app.screen = crate::app::Screen::Journal;
+        let before = app.sign_log.len();
+        app.sign_day_report();
+        app.reload_modules();
+        assert_eq!(app.sign_log.len(), before, "imzo qo'yildi");
+
+        let q = crate::checks::Question::CrewWithoutVolume { workers: 3 };
+        assert!(!app.answer_question(&q, "Javob"), "javob yozildi");
+
+        app.screen = crate::app::Screen::Materials;
+        let rows = app.db.price_book().len();
+        app.clear_prices();
+        assert_eq!(app.db.price_book().len(), rows, "baza tozalandi");
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {

@@ -102,9 +102,8 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
 
     if add {
-        let n = app.requests.len() + 1;
-        app.db
-            .insert_request(&new_request(pid, app.today, format!("Z-{n:03}")));
+        let number = app.next_request_number(0);
+        app.db.insert_request(&new_request(pid, app.today, number));
         app.reload_modules();
     }
     if from_stock {
@@ -140,7 +139,9 @@ fn new_request(pid: i64, today: chrono::NaiveDate, number: String) -> Request {
 /// Shu material uchun yopilmagan ariza allaqachon bo'lsa — takrorlamaydi.
 fn create_from_stock(app: &App, pid: i64) -> usize {
     let mut n = 0;
-    let mut number = app.requests.len();
+    // Raqam mavjudlaridan olinadi: ariza o'chirilgan bo'lsa ro'yxat
+    // uzunligi kamayadi va yangi ariza eski raqamni takrorlab qo'yardi.
+    let mut created = 0usize;
     for line in app.stock().iter().filter(|l| l.below_min) {
         let open = app.requests.iter().any(|q| {
             q.material_id == Some(line.material_id)
@@ -155,8 +156,8 @@ fn create_from_stock(app: &App, pid: i64) -> usize {
         let Some(m) = app.materials.iter().find(|m| m.id == line.material_id) else {
             continue;
         };
-        number += 1;
-        let mut q = new_request(pid, app.today, format!("Z-{number:03}"));
+        let mut q = new_request(pid, app.today, app.next_request_number(created));
+        created += 1;
         q.title = m.name.clone();
         q.material_id = Some(m.id);
         // Minimal zaxiraga yetkazish uchun yetishmaydigan miqdor.
