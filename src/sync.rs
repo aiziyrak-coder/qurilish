@@ -274,6 +274,95 @@ pub fn workers_body(project: &str, items: &[WorkerOut]) -> String {
     )
 }
 
+/// Serverga yuboriladigan bitta QR yorliq (TZ VI.11).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LabelOut {
+    pub kind: String,
+    pub number: String,
+    pub title: String,
+    pub note: String,
+}
+
+/// Yorliqlar so'rovining tanasi.
+pub fn labels_body(project: &str, items: &[LabelOut]) -> String {
+    let rows: Vec<String> = items
+        .iter()
+        .map(|l| {
+            format!(
+                "{{\"kind\":{},\"number\":{},\"title\":{},\"note\":{}}}",
+                json_string(&l.kind),
+                json_string(&l.number),
+                json_string(&l.title),
+                json_string(&l.note)
+            )
+        })
+        .collect();
+    format!(
+        "{{\"project\":{},\"items\":[{}]}}",
+        json_string(project),
+        rows.join(",")
+    )
+}
+
+/// Xabar yuborish so'rovining tanasi (TZ VI.32).
+pub fn message_body(project: &str, text: &str) -> String {
+    format!(
+        "{{\"project\":{},\"text\":{}}}",
+        json_string(project),
+        json_string(text)
+    )
+}
+
+/// Serverdan kelgan xabar.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MessageIn {
+    pub id: i64,
+    pub author: String,
+    pub role: String,
+    pub text: String,
+    pub at: String,
+}
+
+/// Xabarlar javobini o'qiydi.
+///
+/// Kutilmagan qator tashlab yuboriladi, xato ko'tarilmaydi: chat
+/// ishlamay qolgani butun sinxronizatsiyani to'xtatmasligi kerak.
+pub fn parse_messages(body: &str) -> Vec<MessageIn> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
+        return Vec::new();
+    };
+    v["messages"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let id = m["id"].as_i64().unwrap_or(0);
+            let text = m["text"].as_str().unwrap_or_default();
+            (id > 0 && !text.trim().is_empty()).then(|| MessageIn {
+                id,
+                author: m["author"].as_str().unwrap_or_default().to_string(),
+                role: m["role"].as_str().unwrap_or_default().to_string(),
+                text: text.to_string(),
+                at: m["at"].as_str().unwrap_or_default().to_string(),
+            })
+        })
+        .collect()
+}
+
+/// Har sinxronizatsiyada serverga to'liq yuboriladigan ma'lumotnomalar.
+///
+/// Ular bitta tuzilmaga yig'ilgan: har yangi ro'yxat qo'shilganda
+/// funksiya imzosi o'zgaravermasin va chaqiruv joyida nima
+/// yuborilayotgani nomi bilan ko'rinib tursin.
+#[derive(Debug, Clone, Default)]
+pub struct Refs {
+    pub notices: Vec<NoticeOut>,
+    pub tasks: Vec<TaskOut>,
+    pub workers: Vec<WorkerOut>,
+    pub summary: Vec<SummaryOut>,
+    pub labels: Vec<LabelOut>,
+}
+
 /// Serverga yuboriladigan bitta signal.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NoticeOut {
@@ -453,6 +542,49 @@ pub fn send_summary(cfg: &Config, project: &str, items: &[SummaryOut]) -> Result
     Ok(())
 }
 
+/// QR yorliqlar ro'yxatini serverga yuboradi.
+#[cfg(feature = "sync")]
+pub fn send_labels(cfg: &Config, project: &str, items: &[LabelOut]) -> Result<(), Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    send(
+        cfg,
+        "POST",
+        "api/labels",
+        Some(&cfg.token),
+        Some(&labels_body(project, items)),
+    )?;
+    Ok(())
+}
+
+/// Ofisdan xabar yuboradi (TZ VI.32).
+#[cfg(feature = "sync")]
+pub fn send_message(cfg: &Config, project: &str, text: &str) -> Result<(), Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    send(
+        cfg,
+        "POST",
+        "api/message",
+        Some(&cfg.token),
+        Some(&message_body(project, text)),
+    )?;
+    Ok(())
+}
+
+/// `since` dan keyingi xabarlarni oladi (TZ VI.32).
+#[cfg(feature = "sync")]
+pub fn fetch_messages(cfg: &Config, project: &str, since: i64) -> Result<Vec<MessageIn>, Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    let path = format!("api/messages?project={}&since={since}", urlencode(project));
+    let body = send(cfg, "GET", &path, Some(&cfg.token), None)?;
+    Ok(parse_messages(&body))
+}
+
 /// Hujjatni masofadan imzolaydi.
 #[cfg(feature = "sync")]
 pub fn sign(
@@ -526,6 +658,17 @@ pub struct Outcome {
     pub pushed: i64,
     /// Olingan paketlar.
     pub pulled: Pulled,
+    /// Yangi kelgan xabarlar (TZ VI.32).
+    pub messages: Vec<MessageIn>,
+}
+
+/// Sinxronizatsiyaning yozishma qismi.
+#[derive(Debug, Clone, Default)]
+pub struct Chat {
+    /// Yuboriladigan xabar; bo'sh bo'lsa hech narsa yuborilmaydi.
+    pub outgoing: String,
+    /// Qaysi raqamdan keyingi xabarlar so'ralsin.
+    pub since: i64,
 }
 
 /// Fon oqimida yuboradi va oladi.
@@ -537,10 +680,8 @@ pub fn spawn(
     cfg: Config,
     project: String,
     outgoing: Option<(String, i64)>,
-    notices: Vec<NoticeOut>,
-    tasks: Vec<TaskOut>,
-    workers: Vec<WorkerOut>,
-    summary: Vec<SummaryOut>,
+    refs: Refs,
+    chat: Chat,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -553,16 +694,28 @@ pub fn spawn(
             }
             // Signal ro'yxati — har safar to'liq: bartaraf etilgani
             // telefonda ham yo'qolishi kerak.
-            send_notices(&cfg, &project, &notices)?;
+            send_notices(&cfg, &project, &refs.notices)?;
             // Ish ro'yxati — telefonda tanlash uchun; grafik ofisda
             // yuritiladi, shuning uchun yo'nalish bir tomonlama.
-            send_tasks(&cfg, &project, &tasks)?;
-            send_workers(&cfg, &project, &workers)?;
+            send_tasks(&cfg, &project, &refs.tasks)?;
+            send_workers(&cfg, &project, &refs.workers)?;
             // Buyurtmachi kabineti uchun yakun: sonlar ilovada
             // hisoblanadi, kabinet faqat ko'rsatadi.
-            send_summary(&cfg, &project, &summary)?;
+            send_summary(&cfg, &project, &refs.summary)?;
+            // QR yorliqlar: telefon o'qigan kod nimaligini ko'rsatishi uchun.
+            send_labels(&cfg, &project, &refs.labels)?;
+            // Yozishma: avval yuboriladi, keyin olinadi — shunda o'z
+            // xabaring darrov ro'yxatda ko'rinadi.
+            if !chat.outgoing.trim().is_empty() {
+                send_message(&cfg, &project, &chat.outgoing)?;
+            }
+            let messages = fetch_messages(&cfg, &project, chat.since)?;
             let pulled = pull(&cfg, &project, cfg.last_pull)?;
-            Ok(Outcome { pushed, pulled })
+            Ok(Outcome {
+                pushed,
+                pulled,
+                messages,
+            })
         })();
         let _ = tx.send(result);
     });
@@ -575,10 +728,8 @@ pub fn spawn(
     _cfg: Config,
     _project: String,
     _outgoing: Option<(String, i64)>,
-    _notices: Vec<NoticeOut>,
-    _tasks: Vec<TaskOut>,
-    _workers: Vec<WorkerOut>,
-    _summary: Vec<SummaryOut>,
+    _refs: Refs,
+    _chat: Chat,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = tx.send(Err(Error::NotConfigured));
@@ -588,6 +739,52 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Yorliqlar so'rovi serverning kutgan shaklida bo'ladi.
+    #[test]
+    fn labels_are_sent_in_the_shape_the_server_expects() {
+        let body = labels_body(
+            "OBY-1",
+            &[LabelOut {
+                kind: "batch".into(),
+                number: "P-12".into(),
+                title: "Sement \"M400\"".into(),
+                note: String::new(),
+            }],
+        );
+        assert!(body.starts_with("{\"project\":\"OBY-1\""), "{body}");
+        assert!(body.contains("\"kind\":\"batch\""), "{body}");
+        assert!(body.contains("\"number\":\"P-12\""), "{body}");
+        // Qo'shtirnoq qochiriladi: aks holda so'rov buzilardi.
+        assert!(body.contains("Sement \\\"M400\\\""), "{body}");
+        // Bo'sh ro'yxat ham to'g'ri shaklda ketadi — bu «yorliq yo'q» degani.
+        assert!(labels_body("OBY-1", &[]).contains("\"items\":[]"));
+    }
+
+    /// Xabar so'rovi va javobi.
+    #[test]
+    fn messages_survive_a_broken_reply() {
+        let body = message_body("OBY-1", "Sement tugadi");
+        assert!(body.contains("\"text\":\"Sement tugadi\""), "{body}");
+
+        let list = parse_messages(
+            r#"{"messages":[
+                {"id":7,"author":"Alisher","role":"foreman","text":"Sement tugadi","at":"2026-09-08T07:41:12Z"},
+                {"id":8,"author":"Ofis","role":"pm","text":"","at":"2026-09-08T08:00:00Z"},
+                {"id":0,"author":"X","role":"","text":"raqamsiz","at":""}
+            ]}"#,
+        );
+        // Bo'sh matn va raqamsiz yozuv olinmaydi.
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].id, 7);
+        assert_eq!(list[0].author, "Alisher");
+
+        // Buzilgan javob xatoga olib kelmaydi — chat butun
+        // sinxronizatsiyani to'xtatmasligi kerak.
+        assert!(parse_messages("bu JSON emas").is_empty());
+        assert!(parse_messages("{}").is_empty());
+        assert!(parse_messages(r#"{"messages":"matn"}"#).is_empty());
+    }
 
     /// Haqiqiy server bilan boshdan-oxir: kirish, yuborish, olish.
     ///

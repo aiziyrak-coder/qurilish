@@ -2172,6 +2172,128 @@ mod tests {
         assert_eq!(hq.journal.len(), before);
     }
 
+    /// TZ XIII.4: telefondan kelgan kirish-chiqish belgisi ilovaga tushadi
+    /// va tabel bilan solishtiriladi.
+    #[test]
+    fn a_mark_from_the_phone_lands_in_the_app() {
+        let field = TempDb::new();
+        let pid = field.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&field.path).unwrap());
+        app.select_project(pid);
+        let who = app.workers.first().expect("ishchi").name.clone();
+        assert!(app.attendance.is_empty());
+
+        // Server yuboradigan paketning aynan o'zi.
+        let text = format!(
+            "QURAI-PACKAGE\t1\nPROJECT\tOBY\n\n#attendance\n\
+worker\tat\tkind\tgps\tsource\n\
+{who}\t2026-09-08T08:00:00\tin\t41.299500,69.240100,12\tqr\n\
+{who}\t2026-09-08T17:00:00\tout\t41.299500,69.240100,12\tlist\n"
+        );
+        let pkg = crate::package::read(&text).expect("o'qildi");
+        let (added, _) = app.import_package(&pkg);
+        assert_eq!(added, 2, "belgilar qo'shilmadi");
+        app.reload_modules();
+        assert_eq!(app.attendance.len(), 2);
+
+        // Kun juftlanadi: 9 soat.
+        let days = app.attendance_days();
+        assert_eq!(days.len(), 1);
+        assert!((days[0].hours - 9.0).abs() < 1e-9, "{}", days[0].hours);
+        assert!(days[0].by_qr, "QR bilan qo'yilgani ko'rinishi kerak");
+        assert!(!days[0].open);
+
+        // Ikkinchi import dublikat bermaydi.
+        let (added2, existing2) = app.import_package(&pkg);
+        assert_eq!(added2, 0);
+        assert!(existing2 > 0);
+        app.reload_modules();
+        assert_eq!(app.attendance.len(), 2);
+    }
+
+    /// TZ XIII.5: geozona kiritilmaguncha joy bo'yicha hukm chiqmaydi.
+    #[test]
+    fn without_a_fence_there_is_no_verdict_about_place() {
+        let field = TempDb::new();
+        let pid = field.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&field.path).unwrap());
+        app.select_project(pid);
+        let who = app.workers.first().expect("ishchi").name.clone();
+
+        app.db.insert_attendance(&crate::domain::Attendance {
+            id: 0,
+            project_id: pid,
+            worker: who,
+            at: chrono::NaiveDate::from_ymd_opt(2026, 9, 8)
+                .unwrap()
+                .and_hms_opt(8, 0, 0)
+                .unwrap(),
+            kind: crate::domain::InOut::In,
+            // Obyektdan uzoqda.
+            gps: "41.330000,69.240100,10".into(),
+            source: "list".into(),
+        });
+        app.reload_modules();
+
+        assert!(app.fence().is_none());
+        assert_eq!(
+            app.attendance_days()[0].verdict,
+            crate::geo::Verdict::Unknown,
+            "geozonasiz hukm chiqmasligi kerak"
+        );
+
+        // Geozona kiritilgach — chetlanish ko'rinadi va saqlanadi.
+        app.set_fence(Some(crate::geo::Fence {
+            center: crate::geo::Point::new(41.2995, 69.2401),
+            radius: 100.0,
+        }));
+        let fence = app.fence().expect("saqlanishi kerak");
+        assert!((fence.radius - 100.0).abs() < 1e-9);
+        assert!(app.attendance_days()[0].verdict.outside());
+        assert!(app
+            .attendance_mismatch()
+            .iter()
+            .any(|m| matches!(m, crate::attend::Mismatch::Outside { .. })));
+
+        // O'chirilsa yana hukm yo'q.
+        app.set_fence(None);
+        assert!(app.fence().is_none());
+    }
+
+    /// TZ V.13: telefondan kelgan koordinata jurnal yozuvida saqlanadi.
+    #[test]
+    fn a_journal_entry_from_the_phone_keeps_its_place() {
+        let field = TempDb::new();
+        let pid = field.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&field.path).unwrap());
+        app.select_project(pid);
+
+        let text = "QURAI-PACKAGE\t1\nPROJECT\tOBY\n\n#journal\n\
+date\tauthor\ttext\tgps\n\
+2026-09-08\tAlisher\tBeton quyildi\t41.299500,69.240100,12\n";
+        let pkg = crate::package::read(text).expect("o'qildi");
+        let (added, _) = app.import_package(&pkg);
+        assert_eq!(added, 1);
+        app.reload_modules();
+
+        let entry = app
+            .journal
+            .iter()
+            .find(|j| j.text == "Beton quyildi")
+            .expect("yozuv");
+        let point = crate::geo::parse(&entry.gps).expect("koordinata");
+        assert!((point.lat - 41.2995).abs() < 1e-6);
+        assert_eq!(point.accuracy, 12.0);
+
+        // Ilovaning o'z paketiga ham koordinata bilan chiqadi.
+        let out = app.export_package();
+        let table = out.table("journal").expect("jurnal");
+        assert!(
+            table.columns.iter().any(|c| c == "gps"),
+            "paketda gps ustuni yo'q"
+        );
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {
@@ -6781,6 +6903,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 text: "kun yakuni".into(),
                 remarks: String::new(),
                 photos: "foto.jpg".into(),
+                gps: String::new(),
             });
         }
         for w in app.workers.iter().filter(|w| w.active) {
@@ -6875,6 +6998,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             text: String::new(),
             remarks: String::new(),
             photos: String::new(),
+            gps: String::new(),
         };
         let norm = MaterialNorm {
             id: 1,
@@ -6953,6 +7077,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             text: String::new(),
             remarks: String::new(),
             photos: String::new(),
+            gps: String::new(),
         };
 
         // Qolgan hajm 10; 25 yozilgan — ziddiyat.
@@ -7017,6 +7142,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 text: String::new(),
                 remarks: String::new(),
                 photos: String::new(),
+                gps: String::new(),
             })
             .collect();
 
@@ -9105,6 +9231,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             text: String::new(),
             remarks: String::new(),
             photos: String::new(),
+            gps: String::new(),
         };
         let norm = MaterialNorm {
             id: 1,

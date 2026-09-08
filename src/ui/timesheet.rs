@@ -95,6 +95,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (3, t("ts_tab_periods")),
             (4, t("ts_tab_staff")),
             (5, t("ts_tab_objects")),
+            (6, t("ts_tab_attendance")),
         ],
     );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
@@ -106,6 +107,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         3 => periods_tab(ui, app),
         4 => staff_tab(ui, app),
         5 => objects_tab(ui, app),
+        6 => attendance_tab(ui, app),
         _ => {
             if app.workers.is_empty() {
                 ui.add_space(40.0);
@@ -594,6 +596,184 @@ fn sheet_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
 }
 
 // ================================================================ Brigadalar
+
+/// Kirish/chiqish (TZ XIII.4, XIII.5, XIII.6).
+///
+/// Ekran ikki qismdan iborat: **farqlar** (nima e'tiborga muhtoj) va
+/// **kunlar** (nima bo'lgani). Farqlar oldinda turadi — ochilgan zahoti
+/// savol tug'iladigan joy ko'rinsin.
+fn attendance_tab(ui: &mut egui::Ui, app: &mut App) {
+    let fence = app.fence();
+
+    // --- Geozona: joy bo'yicha tekshiruv shundan boshlanadi.
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(t("geo_fence")).size(12.0).strong());
+        match fence {
+            Some(f) => {
+                ui.label(
+                    RichText::new(format!(
+                        "{} · {} {:.0} m",
+                        f.center.label(),
+                        t("geo_radius"),
+                        f.radius
+                    ))
+                    .size(12.0),
+                );
+            }
+            None => {
+                ui.label(
+                    RichText::new(t("geo_fence_empty"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+            }
+        }
+        ui.label(
+            RichText::new(t("geo_fence_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(4.0);
+
+    // --- Ishchi QR yorliqlari: telefon o'qiganda uning sahifasi ochiladi.
+    if !app.workers.is_empty()
+        && ui
+            .button(t("at_worker_labels"))
+            .on_hover_text(t("at_worker_labels_hint"))
+            .clicked()
+    {
+        let rows: Vec<(String, String, String)> = app
+            .workers
+            .iter()
+            .filter(|w| w.active)
+            .map(|w| {
+                (
+                    w.name.clone(),
+                    w.name.clone(),
+                    if w.position.trim().is_empty() {
+                        t("at_title").to_string()
+                    } else {
+                        w.position.clone()
+                    },
+                )
+            })
+            .collect();
+        app.save_labels(crate::qr::Kind::Worker, rows);
+    }
+    ui.add_space(6.0);
+
+    if app.attendance.is_empty() {
+        ui.add_space(20.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("at_empty"))
+                    .color(theme::muted())
+                    .size(14.0),
+            );
+        });
+        ui.add_space(6.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(t("at_hint")).size(11.0).color(theme::muted()));
+        });
+        return;
+    }
+
+    let days = app.attendance_days();
+    let mismatch = app.attendance_mismatch();
+
+    ui.label(RichText::new(t("at_hint")).size(11.0).color(theme::muted()));
+    ui.add_space(6.0);
+
+    if mismatch.is_empty() {
+        ui.label(
+            RichText::new(format!("✓ {}", t("at_agree")))
+                .size(12.0)
+                .color(theme::ok()),
+        );
+    } else {
+        for m in mismatch.iter().take(30) {
+            let color = if m.severe() {
+                theme::danger()
+            } else {
+                theme::warn()
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new(if m.severe() { "!" } else { "·" }).color(color));
+                ui.label(
+                    RichText::new(format!("{} · {}", m.date().format("%d.%m"), m.worker()))
+                        .size(12.0)
+                        .strong(),
+                );
+                ui.label(RichText::new(m.text()).size(12.0).color(color));
+            });
+        }
+    }
+
+    ui.add_space(10.0);
+    egui::ScrollArea::vertical()
+        .id_salt("attendance_days")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("attendance_grid")
+                .striped(true)
+                .num_columns(6)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    for h in [
+                        t("col_date"),
+                        t("col_worker"),
+                        t("at_first_in"),
+                        t("at_last_out"),
+                        t("hours_short"),
+                        t("geo_distance"),
+                    ] {
+                        ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+
+                    for d in &days {
+                        ui.label(RichText::new(d.date.format("%d.%m.%Y").to_string()).size(12.0));
+                        let who = if d.by_qr {
+                            format!("{} · {}", d.worker, t("at_by_qr"))
+                        } else {
+                            d.worker.clone()
+                        };
+                        ui.label(RichText::new(who).size(12.0))
+                            .on_hover_text(format!("{}: {}", t("at_marks"), d.marks));
+                        ui.label(
+                            RichText::new(
+                                d.first_in
+                                    .map(|x| x.format("%H:%M").to_string())
+                                    .unwrap_or_else(|| "—".into()),
+                            )
+                            .size(12.0),
+                        );
+                        ui.label(
+                            RichText::new(
+                                d.last_out
+                                    .map(|x| x.format("%H:%M").to_string())
+                                    .unwrap_or_else(|| "—".into()),
+                            )
+                            .size(12.0),
+                        );
+                        let hours = RichText::new(d.hours_label()).size(12.0);
+                        ui.label(if d.open {
+                            hours.color(theme::warn())
+                        } else {
+                            hours
+                        });
+                        let v = RichText::new(d.verdict.label()).size(11.0);
+                        ui.label(if d.verdict.outside() {
+                            v.color(theme::danger())
+                        } else {
+                            v.color(theme::muted())
+                        });
+                        ui.end_row();
+                    }
+                });
+        });
+}
 
 fn brigades_tab(ui: &mut egui::Ui, app: &mut App, week: NaiveDate) {
     if app.brigades.is_empty() {

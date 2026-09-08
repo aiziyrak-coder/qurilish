@@ -457,6 +457,7 @@ fn journal_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
             text: String::new(),
             remarks: String::new(),
             photos: String::new(),
+            gps: String::new(),
         });
         app.reload_modules();
     }

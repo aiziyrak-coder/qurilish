@@ -23,6 +23,21 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
+    let tab_key = egui::Id::new("nt_tab");
+    let mut tab = ui.data(|d| d.get_temp::<u8>(tab_key)).unwrap_or(0);
+    super::tab_row(
+        ui,
+        &mut tab,
+        &[(0, t("nt_tab_list")), (1, t("nt_tab_chat"))],
+        &[],
+    );
+    ui.data_mut(|d| d.insert_temp(tab_key, tab));
+    ui.add_space(8.0);
+    if tab == 1 {
+        chat_tab(ui, app);
+        return;
+    }
+
     let list = app.notices.clone();
 
     ui.horizontal(|ui| {
@@ -167,4 +182,102 @@ fn severity_color(s: Severity) -> egui::Color32 {
         Severity::Warning => theme::accent(),
         Severity::Info | Severity::Ok => theme::muted(),
     }
+}
+
+/// Ofis bilan yozishma (TZ VI.32).
+///
+/// Yozishma **serverda** yuritiladi va shu sababli aloqa kerak. Server
+/// sozlanmagan bo'lsa ekran buni ochiq aytadi va bo'sh ro'yxat
+/// ko'rsatmaydi: «xabar yo'q» bilan «ulanish yo'q» bir xil ko'rinmasligi
+/// kerak.
+fn chat_tab(ui: &mut egui::Ui, app: &mut App) {
+    let ready = app.sync.ready();
+
+    ui.label(
+        RichText::new(t("chat_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    if !ready {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("·").color(theme::warn()));
+            ui.label(
+                RichText::new(t("chat_needs_server"))
+                    .size(12.0)
+                    .color(theme::warn()),
+            );
+        });
+        ui.add_space(6.0);
+    }
+
+    // --- Yozish maydoni.
+    ui.horizontal(|ui| {
+        let width = (ui.available_width() - 120.0).max(120.0);
+        ui.add(
+            egui::TextEdit::multiline(&mut app.chat_draft)
+                .desired_width(width)
+                .desired_rows(2)
+                .hint_text(t("chat_placeholder")),
+        );
+        ui.vertical(|ui| {
+            let can = ready && !app.chat_draft.trim().is_empty();
+            if ui
+                .add_enabled(can, egui::Button::new(t("chat_send")))
+                .on_hover_text(t("chat_send_hint"))
+                .clicked()
+            {
+                app.send_chat();
+            }
+            if ui
+                .button(t("chat_refresh"))
+                .on_hover_text(t("chat_refresh_hint"))
+                .clicked()
+                && ready
+            {
+                app.sync_now();
+            }
+        });
+    });
+    ui.add_space(10.0);
+
+    if app.messages.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("chat_empty"))
+                    .color(theme::muted())
+                    .size(14.0),
+            );
+        });
+        return;
+    }
+
+    // Yangi xabar pastda: suhbat shunday o'qiladi.
+    egui::ScrollArea::vertical()
+        .id_salt("chat_list")
+        .auto_shrink([false, false])
+        .stick_to_bottom(true)
+        .show(ui, |ui| {
+            for m in &app.messages {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(&m.author).size(12.0).strong());
+                    ui.label(
+                        RichText::new(crate::ui::short_stamp(&m.at))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                    if !m.role.trim().is_empty() {
+                        ui.label(
+                            RichText::new(crate::roles::Role::parse(&m.role).label())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                    }
+                });
+                ui.label(RichText::new(&m.text).size(13.0));
+                ui.add_space(8.0);
+            }
+        });
 }

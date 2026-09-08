@@ -554,6 +554,18 @@ pub struct App {
     pub ppr_docs: Vec<PprDoc>,
     pub exec_docs: Vec<ExecDoc>,
     pub journal: Vec<JournalEntry>,
+    /// Maydonchaga kirish-chiqish belgilari (TZ XIII.4). Faqat telefondan
+    /// keladi — ilovada qo'lda kiritilmaydi.
+    pub attendance: Vec<crate::domain::Attendance>,
+    /// Ofis bilan yozishma (TZ VI.32). Serverda yuritiladi, bu yerda nusxa.
+    pub messages: Vec<crate::domain::ChatMessage>,
+    /// Yozishma maydonidagi matn.
+    pub chat_draft: String,
+    /// Keyingi sinxronizatsiyada yuboriladigan xabar.
+    pub chat_outgoing: String,
+    /// Oxirgi foto-nazorat natijasi (TZ V.9). Tugma bosilganda hisoblanadi:
+    /// fayllar diskdan o'qiladi va bu har kadrda qilinadigan ish emas.
+    pub photo_report: Option<Vec<crate::photocheck::PhotoIssue>>,
     pub materials: Vec<Material>,
     pub stock_moves: Vec<StockMove>,
     pub warehouses: Vec<Warehouse>,
@@ -778,6 +790,11 @@ impl App {
             ppr_docs: Vec::new(),
             exec_docs: Vec::new(),
             journal: Vec::new(),
+            attendance: Vec::new(),
+            messages: Vec::new(),
+            chat_draft: String::new(),
+            chat_outgoing: String::new(),
+            photo_report: None,
             materials: Vec::new(),
             stock_moves: Vec::new(),
             warehouses: Vec::new(),
@@ -1089,6 +1106,10 @@ impl App {
         self.ppr_docs = self.db.ppr_docs(id);
         self.exec_docs = self.db.exec_docs(id);
         self.journal = self.db.journal(id);
+        self.attendance = self.db.attendance(id);
+        self.messages = self.db.messages(id);
+        // Boshqa obyektning foto hisoboti qolib ketmasin.
+        self.photo_report = None;
         self.materials = self.db.materials(id);
         self.stock_moves = self.db.stock_moves(id);
         self.warehouses = self.db.warehouses(id);
@@ -1361,6 +1382,7 @@ impl App {
                 "unit".into(),
                 "text".into(),
                 "remarks".into(),
+                "gps".into(),
             ],
             rows: self
                 .journal
@@ -1378,6 +1400,7 @@ impl App {
                         j.unit.clone(),
                         j.text.clone(),
                         j.remarks.clone(),
+                        j.gps.clone(),
                     ]
                 })
                 .collect(),
@@ -1556,8 +1579,48 @@ impl App {
                     text,
                     remarks: m.get("remarks").copied().unwrap_or("").into(),
                     photos: String::new(),
+                    // Telefondan kelgan yozuvda koordinata bo'lishi mumkin;
+                    // eski paketda bu ustun yo'q — bo'sh qoladi.
+                    gps: m.get("gps").copied().unwrap_or("").into(),
                 });
                 added += 1;
+            }
+        }
+
+        // ---- Kirish/chiqish: telefondan keladi, ilovada yaratilmaydi.
+        if let Some(t) = pkg.table("attendance") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let who = m.get("worker").copied().unwrap_or("").trim().to_string();
+                if who.is_empty() {
+                    continue;
+                }
+                let at = crate::store::parse_stamp(m.get("at").copied().unwrap_or(""));
+                let kind = crate::domain::InOut::parse(m.get("kind").copied().unwrap_or("in"));
+                // Bir xil belgi ikki marta kelishi mumkin: baza uni o'zi
+                // rad etadi, biz esa «qo'shildi» deb sanamaymiz.
+                let already = self
+                    .attendance
+                    .iter()
+                    .any(|a| a.worker == who && a.at == at && a.kind == kind);
+                if already {
+                    existing += 1;
+                    continue;
+                }
+                let id = self.db.insert_attendance(&crate::domain::Attendance {
+                    id: 0,
+                    project_id: pid,
+                    worker: who,
+                    at,
+                    kind,
+                    gps: m.get("gps").copied().unwrap_or("").into(),
+                    source: m.get("source").copied().unwrap_or("").into(),
+                });
+                if id > 0 {
+                    added += 1;
+                } else {
+                    existing += 1;
+                }
             }
         }
 
@@ -2041,14 +2104,25 @@ impl App {
             })
             .collect();
 
+        let since = self
+            .project()
+            .map(|p| self.db.last_message_id(p.id))
+            .unwrap_or(0);
         self.sync_pending = Some(crate::sync::spawn(
             self.sync.clone(),
             project,
             Some((body, rows)),
-            notices,
-            tasks,
-            workers,
-            summary,
+            crate::sync::Refs {
+                notices,
+                tasks,
+                workers,
+                summary,
+                labels: self.label_refs(),
+            },
+            crate::sync::Chat {
+                outgoing: std::mem::take(&mut self.chat_outgoing),
+                since,
+            },
         ));
         self.sync_status = Some((t("sync_running").to_string(), false));
     }
@@ -2081,6 +2155,26 @@ impl App {
                         Err(_) => skipped += 1,
                     }
                 }
+                // Yangi xabarlar saqlanadi: internet yo'q paytda ham
+                // yozishma ochilsin.
+                if let Some(pid) = self.project().map(|p| p.id) {
+                    for m in &outcome.messages {
+                        self.db.insert_message(&crate::domain::ChatMessage {
+                            id: 0,
+                            project_id: pid,
+                            server_id: m.id,
+                            author: m.author.clone(),
+                            role: m.role.clone(),
+                            text: m.text.clone(),
+                            at: m.at.clone(),
+                        });
+                    }
+                    if !outcome.messages.is_empty() {
+                        self.messages = self.db.messages(pid);
+                    }
+                }
+                // Xabar yuborilgan bo'lsa maydon bo'shaydi.
+                self.chat_draft.clear();
                 if outcome.pulled.last > self.sync.last_pull {
                     self.sync.last_pull = outcome.pulled.last;
                     self.save_sync();
@@ -2100,6 +2194,11 @@ impl App {
                 ));
             }
             Err(e) => {
+                // Yuborilmagan xabar maydonda qoladi: «yuborildi» deb
+                // aldab qo'yilmaydi.
+                if !self.chat_outgoing.trim().is_empty() && self.chat_draft.trim().is_empty() {
+                    self.chat_draft = std::mem::take(&mut self.chat_outgoing);
+                }
                 // Seans tugagan bo'lsa, belgi foydasiz — qayta kirish kerak.
                 if e == crate::sync::Error::Auth {
                     self.sync.token.clear();
@@ -2537,6 +2636,121 @@ impl App {
             Ok(()) => self.notify(format!("{} {count} · {}", t("qr_done"), path.display())),
             Err(e) => self.notify(format!("{}: {e}", t("export_failed"))),
         }
+    }
+
+    /// Obyekt geozonasi (TZ XIII.5, XV.5).
+    ///
+    /// Sozlama obyekt bo'yicha saqlanadi: bitta bazada bir necha obyekt
+    /// bo'lishi mumkin va ularning joyi har xil.
+    pub fn fence(&self) -> Option<crate::geo::Fence> {
+        let id = self.project()?.id;
+        crate::geo::Fence::parse(&self.db.get_setting(&format!("fence.{id}"))?)
+    }
+
+    /// Geozonani saqlaydi. `None` — o'chirish.
+    pub fn set_fence(&mut self, fence: Option<crate::geo::Fence>) {
+        let Some(id) = self.project().map(|p| p.id) else {
+            return;
+        };
+        let value = fence.map(|f| f.store()).unwrap_or_default();
+        let _ = self.db.set_setting(&format!("fence.{id}"), &value);
+    }
+
+    /// Kirish-chiqish belgilaridan kunlar (TZ XIII.4).
+    pub fn attendance_days(&self) -> Vec<crate::attend::Day> {
+        crate::attend::days(&self.attendance, self.fence())
+    }
+
+    /// Belgi va tabel orasidagi farqlar (TZ XIII.4).
+    pub fn attendance_mismatch(&self) -> Vec<crate::attend::Mismatch> {
+        crate::attend::compare(&self.attendance_days(), &self.timesheet, &self.workers)
+    }
+
+    /// Jurnal fotolariga e'tirozlar (TZ V.9, XIV.14).
+    ///
+    /// Fayllar diskdan o'qiladi, shuning uchun chaqiruv har kadrda emas,
+    /// tugma bosilganda bajariladi.
+    pub fn photo_issues(&self) -> Vec<crate::photocheck::PhotoIssue> {
+        crate::photocheck::check(
+            &crate::photocheck::from_journal(&self.journal),
+            self.fence(),
+        )
+    }
+
+    /// Serverga yuboriladigan QR yorliqlar ro'yxati (TZ VI.11).
+    ///
+    /// Telefon o'qigan kod nimaligini ko'rsatishi uchun kerak. Yozuvning
+    /// o'zi emas, faqat qisqa nomi ketadi: baza va hisob-kitob ilovada
+    /// qoladi.
+    pub fn label_refs(&self) -> Vec<crate::sync::LabelOut> {
+        let mut out = Vec::new();
+        for u in &self.units {
+            out.push(crate::sync::LabelOut {
+                kind: "unit".into(),
+                number: u.number.clone(),
+                title: format!("{} {}", t("col_unit"), u.number),
+                note: format!(
+                    "{} {} · {} m² · {}",
+                    u.floor,
+                    t("floor_short"),
+                    crate::ui::materials::trim_num(u.area),
+                    u.kind.label()
+                ),
+            });
+        }
+        for b in &self.batches {
+            let material = self
+                .materials
+                .iter()
+                .find(|m| m.id == b.material_id)
+                .map(|m| m.name.clone())
+                .unwrap_or_default();
+            out.push(crate::sync::LabelOut {
+                kind: "batch".into(),
+                number: b.number.clone(),
+                title: material,
+                note: format!("{} · {}", b.received, b.supplier),
+            });
+        }
+        for d in &self.exec_docs {
+            out.push(crate::sync::LabelOut {
+                kind: "doc".into(),
+                number: d.number.clone(),
+                title: d.name.clone(),
+                note: format!("{} · {}", d.kind.label(), d.date),
+            });
+        }
+        for w in self.workers.iter().filter(|w| w.active) {
+            out.push(crate::sync::LabelOut {
+                kind: "worker".into(),
+                number: w.name.clone(),
+                title: w.name.clone(),
+                note: w.position.clone(),
+            });
+        }
+        out
+    }
+
+    /// Yozishmaga xabar qo'shadi (TZ VI.32).
+    ///
+    /// Xabar **serverga** ketadi, shuning uchun aloqa kerak. Aloqa
+    /// bo'lmasa matn maydonda qoladi va sabab aytiladi — «yuborildi» deb
+    /// aldab qo'yilmaydi.
+    pub fn send_chat(&mut self) {
+        let text = self.chat_draft.trim().to_string();
+        if text.is_empty() {
+            return;
+        }
+        if !self.sync.ready() {
+            self.notify(t("chat_needs_server").to_string());
+            return;
+        }
+        if self.sync_pending.is_some() {
+            self.notify(t("sync_running").to_string());
+            return;
+        }
+        self.chat_outgoing = text;
+        self.sync_now();
     }
 
     /// Sertifikat nazorati (TZ IV.11, XII.27).

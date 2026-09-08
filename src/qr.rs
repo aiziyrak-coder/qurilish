@@ -33,6 +33,8 @@ pub enum Kind {
     Unit,
     Batch,
     Document,
+    /// Ishchi bejigi: telefonda o'qilganda kirish-chiqish sahifasi ochiladi.
+    Worker,
 }
 
 impl Kind {
@@ -42,6 +44,7 @@ impl Kind {
             Kind::Unit => "unit",
             Kind::Batch => "batch",
             Kind::Document => "doc",
+            Kind::Worker => "worker",
         }
     }
 }

@@ -947,3 +947,409 @@ fn read_only_role_cannot_send_summary() {
         assert_eq!(code, StatusCode::FORBIDDEN);
     });
 }
+
+// ================================================ Kirish/chiqish, QR va chat
+
+/// Telefondan cookie oladi — quyidagi sinovlar shu bilan ishlaydi.
+async fn cookie_for(app: &axum::Router, login: &str, password: &str) -> String {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                .body(Body::from(format!("login={login}&password={password}")))
+                .expect("so'rov"),
+        )
+        .await
+        .expect("javob");
+    resp.headers()
+        .get(header::SET_COOKIE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(';').next())
+        .expect("cookie")
+        .to_string()
+}
+
+/// Sahifa matnini oladi.
+async fn page_text(app: &axum::Router, uri: &str, cookie: &str) -> (StatusCode, String) {
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
+                .expect("so'rov"),
+        )
+        .await
+        .expect("javob");
+    let status = resp.status();
+    let bytes = resp.into_body().collect().await.expect("tana").to_bytes();
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// TZ XIII.4: belgi telefondan qo'yiladi va ofisga paket bo'lib boradi.
+#[test]
+fn a_mark_from_the_phone_reaches_the_office() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+        // Ishchilar ro'yxati ilovadan keladi.
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/workers",
+                Some(&token),
+                json!({"project":"OBY-1","items":[{"name":"Alisher","position":"Beton"}]}),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let (code, html) = page_text(&app, "/o/OBY-1/checkin", &cookie).await;
+        assert_eq!(code, StatusCode::OK);
+        assert!(html.contains("Alisher"), "ro'yxat ko'rinmadi");
+
+        // Belgi qo'yamiz — koordinata bilan.
+        let form = "worker=Alisher&kind=in&gps=41.299500%2C69.240100%2C12&source=qr";
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/checkin")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(form))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+
+        // Ofisdagi ilova uni oddiy paket sifatida oladi.
+        let (code, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
+        assert_eq!(code, StatusCode::OK);
+        let text = body["changes"][0]["body"].as_str().expect("matn");
+        assert!(text.contains("#attendance"), "{text}");
+        assert!(text.contains("Alisher"), "{text}");
+        assert!(text.contains("41.299500,69.240100,12"), "{text}");
+        assert!(text.contains("\tqr"), "{text}");
+
+        // Sahifa endi keyingi belgi «chiqish» ekanini biladi.
+        let (_, html) = page_text(&app, "/o/OBY-1/checkin?w=Alisher", &cookie).await;
+        assert!(html.contains("Chiqdim"), "{html}");
+    });
+}
+
+/// Ro'yxatda yo'q ishchiga belgi qo'yilmaydi: tabel ilovada yuritiladi.
+#[test]
+fn a_stranger_cannot_be_marked() {
+    runtime().block_on(async {
+        let (app, state) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/checkin")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("worker=Notanish&kind=in"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        // Qayta yo'naltirish emas — sahifada sabab yoziladi.
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(state.store.attendance("OBY-1", 10).is_empty());
+    });
+}
+
+/// Yolg'on koordinata qabul qilinmaydi.
+#[test]
+fn a_broken_coordinate_becomes_no_coordinate() {
+    use crate::web::clean_gps;
+    assert_eq!(clean_gps("41.2995,69.2401,12"), "41.299500,69.240100,12");
+    assert_eq!(clean_gps("41.2995 69.2401"), "41.299500,69.240100");
+    // Chegaradan tashqarida, bo'sh, harf va nol-nol — hammasi bo'sh.
+    assert_eq!(clean_gps("95,69"), "");
+    assert_eq!(clean_gps("0,0"), "");
+    assert_eq!(clean_gps("shimolda"), "");
+    assert_eq!(clean_gps(""), "");
+    // Aniqlik manfiy bo'lsa yozilmaydi.
+    assert_eq!(clean_gps("41.2995,69.2401,-5"), "41.299500,69.240100");
+}
+
+/// TZ VI.11: o'qilgan kod nimaligi aytiladi, ishchi bo'lsa sahifa ochiladi.
+#[test]
+fn a_scanned_code_finds_its_record() {
+    use crate::web::decode_label;
+    assert_eq!(
+        decode_label("QURAI:OBY-1:batch:P-12"),
+        Some(("batch".into(), "P-12".into()))
+    );
+    assert_eq!(
+        decode_label("http://10.0.0.5:8080/o/OBY-1?unit=12%2FA"),
+        Some(("unit".into(), "12/A".into()))
+    );
+    assert_eq!(decode_label("shunchaki matn"), None);
+    assert_eq!(decode_label("QURAI:buzuq"), None);
+
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/labels",
+                Some(&token),
+                json!({"project":"OBY-1","items":[
+                    {"kind":"batch","number":"P-12","title":"Sement M400","note":"08.09 · Qizilqum"}
+                ]}),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let (code, html) = page_text(
+            &app,
+            "/o/OBY-1/find?code=QURAI%3AOBY-1%3Abatch%3AP-12",
+            &cookie,
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+        assert!(html.contains("Sement M400"), "{html}");
+
+        // Serverga kelmagan yorliq — «ma'lumot yo'q» deyiladi, o'ylab
+        // topilmaydi.
+        let (_, html) = page_text(
+            &app,
+            "/o/OBY-1/find?code=QURAI%3AOBY-1%3Adoc%3AAOSR-9",
+            &cookie,
+        )
+        .await;
+        assert!(html.contains("hali kelmagan"), "{html}");
+
+        // Ishchi kodi darrov belgilash sahifasiga olib boradi.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/o/OBY-1/find?code=QURAI%3AOBY-1%3Aworker%3AAlisher")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        let to = resp
+            .headers()
+            .get(header::LOCATION)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        assert!(to.contains("/checkin?w=Alisher"), "{to}");
+    });
+}
+
+/// TZ VI.32: maydonchadan yozilgan xabar ofisga, ofisdan yozilgani
+/// telefonga yetadi.
+#[test]
+fn the_office_and_the_site_see_the_same_conversation() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/chat")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("text=Sement+tugadi"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+
+        // Ofisdagi ilova xabarni oladi.
+        let token = login(&app, "nazorat", "nazorat-parol-1").await;
+        let (code, body) = send(
+            &app,
+            get("/api/messages?project=OBY-1&since=0", Some(&token)),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+        let list = body["messages"].as_array().expect("ro'yxat");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["text"], "Sement tugadi");
+        assert_eq!(list[0]["author"], "Alisher");
+        let first = list[0]["id"].as_i64().expect("raqam");
+
+        // Ofis javob yozadi.
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/message",
+                Some(&token),
+                json!({"project":"OBY-1","text":"Ertaga keladi"}),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+
+        // Telefon uni ko'radi.
+        let (_, html) = page_text(&app, "/o/OBY-1/chat", &cookie).await;
+        assert!(html.contains("Ertaga keladi"), "{html}");
+
+        // `since` bilan faqat yangisi keladi — takror kelmaydi.
+        let (_, body) = send(
+            &app,
+            get(
+                &format!("/api/messages?project=OBY-1&since={first}"),
+                Some(&token),
+            ),
+        )
+        .await;
+        let list = body["messages"].as_array().expect("ro'yxat");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0]["text"], "Ertaga keladi");
+    });
+}
+
+/// Faqat ko'ruvchi rol xabar yozmaydi, lekin o'qiy oladi.
+#[test]
+fn a_read_only_role_can_read_but_not_write_messages() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "mijoz", "mijoz-parol-11").await;
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/message",
+                Some(&token),
+                json!({"project":"OBY-1","text":"Salom"}),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::FORBIDDEN);
+
+        let cookie = cookie_for(&app, "mijoz", "mijoz-parol-11").await;
+        let (code, html) = page_text(&app, "/o/OBY-1/chat", &cookie).await;
+        assert_eq!(code, StatusCode::OK);
+        assert!(html.contains("faqat o'qiydi"), "{html}");
+        assert!(!html.contains("<textarea"), "{html}");
+    });
+}
+
+/// TZ VI.28: aloqasiz navbatdan qayta kelgan forma ikkinchi yozuv
+/// yaratmaydi.
+///
+/// Xizmat ishchisi yuborilmagan formani telefonda saqlaydi va aloqa
+/// qaytganda qayta yuboradi. Javob kelmagan bo'lsa u birinchi urinish
+/// yetgan-yetmaganini bilmaydi, shuning uchun himoya **serverda**
+/// bo'lishi shart.
+#[test]
+fn a_queued_form_sent_twice_is_written_once() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+
+        // Forma sahifasi belgini o'zi qo'yadi.
+        let (_, html) = page_text(&app, "/o/OBY-1/journal", &cookie).await;
+        let nonce = html
+            .split("name=\"nonce\" value=\"")
+            .nth(1)
+            .and_then(|p| p.split('"').next())
+            .expect("belgi topilmadi")
+            .to_string();
+        assert!(nonce.len() > 20, "belgi juda qisqa: {nonce}");
+
+        let form = format!(
+            "date=2026-09-04&text=Beton+quyildi&nonce={nonce}&task=&volume=&unit=\
+&workers=&machines=&weather=&remarks=&gps="
+        );
+        for _ in 0..2 {
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/o/OBY-1/journal")
+                        .header(header::COOKIE, &cookie)
+                        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                        .body(Body::from(form.clone()))
+                        .expect("so'rov"),
+                )
+                .await
+                .expect("javob");
+            // Ikkinchi urinish ham muvaffaqiyatli ko'rinadi: u haqiqatan
+            // ham muvaffaqiyatli edi — birinchi marta.
+            assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+        }
+
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+        let (_, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
+        let changes = body["changes"].as_array().expect("ro'yxat");
+        assert_eq!(changes.len(), 1, "yozuv ikki marta tushdi");
+    });
+}
+
+/// Belgisiz forma qabul qilinadi: eski sahifa yoki JavaScript o'chirilgan
+/// brauzer ham ishlashi kerak.
+#[test]
+fn a_form_without_a_token_still_works() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/journal")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("date=2026-09-04&text=Belgisiz"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+    });
+}
+
+/// TZ VI.38: telefonga o'rnatiladigan ko'rinish uchun kerak bo'lgan
+/// fayllar mavjud va kirishsiz ochiladi.
+#[test]
+fn the_phone_can_install_the_app() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        for (uri, must) in [
+            ("/manifest.webmanifest", "standalone"),
+            ("/sw.js", "qurai-queue"),
+            ("/icon.svg", "<svg"),
+            ("/offline", "Aloqa yo'q"),
+        ] {
+            // Kirish talab qilinmaydi: aks holda brauzer ularni
+            // o'rnatish paytida ololmasdi.
+            let (code, text) = page_text(&app, uri, "").await;
+            assert_eq!(code, StatusCode::OK, "{uri}");
+            assert!(text.contains(must), "{uri}: {text}");
+        }
+
+        // Har sahifada manifest va xizmat ishchisi ulanadi.
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let (_, html) = page_text(&app, "/", &cookie).await;
+        assert!(html.contains("manifest.webmanifest"), "{html}");
+        assert!(html.contains("serviceWorker"), "{html}");
+    });
+}

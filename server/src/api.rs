@@ -140,6 +140,39 @@ pub struct WorkerItem {
 }
 
 #[derive(Deserialize)]
+pub struct MessageReq {
+    pub project: String,
+    pub text: String,
+}
+
+#[derive(Deserialize)]
+pub struct MessagesQuery {
+    pub project: String,
+    #[serde(default)]
+    pub since: i64,
+}
+
+/// Bitta so'rovda beriladigan eng ko'p xabar soni.
+pub const MESSAGE_LIMIT: i64 = 200;
+
+#[derive(Deserialize)]
+pub struct LabelsReq {
+    pub project: String,
+    #[serde(default)]
+    pub items: Vec<LabelItem>,
+}
+
+#[derive(Deserialize)]
+pub struct LabelItem {
+    pub kind: String,
+    pub number: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub note: String,
+}
+
+#[derive(Deserialize)]
 pub struct SummaryReq {
     pub project: String,
     #[serde(default)]
@@ -502,6 +535,44 @@ pub async fn workers(
     }
 }
 
+/// `POST /api/labels` — QR yorliqlar ro'yxati (TZ VI.11, XI.5).
+///
+/// Telefon o'qigan kod nimaligini ko'rsatishi uchun kerak: serverda
+/// yozuvning o'zi emas, uning qisqa nomi turadi.
+pub async fn labels(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<LabelsReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt ko'rsatilmagan");
+    }
+    if req.items.len() > MAX_TASKS {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "yorliq juda ko'p");
+    }
+    let items: Vec<crate::store::LabelRef> = req
+        .items
+        .into_iter()
+        .filter(|l| !l.kind.trim().is_empty() && !l.number.trim().is_empty())
+        .map(|l| crate::store::LabelRef {
+            kind: l.kind,
+            number: l.number,
+            title: l.title,
+            note: l.note,
+        })
+        .collect();
+    match state.store.set_labels(req.project.trim(), &items) {
+        Ok(n) => Json(json!({ "saved": n })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
 /// `POST /api/summary` — obyekt yakuni (buyurtmachi kabineti uchun).
 pub async fn summary(
     State(state): State<Arc<AppState>>,
@@ -537,6 +608,62 @@ pub async fn summary(
         Ok(n) => Json(json!({ "saved": n })).into_response(),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }
+}
+
+/// `POST /api/message` — ofisdan xabar yuborish (TZ VI.32).
+pub async fn message(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<MessageReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol xabar yozmaydi");
+    }
+    let text = req.text.trim();
+    if req.project.trim().is_empty() || text.is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt yoki matn bo'sh");
+    }
+    let at = crate::now();
+    match state.store.add_message(&crate::store::Message {
+        id: 0,
+        project: req.project.trim().to_string(),
+        author: user.name.clone(),
+        role: user.role.clone(),
+        text: text.chars().take(2_000).collect(),
+        at,
+    }) {
+        Ok(id) => Json(json!({ "id": id })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
+/// `GET /api/messages?project=&since=` — yangi xabarlar.
+pub async fn messages(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<MessagesQuery>,
+) -> axum::response::Response {
+    if caller(&state, &headers).is_none() {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    }
+    let list: Vec<_> = state
+        .store
+        .messages(q.project.trim(), q.since, MESSAGE_LIMIT)
+        .into_iter()
+        .map(|m| {
+            json!({
+                "id": m.id,
+                "author": m.author,
+                "role": m.role,
+                "text": m.text,
+                "at": m.at,
+            })
+        })
+        .collect();
+    Json(json!({ "messages": list })).into_response()
 }
 
 /// `GET /api/health` — server tirikmi.

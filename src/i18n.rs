@@ -6379,6 +6379,108 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_overdue_pay_hint" => ("to'lov sanasi o'tdi", "срок платежа прошел"),
         "kpi_avg_m2" => ("O'rtacha 1 m²", "Средняя за м²"),
 
+        // ---------- Yozishma / Переписка ----------
+        "nt_tab_list" => ("Bildirishnomalar", "Уведомления"),
+        "nt_tab_chat" => ("Ofis bilan yozishma", "Переписка с офисом"),
+        "chat_hint" => (
+            "Obyekt bo'yicha umumiy suhbat: maydonchadagi savol va ofisning javobi shu yerda turadi. Xabarlar serverda saqlanadi.",
+            "Общая переписка по объекту: вопрос с площадки и ответ офиса хранятся здесь. Сообщения лежат на сервере.",
+        ),
+        "chat_needs_server" => (
+            "Yozishma server orqali ishlaydi: Sozlamalarda server manzilini kiriting va kiring.",
+            "Переписка работает через сервер: укажите адрес сервера в Настройках и войдите.",
+        ),
+        "chat_placeholder" => ("Xabar matni", "Текст сообщения"),
+        "chat_send" => ("Yuborish", "Отправить"),
+        "chat_send_hint" => (
+            "Xabar serverga yuboriladi va telefonda ham ko'rinadi.",
+            "Сообщение уходит на сервер и появляется также на телефоне.",
+        ),
+        "chat_refresh" => ("Yangilash", "Обновить"),
+        "chat_refresh_hint" => (
+            "Serverdagi yangi xabarlarni oladi.",
+            "Забирает новые сообщения с сервера.",
+        ),
+        "chat_empty" => ("Hali xabar yo'q", "Сообщений пока нет"),
+
+        // ---------- Kirish/chiqish / Приход-уход ----------
+        "io_in" => ("kirish", "приход"),
+        "io_out" => ("chiqish", "уход"),
+        "at_title" => ("Kirish / chiqish", "Приход / уход"),
+        "ts_tab_attendance" => ("Kirish / chiqish", "Приход / уход"),
+        "at_hint" => (
+            "Belgi telefondan qo'yiladi va tabelning o'rnini bosmaydi: soatni odam yozadi, belgi esa uni tekshirish uchun mustaqil dalil bo'ladi.",
+            "Отметка ставится с телефона и не заменяет табель: часы пишет человек, а отметка служит независимым подтверждением.",
+        ),
+        "at_open" => ("ochiq", "открыт"),
+        "at_open_day" => ("chiqish belgilanmagan", "уход не отмечен"),
+        "at_no_marks" => ("belgi yo'q", "отметок нет"),
+        "at_no_timesheet" => ("tabelda kun bo'sh", "в табеле день пуст"),
+        "at_hours_differ" => ("soat farq qiladi", "часы расходятся"),
+        "at_marked" => ("belgi", "отметка"),
+        "at_in_timesheet" => ("tabel", "табель"),
+        "at_outside" => ("belgi obyektdan tashqarida", "отметка вне объекта"),
+        "at_empty" => (
+            "Belgi hali kelmagan: telefondan «Kirish / chiqish» sahifasida qo'yiladi.",
+            "Отметок пока нет: они ставятся с телефона на странице «Приход / уход».",
+        ),
+        "at_marks" => ("Belgi", "Отметок"),
+        "at_first_in" => ("Kirdi", "Пришёл"),
+        "at_last_out" => ("Chiqdi", "Ушёл"),
+        "at_by_qr" => ("QR", "QR"),
+        "at_agree" => ("Tabel bilan mos", "Совпадает с табелем"),
+        "at_worker_labels" => ("Ishchi QR yorliqlari", "QR-бейджи рабочих"),
+        "at_worker_labels_hint" => (
+            "Har ishchiga yorliq: telefonda o'qilganda uning kirish-chiqish sahifasi ochiladi.",
+            "Бейдж на каждого рабочего: при считывании телефоном открывается его страница прихода-ухода.",
+        ),
+        "hours_short" => ("soat", "ч"),
+
+        // ---------- Geolokatsiya / Геолокация ----------
+        "geo_unknown" => ("koordinata yo'q", "координат нет"),
+        "geo_inside" => ("obyekt doirasida", "в пределах объекта"),
+        "geo_outside" => ("obyektdan tashqarida", "вне объекта"),
+        "geo_fence" => ("Obyekt geozonasi", "Геозона объекта"),
+        "geo_fence_hint" => (
+            "Markaz koordinatasi va radius: telefondan kelgan yozuv shu doiraga tushdimi — shu bilan tekshiriladi.",
+            "Координаты центра и радиус: по ним проверяется, попала ли запись с телефона в пределы объекта.",
+        ),
+        "geo_fence_empty" => (
+            "kiritilmagan — joy bo'yicha tekshiruv o'tkazilmaydi",
+            "не задана — проверка по месту не выполняется",
+        ),
+        "geo_suggest" => ("Fotolardan taklif qilish", "Предложить по фото"),
+        "geo_suggest_hint" => (
+            "Jurnaldagi fotolar va telefondan kelgan koordinatalar o'rtachasini markaz sifatida taklif qiladi. Taklif o'zi qabul qilinmaydi — tugma bosilgandagina yoziladi.",
+            "Предлагает центром среднее по координатам фото в журнале и записей с телефона. Предложение не применяется само — только по нажатию.",
+        ),
+        "geo_no_points" => ("Koordinatali foto topilmadi", "Фото с координатами не найдено"),
+        "geo_center" => ("Markaz", "Центр"),
+        "geo_radius" => ("Radius, m", "Радиус, м"),
+        "geo_distance" => ("Masofa", "Расстояние"),
+
+        // ---------- Foto-nazorat / Фотоконтроль ----------
+        "ph_title" => ("Foto-nazorat", "Фотоконтроль"),
+        "jr_tab_photo" => ("Foto-nazorat", "Фотоконтроль"),
+        "ph_hint" => (
+            "Rasmning ichidagi yozuv (EXIF) tekshiriladi: qachon va qayerda olingani. Rasm mazmuni tanilmaydi — buning uchun tashqi model kerak.",
+            "Проверяется запись внутри снимка (EXIF): когда и где он сделан. Содержимое снимка не распознаётся — для этого нужна внешняя модель.",
+        ),
+        "ph_clean" => ("Fotolarga e'tiroz yo'q", "К фото замечаний нет"),
+        "ph_none" => ("Foto biriktirilmagan", "Фото не прикреплены"),
+        "ph_no_data" => (
+            "ichida yozuv yo'q — qachon olingani tekshirilmadi",
+            "внутри нет записи — когда снят, проверить не удалось",
+        ),
+        "ph_wrong_day" => ("boshqa kuni olingan", "снят в другой день"),
+        "ph_expected" => ("kutilgan", "ожидалось"),
+        "ph_outside" => ("obyektdan tashqarida olingan", "снят вне объекта"),
+        "ph_edited" => ("tahrirlovchi dasturdan o'tgan", "прошёл через редактор"),
+        "ph_reused" => ("bir necha yozuvda ishlatilgan", "использован в нескольких записях"),
+        "ph_checked" => ("Tekshirildi", "Проверено"),
+        "ph_taken" => ("Olingan", "Снят"),
+        "ph_camera" => ("Qurilma", "Устройство"),
+
         // ---------- Oy nomlari / Названия месяцев ----------
         "mon_1" => ("yan", "янв"),
         "mon_2" => ("fev", "фев"),

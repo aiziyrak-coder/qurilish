@@ -11,11 +11,22 @@ use crate::db::Db;
 use crate::domain::*;
 use crate::model::Section;
 use crate::roles::{Role, User};
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, NaiveDateTime};
 use rusqlite::{params, Row};
 
 fn date(s: &str) -> NaiveDate {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_else(|_| chrono::Local::now().date_naive())
+}
+
+/// Vaqt belgisi: `2026-09-08T07:41:12` yoki `...Z`.
+///
+/// O'qib bo'lmasa kun boshiga tushadi — yozuv yo'qolib ketgandan ko'ra
+/// noaniq vaqt bilan turgani yaxshiroq, va bu ekranda ko'rinadi.
+pub fn parse_stamp(s: &str) -> NaiveDateTime {
+    let clean = s.trim().trim_end_matches('Z');
+    NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(clean, "%Y-%m-%d %H:%M:%S"))
+        .unwrap_or_else(|_| date(clean).and_hms_opt(0, 0, 0).unwrap_or_default())
 }
 
 fn odate(s: Option<String>) -> Option<NaiveDate> {
@@ -269,6 +280,28 @@ impl Db {
                 task_id INTEGER,
                 note TEXT NOT NULL DEFAULT '',
                 UNIQUE(worker_id, date)
+            );
+
+            CREATE TABLE IF NOT EXISTS message (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                server_id INTEGER NOT NULL DEFAULT 0,
+                author TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT '',
+                text TEXT NOT NULL DEFAULT '',
+                at TEXT NOT NULL DEFAULT '',
+                UNIQUE(project_id, server_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                worker TEXT NOT NULL,
+                at TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'in',
+                gps TEXT NOT NULL DEFAULT '',
+                source TEXT NOT NULL DEFAULT '',
+                UNIQUE(project_id, worker, at, kind)
             );
 
             CREATE TABLE IF NOT EXISTS quality_check (
@@ -873,6 +906,7 @@ impl Db {
             "ALTER TABLE ppr ADD COLUMN approved_at TEXT",
             "ALTER TABLE issue ADD COLUMN deadline TEXT",
             "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE journal ADD COLUMN gps TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
             "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
@@ -2924,7 +2958,7 @@ impl Db {
     pub fn journal(&self, pid: i64) -> Vec<JournalEntry> {
         self.list(
             "SELECT id,project_id,date,author,weather,temperature,workers,machines,task_id,volume,
-                    unit,text,remarks,photos
+                    unit,text,remarks,photos,gps
              FROM journal WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -2943,6 +2977,7 @@ impl Db {
                     text: r.get(11)?,
                     remarks: r.get(12)?,
                     photos: r.get(13)?,
+                    gps: r.get(14)?,
                 })
             },
         )
@@ -2951,8 +2986,8 @@ impl Db {
     pub fn insert_journal(&self, j: &JournalEntry) -> i64 {
         self.ins(
             "INSERT INTO journal (project_id,date,author,weather,temperature,workers,machines,
-                                 task_id,volume,unit,text,remarks,photos)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+                                 task_id,volume,unit,text,remarks,photos,gps)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 j.project_id,
                 j.date.to_string(),
@@ -2966,7 +3001,8 @@ impl Db {
                 j.unit,
                 j.text,
                 j.remarks,
-                j.photos
+                j.photos,
+                j.gps
             ],
         )
     }
@@ -2974,7 +3010,8 @@ impl Db {
     pub fn update_journal(&self, j: &JournalEntry) -> bool {
         self.upd(
             "UPDATE journal SET date=?2,author=?3,weather=?4,temperature=?5,workers=?6,machines=?7,
-                    task_id=?8,volume=?9,unit=?10,text=?11,remarks=?12,photos=?13 WHERE id=?1",
+                    task_id=?8,volume=?9,unit=?10,text=?11,remarks=?12,photos=?13,gps=?14
+             WHERE id=?1",
             params![
                 j.id,
                 j.date.to_string(),
@@ -2988,7 +3025,8 @@ impl Db {
                 j.unit,
                 j.text,
                 j.remarks,
-                j.photos
+                j.photos,
+                j.gps
             ],
         )
     }
@@ -3461,6 +3499,91 @@ impl Db {
         self.upd(
             "UPDATE worker SET project_id=?2, brigade_id=NULL WHERE id=?1",
             params![worker_id, to_project],
+        )
+    }
+
+    // ---------- VI.32. Yozishma ----------
+
+    /// Obyekt bo'yicha xabarlar, eskisidan boshlab.
+    pub fn messages(&self, pid: i64) -> Vec<ChatMessage> {
+        self.list(
+            "SELECT id,project_id,server_id,author,role,text,at
+             FROM message WHERE project_id=?1 ORDER BY server_id, id",
+            pid,
+            |r| {
+                Ok(ChatMessage {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    server_id: r.get(2)?,
+                    author: r.get(3)?,
+                    role: r.get(4)?,
+                    text: r.get(5)?,
+                    at: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    /// Serverdan kelgan xabarni saqlaydi. Takror kelsa yozilmaydi.
+    pub fn insert_message(&self, m: &ChatMessage) -> i64 {
+        self.ins(
+            "INSERT INTO message (project_id,server_id,author,role,text,at)
+             VALUES (?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(project_id,server_id) DO NOTHING",
+            params![m.project_id, m.server_id, m.author, m.role, m.text, m.at],
+        )
+    }
+
+    /// Oxirgi olingan xabar raqami — keyingi so'rov shundan boshlanadi.
+    pub fn last_message_id(&self, pid: i64) -> i64 {
+        self.conn()
+            .query_row(
+                "SELECT COALESCE(MAX(server_id),0) FROM message WHERE project_id=?1",
+                params![pid],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    // ---------- XIII.4–6. Kirish/chiqish ----------
+
+    /// Maydonchaga kirish-chiqish belgilari, oxirgisi oldinda.
+    pub fn attendance(&self, pid: i64) -> Vec<Attendance> {
+        self.list(
+            "SELECT id,project_id,worker,at,kind,gps,source
+             FROM attendance WHERE project_id=?1 ORDER BY at DESC, id DESC",
+            pid,
+            |r| {
+                Ok(Attendance {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    worker: r.get(2)?,
+                    at: parse_stamp(&r.get::<_, String>(3)?),
+                    kind: InOut::parse(&r.get::<_, String>(4)?),
+                    gps: r.get(5)?,
+                    source: r.get(6)?,
+                })
+            },
+        )
+    }
+
+    /// Belgini qo'shadi.
+    ///
+    /// Bir xil belgi ikki marta kelishi mumkin (paket qayta olinsa),
+    /// shuning uchun ishchi + payt + tur bo'yicha takrorlanmaydi.
+    pub fn insert_attendance(&self, a: &Attendance) -> i64 {
+        self.ins(
+            "INSERT INTO attendance (project_id,worker,at,kind,gps,source)
+             VALUES (?1,?2,?3,?4,?5,?6)
+             ON CONFLICT(project_id,worker,at,kind) DO NOTHING",
+            params![
+                a.project_id,
+                a.worker,
+                a.at.format("%Y-%m-%dT%H:%M:%S").to_string(),
+                a.kind.code(),
+                a.gps,
+                a.source
+            ],
         )
     }
 
@@ -6498,6 +6621,7 @@ impl Db {
                     String::new()
                 },
                 photos: String::new(),
+                gps: String::new(),
             });
         }
 
@@ -10599,6 +10723,7 @@ impl Db {
                 text: text.into(),
                 remarks: String::new(),
                 photos: String::new(),
+                gps: String::new(),
             });
         };
         // 7-ish hozir bajarilmoqda — jurnal yozuvlari shunga tegishli.

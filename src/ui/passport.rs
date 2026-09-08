@@ -84,6 +84,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 card_frame(ui, t("card_finance"), left_w - 36.0, |ui| {
                     finance_fields(ui, &mut p, &mut dirty);
                 });
+                ui.add_space(10.0);
+                card_frame(ui, t("geo_fence"), left_w - 36.0, |ui| {
+                    geofence_card(ui, app);
+                });
             });
 
             // ---- O'ng ustun: holat va to'ldirilish ----
@@ -284,6 +288,99 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
 }
 
 // ================================================================ Kartalar
+
+/// Obyekt geozonasi (TZ XIII.5, XV.5).
+///
+/// Bu obyektning **joyi**: markaz koordinatasi va radius. Telefondan
+/// kelgan yozuv va foto shu doiraga tushdimi — tekshiruv shundan
+/// boshlanadi. Kiritilmagan bo'lsa joy bo'yicha hech qanday hukm
+/// chiqarilmaydi va bu ochiq yoziladi.
+fn geofence_card(ui: &mut egui::Ui, app: &mut App) {
+    let current = app.fence();
+    let mut lat = current.map(|f| f.center.lat).unwrap_or(0.0);
+    let mut lon = current.map(|f| f.center.lon).unwrap_or(0.0);
+    let mut radius = current.map(|f| f.radius).unwrap_or(crate::geo::MIN_RADIUS);
+    let mut changed = false;
+
+    ui.label(
+        RichText::new(t("geo_fence_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    field(ui, t("geo_center"), |ui| {
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut lat)
+                    .speed(0.0001)
+                    .range(-90.0..=90.0)
+                    .max_decimals(6),
+            )
+            .changed();
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut lon)
+                    .speed(0.0001)
+                    .range(-180.0..=180.0)
+                    .max_decimals(6),
+            )
+            .changed();
+    });
+    field(ui, t("geo_radius"), |ui| {
+        changed |= ui
+            .add(
+                egui::DragValue::new(&mut radius)
+                    .speed(5.0)
+                    .range(crate::geo::MIN_RADIUS..=5_000.0),
+            )
+            .changed();
+    });
+
+    if changed {
+        let point = crate::geo::Point::new(lat, lon);
+        app.set_fence(point.valid().then_some(crate::geo::Fence {
+            center: point,
+            radius,
+        }));
+    }
+
+    ui.add_space(4.0);
+    ui.horizontal_wrapped(|ui| {
+        if current.is_none() {
+            ui.label(
+                RichText::new(t("geo_fence_empty"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+        }
+        // Koordinatani fotolardan taklif qilish: obyektda olingan
+        // rasmlarning o'rtachasi. Bu **taklif**, o'zi qabul qilinmaydi —
+        // tugma bosilgandagina yoziladi.
+        if ui
+            .button(t("geo_suggest"))
+            .on_hover_text(t("geo_suggest_hint"))
+            .clicked()
+        {
+            let points: Vec<crate::geo::Point> = crate::photocheck::from_journal(&app.journal)
+                .iter()
+                .filter_map(|s| crate::exif::read(std::path::Path::new(&s.file)))
+                .filter_map(|m| m.point)
+                .chain(app.journal.iter().filter_map(|e| crate::geo::parse(&e.gps)))
+                .collect();
+            match crate::photocheck::suggest_center(&points) {
+                Some(c) => {
+                    app.set_fence(Some(crate::geo::Fence {
+                        center: c,
+                        radius: radius.max(crate::geo::MIN_RADIUS),
+                    }));
+                    app.notify(format!("{} · {}", t("geo_center"), c.label()));
+                }
+                None => app.notify(t("geo_no_points").to_string()),
+            }
+        }
+    });
+}
 
 fn object_fields(ui: &mut egui::Ui, p: &mut crate::model::Project, dirty: &mut bool) {
     field(ui, t("field_name"), |ui| {

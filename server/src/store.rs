@@ -101,6 +101,49 @@ pub struct WorkerRef {
     pub position: String,
 }
 
+/// Ofis va maydoncha o'rtasidagi xabar (TZ VI.32).
+#[derive(Debug, Clone)]
+pub struct Message {
+    pub id: i64,
+    pub project: String,
+    pub author: String,
+    pub role: String,
+    pub text: String,
+    pub at: String,
+}
+
+/// QR yorliq bilan belgilangan yozuv (TZ VI.11, XI.5).
+///
+/// Serverda yozuvning o'zi saqlanmaydi — faqat telefonda ko'rsatish
+/// uchun qisqa ma'lumot. Baza va hisob-kitob ofisdagi ilovada qoladi.
+#[derive(Debug, Clone)]
+pub struct LabelRef {
+    pub kind: String,
+    pub number: String,
+    pub title: String,
+    pub note: String,
+}
+
+/// Maydonchaga kirish yoki undan chiqish belgisi (TZ XIII.4, XIII.5, XIII.6).
+///
+/// Vaqt va joy **telefondan** keladi: serverda GPS yo'q, ish stolida ham
+/// yo'q. Koordinata bo'sh bo'lishi mumkin (ruxsat berilmagan, ichkarida
+/// signal yo'q) — bu holda belgi baribir yoziladi, shunchaki joy bo'yicha
+/// tekshirilmaydi.
+#[derive(Debug, Clone)]
+pub struct Attendance {
+    pub project: String,
+    pub worker: String,
+    /// `in` yoki `out`.
+    pub kind: String,
+    /// ISO 8601, UTC.
+    pub at: String,
+    /// `kenglik,uzunlik[,aniqlik]` yoki bo'sh.
+    pub gps: String,
+    /// Belgi qanday qo'yilgani: `qr` yoki `list`.
+    pub source: String,
+}
+
 /// Obyekt yakunining bitta qatori (TZ VIII.35).
 ///
 /// Buyurtmachi kabineti shu qatorlarni ko'rsatadi. Ular serverda
@@ -558,6 +601,217 @@ impl Store {
             .unwrap_or_default()
     }
 
+    // ------------------------------------------------------- Forma belgisi
+
+    /// Formaning bir martalik belgisini ishlatadi (TZ VI.28).
+    ///
+    /// `true` — belgi birinchi marta ko'rindi, yozuvni qabul qilish
+    /// mumkin. `false` — bu forma allaqachon yuborilgan: aloqasiz
+    /// navbatdan qayta kelgan yoki tugma ikki marta bosilgan. Ikkinchi
+    /// holatda yozuv **takrorlanmaydi**.
+    pub fn use_nonce(&self, nonce: &str, at: &str) -> bool {
+        let conn = self.lock();
+        // Eski belgilar saqlanmaydi: ular faqat takrorni ushlash uchun
+        // kerak va bir oydan keyin navbatda hech narsa qolmaydi.
+        let _ = conn.execute(
+            "DELETE FROM form_nonce WHERE at < ?1",
+            params![crate::plus_days(-30)],
+        );
+        conn.execute(
+            "INSERT OR IGNORE INTO form_nonce (nonce, at) VALUES (?1, ?2)",
+            params![nonce, at],
+        )
+        .map(|n| n == 1)
+        .unwrap_or(false)
+    }
+
+    // -------------------------------------------------------------- Chat
+
+    /// Xabar qo'shadi (TZ VI.32).
+    pub fn add_message(&self, m: &Message) -> Result<i64, String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO message (project,author,role,text,at) VALUES (?1,?2,?3,?4,?5)",
+            params![m.project, m.author, m.role, m.text, m.at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// `since` dan keyingi xabarlar, eskisidan boshlab.
+    ///
+    /// Tartib **raqam bo'yicha**, vaqt bo'yicha emas: qurilmalarning soati
+    /// bir xil yurmaydi, raqam esa serverda bitta joyda beriladi.
+    pub fn messages(&self, project: &str, since: i64, limit: i64) -> Vec<Message> {
+        let conn = self.lock();
+        let mut st = match conn.prepare(
+            "SELECT id,project,author,role,text,at FROM message
+             WHERE project=?1 AND id>?2 ORDER BY id LIMIT ?3",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project, since, limit.max(1)], |r| {
+            Ok(Message {
+                id: r.get(0)?,
+                project: r.get(1)?,
+                author: r.get(2)?,
+                role: r.get(3)?,
+                text: r.get(4)?,
+                at: r.get(5)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Oxirgi xabarlar, yangisi oldinda — telefon sahifasi uchun.
+    pub fn recent_messages(&self, project: &str, limit: i64) -> Vec<Message> {
+        let conn = self.lock();
+        let mut st = match conn.prepare(
+            "SELECT id,project,author,role,text,at FROM message
+             WHERE project=?1 ORDER BY id DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project, limit.max(1)], |r| {
+            Ok(Message {
+                id: r.get(0)?,
+                project: r.get(1)?,
+                author: r.get(2)?,
+                role: r.get(3)?,
+                text: r.get(4)?,
+                at: r.get(5)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    // ---------------------------------------------------------- Yorliqlar
+
+    /// QR yorliqlar ro'yxatini almashtiradi (TZ VI.11).
+    pub fn set_labels(&self, project: &str, items: &[LabelRef]) -> Result<usize, String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM label_ref WHERE project=?1", params![project])
+            .map_err(|e| e.to_string())?;
+        for l in items {
+            tx.execute(
+                "INSERT INTO label_ref (project,kind,number,title,note)
+                 VALUES (?1,?2,?3,?4,?5)",
+                params![project, l.kind, l.number, l.title, l.note],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(items.len())
+    }
+
+    /// Bitta yorliq — o'qilgan kod bo'yicha.
+    pub fn label(&self, project: &str, kind: &str, number: &str) -> Option<LabelRef> {
+        let conn = self.lock();
+        conn.query_row(
+            "SELECT kind,number,title,note FROM label_ref
+             WHERE project=?1 AND kind=?2 AND number=?3 LIMIT 1",
+            params![project, kind, number],
+            |r| {
+                Ok(LabelRef {
+                    kind: r.get(0)?,
+                    number: r.get(1)?,
+                    title: r.get(2)?,
+                    note: r.get(3)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    /// Obyektdagi barcha yorliqlar.
+    pub fn labels(&self, project: &str) -> Vec<LabelRef> {
+        let conn = self.lock();
+        let mut st = match conn
+            .prepare("SELECT kind,number,title,note FROM label_ref WHERE project=?1 ORDER BY id")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project], |r| {
+            Ok(LabelRef {
+                kind: r.get(0)?,
+                number: r.get(1)?,
+                title: r.get(2)?,
+                note: r.get(3)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    // --------------------------------------------------------- Kirish/chiqish
+
+    /// Kirish yoki chiqish belgisini yozadi (TZ XIII.4).
+    ///
+    /// Yozuv ikki joyga tushadi: shu jadvalga (telefon o'zi ko'rishi uchun)
+    /// va o'zgarishlar oqimiga (ofisdagi ilova olishi uchun). Ikkalasi
+    /// bitta manbadan yoziladi, shuning uchun ular ajralib qolmaydi.
+    pub fn add_attendance(&self, a: &Attendance) -> Result<i64, String> {
+        let conn = self.lock();
+        conn.execute(
+            "INSERT INTO attendance (project,worker,kind,at,gps,source)
+             VALUES (?1,?2,?3,?4,?5,?6)",
+            params![a.project, a.worker, a.kind, a.at, a.gps, a.source],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Obyektdagi belgilar, oxirgisi oldinda.
+    pub fn attendance(&self, project: &str, limit: i64) -> Vec<Attendance> {
+        let conn = self.lock();
+        let mut st = match conn.prepare(
+            "SELECT project,worker,kind,at,gps,source FROM attendance
+             WHERE project=?1 ORDER BY at DESC, id DESC LIMIT ?2",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project, limit.max(1)], |r| {
+            Ok(Attendance {
+                project: r.get(0)?,
+                worker: r.get(1)?,
+                kind: r.get(2)?,
+                at: r.get(3)?,
+                gps: r.get(4)?,
+                source: r.get(5)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Ishchining oxirgi belgisi — keyingi tugma «kirish» mi yoki «chiqish» mi.
+    pub fn last_attendance(&self, project: &str, worker: &str) -> Option<Attendance> {
+        let conn = self.lock();
+        conn.query_row(
+            "SELECT project,worker,kind,at,gps,source FROM attendance
+             WHERE project=?1 AND worker=?2 ORDER BY at DESC, id DESC LIMIT 1",
+            params![project, worker],
+            |r| {
+                Ok(Attendance {
+                    project: r.get(0)?,
+                    worker: r.get(1)?,
+                    kind: r.get(2)?,
+                    at: r.get(3)?,
+                    gps: r.get(4)?,
+                    source: r.get(5)?,
+                })
+            },
+        )
+        .ok()
+    }
+
     // ------------------------------------------------------------- Yakun
 
     /// Obyekt yakunini almashtiradi (TZ VIII.35).
@@ -707,6 +961,38 @@ CREATE TABLE IF NOT EXISTS worker_ref (
     position TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS worker_ref_project ON worker_ref(project);
+CREATE TABLE IF NOT EXISTS form_nonce (
+    nonce TEXT PRIMARY KEY,
+    at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS message (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    author TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT '',
+    text TEXT NOT NULL,
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS message_project ON message(project, id);
+CREATE TABLE IF NOT EXISTS label_ref (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    number TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS label_ref_project ON label_ref(project, kind, number);
+CREATE TABLE IF NOT EXISTS attendance (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    worker TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    at TEXT NOT NULL,
+    gps TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS attendance_project ON attendance(project, at);
 CREATE TABLE IF NOT EXISTS summary (
     id INTEGER PRIMARY KEY,
     project TEXT NOT NULL,

@@ -93,6 +93,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (1, t("jr_tab_day")),
                 (2, t("jr_tab_tomorrow")),
                 (3, t("jr_tab_special")),
+                (4, t("jr_tab_photo")),
             ] {
                 if ui.selectable_label(tab == i, label).clicked() {
                     tab = i;
@@ -105,6 +106,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             1 => day_tab(ui, app),
             2 => tomorrow_tab(ui, app),
             3 => special_tab(ui, app),
+            4 => photo_tab(ui, app),
             _ => entries(ui, app),
         }
     }
@@ -117,6 +119,92 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if apply {
         app.apply_journal_to_tasks();
     }
+}
+
+/// Foto-nazorat (TZ V.9, IV.9, XIV.14).
+///
+/// Rasmning **mazmuni** tanilmaydi — buning uchun tashqi model kerak va
+/// u yo'q. Tekshiriladigan narsa rasmning ichidagi yozuv: qachon va
+/// qayerda olingani, tahrirlangani, boshqa yozuvda ishlatilgani.
+///
+/// Tekshiruv tugma bilan ishga tushadi, o'zi emas: fayllar diskdan
+/// o'qiladi va bu har kadrda qilinadigan ish emas.
+fn photo_tab(ui: &mut egui::Ui, app: &mut App) {
+    ui.label(RichText::new(t("ph_hint")).size(11.0).color(theme::muted()));
+    ui.add_space(6.0);
+
+    let total: usize = app
+        .journal
+        .iter()
+        .map(|e| photo_list(&e.photos).len())
+        .sum();
+
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .add_enabled(total > 0, egui::Button::new(t("ph_title")))
+            .on_hover_text(t("ph_hint"))
+            .clicked()
+        {
+            app.photo_report = Some(app.photo_issues());
+        }
+        ui.label(
+            RichText::new(format!("{}: {total}", t("jr_photos")))
+                .size(12.0)
+                .color(theme::muted()),
+        );
+        if app.fence().is_none() {
+            ui.label(
+                RichText::new(t("geo_fence_empty"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+        }
+    });
+    ui.add_space(8.0);
+
+    if total == 0 {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(RichText::new(t("ph_none")).color(theme::muted()).size(14.0));
+        });
+        return;
+    }
+
+    let Some(issues) = app.photo_report.clone() else {
+        return;
+    };
+    if issues.is_empty() {
+        ui.label(
+            RichText::new(format!("✓ {}", t("ph_clean")))
+                .size(13.0)
+                .color(theme::ok()),
+        );
+        return;
+    }
+
+    egui::ScrollArea::vertical()
+        .id_salt("photo_issues")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for issue in &issues {
+                let color = if issue.severe() {
+                    theme::danger()
+                } else {
+                    theme::muted()
+                };
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new(if issue.severe() { "!" } else { "·" }).color(color));
+                    ui.label(RichText::new(file_name(issue.file())).size(12.0).strong())
+                        .on_hover_text(issue.file());
+                    ui.label(RichText::new(issue.text()).size(12.0).color(color));
+                });
+            }
+        });
+}
+
+/// Yo'ldan faqat fayl nomini oladi — to'liq yo'l ipda ko'rinadi.
+fn file_name(path: &str) -> String {
+    path.rsplit(['/', '\\']).next().unwrap_or(path).to_string()
 }
 
 // ================================================================ Maxsus jurnallar
@@ -829,6 +917,7 @@ fn add_entry(app: &mut App) {
         text: String::new(),
         remarks: String::new(),
         photos: String::new(),
+        gps: String::new(),
     });
     app.reload_modules();
     // Yangi yozuv ro'yxat boshida turadi va ajratib ko'rsatiladi.
@@ -848,6 +937,10 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
     // birinchi savoli shu: «bugungi yozuv bormi?». Ilgari bunga javob
     // ro'yxatni ko'rib chiqib topilardi.
     today_line(ui, app, &mut add_today);
+
+    // Geozona bir marta o'qiladi: har yozuv uchun qaytadan so'rash
+    // bazaga keraksiz murojaat bo'lardi.
+    let fence = app.fence();
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -1009,6 +1102,28 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                         .size(11.0)
                                         .color(theme::muted()),
                                 );
+                            }
+                            // Yozuv qayerda kiritilgani (TZ V.13, V.27).
+                            // Koordinatani faqat telefon beradi; ish
+                            // stolida kiritilgan yozuvda u bo'lmaydi va
+                            // shuning uchun hech narsa yozilmaydi.
+                            if let Some(point) = crate::geo::parse(&e.gps) {
+                                let verdict = fence
+                                    .map(|f| f.check(point))
+                                    .unwrap_or(crate::geo::Verdict::Unknown);
+                                ui.label(
+                                    RichText::new(format!("📍 {}", point.label()))
+                                        .size(11.0)
+                                        .color(theme::muted()),
+                                )
+                                .on_hover_text(verdict.label());
+                                if verdict.outside() {
+                                    ui.label(
+                                        RichText::new(verdict.label())
+                                            .size(11.0)
+                                            .color(theme::danger()),
+                                    );
+                                }
                             }
                         });
 

@@ -1258,6 +1258,21 @@ pub fn draw_check(p: &egui::Painter, c: egui::Pos2, r: f32, color: Color32, widt
 /// Barcha pul qiymatlari shu funksiyadan o'tadi, shuning uchun hisobdagi
 /// nosozlik («NaN», «inf») ekranga chiqib ketmasligi kerak — bunday qiymat
 /// chiziqcha bilan ko'rsatiladi.
+/// ISO 8601 vaqtni «08.09 07:41» ko'rinishiga keltiradi.
+///
+/// Serverdan kelgan vaqt UTC da va to'liq yozilgan; ekranda esa qisqa
+/// ko'rinish o'qishga qulay.
+pub fn short_stamp(iso: &str) -> String {
+    let (date, time) = iso.split_once('T').unwrap_or((iso, ""));
+    let parts: Vec<&str> = date.split('-').collect();
+    let hm: String = time.chars().take(5).collect();
+    if parts.len() == 3 {
+        format!("{}.{} {hm}", parts[2], parts[1]).trim().to_string()
+    } else {
+        format!("{date} {hm}").trim().to_string()
+    }
+}
+
 pub fn money(v: f64) -> String {
     if !v.is_finite() {
         return t("dash").to_string();
@@ -1333,6 +1348,7 @@ mod screen_tests {
         "ql_tab",
         "sales_tab",
         "sf_tab",
+        "nt_tab",
         "ts_tab",
         "wh_tab",
     ];

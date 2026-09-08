@@ -7,7 +7,7 @@
 #![allow(dead_code)]
 
 use crate::i18n::t;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 
 /// Sanoq turlari uchun umumiy shakl: kod, tarjima, ro'yxat.
 macro_rules! enum_kind {
@@ -399,6 +399,12 @@ pub struct JournalEntry {
     /// Biriktirilgan fotolar — fayl yo'llari, nuqtali vergul bilan ajratilgan.
     /// Fayllar ko'chirilmaydi (TZ V: fotofiksatsiya), faqat yo'li saqlanadi.
     pub photos: String,
+    /// Yozuv kiritilgan joy: `kenglik,uzunlik[,aniqlik]` (TZ V.13, VI.19).
+    ///
+    /// Faqat telefondan kelgan yozuvda to'ladi — ish stolida GPS yo'q va
+    /// koordinata **o'ylab topilmaydi**. Bo'sh bo'lsa joy bo'yicha
+    /// tekshiruv o'tkazilmaydi.
+    pub gps: String,
 }
 
 // ---------- IX. Arizalar ----------
@@ -1057,6 +1063,54 @@ pub struct TimesheetEntry {
     pub kind: DayKind,
     pub shift: Shift,
     pub note: String,
+}
+
+/// Maydonchaga kirish yoki undan chiqish belgisi (TZ XIII.4, XIII.5, XIII.6).
+///
+/// Belgi **telefondan** keladi: ish stolida GPS ham, turniket ham yo'q.
+/// Shuning uchun bu yerda u faqat saqlanadi va tabel bilan solishtiriladi
+/// — o'zi hosil qilinmaydi.
+///
+/// Belgi tabelning **o'rnini bosmaydi**. Tabelda soatni odam yozadi va
+/// javobgarlik ham unda qoladi; belgi esa shu yozuvni tekshirish uchun
+/// mustaqil dalil bo'ladi.
+#[derive(Debug, Clone)]
+pub struct Attendance {
+    pub id: i64,
+    pub project_id: i64,
+    /// Ishchining ismi — ro'yxatga nom bo'yicha bog'lanadi.
+    pub worker: String,
+    /// Belgi qo'yilgan payt.
+    pub at: NaiveDateTime,
+    pub kind: InOut,
+    /// `kenglik,uzunlik[,aniqlik]` yoki bo'sh.
+    pub gps: String,
+    /// Belgi qanday qo'yilgani: QR yorliq yoki ro'yxatdan tanlash.
+    pub source: String,
+}
+
+enum_kind!(InOut {
+    In  => "in",  "io_in";
+    Out => "out", "io_out";
+});
+
+/// Ofis va maydoncha o'rtasidagi xabar (TZ VI.32).
+///
+/// Yozishma **serverda** yuritiladi: ikki tomon bir-birini shu yerda
+/// ko'radi. Ilova nusxasini saqlaydi, shunda internet yo'q paytda ham
+/// eski xabarlar ochiladi — lekin yangi xabar yuborish uchun aloqa kerak
+/// va bu ochiq aytiladi.
+#[derive(Debug, Clone)]
+pub struct ChatMessage {
+    pub id: i64,
+    pub project_id: i64,
+    /// Serverdagi tartib raqami — takrorlanmaslik shu bo'yicha.
+    pub server_id: i64,
+    pub author: String,
+    pub role: String,
+    pub text: String,
+    /// ISO 8601, UTC.
+    pub at: String,
 }
 
 // ---------- XIV. Sifat ----------
