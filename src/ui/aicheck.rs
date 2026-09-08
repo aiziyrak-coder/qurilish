@@ -62,6 +62,114 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
 }
 
+/// Geometriya bo'yicha kolliziyalar (TZ II, VII.31).
+///
+/// Qoidalar bo'yicha topilmalardan **alohida** ko'rsatiladi va shu
+/// sababli aralashib ketmaydi: bu yerdagi xulosa o'lchamga tayanadi,
+/// yuqoridagilar esa bog'lanishlarga.
+///
+/// Qamrov ochiq yoziladi: hamma element o'lchamli emas va «kolliziya
+/// topilmadi» degan xulosa nechta element tekshirilganini bilmasdan
+/// ma'nosiz bo'lardi.
+fn geometry_clash_block(ui: &mut egui::Ui, app: &App) {
+    let measured = crate::clash::measured(&app.elements);
+    ui.separator();
+    ui.add_space(6.0);
+    ui.label(RichText::new(t("gclash_title")).size(13.0).strong());
+    ui.label(
+        RichText::new(t("gclash_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(4.0);
+
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(format!(
+                "{}: {measured} / {}",
+                t("gclash_measured"),
+                app.elements.len()
+            ))
+            .size(11.5)
+            .color(if measured == 0 {
+                theme::muted()
+            } else {
+                theme::text()
+            }),
+        )
+        .on_hover_text(t("gclash_measured_hint"));
+    });
+
+    if measured == 0 {
+        ui.add_space(6.0);
+        ui.label(
+            RichText::new(t("gclash_no_shapes"))
+                .size(12.0)
+                .color(theme::muted()),
+        );
+        return;
+    }
+
+    let found = app.geometry_clashes();
+    ui.add_space(6.0);
+    if found.is_empty() {
+        ui.label(
+            RichText::new(format!("✓ {}", t("gclash_none")))
+                .size(12.5)
+                .color(theme::ok()),
+        );
+        return;
+    }
+
+    let name = |id: i64| {
+        app.elements
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| {
+                let mark = if e.mark.trim().is_empty() {
+                    e.kind.label().to_string()
+                } else {
+                    e.mark.clone()
+                };
+                format!("{} · {}", mark, e.section.code())
+            })
+            .unwrap_or_default()
+    };
+
+    egui::ScrollArea::vertical()
+        .id_salt("geometry_clash")
+        .max_height(240.0)
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("geometry_clash_grid")
+                .num_columns(4)
+                .spacing([12.0, 5.0])
+                .striped(true)
+                .show(ui, |ui| {
+                    for h in [
+                        t("col_element"),
+                        t("col_element"),
+                        t("gclash_depth"),
+                        t("gclash_volume"),
+                    ] {
+                        ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+                    for c in &found {
+                        ui.label(RichText::new(name(c.a)).size(12.0));
+                        ui.label(RichText::new(name(c.b)).size(12.0));
+                        ui.label(
+                            RichText::new(format!("{:.2} m", c.depth()))
+                                .size(12.0)
+                                .color(theme::danger()),
+                        );
+                        ui.label(RichText::new(format!("{:.3} m³", c.volume())).size(12.0));
+                        ui.end_row();
+                    }
+                });
+        });
+}
+
 // ---------------------------------------------------------------- REJA
 
 /// Joylashuv rejasi (TZ VI.13, VIII.6).
@@ -641,9 +749,15 @@ fn clash_tab(ui: &mut egui::Ui, app: &mut App) {
     );
     ui.add_space(12.0);
 
+    // Geometriya bo'yicha topilmalar qoidalar jadvalidan **oldin**
+    // turadi: jadval qolgan joyni to'liq egallaydi va pastdagi blok
+    // ko'rinmay qolardi.
+    geometry_clash_block(ui, app);
+    ui.add_space(12.0);
+
     if rows.is_empty() {
         ui.vertical_centered(|ui| {
-            ui.add_space(30.0);
+            ui.add_space(20.0);
             ui.label(RichText::new(t("clash_none")).color(theme::ok()).size(15.0));
         });
         return;
@@ -919,8 +1033,9 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
                 value_name: String::new(),
                 sheet: String::new(),
                 note: String::new(),
-                // Qo'lda kiritilgan element: joyi noma'lum.
+                // Qo'lda kiritilgan element: joyi ham, hajmi ham noma'lum.
                 pos: None,
+                bbox: None,
             };
             let id = app.db.insert_element(&el);
             app.reload_modules();

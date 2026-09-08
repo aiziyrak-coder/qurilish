@@ -162,6 +162,13 @@ pub struct Element {
     /// elementda **bo'sh qoladi** va reja chizmasida ko'rinmaydi —
     /// joyi noma'lum narsani xaritaga qo'yish yolg'on bo'lardi.
     pub pos: Option<[f64; 3]>,
+    /// O'q bo'yicha tekislangan quti: `[minX, minY, minZ, maxX, maxY, maxZ]`,
+    /// metrda (TZ II, VII.31).
+    ///
+    /// Faqat shakli tanilgan IFC elementida to'ladi. Bo'sh bo'lsa element
+    /// geometrik kolliziya hisobiga **umuman kirmaydi** — taxminiy quti
+    /// hisobni yolg'on qilardi.
+    pub bbox: Option<[f64; 6]>,
 }
 
 enum_kind!(Relation {

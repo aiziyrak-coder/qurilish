@@ -6387,6 +6387,14 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
 
         // ---------- Prorabga savollar / Вопросы прорабу ----------
         "q_title" => ("Savollar", "Вопросы"),
+        "rp_attendance" => ("Kirish va chiqish", "Приход и уход"),
+        "rp_signatures" => ("Imzo daftari", "Журнал подписей"),
+        "rp_prices" => ("Narxlar bazasi bilan", "Сверка с базой цен"),
+        "rp_price_min" => ("Eng past", "Минимум"),
+        "rp_price_max" => ("Eng yuqori", "Максимум"),
+        "rp_price_verdict" => ("Holat", "Состояние"),
+        "rp_price_trend" => ("% / oy", "% / мес"),
+        "rp_time" => ("Vaqt", "Время"),
         "jr_day_report" => ("Kunlik hisobot", "Дневной отчёт"),
         "jr_sign_day" => ("Kunni imzolash", "Подписать день"),
         "jr_sign_day_hint" => (
@@ -6435,6 +6443,26 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Для схемы нет координат",
         ),
         "plan_title" => ("Joylashuv rejasi", "План расположения"),
+        "gclash_title" => ("Geometriya bo'yicha", "По геометрии"),
+        "gclash_hint" => (
+            "Elementlarning o'lchamli qutisi kesishsa — ular bir joyni egallayapti. Quti o'qlar bo'yicha tekislangan va burilish hisobga olinmaydi: burilgan element uchun quti haqiqiydan kattaroq bo'ladi, ya'ni ortiqcha topilma bo'lishi mumkin, tushib qolgani emas.",
+            "Если габаритные коробки элементов пересекаются — они занимают одно место. Коробка выровнена по осям, поворот не учитывается: для повёрнутого элемента она больше реальной, то есть возможна лишняя находка, но не пропущенная.",
+        ),
+        "gclash_measured" => ("O'lchami ma'lum", "С известными габаритами"),
+        "gclash_measured_hint" => (
+            "Shakli tanilgan element (quti yoki cho'zilgan profil) hisobga kiradi. BREP va CSG shakllari tanilmaydi va ular umuman tekshirilmaydi — taxminiy quti qo'yish hisobni yolg'on qilardi.",
+            "В расчёт входят элементы с распознанной формой (габаритная коробка или выдавленный профиль). Формы BREP и CSG не распознаются и не проверяются вовсе — приблизительная коробка сделала бы расчёт ложным.",
+        ),
+        "gclash_no_shapes" => (
+            "O'lchamli element yo'q: IFC da shakl tanilmagan yoki model yuklanmagan",
+            "Элементов с габаритами нет: форма в IFC не распознана или модель не загружена",
+        ),
+        "gclash_none" => (
+            "O'lchamli elementlar orasida kesishish yo'q",
+            "Среди элементов с габаритами пересечений нет",
+        ),
+        "gclash_depth" => ("Chuqurlik", "Глубина"),
+        "gclash_volume" => ("Kesishgan hajm", "Объём пересечения"),
         "plan_hint" => (
             "Bu 3D ko'rinish emas: IFC dan elementning shakli emas, joyi olinadi. Burilish hisobga olinmaydi, shuning uchun chizma qavat ichidagi joylashuvni ko'rsatadi.",
             "Это не 3D-вид: из IFC берётся не форма элемента, а его расположение. Поворот не учитывается, поэтому схема показывает размещение в пределах этажа.",

@@ -146,12 +146,18 @@ pub enum Kind {
     Floors,
     /// XIX. Menejerlar kesimi.
     Managers,
+    /// XIII.4. Kirish/chiqish belgilari.
+    Attendance,
+    /// IV.18. Imzo daftari va zanjir holati.
+    Signatures,
+    /// III.15. Narxlar bazasi bilan solishtirish.
+    Prices,
     /// Obyekt yakuni: har modulning bosh soni bitta varaqda.
     Summary,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 23] = [
+    pub const ALL: [Kind; 26] = [
         Kind::Schedule,
         Kind::Ppr,
         Kind::Project,
@@ -174,6 +180,9 @@ impl Kind {
         Kind::Debts,
         Kind::Floors,
         Kind::Managers,
+        Kind::Attendance,
+        Kind::Signatures,
+        Kind::Prices,
         Kind::Summary,
     ];
 
@@ -202,6 +211,9 @@ impl Kind {
             Kind::Debts => t("rp_debts"),
             Kind::Floors => t("rp_floors"),
             Kind::Managers => t("rp_managers"),
+            Kind::Attendance => t("rp_attendance"),
+            Kind::Signatures => t("rp_signatures"),
+            Kind::Prices => t("rp_prices"),
             Kind::Summary => t("rp_summary"),
         }
     }
@@ -231,6 +243,9 @@ impl Kind {
             Kind::Debts => "XX",
             Kind::Floors => "XIX",
             Kind::Managers => "XIX",
+            Kind::Attendance => "XIII.4",
+            Kind::Signatures => "IV.18",
+            Kind::Prices => "III.15",
             Kind::Summary => "—",
         }
     }
@@ -244,7 +259,13 @@ impl Kind {
     pub fn uses_period(self) -> bool {
         !matches!(
             self,
-            Kind::Ppr | Kind::Project | Kind::Estimate | Kind::Sales | Kind::Debts | Kind::Floors
+            Kind::Ppr
+                | Kind::Project
+                | Kind::Estimate
+                | Kind::Sales
+                | Kind::Debts
+                | Kind::Floors
+                | Kind::Prices
         )
     }
 }
@@ -330,6 +351,9 @@ pub fn build(app: &App, kind: Kind, period: Period) -> Table {
         Kind::Debts => with_totals(debts(app, name), &[3, 4, 5]),
         Kind::Floors => with_totals(floors(app, name), &[1, 2, 4]),
         Kind::Managers => with_totals(managers(app, name), &[1, 2, 3, 4]),
+        Kind::Attendance => with_totals(attendance(app, name, period), &[4, 5]),
+        Kind::Signatures => signatures(app, name, period),
+        Kind::Prices => prices(app, name),
         Kind::Summary => summary(app, name, period),
     }
 }
@@ -341,6 +365,179 @@ pub fn build_all(app: &App, period: Period) -> Vec<Table> {
         .map(|k| build(app, *k, period))
         .filter(|t| !t.rows.is_empty())
         .collect()
+}
+
+// ==================================================== XIII.4. Kirish/chiqish
+
+/// Kirish-chiqish belgilari va ularning tabel bilan farqi.
+///
+/// Soat **shu yerda qayta hisoblanmaydi**: u `attend` modulidan olinadi —
+/// ekranda ko'ringan son bilan hisobotdagi son bir xil bo'lishi shart.
+fn attendance(app: &App, name: String, p: Period) -> Table {
+    let days = app.attendance_days();
+    let mismatch = app.attendance_mismatch();
+    let rows = days
+        .iter()
+        .filter(|d| p.has(d.date))
+        .map(|d| {
+            // Shu kun va shu ishchi bo'yicha e'tirozlar bir qatorga
+            // yig'iladi: hisobot qatori bitta bo'lishi kerak.
+            let note = mismatch
+                .iter()
+                .filter(|m| m.date() == d.date && m.worker() == d.worker)
+                .map(|m| m.text())
+                .collect::<Vec<_>>()
+                .join("; ");
+            vec![
+                Cell::Date(d.date),
+                txt(&d.worker),
+                txt(d
+                    .first_in
+                    .map(|x| x.format("%H:%M").to_string())
+                    .unwrap_or_default()),
+                txt(d
+                    .last_out
+                    .map(|x| x.format("%H:%M").to_string())
+                    .unwrap_or_default()),
+                Cell::Num(d.hours),
+                Cell::Num(d.marks as f64),
+                txt(if d.by_qr { t("at_by_qr") } else { "" }),
+                txt(d.verdict.label()),
+                txt(note),
+            ]
+        })
+        .collect();
+    table(
+        name,
+        &[
+            t("col_date"),
+            t("col_worker"),
+            t("at_first_in"),
+            t("at_last_out"),
+            t("hours_short"),
+            t("at_marks"),
+            t("at_by_qr"),
+            t("geo_distance"),
+            t("col_note"),
+        ],
+        rows,
+    )
+}
+
+// ======================================================= IV.18. Imzo daftari
+
+/// Imzo daftari va zanjir holati.
+///
+/// Oxirgi ustun **hisobotning ma'nosi**: yozuv keyin tuzatilgan bo'lsa,
+/// bu shu yerda ko'rinadi. Daftarni qog'ozga chiqarishning butun sababi
+/// shu — tekshiruvchi zanjir butunligini o'zi ko'rsin.
+fn signatures(app: &App, name: String, p: Period) -> Table {
+    let breaks = app.sign_breaks();
+    let rows = app
+        .sign_log
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| p.has(e.at.date()))
+        .map(|(i, e)| {
+            let broken: Vec<String> = breaks
+                .iter()
+                .filter(|b| match b {
+                    crate::signlog::Break::Chain { index, .. }
+                    | crate::signlog::Break::Text { index, .. } => *index == i,
+                })
+                .map(|b| b.text())
+                .collect();
+            vec![
+                Cell::Date(e.at.date()),
+                txt(e.at.format("%H:%M").to_string()),
+                txt(&e.document),
+                txt(&e.subject),
+                txt(&e.signer),
+                txt(crate::roles::Role::parse(&e.role).label()),
+                txt(if e.rejected.trim().is_empty() {
+                    t("sl_approved").to_string()
+                } else {
+                    format!("{}: {}", t("sl_rejected"), e.rejected)
+                }),
+                txt(e.digest.chars().take(12).collect::<String>()),
+                txt(if broken.is_empty() {
+                    t("sl_intact").to_string()
+                } else {
+                    broken.join("; ")
+                }),
+            ]
+        })
+        .collect();
+    table(
+        name,
+        &[
+            t("col_date"),
+            t("rp_time"),
+            t("sl_col_doc"),
+            t("col_name"),
+            t("sl_col_signer"),
+            t("col_role"),
+            t("sl_col_state"),
+            t("sl_col_digest"),
+            t("col_check"),
+        ],
+        rows,
+    )
+}
+
+// ====================================================== III.15. Narxlar bazasi
+
+/// Narxlar bazasi va materiallarimizning unga nisbatan holati.
+///
+/// Ikkita ro'yxatni birlashtirish ataylab: bazaning o'zi hisobot emas —
+/// u ma'lumotnoma. Hisobotning ma'nosi **bizning narximiz** bazadagi
+/// diapazonga tushadimi degan savolda.
+fn prices(app: &App, name: String) -> Table {
+    let rows = app
+        .materials
+        .iter()
+        .map(|m| {
+            let range = app.market_range(m);
+            let verdict = crate::prices::compare(m.price, range);
+            let trend = app.price_trend(m.id);
+            vec![
+                txt(&m.name),
+                txt(&m.unit),
+                Cell::Money(m.price),
+                match range {
+                    Some(r) => Cell::Money(r.min),
+                    None => Cell::Empty,
+                },
+                match range {
+                    Some(r) => Cell::Money(r.max),
+                    None => Cell::Empty,
+                },
+                match range {
+                    Some(r) => Cell::Num(r.count as f64),
+                    None => Cell::Empty,
+                },
+                txt(verdict.text()),
+                match trend {
+                    Some(tr) => Cell::Num((tr.per_month * 10.0).round() / 10.0),
+                    None => Cell::Empty,
+                },
+            ]
+        })
+        .collect();
+    table(
+        name,
+        &[
+            t("col_material"),
+            t("col_unit"),
+            t("col_price"),
+            t("rp_price_min"),
+            t("rp_price_max"),
+            t("pb_rows"),
+            t("rp_price_verdict"),
+            t("rp_price_trend"),
+        ],
+        rows,
+    )
 }
 
 // ================================================================ I. Grafik
@@ -1435,6 +1632,102 @@ mod tests {
         }
         // Birinchi katakda «JAMI» yozuvi turadi.
         assert!(matches!(last.first(), Some(crate::docgen::Cell::Text(s)) if !s.is_empty()));
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Yangi hisobotlar ham o'z modulidan o'qiydi (TZ XIII.4, IV.18, III.15).
+    ///
+    /// Hisobot ikkinchi hisob qilmasligi kerak: ekranda ko'ringan son
+    /// bilan hisobotdagi son bir xil bo'lishi shart.
+    #[test]
+    fn the_new_reports_read_from_their_modules() {
+        let (path, mut app) = app();
+        let period = all_period(&app);
+
+        // --- Kirish/chiqish: belgi qo'yamiz va hisobot uni oladi.
+        let worker = app.workers.first().expect("ishchi").name.clone();
+        let day = app.today;
+        for (h, kind) in [
+            (8u32, crate::domain::InOut::In),
+            (17, crate::domain::InOut::Out),
+        ] {
+            app.db.insert_attendance(&crate::domain::Attendance {
+                id: 0,
+                project_id: app.current.expect("obyekt"),
+                worker: worker.clone(),
+                at: day.and_hms_opt(h, 0, 0).expect("vaqt"),
+                kind,
+                gps: String::new(),
+                source: "list".into(),
+            });
+        }
+        app.reload_modules();
+
+        let days = app.attendance_days();
+        let report = build(&app, Kind::Attendance, period);
+        // Qatorlar soni kunlar soniga teng (+ «JAMI»).
+        assert_eq!(report.rows.len(), days.len() + 1);
+        // Soat modul hisobidan olinadi, qayta hisoblanmaydi.
+        let hours = days.first().expect("kun").hours;
+        match report.rows[0].get(4) {
+            Some(crate::docgen::Cell::Num(v)) => {
+                assert!((v - hours).abs() < 1e-9, "{v} ≠ {hours}")
+            }
+            other => panic!("soat ustuni noto'g'ri: {other:?}"),
+        }
+
+        // --- Imzo daftari: imzo qo'yamiz va hisobot uni ko'rsatadi.
+        app.sign_day_report();
+        let report = build(&app, Kind::Signatures, period);
+        assert_eq!(report.rows.len(), app.sign_log.len());
+        // Oxirgi ustunda zanjir holati: toza daftarda e'tiroz yo'q.
+        match report.rows[0].last() {
+            Some(crate::docgen::Cell::Text(s)) => {
+                assert_eq!(s, crate::i18n::t("sl_intact"), "{s}")
+            }
+            other => panic!("tekshiruv ustuni noto'g'ri: {other:?}"),
+        }
+
+        // --- Narxlar bazasi: baza bo'sh bo'lsa ham hisobot chiqadi va
+        // «bazada yo'q» deyiladi — jim qolmaydi.
+        let report = build(&app, Kind::Prices, period);
+        assert_eq!(report.rows.len(), app.materials.len());
+        if let Some(row) = report.rows.first() {
+            match row.get(6) {
+                Some(crate::docgen::Cell::Text(s)) => {
+                    assert_eq!(s, crate::i18n::t("pb_no_data"), "{s}")
+                }
+                other => panic!("holat ustuni noto'g'ri: {other:?}"),
+            }
+        }
+
+        // Baza yuklangach hukm o'zgaradi.
+        let m = app.materials.first().cloned().expect("material");
+        app.db.add_prices(&[crate::prices::PriceRow {
+            id: 0,
+            code: String::new(),
+            name: m.name.clone(),
+            unit: m.unit.clone(),
+            // Materialning o'z narxidan ancha past: chetlanish ko'rinishi kerak.
+            price: (m.price / 3.0).max(1.0),
+            source: "Sinov".into(),
+            date: None,
+            region: String::new(),
+        }]);
+        app.price_book = app.db.price_book();
+        let report = build(&app, Kind::Prices, period);
+        let row = report
+            .rows
+            .iter()
+            .find(|r| matches!(r.first(), Some(crate::docgen::Cell::Text(s)) if *s == m.name))
+            .expect("material qatori");
+        let verdict = crate::prices::compare(m.price, app.market_range(&m));
+        match row.get(6) {
+            Some(crate::docgen::Cell::Text(s)) => assert_eq!(*s, verdict.text()),
+            other => panic!("holat ustuni noto'g'ri: {other:?}"),
+        }
+
         drop(app);
         let _ = std::fs::remove_file(&path);
     }

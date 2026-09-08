@@ -510,6 +510,18 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/warehouse.rs` | Ombor: qoldiqlar va harakatlar |
 | `src/ui/issues.rs` | Nomuvofiqliklar uchun umumiy jadval va kartochka |
 | `src/ui/settings.rs` | Sozlamalar ekrani |
+| `src/geo.rs` | Masofa, obyekt geozonasi va joy bo'yicha hukm |
+| `src/exif.rs` | Fotoning ichidagi yozuv: sana, joy, qurilma, tahrir |
+| `src/photocheck.rs` | Foto dalil bo'la oladimi: kun, joy, tahrir, takror |
+| `src/attend.rs` | Kirish-chiqish belgilaridan kun va tabel bilan farq |
+| `src/clash.rs` | O'lcham bo'yicha kolliziya: qutilar kesishishi |
+| `src/signlog.rs` | Imzo daftari va uning zanjiri |
+| `hash/` | SHA-256: ilova va server bitta xeshga tayanishi uchun |
+| `src/prices.rs` | Narxlar bazasi: diapazon, chetlanish, tendensiya |
+| `src/hook.rs` | Tashqi xabar nuqtasi (sukut bo'yicha o'chiq) |
+| `src/reports.rs` | Hisobotlar katalogi: 26 hisobot, davr va yakuniy qator |
+| `src/ui/plan.rs` | Nuqtalar rejasi: IFC joylashuvi va joy sxemasi |
+| `src/ui/reports.rs` | Hisobotlar ekrani |
 | `src/ui/mod.rs` | Mavzu, navigatsiya, dialoglar, umumiy vidjetlar |
 
 ## Ombor
@@ -613,16 +625,22 @@ gaplashadi, PDF va Excel fayllari haqiqatda yoziladi va qayta o'qiladi.
 TZ da tashqi xizmat talab qiladigan bandlar bor. Ularning har biri ikki
 guruhga bo'lingan va farqi muhim.
 
-### Haqiqatan bloklangan
+### To'liq qoplab bo'lmaydi
 
-Bu yerda o'rniga qo'yiladigan narsa yo'q va shunday deb aytiladi.
+Bu bandlarda tashqi shartning o'rnini to'liq bosib bo'lmaydi. Har birida
+**nima qilinadi va nima qilinmaydi** ochiq yozilgan.
 
 1. **DWG va RVT** — yopiq formatlar. CAD dan **DXF** eksport qilinadi va u
    o'qiladi; IFC ham o'qiladi.
-2. **3D geometriya bo'yicha kolliziya** — element **shaklini** talab qiladi.
-   IFC dan uning **joyi** olinadi va joylashuv rejasi chiziladi; kolliziyalar
-   esa qoidalar bo'yicha topiladi (kesishish, teshik, uklon).
-3. **AR / vizual tekshiruv** — qurilma va kamera kalibrlashini talab qiladi.
+2. **AR / vizual tekshiruv** — qurilma va kamera kalibrlashini talab qiladi.
+   Bu ro'yxatdagi yagona to'liq ochiq band.
+3. **To'liq 3D geometriya** — burilgan va murakkab shakl (BREP, CSG).
+   Kolliziya **quti darajasida** hisoblanadi: IFC dan `IfcBoundingBox` va
+   cho'zilgan profil o'qiladi, qutilar kesishishi chuqurlik va hajm bilan
+   ko'rsatiladi. Quti o'qlar bo'yicha tekislangan, ya'ni burilgan element
+   uchun **ortiqcha topilma** bo'lishi mumkin — tushib qolgani emas.
+   Shakli tanilmagan element hisobga **umuman kirmaydi** va ekranda
+   nechta element o'lchamli ekani yozib turadi.
 4. **Rasm mazmunini tanish** — tashqi model. Rasmning **ichidagi yozuv**
    (EXIF) esa o'qiladi: qachon, qayerda olingani, tahrirlangani va boshqa
    yozuvda ishlatilgani tekshiriladi.

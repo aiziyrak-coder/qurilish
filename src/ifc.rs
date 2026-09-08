@@ -509,6 +509,165 @@ pub fn pos_parse(s: &str) -> Option<[f64; 3]> {
     (parts.len() == 3).then(|| [parts[0], parts[1], parts[2]])
 }
 
+// ================================================================ O'lcham
+
+/// Elementning o'q bo'yicha tekislangan qutisi (AABB), metrda:
+/// `[minX, minY, minZ, maxX, maxY, maxZ]`.
+///
+/// IFC da shakl bir necha xil yoziladi. Bu yerda **ikkitasi** tushuniladi
+/// va ular real modellarning katta qismini qoplaydi:
+///
+/// 1. `IfcBoundingBox` — modelning o'zi bergan quti. Eng ishonchlisi.
+/// 2. `IfcExtrudedAreaSolid` — profil (to'rtburchak, doira, I-simon)
+///    ma'lum yo'nalishda cho'zilgan. Devor, ustun va rigelning aksariyati
+///    shunday yoziladi.
+///
+/// **Nima tushunilmaydi va nega:** BREP (yuzalar to'plami), CSG (kesish
+/// va birlashtirish) va aylantirilgan profil. Ular geometriya yadrosini
+/// talab qiladi. Bunday elementda quti **bo'lmaydi** — «taxminiy quti»
+/// qo'yish kolliziya hisobini yolg'on qilardi.
+///
+/// **Burilish hisobga olinmaydi.** Quti o'qlar bo'yicha tekislangan,
+/// shuning uchun burilgan devorning qutisi haqiqiy devordan kattaroq
+/// bo'ladi. Bu **ortiqcha topilma** beradi, tushib qolgan topilma emas —
+/// va ekranda shunday deb aytiladi.
+pub fn bbox(model: &Model, entity: &Entity, origin: [f64; 3]) -> Option<[f64; 6]> {
+    // IfcProduct: 6-argument — Representation.
+    let shape = model.get(entity.arg(6)?.as_ref_id()?)?;
+    if shape.kind != "IFCPRODUCTDEFINITIONSHAPE" {
+        return None;
+    }
+    let mut best: Option<[f64; 6]> = None;
+    for rep_id in shape.arg(2).map(|v| v.refs()).unwrap_or_default() {
+        let Some(rep) = model.get(rep_id) else {
+            continue;
+        };
+        if rep.kind != "IFCSHAPEREPRESENTATION" {
+            continue;
+        }
+        for item_id in rep.arg(3).map(|v| v.refs()).unwrap_or_default() {
+            let Some(item) = model.get(item_id) else {
+                continue;
+            };
+            let local = match item.kind.as_str() {
+                "IFCBOUNDINGBOX" => bounding_box(model, item),
+                "IFCEXTRUDEDAREASOLID" => extruded(model, item),
+                _ => None,
+            };
+            // `IfcBoundingBox` aniqroq: u modelning o'z hisobidan keladi,
+            // cho'zilgan profil esa bizning soddalashtirishimiz. Shuning
+            // uchun quti topilsa u har doim ustun turadi.
+            let exact = item.kind == "IFCBOUNDINGBOX";
+            if let Some(l) = local {
+                if exact || best.is_none() {
+                    best = Some(l);
+                }
+            }
+        }
+    }
+    let l = best?;
+    Some([
+        l[0] + origin[0],
+        l[1] + origin[1],
+        l[2] + origin[2],
+        l[3] + origin[0],
+        l[4] + origin[1],
+        l[5] + origin[2],
+    ])
+}
+
+/// `IfcBoundingBox(Corner, XDim, YDim, ZDim)`.
+fn bounding_box(model: &Model, item: &Entity) -> Option<[f64; 6]> {
+    let corner = cartesian(model, item.arg(0).and_then(|v| v.as_ref_id()))?;
+    let dims = [num(item, 1)?, num(item, 2)?, num(item, 3)?];
+    if dims.iter().any(|d| *d <= 0.0) {
+        return None;
+    }
+    Some([
+        corner[0],
+        corner[1],
+        corner[2],
+        corner[0] + dims[0],
+        corner[1] + dims[1],
+        corner[2] + dims[2],
+    ])
+}
+
+/// `IfcExtrudedAreaSolid(SweptArea, Position, ExtrudedDirection, Depth)`.
+fn extruded(model: &Model, item: &Entity) -> Option<[f64; 6]> {
+    let depth = num(item, 3)?;
+    if depth <= 0.0 {
+        return None;
+    }
+    let (dx, dy) = profile(model, item.arg(0).and_then(|v| v.as_ref_id()))?;
+    // Profilning o'z siljishi: `Position` — IfcAxis2Placement3D.
+    let at = axis_point(model, item.arg(1).and_then(|v| v.as_ref_id())).unwrap_or([0.0; 3]);
+    // Cho'zish yo'nalishi odatda Z. Boshqa o'q bo'lsa ham quti shu
+    // o'lchamda qoladi: burilish baribir hisobga olinmaydi va bu
+    // yuqorida aytilgan.
+    Some([
+        at[0] - dx / 2.0,
+        at[1] - dy / 2.0,
+        at[2],
+        at[0] + dx / 2.0,
+        at[1] + dy / 2.0,
+        at[2] + depth,
+    ])
+}
+
+/// Profilning kengligi va chuqurligi.
+///
+/// Tanilmagan profil `None` beradi — taxmin qilinmaydi.
+fn profile(model: &Model, id: Option<u64>) -> Option<(f64, f64)> {
+    let p = model.get(id?)?;
+    match p.kind.as_str() {
+        // IfcRectangleProfileDef(ProfileType, Name, Position, XDim, YDim)
+        "IFCRECTANGLEPROFILEDEF" | "IFCROUNDEDRECTANGLEPROFILEDEF" => {
+            Some((num(p, 3)?, num(p, 4)?))
+        }
+        // IfcCircleProfileDef(..., Radius)
+        "IFCCIRCLEPROFILEDEF" | "IFCCIRCLEHOLLOWPROFILEDEF" => {
+            let r = num(p, 3)?;
+            Some((r * 2.0, r * 2.0))
+        }
+        // IfcIShapeProfileDef(..., OverallWidth, OverallDepth, ...)
+        "IFCISHAPEPROFILEDEF" => Some((num(p, 3)?, num(p, 4)?)),
+        // IfcRectangleHollowProfileDef ham to'rtburchak o'lchamiga ega.
+        "IFCRECTANGLEHOLLOWPROFILEDEF" => Some((num(p, 3)?, num(p, 4)?)),
+        _ => None,
+    }
+    .filter(|(x, y)| *x > 0.0 && *y > 0.0)
+}
+
+/// Argumentdagi son.
+fn num(e: &Entity, i: usize) -> Option<f64> {
+    match e.arg(i)? {
+        Value::Number(n) => Some(*n),
+        _ => None,
+    }
+}
+
+/// Qutini yozuvga saqlash ko'rinishi.
+pub fn bbox_text(b: Option<[f64; 6]>) -> String {
+    match b {
+        Some(v) => v
+            .iter()
+            .map(|x| format!("{x:.3}"))
+            .collect::<Vec<_>>()
+            .join(","),
+        None => String::new(),
+    }
+}
+
+/// Saqlangan matndan qutini o'qiydi.
+pub fn bbox_parse(s: &str) -> Option<[f64; 6]> {
+    let v: Vec<f64> = s
+        .split(',')
+        .filter_map(|p| p.trim().parse::<f64>().ok())
+        .collect();
+    (v.len() == 6).then(|| [v[0], v[1], v[2], v[3], v[4], v[5]])
+}
+
 /// O'qilgan modeldan bilimlar grafi tuzadi.
 pub fn to_graph(model: &Model, project_id: i64) -> Graph {
     let mut g = Graph::default();
@@ -562,6 +721,7 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
             continue;
         };
         index.insert(e.id, g.elements.len());
+        let pos = position(model, e);
         g.elements.push(Element {
             id: 0,
             project_id,
@@ -578,7 +738,8 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
             // Manba ko'rsatiladi: bu qiymat qo'lda emas, IFC dan kelgan.
             sheet: "IFC".into(),
             note: e.kind.clone(),
-            pos: position(model, e),
+            pos,
+            bbox: pos.and_then(|origin| bbox(model, e, origin)),
         });
     }
 
@@ -641,6 +802,77 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// TZ II, VII.31: element o'lchami IFC dan olinadi.
+    ///
+    /// Ikki manba tekshiriladi: modelning o'z qutisi va cho'zilgan
+    /// profil. Tanilmagan shakl esa **quti bermaydi** — taxminiy quti
+    /// kolliziya hisobini yolg'on qilardi.
+    #[test]
+    fn a_shape_becomes_a_box_or_nothing_at_all() {
+        let src = r#"
+ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1= IFCCARTESIANPOINT((0.,0.,0.));
+#2= IFCAXIS2PLACEMENT3D(#1,$,$);
+#3= IFCLOCALPLACEMENT($,#2);
+
+/* Cho'zilgan to'rtburchak: 0,2 x 4,0, balandligi 3,0 */
+#10= IFCRECTANGLEPROFILEDEF(.AREA.,'Devor',$,0.2,4.0);
+#11= IFCEXTRUDEDAREASOLID(#10,$,$,3.0);
+#12= IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#11));
+#13= IFCPRODUCTDEFINITIONSHAPE($,$,(#12));
+#14= IFCWALLSTANDARDCASE('w1',$,'Devor',$,$,#3,#13,'D-1');
+
+/* Modelning o'z qutisi: burchakdan 1,0 x 2,0 x 0,5 */
+#20= IFCCARTESIANPOINT((1.,1.,0.));
+#21= IFCBOUNDINGBOX(#20,1.0,2.0,0.5);
+#22= IFCSHAPEREPRESENTATION($,'Box','BoundingBox',(#21));
+#23= IFCPRODUCTDEFINITIONSHAPE($,$,(#22));
+#24= IFCCOLUMN('c1',$,'Ustun',$,$,#3,#23,'K-1');
+
+/* Tanilmagan shakl: BREP */
+#30= IFCFACETEDBREP(#1);
+#31= IFCSHAPEREPRESENTATION($,'Body','Brep',(#30));
+#32= IFCPRODUCTDEFINITIONSHAPE($,$,(#31));
+#33= IFCBEAM('b1',$,'Rigel',$,$,#3,#32,'R-1');
+ENDSEC;
+END-ISO-10303-21;
+"#;
+        let model = parse(src);
+
+        // Cho'zilgan profil: markazdan yarim-yarim, balandligi 0..3.
+        let wall = model.get(14).expect("devor");
+        let b = bbox(&model, wall, [0.0, 0.0, 0.0]).expect("quti");
+        assert!((b[0] - -0.1).abs() < 1e-9, "{b:?}");
+        assert!((b[1] - -2.0).abs() < 1e-9, "{b:?}");
+        assert!((b[3] - 0.1).abs() < 1e-9, "{b:?}");
+        assert!((b[4] - 2.0).abs() < 1e-9, "{b:?}");
+        assert!((b[5] - 3.0).abs() < 1e-9, "{b:?}");
+
+        // Modelning o'z qutisi burchakdan o'lchanadi.
+        let column = model.get(24).expect("ustun");
+        let b = bbox(&model, column, [0.0, 0.0, 0.0]).expect("quti");
+        assert_eq!([b[0], b[1], b[2]], [1.0, 1.0, 0.0]);
+        assert_eq!([b[3], b[4], b[5]], [2.0, 3.0, 0.5]);
+
+        // Joylashuv qo'shiladi.
+        let b = bbox(&model, column, [10.0, 20.0, 3.0]).expect("quti");
+        assert_eq!([b[0], b[1], b[2]], [11.0, 21.0, 3.0]);
+
+        // Tanilmagan shakl — quti yo'q.
+        let beam = model.get(33).expect("rigel");
+        assert!(bbox(&model, beam, [0.0; 3]).is_none());
+
+        // Saqlash va qayta o'qish.
+        let text = bbox_text(Some([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]));
+        assert_eq!(bbox_parse(&text), Some([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]));
+        assert_eq!(bbox_text(None), "");
+        assert!(bbox_parse("1,2,3").is_none());
+    }
 
     /// TZ VI.13: element joyi joylashuv zanjiridan yig'iladi.
     ///

@@ -933,6 +933,7 @@ impl Db {
             "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE journal ADD COLUMN gps TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE element ADD COLUMN pos TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE element ADD COLUMN bbox TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
             "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
@@ -2462,7 +2463,8 @@ impl Db {
 
     pub fn elements(&self, pid: i64) -> Vec<Element> {
         self.list(
-            "SELECT id,project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note,pos
+            "SELECT id,project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,
+                    sheet,note,pos,bbox
              FROM element WHERE project_id=?1 ORDER BY id",
             pid,
             |r| {
@@ -2482,6 +2484,7 @@ impl Db {
                     sheet: r.get(12)?,
                     note: r.get(13)?,
                     pos: crate::ifc::pos_parse(&r.get::<_, String>(14)?),
+                    bbox: crate::ifc::bbox_parse(&r.get::<_, String>(15)?),
                 })
             },
         )
@@ -2489,12 +2492,12 @@ impl Db {
 
     pub fn insert_element(&self, e: &Element) -> i64 {
         self.ins(
-            "INSERT INTO element (project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note,pos)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+            "INSERT INTO element (project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note,pos,bbox)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 e.project_id, e.section.code(), e.kind.code(), e.mark, e.room, e.axis, e.level,
                 e.size, e.unit, e.value, e.value_name, e.sheet, e.note,
-                crate::ifc::pos_text(e.pos)
+                crate::ifc::pos_text(e.pos), crate::ifc::bbox_text(e.bbox)
             ],
         )
     }
@@ -2502,7 +2505,8 @@ impl Db {
     pub fn update_element(&self, e: &Element) -> bool {
         self.upd(
             "UPDATE element SET section=?2,kind=?3,mark=?4,room=?5,axis=?6,level=?7,size=?8,
-                    unit=?9,value=?10,value_name=?11,sheet=?12,note=?13,pos=?14 WHERE id=?1",
+                    unit=?9,value=?10,value_name=?11,sheet=?12,note=?13,pos=?14,bbox=?15
+             WHERE id=?1",
             params![
                 e.id,
                 e.section.code(),
@@ -2517,7 +2521,8 @@ impl Db {
                 e.value_name,
                 e.sheet,
                 e.note,
-                crate::ifc::pos_text(e.pos)
+                crate::ifc::pos_text(e.pos),
+                crate::ifc::bbox_text(e.bbox)
             ],
         )
     }
@@ -5191,6 +5196,7 @@ impl Db {
                 sheet: sheet.into(),
                 note: String::new(),
                 pos: None,
+                bbox: None,
             })
         };
 
@@ -5522,6 +5528,32 @@ impl Db {
         link(r101, mb1, Relation::Contains);
         link(n1, w2, Relation::PoweredBy);
         link(mk1, k1, Relation::SupportedBy);
+
+        // ---- O'lchamlar: geometrik kolliziya ko'rinishi uchun.
+        //
+        // Namunadagi ziddiyat ataylab qo'yilgan (rigelni kesib o'tuvchi
+        // quvur) va u ikki xil yo'l bilan topiladi: qoidalar bo'yicha
+        // (bog'lanish bor, teshik yo'q) va o'lcham bo'yicha (qutilari
+        // kesishadi). Ikkalasi bir xil narsani ko'rsatsa, hisob
+        // to'g'riligiga ishonch ortadi.
+        //
+        // Elementlarning **bir qismigina** o'lchamli: haqiqiy modelda ham
+        // shunday bo'ladi va ekrandagi qamrov soni buni ko'rsatadi.
+        let with_box = |id: i64, bbox: [f64; 6]| {
+            if let Some(mut e) = self.elements(pid).into_iter().find(|e| e.id == id) {
+                e.bbox = Some(bbox);
+                e.pos = Some([bbox[0], bbox[1], bbox[2]]);
+                self.update_element(&e);
+            }
+        };
+        // Rigel B-1: koridor bo'ylab, 3,0 m balandlikda.
+        with_box(b1, [0.0, 0.0, 3.0, 6.0, 0.4, 3.6]);
+        // Quvur K1-2: rigelning aynan ichidan o'tyapti.
+        with_box(p2, [2.4, 0.10, 3.15, 2.5, 0.30, 3.45]);
+        // Ustun K-1: rigel tayanchi — u bilan kesishmaydi.
+        with_box(k1, [0.0, 0.0, 0.0, 0.4, 0.4, 3.0]);
+        // Shamollatish V-1: boshqa balandlikda, kesishmaydi.
+        with_box(v1, [0.0, 1.0, 2.4, 6.0, 1.4, 2.7]);
 
         self.seed_demo_estimate(pid, ru);
         self.seed_demo_execution(pid, ru);

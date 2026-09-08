@@ -2625,6 +2625,48 @@ date	kind	title	qty	unit	requester	need_date	note	gps
             .any(|b| matches!(b, crate::signlog::Break::Chain { .. })));
     }
 
+    /// TZ II, VII.31: namuna bazasida geometrik kolliziya ham topiladi
+    /// va u qoidalar bo'yicha topilgan bilan bir xil juftni ko'rsatadi.
+    ///
+    /// Ikki mustaqil yo'l bir xil narsani ko'rsatishi — hisob
+    /// to'g'riligining eng yaxshi dalili.
+    #[test]
+    fn the_demo_model_has_a_real_geometric_clash() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let measured = crate::clash::measured(&app.elements);
+        assert!(measured > 0, "o'lchamli element yo'q");
+        assert!(
+            measured < app.elements.len(),
+            "namunada hamma element o'lchamli bo'lib qolgan — bu haqiqiy modelga o'xshamaydi"
+        );
+
+        let found = app.geometry_clashes();
+        assert_eq!(found.len(), 1, "{found:?}");
+
+        // Topilgan juft — quvur va rigel.
+        let mark = |id: i64| {
+            app.elements
+                .iter()
+                .find(|e| e.id == id)
+                .map(|e| e.mark.clone())
+                .unwrap_or_default()
+        };
+        let mut marks = [mark(found[0].a), mark(found[0].b)];
+        marks.sort();
+        assert_eq!(marks, ["B-1".to_string(), "K1-2".to_string()], "{marks:?}");
+        assert!(found[0].volume() > 0.0);
+
+        // Xuddi shu juft qoidalar bo'yicha ham bog'langan.
+        assert!(app.element_links.iter().any(|l| {
+            let pair = [mark(l.from_el), mark(l.to_el)];
+            pair.contains(&"B-1".to_string()) && pair.contains(&"K1-2".to_string())
+        }));
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {
@@ -7559,6 +7601,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             sheet: "L-1".into(),
             note: String::new(),
             pos: None,
+            bbox: None,
         }
     }
 

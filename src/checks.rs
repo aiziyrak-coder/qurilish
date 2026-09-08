@@ -4880,6 +4880,7 @@ mod tests {
             sheet: sheet.into(),
             note: String::new(),
             pos: None,
+            bbox: None,
         }
     }
 

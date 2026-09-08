@@ -7,6 +7,7 @@ mod app;
 mod attend;
 mod backup;
 mod checks;
+mod clash;
 mod copilot;
 mod cpm;
 mod db;

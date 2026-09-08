@@ -2706,6 +2706,15 @@ impl App {
         })
     }
 
+    /// Geometriya bo'yicha kolliziyalar (TZ II, VII.31).
+    ///
+    /// Qoidalar bo'yicha topilmalardan alohida: bu yerdagi xulosa
+    /// elementlarning **o'lchamiga** tayanadi va faqat shakli tanilgan
+    /// elementlarni qamraydi.
+    pub fn geometry_clashes(&self) -> Vec<crate::clash::Clash> {
+        crate::clash::find(&self.elements, &self.element_links)
+    }
+
     /// Prorabga beriladigan savollar (TZ V.25, XIV.37).
     ///
     /// Kun yakuni ro'yxati nima **to'ldirilmaganini** aytadi; bu esa

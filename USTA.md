@@ -148,9 +148,9 @@ o'qish tarmoqsiz sinaladi.
 
 ## Holat: 1.1.0 — tashqi bandlar yopildi (2026-09-08)
 
-TZ bo'yicha **672 / 702 band to'liq**, 27 tasi qisman, 3 tasi ochiq. Uchala
-ochiq band bitta sababga borib taqaladi: **element geometriyasi** (3D
-kolliziya, AR) — u yerda o'rniga qo'yiladigan narsa yo'q.
+TZ bo'yicha **672 / 702 band to'liq**, 29 tasi qisman, **1 tasi ochiq** —
+AR / vizual tekshiruv. U qurilma va kamera kalibrlashini talab qiladi va
+unga o'rniga qo'yiladigan narsa yo'q.
 
 Qolgan 🔒 belgilari qisman bandlar ichida: davlat ERI si, ob-havo xizmati,
 bozor narxi manbasi, SMS/Telegram shlyuzi, rasm mazmunini tanuvchi model,
@@ -161,7 +161,7 @@ Tekshiruv:
 
 | Nima | Natija |
 |---|---|
-| `cargo test --workspace` | 458 desktop + 53 server + 3 xesh sinov o'tadi |
+| `cargo test --workspace` | 467 desktop + 53 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
 | `cargo test --no-default-features` | 457 sinov (tarmoq kodisiz yig'ilish) |
@@ -184,6 +184,9 @@ Qo'riqchi sinovlar (regressiyani ushlaydi):
   million belgi) — imzo zanjiri shu xeshga tayanadi
 - imzo daftaridan yozuv o'chirilsa yoki tuzatilsa zanjir buziladi va
   serverdagi belgi bilan farq ko'rinadi
+- namunadagi «rigelni kesib o'tuvchi quvur» ikki mustaqil yo'l bilan
+  topiladi: qoidalar bo'yicha va o'lcham bo'yicha — natijalar bir xil
+- yangi hisobotlar sonni qayta hisoblamaydi: ular o'z modulidan o'qiydi
 - EXIF o'quvchi haqiqiy bayt tartibidagi JPEG da sinaladi
 - aloqasiz navbatdan qayta kelgan forma ikkinchi yozuv yaratmaydi
 - server: kim kira oladi, kim kira olmaydi, paket tartibi, imzo huquqi
@@ -203,6 +206,8 @@ ma'lumot **telefon sahifasidan** keladi va ilova uni hosil qilmaydi:
 - `src/signlog.rs` + `hash/` — imzo daftari, SHA-256 zanjiri
 - `src/prices.rs` — yuklangan narx ro'yxati, diapazon va tendensiya
 - `src/hook.rs` — tashqi xabar nuqtasi (sukut bo'yicha o'chiq)
+- `src/clash.rs` — o'lcham bo'yicha kolliziya: qutilar kesishishi,
+  chuqurlik va hajm bilan. O'lchami yo'q element hisobga kirmaydi
 
 Telefon tomonida: joyni so'rash, QR o'qish, ovoz bilan matn, kirish-chiqish,
 ariza, texnika smenasi, ofis bilan yozishma va PWA (aloqasiz o'qish,

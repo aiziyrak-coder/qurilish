@@ -19,12 +19,12 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | Modul | Talab | ✅ | 🟡 | ⬜ | shundan 🔒 |
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
-| II. AI loyiha tekshiruvi | 22 | 20 | 1 | 1 | 1 |
+| II. AI loyiha tekshiruvi | 22 | 20 | 2 | 0 | 0 |
 | III. AI smeta tekshiruvi | 34 | 34 | 0 | 0 | 0 |
 | IV. Ijro hujjatlari | 30 | 29 | 1 | 0 | 0 |
 | V. Kunlik ishlar jurnali | 34 | 32 | 2 | 0 | 0 |
 | VI. Prorab ilovasi | 37 | 33 | 4 | 0 | 0 |
-| VII. Texnik nazorat kabineti | 38 | 36 | 0 | 2 | 2 |
+| VII. Texnik nazorat kabineti | 38 | 36 | 1 | 1 | 1 |
 | VIII. Buyurtmachi kabineti | 37 | 35 | 2 | 0 | 0 |
 | IX. Arizalar | 42 | 42 | 0 | 0 | 0 |
 | X. Xaridlar | 48 | 47 | 1 | 0 | 0 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 16 | 15 | 1 | 0 | 0 |
-| **Jami** | **702** | **672** | **27** | **3** | **3** |
+| **Jami** | **702** | **672** | **29** | **1** | **1** |
 
 Ya'ni **~96 % to'liq**, **~4 % qisman**, **~0 % hali yo'q**.
 
@@ -87,7 +87,7 @@ bu ro'yxatning asosiy vazifasi shu.
 - [x] 19. Interfeys: PROYEKT / AI CHECK / CLASH / ACTION
 - [x] **IFC va DXF dan o'qish** — *ikkala ochiq format ham o'qiladi; DWG/RVT yopiq — ulardan CAD orqali DXF eksport qilinadi*
 - [~] PDF va DWG dan chizmani tanish — *PDF dagi matn va DXF chizma o'qiladi; DWG/RVT ning o'zi 🔒 (yopiq format)*
-- [ ] 🔒 3D geometriya bo'yicha haqiqiy kolliziya (clash) hisobi
+- [~] 3D geometriya bo'yicha haqiqiy kolliziya (clash) hisobi — *IFC dan element o'lchami olinadi (`IfcBoundingBox` va cho'zilgan profil) va qutilar kesishishi bo'yicha kolliziya hisoblanadi: chuqurlik va kesishgan hajm bilan. Ikki chegara ochiq aytiladi — quti o'qlar bo'yicha tekislangan (burilish hisobga olinmaydi, ya'ni ortiqcha topilma bo'lishi mumkin) va BREP/CSG shakllari tanilmaydi, ular hisobga umuman kirmaydi 🔒*
 
 ---
 
@@ -222,7 +222,7 @@ bu ro'yxatning asosiy vazifasi shu.
 - [~] 10. Video — *fotoga o'xshab biriktiriladi (yo'li saqlanadi) va tizim pleyerida ochiladi; videoda EXIF bo'lmagani uchun foto-nazoratdan chetlab o'tiladi. Telefondan video yuklash 🔒 — u fayl saqlash xizmatini talab qiladi*
 - [x] 11. QR-kod — *kvartira, partiya, hujjat va ishchi uchun yorliq chiqariladi (A4 da 21 ta); telefon sahifasida kamera bilan o'qiladi va u yo'q brauzerda kod qo'lda kiritiladi; o'qilgan kod nimaligi serverdagi yorliq ro'yxatidan ko'rsatiladi*
 - [x] 12. Chizmalar bilan ishlash — *topshirilgan versiya prorab ekranida*
-- [~] 13. BIM bilan ishlash — *IFC o'qiladi: elementlar, kolliziyalar va endi **joylashuv rejasi** (element qaysi qavatda va qayerda). 3D ko'rinish 🔒 — u element shaklini talab qiladi, IFC dan esa joyi olinadi*
+- [~] 13. BIM bilan ishlash — *IFC o'qiladi: elementlar, bog'lanishlar, **joylashuv rejasi** va **o'lcham bo'yicha kolliziya**. Uch o'lchovli ko'rinish 🔒 — u har elementning to'liq shaklini talab qiladi; hozir quti darajasida ishlanadi*
 - [x] 14. Bajarilgan ishlar
 - [x] 15. Materiallar
 - [x] 16. Materialga ariza
@@ -282,7 +282,7 @@ bu ro'yxatning asosiy vazifasi shu.
 - [x] 28. Ishlar ketma-ketligini nazorat qilish
 - [x] 29. Loyihani nazorat qilish — *CLASH va versiya nazorati*
 - [x] 30. Versiyalarni nazorat qilish
-- [ ] 🔒 31. Texnik nazorat uchun AI Clash
+- [~] 31. Texnik nazorat uchun AI Clash — *ikki mustaqil yo'l: qoidalar bo'yicha (bog'lanish, teshik, uklon) va o'lcham bo'yicha (qutilar kesishishi). Namunadagi «rigelni kesib o'tuvchi quvur» ikkalasida ham topiladi. To'liq geometriya (burilgan va murakkab shakl) 🔒*
 - [x] 32. Qurilishdagi o'zgarishlarni nazorat qilish — *yangi chizmadan oldin tugatilgan ishlar*
 - [x] 33. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 34. Texnik nazoratning kunlik hisoboti — *oxirgi 14 kun, yozuvlardan yig'iladi*
@@ -300,7 +300,7 @@ bu ro'yxatning asosiy vazifasi shu.
 - [x] 3. Obyekt holati
 - [x] 4. Obyekt foto va videosi — *jurnal va yozuvlarga biriktirilgan fotolar*
 - [x] 5. Obyekt tarixi — *oxirgi ish kunlari va versiyalar*
-- [~] 6. 3D / BIM — *joylashuv rejasi bor (VI.13); uch o'lchovli ko'rinish 🔒*
+- [~] 6. 3D / BIM — *joylashuv rejasi va o'lcham bo'yicha kolliziya bor (VI.13); uch o'lchovli ko'rinish 🔒*
 - [x] 7. Ishlar grafigi — *bo'limlar kesimi va haftalik hisobot*
 - [x] 8. Grafikni AI tahlili
 - [x] 9. Moliya
@@ -598,7 +598,7 @@ bu ro'yxatning asosiy vazifasi shu.
 - [x] 11. Sifat fotofiksatsiyasi
 - [~] 12. Fotolarni AI tahlili — *EXIF bo'yicha nazorat (V.9); mazmunni tanish 🔒*
 - [x] 13. Geometriya nazorati — *geodeziya: loyiha/fakt/dopusk (VII)*
-- [~] 14. BIM Quality Control — *IFC dan kelgan elementlar sifat tekshiruvlariga bog'lanadi va joylashuv rejasida ko'rinadi; model bilan **haqiqiy** bajarilganni solishtirish 🔒 — u geometriya va o'lchov ma'lumotini talab qiladi*
+- [~] 14. BIM Quality Control — *IFC dan kelgan elementlar sifat tekshiruvlariga bog'lanadi, joylashuv rejasida ko'rinadi va o'lcham bo'yicha kolliziyaga tushadi; model bilan **haqiqiy** bajarilganni solishtirish 🔒 — u maydondagi o'lchov ma'lumotini talab qiladi*
 - [x] 15. Bo'limlarni nazorat qilish — *bo'lim kesimida ball*
 - [x] 16. Kolliziyalarni tekshirish — *AI tekshiruvida: kesish va teshik*
 - [x] 17. Izohlar
