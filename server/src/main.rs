@@ -256,6 +256,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/api/labels", post(api::labels))
         .route("/api/message", post(api::message))
         .route("/api/messages", get(api::messages))
+        .route("/api/chain", post(api::chain_mark))
+        .route("/api/chain", get(api::chain_list))
         .route("/o/{project}/client", get(web::client_page))
         .route("/o/{project}/tasks", get(web::tasks_page))
         .route("/o/{project}/timesheet", get(web::timesheet_form))

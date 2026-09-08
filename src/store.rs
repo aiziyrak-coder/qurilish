@@ -282,6 +282,19 @@ impl Db {
                 UNIQUE(worker_id, date)
             );
 
+            CREATE TABLE IF NOT EXISTS sign_log (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
+                document TEXT NOT NULL,
+                subject TEXT NOT NULL DEFAULT '',
+                signer TEXT NOT NULL DEFAULT '',
+                role TEXT NOT NULL DEFAULT '',
+                at TEXT NOT NULL,
+                digest TEXT NOT NULL DEFAULT '',
+                chain TEXT NOT NULL DEFAULT '',
+                rejected TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE TABLE IF NOT EXISTS message (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -3499,6 +3512,58 @@ impl Db {
         self.upd(
             "UPDATE worker SET project_id=?2, brigade_id=NULL WHERE id=?1",
             params![worker_id, to_project],
+        )
+    }
+
+    // ---------- IV.18, V.28. Imzo daftari ----------
+
+    /// Imzo daftari — yozilish tartibida.
+    ///
+    /// Tartib **o'zgarmasligi shart**: zanjir shu tartibda hisoblanadi.
+    /// Shuning uchun saralash `id` bo'yicha, sana bo'yicha emas — sana
+    /// tuzatilishi mumkin, `id` esa yozilish tartibi.
+    pub fn sign_log(&self, pid: i64) -> Vec<SignEntry> {
+        self.list(
+            "SELECT id,project_id,document,subject,signer,role,at,digest,chain,rejected
+             FROM sign_log WHERE project_id=?1 ORDER BY id",
+            pid,
+            |r| {
+                Ok(SignEntry {
+                    id: r.get(0)?,
+                    project_id: r.get(1)?,
+                    document: r.get(2)?,
+                    subject: r.get(3)?,
+                    signer: r.get(4)?,
+                    role: r.get(5)?,
+                    at: parse_stamp(&r.get::<_, String>(6)?),
+                    digest: r.get(7)?,
+                    chain: r.get(8)?,
+                    rejected: r.get(9)?,
+                })
+            },
+        )
+    }
+
+    /// Daftarga yozuv qo'shadi.
+    ///
+    /// Yozuv **o'zgartirilmaydi va o'chirilmaydi**: shuning uchun bu
+    /// yerda faqat qo'shish bor. Xato imzo rad etish yozuvi bilan
+    /// tuzatiladi — o'chirish bilan emas.
+    pub fn insert_sign_entry(&self, e: &SignEntry) -> i64 {
+        self.ins(
+            "INSERT INTO sign_log (project_id,document,subject,signer,role,at,digest,chain,rejected)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)",
+            params![
+                e.project_id,
+                e.document,
+                e.subject,
+                e.signer,
+                e.role,
+                e.at.format("%Y-%m-%dT%H:%M:%S").to_string(),
+                e.digest,
+                e.chain,
+                e.rejected
+            ],
         )
     }
 

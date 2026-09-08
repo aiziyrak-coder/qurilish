@@ -2294,6 +2294,79 @@ date\tauthor\ttext\tgps\n\
         );
     }
 
+    /// TZ IV.18, V.28: imzo daftariga yozuv tushadi va hujjat keyin
+    /// o'zgartirilsa bu ko'rinadi.
+    #[test]
+    fn signing_records_the_document_and_notices_later_edits() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        assert!(app.sign_log.is_empty());
+
+        let doc = app.exec_docs.first().cloned().expect("hujjat");
+        let text = app.document_text(&doc);
+        app.sign_document(&doc.number, &doc.name, &text, "");
+        assert_eq!(app.sign_log.len(), 1);
+        assert!(app.sign_breaks().is_empty(), "toza daftarda e'tiroz yo'q");
+
+        // Ikkinchi imzo zanjirga ulanadi.
+        app.sign_document(&doc.number, &doc.name, &text, "rad: hajm mos emas");
+        assert_eq!(app.sign_log.len(), 2);
+        assert!(app.sign_breaks().is_empty());
+        assert_ne!(app.sign_log[0].chain, app.sign_log[1].chain);
+
+        // Hujjat imzodan keyin o'zgartirildi — bu ko'rinadi.
+        let mut edited = doc.clone();
+        edited.name = format!("{} (tuzatilgan)", doc.name);
+        assert!(app.db.update_exec_doc(&edited));
+        app.reload_modules();
+        let breaks = app.sign_breaks();
+        assert!(
+            breaks
+                .iter()
+                .any(|b| matches!(b, crate::signlog::Break::Text { .. })),
+            "{breaks:?}"
+        );
+    }
+
+    /// Serverdagi belgi bilan solishtirish: yozuv o'chirilsa aytiladi.
+    #[test]
+    fn a_server_mark_catches_a_deleted_record() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let doc = app.exec_docs.first().cloned().expect("hujjat");
+        let text = app.document_text(&doc);
+        for _ in 0..3 {
+            app.sign_document(&doc.number, &doc.name, &text, "");
+        }
+        let (count, head) = crate::signlog::head(&app.sign_log);
+        assert_eq!(count, 3);
+
+        // Server o'sha paytdagi uchni eslab qolgan.
+        app.chain_marks = vec![crate::sync::ChainMark {
+            count: 3,
+            head: head.clone(),
+            at: String::new(),
+        }];
+        assert!(app.chain_alerts().is_empty());
+
+        // Kimdir bazadan bitta yozuvni o'chirdi.
+        let id = app.sign_log[1].id;
+        app.db
+            .conn()
+            .execute("DELETE FROM sign_log WHERE id=?1", [id])
+            .expect("o'chirish");
+        app.reload_modules();
+        assert_eq!(app.sign_log.len(), 2);
+        assert!(
+            !app.chain_alerts().is_empty(),
+            "serverdagi belgi bilan farq sezilmadi"
+        );
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {

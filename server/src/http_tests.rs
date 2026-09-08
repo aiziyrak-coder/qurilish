@@ -1353,3 +1353,64 @@ fn the_phone_can_install_the_app() {
         assert!(html.contains("serviceWorker"), "{html}");
     });
 }
+
+/// TZ IV.18, V.32: server imzo daftarining uchini eslab qoladi va
+/// o'sha uzunlikda boshqa uch kelsa buni aytadi.
+///
+/// Server daftarni ko'rmaydi va ko'ra olmaydi — u faqat **guvoh**.
+/// Ilovadagi baza fayli ochiq bo'lgani uchun dalilning bir uchi shu
+/// yerda turishi kerak.
+#[test]
+fn the_server_remembers_the_chain_and_notices_a_change() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+
+        let mark = |count: i64, head: &str| {
+            post(
+                "/api/chain",
+                Some(&token),
+                json!({"project":"OBY-1","count":count,"head":head}),
+            )
+        };
+
+        let (code, body) = send(&app, mark(3, "aaa")).await;
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(body["ok"], true);
+
+        // Xuddi shu uch qayta kelsa — ziddiyat yo'q.
+        let (_, body) = send(&app, mark(3, "aaa")).await;
+        assert_eq!(body["ok"], true);
+
+        // Boshqa uch — daftar o'zgartirilgan.
+        let (_, body) = send(&app, mark(3, "bbb")).await;
+        assert_eq!(body["ok"], false);
+        assert_eq!(body["conflict"], "aaa");
+
+        // Belgi o'zgarmaydi: birinchi yozilgani qoladi.
+        let (_, body) = send(&app, get("/api/chain?project=OBY-1", Some(&token))).await;
+        let marks = body["marks"].as_array().expect("ro'yxat");
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks[0]["head"], "aaa");
+        assert_eq!(marks[0]["count"], 3);
+    });
+}
+
+/// Faqat ko'ruvchi rol zanjir belgisini yozmaydi.
+#[test]
+fn a_read_only_role_cannot_mark_the_chain() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "mijoz", "mijoz-parol-11").await;
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/chain",
+                Some(&token),
+                json!({"project":"OBY-1","count":1,"head":"aaa"}),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::FORBIDDEN);
+    });
+}

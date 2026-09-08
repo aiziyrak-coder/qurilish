@@ -140,6 +140,18 @@ pub struct WorkerItem {
 }
 
 #[derive(Deserialize)]
+pub struct ChainReq {
+    pub project: String,
+    pub count: i64,
+    pub head: String,
+}
+
+#[derive(Deserialize)]
+pub struct ProjectQuery {
+    pub project: String,
+}
+
+#[derive(Deserialize)]
 pub struct MessageReq {
     pub project: String,
     pub text: String,
@@ -664,6 +676,63 @@ pub async fn messages(
         })
         .collect();
     Json(json!({ "messages": list })).into_response()
+}
+
+/// `POST /api/chain` — imzo daftarining uchini qayd etadi (TZ IV.18, V.32).
+///
+/// Server daftarni ko'rmaydi va tekshira olmaydi — u faqat **eslab
+/// qoladi**. Ilova keyin o'sha uzunlikda boshqa uch bilan kelsa,
+/// daftar o'zgartirilgani shundan bilinadi.
+pub async fn chain_mark(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<ChainReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() || req.count < 0 {
+        return err(StatusCode::BAD_REQUEST, "obyekt yoki uzunlik noto'g'ri");
+    }
+    match state.store.mark_chain(
+        req.project.trim(),
+        req.count,
+        req.head.trim(),
+        &crate::now(),
+    ) {
+        Ok(None) => Json(json!({ "ok": true })).into_response(),
+        Ok(Some(old)) => {
+            state.store.log(
+                &user.login,
+                "zanjir-ziddiyat",
+                req.project.trim(),
+                &crate::now(),
+            );
+            Json(json!({ "ok": false, "conflict": old })).into_response()
+        }
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
+/// `GET /api/chain?project=` — qayd etilgan belgilar.
+pub async fn chain_list(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Query(q): Query<ProjectQuery>,
+) -> axum::response::Response {
+    if caller(&state, &headers).is_none() {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    }
+    let list: Vec<_> = state
+        .store
+        .chain_marks(q.project.trim())
+        .into_iter()
+        .map(|(count, head, at)| json!({ "count": count, "head": head, "at": at }))
+        .collect();
+    Json(json!({ "marks": list })).into_response()
 }
 
 /// `GET /api/health` — server tirikmi.

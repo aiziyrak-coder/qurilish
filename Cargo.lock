@@ -3052,6 +3052,7 @@ dependencies = [
  "lopdf",
  "printpdf",
  "qrcode",
+ "qurai-hash",
  "rfd",
  "rusqlite",
  "rust_xlsxwriter",
@@ -3062,6 +3063,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "qurai-hash"
+version = "1.0.0"
+
+[[package]]
 name = "qurai-server"
 version = "1.0.0"
 dependencies = [
@@ -3069,6 +3074,7 @@ dependencies = [
  "axum",
  "chrono",
  "http-body-util",
+ "qurai-hash",
  "rand 0.8.8",
  "rusqlite",
  "serde",

@@ -563,6 +563,10 @@ pub struct App {
     pub chat_draft: String,
     /// Keyingi sinxronizatsiyada yuboriladigan xabar.
     pub chat_outgoing: String,
+    /// Imzo daftari (TZ IV.18, V.28).
+    pub sign_log: Vec<crate::domain::SignEntry>,
+    /// Serverda qayd etilgan zanjir belgilari.
+    pub chain_marks: Vec<crate::sync::ChainMark>,
     /// Oxirgi foto-nazorat natijasi (TZ V.9). Tugma bosilganda hisoblanadi:
     /// fayllar diskdan o'qiladi va bu har kadrda qilinadigan ish emas.
     pub photo_report: Option<Vec<crate::photocheck::PhotoIssue>>,
@@ -794,6 +798,8 @@ impl App {
             messages: Vec::new(),
             chat_draft: String::new(),
             chat_outgoing: String::new(),
+            sign_log: Vec::new(),
+            chain_marks: Vec::new(),
             photo_report: None,
             materials: Vec::new(),
             stock_moves: Vec::new(),
@@ -1108,6 +1114,7 @@ impl App {
         self.journal = self.db.journal(id);
         self.attendance = self.db.attendance(id);
         self.messages = self.db.messages(id);
+        self.sign_log = self.db.sign_log(id);
         // Boshqa obyektning foto hisoboti qolib ketmasin.
         self.photo_report = None;
         self.materials = self.db.materials(id);
@@ -2118,6 +2125,10 @@ impl App {
                 workers,
                 summary,
                 labels: self.label_refs(),
+                chain: {
+                    let (count, head) = crate::signlog::head(&self.sign_log);
+                    (count as i64, head)
+                },
             },
             crate::sync::Chat {
                 outgoing: std::mem::take(&mut self.chat_outgoing),
@@ -2175,6 +2186,17 @@ impl App {
                 }
                 // Xabar yuborilgan bo'lsa maydon bo'shaydi.
                 self.chat_draft.clear();
+                // Imzo zanjiri: serverdagi belgilar saqlanadi va
+                // ziddiyat darrov aytiladi — bu jimgina o'tadigan narsa
+                // emas.
+                self.chain_marks = outcome.chain_marks.clone();
+                if let Some(old) = &outcome.chain_conflict {
+                    self.notify(format!(
+                        "{}: {}",
+                        t("sl_conflict"),
+                        &old[..8.min(old.len())]
+                    ));
+                }
                 if outcome.pulled.last > self.sync.last_pull {
                     self.sync.last_pull = outcome.pulled.last;
                     self.save_sync();
@@ -2232,7 +2254,13 @@ impl App {
             return;
         };
         match crate::sync::sign(&self.sync, &project, document, text, rejected) {
-            Ok(()) => self.sync_status = Some((format!("{} {document}", t("sync_signed")), false)),
+            Ok(()) => {
+                // Serverdagi imzo ilovadagi daftarga ham tushadi:
+                // ikkalasi bir xil matndan bir xil xesh beradi, shuning
+                // uchun ular keyin solishtiriladi.
+                self.sign_document(document, text, text, rejected);
+                self.sync_status = Some((format!("{} {document}", t("sync_signed")), false));
+            }
             Err(e) => self.sync_status = Some((t(e.key()).to_string(), true)),
         }
     }
@@ -2751,6 +2779,102 @@ impl App {
         }
         self.chat_outgoing = text;
         self.sync_now();
+    }
+
+    /// Hujjatni imzo daftariga yozadi (TZ IV.18, V.28).
+    ///
+    /// Bu **hujjat butunligi** yozuvi: imzolangan matnning xeshi olinadi
+    /// va yozuv oldingisiga bog'lanadi. Davlat elektron raqamli imzosi
+    /// emas — kim imzolagani ism bilan yoziladi, kalit bilan emas.
+    pub fn sign_document(&mut self, document: &str, subject: &str, text: &str, rejected: &str) {
+        let Some(pid) = self.project().map(|p| p.id) else {
+            return;
+        };
+        if document.trim().is_empty() || text.trim().is_empty() {
+            self.notify(t("sl_nothing_to_sign").to_string());
+            return;
+        }
+        let prev = self
+            .sign_log
+            .last()
+            .map(|e| e.chain.clone())
+            .unwrap_or_default();
+        let mut entry = crate::domain::SignEntry {
+            id: 0,
+            project_id: pid,
+            document: document.trim().to_string(),
+            subject: subject.trim().to_string(),
+            signer: self.current_user_name(),
+            role: self.role().code().to_string(),
+            // Soniyagacha: bir kunda bir necha imzo bo'lishi mumkin va
+            // ularning tartibi ko'rinib turishi kerak.
+            at: crate::store::parse_stamp(
+                &chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string(),
+            ),
+            digest: qurai_hash::text(text),
+            chain: String::new(),
+            rejected: rejected.trim().to_string(),
+        };
+        entry.chain = crate::signlog::link(&prev, &entry);
+        self.db.insert_sign_entry(&entry);
+        self.sign_log = self.db.sign_log(pid);
+        self.notify(format!("{} {document}", t("sl_signed")));
+    }
+
+    /// Imzolanadigan hujjat matni (TZ IV.18).
+    ///
+    /// Matn **bitta joyda** tuziladi: imzolashda ham, keyin tekshirishda
+    /// ham shu funksiya chaqiriladi. Ikkita ko'rinish bo'lsa, tekshiruv
+    /// hech qachon mos kelmasdi.
+    pub fn document_text(&self, doc: &crate::domain::ExecDoc) -> String {
+        format!(
+            "{} · {} · {} · v{}",
+            doc.number,
+            doc.name,
+            doc.date.format("%d.%m.%Y"),
+            doc.version
+        )
+    }
+
+    /// Imzo daftarining holati (TZ IV.18, V.32).
+    ///
+    /// Ikki narsa tekshiriladi: zanjir butunmi va imzolangan hujjat
+    /// keyin o'zgarmaganmi. Hujjat topilmasa hukm chiqarilmaydi — u
+    /// o'chirilgan bo'lishi mumkin va bu boshqa masala.
+    pub fn sign_breaks(&self) -> Vec<crate::signlog::Break> {
+        crate::signlog::verify_with_text(&self.sign_log, |e| {
+            self.exec_docs
+                .iter()
+                .find(|d| d.number == e.document)
+                .map(|d| self.document_text(d))
+        })
+    }
+
+    /// Serverdagi belgilar bilan solishtiradi.
+    ///
+    /// Server daftarni ko'rmaydi — u faqat «shu uzunlikda uch shunday
+    /// edi» deb eslab qoladi. Shuning uchun tekshiruv shu yerda
+    /// bajariladi: har belgi uchun daftardagi o'sha uzunlikdagi uch
+    /// qayta olinadi va solishtiriladi.
+    pub fn chain_alerts(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for mark in &self.chain_marks {
+            let count = mark.count.max(0) as usize;
+            match crate::signlog::head_at(&self.sign_log, count) {
+                Some(head) if head == mark.head => {}
+                Some(_) => out.push(format!(
+                    "{} {count}: {}",
+                    t("sl_mark"),
+                    t("sl_mark_differs")
+                )),
+                None => out.push(format!(
+                    "{} {count}: {}",
+                    t("sl_mark"),
+                    t("sl_mark_missing")
+                )),
+            }
+        }
+        out
     }
 
     /// Sertifikat nazorati (TZ IV.11, XII.27).

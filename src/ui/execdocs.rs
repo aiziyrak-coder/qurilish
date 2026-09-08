@@ -32,6 +32,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             (2, t("ed_tab_schemes")),
             (3, t("ed_tab_author")),
             (4, t("ed_tab_matrix")),
+            (5, t("ed_tab_signlog")),
         ],
     );
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
@@ -50,6 +51,10 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     }
     if tab == 4 {
         matrix_tab(ui, app);
+        return;
+    }
+    if tab == 5 {
+        signlog_tab(ui, app);
         return;
     }
 
@@ -628,6 +633,7 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut new_version: Option<i64> = None;
     // Serverda imzolash: hujjat raqami va imzolanadigan matn.
     let mut remote_sign: Option<(String, String)> = None;
+    let mut local_sign: Option<(String, String, String)> = None;
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
@@ -681,6 +687,19 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
                             if ui.small_button(t("ed_new_version")).clicked() {
                                 new_version = Some(doc.id);
                             }
+                            // Imzolanadigan matn bir joyda tuziladi:
+                            // daftardagi xesh va serverdagi xesh bir xil
+                            // matndan chiqishi shart.
+                            let text = app.document_text(doc);
+                            // Daftarga yozish serversiz ham ishlaydi.
+                            if ui
+                                .small_button(t("sl_sign_btn"))
+                                .on_hover_text(t("sl_sign_hint"))
+                                .clicked()
+                            {
+                                local_sign =
+                                    Some((doc.number.clone(), doc.name.clone(), text.clone()));
+                            }
                             // Server sozlangan bo'lsagina ko'rinadi.
                             if app.sync.ready()
                                 && ui
@@ -688,16 +707,7 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
                                     .on_hover_text(t("sync_sign_hint"))
                                     .clicked()
                             {
-                                remote_sign = Some((
-                                    doc.number.clone(),
-                                    format!(
-                                        "{} · {} · {} · v{}",
-                                        doc.number,
-                                        doc.name,
-                                        doc.date.format("%d.%m.%Y"),
-                                        doc.version
-                                    ),
-                                ));
+                                remote_sign = Some((doc.number.clone(), text));
                             }
                         });
                         for p in &c.problems {
@@ -813,6 +823,9 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
             }
         });
 
+    if let Some((number, subject, text)) = local_sign {
+        app.sign_document(&number, &subject, &text, "");
+    }
     if let Some((number, text)) = remote_sign {
         app.sync_sign(&number, &text, "");
     }
@@ -1279,4 +1292,147 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
         app.reload_modules();
     }
     super::notes::below_table(ui, app, NoteTarget::ExecDoc, open_notes);
+}
+
+/// Imzo daftari (TZ IV.18, V.28, V.32).
+///
+/// Daftar **o'zgartirilmaydi**: yozuv qo'shiladi, tuzatilmaydi va
+/// o'chirilmaydi. Har yozuv oldingisiga bog'langani uchun keyinchalik
+/// qilingan tuzatish ko'rinib qoladi — ekran aynan shuni ko'rsatadi.
+fn signlog_tab(ui: &mut egui::Ui, app: &mut App) {
+    ui.label(RichText::new(t("sl_hint")).size(11.0).color(theme::muted()));
+    ui.add_space(6.0);
+
+    let breaks = app.sign_breaks();
+    let alerts = app.chain_alerts();
+
+    if app.sign_log.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("sl_empty"))
+                    .color(theme::muted())
+                    .size(14.0),
+            );
+        });
+        return;
+    }
+
+    // --- Holat: avval xulosa, keyin ro'yxat.
+    if breaks.is_empty() && alerts.is_empty() {
+        ui.label(
+            RichText::new(format!("✓ {}", t("sl_intact")))
+                .size(13.0)
+                .color(theme::ok()),
+        );
+    } else {
+        for b in &breaks {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("!").color(theme::danger()));
+                ui.label(RichText::new(b.document()).size(12.0).strong());
+                ui.label(RichText::new(b.text()).size(12.0).color(theme::danger()));
+            });
+        }
+        for a in &alerts {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("!").color(theme::danger()));
+                ui.label(RichText::new(a).size(12.0).color(theme::danger()));
+            });
+        }
+    }
+
+    // Serverdagi belgi — dalilning ilovadan tashqaridagi uchi.
+    ui.add_space(4.0);
+    let (count, head) = crate::signlog::head(&app.sign_log);
+    ui.horizontal_wrapped(|ui| {
+        ui.label(
+            RichText::new(format!("{}: {count}", t("sl_records")))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.label(
+            RichText::new(format!("{}: {}", t("sl_head"), &head[..8.min(head.len())]))
+                .size(11.0)
+                .color(theme::muted()),
+        )
+        .on_hover_text(&head);
+        ui.label(
+            RichText::new(if app.chain_marks.is_empty() {
+                t("sl_no_marks").to_string()
+            } else {
+                format!("{}: {}", t("sl_marks"), app.chain_marks.len())
+            })
+            .size(11.0)
+            .color(theme::muted()),
+        )
+        .on_hover_text(t("sl_marks_hint"));
+    });
+    ui.add_space(8.0);
+
+    let broken: std::collections::BTreeSet<usize> = breaks
+        .iter()
+        .map(|b| match b {
+            crate::signlog::Break::Chain { index, .. }
+            | crate::signlog::Break::Text { index, .. } => *index,
+        })
+        .collect();
+
+    egui::ScrollArea::vertical()
+        .id_salt("sign_log")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("sign_log_grid")
+                .striped(true)
+                .num_columns(5)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    for h in [
+                        t("col_date"),
+                        t("sl_col_doc"),
+                        t("sl_col_signer"),
+                        t("sl_col_state"),
+                        t("sl_col_digest"),
+                    ] {
+                        ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+
+                    for (i, e) in app.sign_log.iter().enumerate() {
+                        let bad = broken.contains(&i);
+                        let paint = |text: String| {
+                            let r = RichText::new(text).size(12.0);
+                            if bad {
+                                r.color(theme::danger())
+                            } else {
+                                r
+                            }
+                        };
+                        ui.label(paint(e.at.format("%d.%m.%Y %H:%M").to_string()));
+                        ui.label(paint(e.document.clone()))
+                            .on_hover_text(&e.subject);
+                        ui.label(paint(format!(
+                            "{} · {}",
+                            e.signer,
+                            crate::roles::Role::parse(&e.role).label()
+                        )));
+                        ui.label(if e.rejected.trim().is_empty() {
+                            RichText::new(t("sl_approved"))
+                                .size(12.0)
+                                .color(theme::ok())
+                        } else {
+                            RichText::new(t("sl_rejected"))
+                                .size(12.0)
+                                .color(theme::warn())
+                        })
+                        .on_hover_text(&e.rejected);
+                        ui.label(
+                            RichText::new(e.digest[..8.min(e.digest.len())].to_string())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        )
+                        .on_hover_text(&e.digest);
+                        ui.end_row();
+                    }
+                });
+        });
 }

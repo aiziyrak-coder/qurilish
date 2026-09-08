@@ -31,6 +31,7 @@ mod qr;
 mod reports;
 mod roles;
 mod sales;
+mod signlog;
 mod store;
 mod sync;
 mod theme;

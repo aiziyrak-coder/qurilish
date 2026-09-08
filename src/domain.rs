@@ -1094,6 +1094,30 @@ enum_kind!(InOut {
     Out => "out", "io_out";
 });
 
+/// Imzo daftarining bitta yozuvi (TZ IV.18, V.28, XV.22).
+///
+/// Bu **hujjat butunligi** yozuvi: kim, qachon va qaysi matnni
+/// tasdiqlaganini qayd etadi, hamda oldingi yozuvga bog'lanadi. Shaxsni
+/// tasdiqlovchi davlat elektron imzosi emas.
+#[derive(Debug, Clone)]
+pub struct SignEntry {
+    pub id: i64,
+    pub project_id: i64,
+    /// Hujjat raqami — ijro hujjati bilan bog'lanadi.
+    pub document: String,
+    /// Hujjat nomi — daftar o'z-o'zidan o'qilsin.
+    pub subject: String,
+    pub signer: String,
+    pub role: String,
+    pub at: NaiveDateTime,
+    /// Imzolangan matnning xeshi.
+    pub digest: String,
+    /// Zanjir bo'g'ini: oldingi bo'g'in va shu yozuvdan.
+    pub chain: String,
+    /// Rad etilgan bo'lsa sababi; bo'sh bo'lsa — tasdiqlangan.
+    pub rejected: String,
+}
+
 /// Ofis va maydoncha o'rtasidagi xabar (TZ VI.32).
 ///
 /// Yozishma **serverda** yuritiladi: ikki tomon bir-birini shu yerda

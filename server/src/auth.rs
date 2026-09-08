@@ -100,13 +100,14 @@ pub fn can(role: &str, what: Access) -> bool {
 /// keyin o'zgarganini **ko'rsatadi**. Haqiqiy elektron raqamli imzo
 /// davlat kalitlari bilan ishlaydi va u alohida masala.
 pub fn digest(text: &str) -> String {
-    // FNV-1a: kichik, tashqi kutubxonasiz va shu vazifaga yetarli.
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in text.as_bytes() {
-        h ^= *b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    }
-    format!("{h:016x}")
+    // SHA-256. Bu yerda xesh **buzilishni ko'rsatish** uchun turadi:
+    // imzolangan matn keyin o'zgarsa, xesh mos kelmasligi kerak va unga
+    // mos matn tanlab bo'lmasligi kerak. Oddiy yig'indi (avvalgi FNV)
+    // birinchi shartni bajarardi, ikkinchisini esa yo'q.
+    //
+    // Xesh ilovadagi bilan bitta kutubxonadan olinadi: ikkita mustaqil
+    // amalga oshirish bir kun kelib ajralib qolardi.
+    qurai_hash::text(text)
 }
 
 #[cfg(test)]
@@ -164,6 +165,10 @@ mod tests {
         let a = digest("AOSR-001: beton quyish, 10 m3");
         assert_eq!(a, digest("AOSR-001: beton quyish, 10 m3"));
         assert_ne!(a, digest("AOSR-001: beton quyish, 11 m3"));
-        assert_eq!(a.len(), 16);
+        // SHA-256 — 64 ta o'n oltilik belgi.
+        assert_eq!(a.len(), 64);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        // Ilova va server bitta xeshni beradi.
+        assert_eq!(a, qurai_hash::text("AOSR-001: beton quyish, 10 m3"));
     }
 }

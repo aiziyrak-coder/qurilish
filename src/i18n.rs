@@ -6379,6 +6379,57 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_overdue_pay_hint" => ("to'lov sanasi o'tdi", "срок платежа прошел"),
         "kpi_avg_m2" => ("O'rtacha 1 m²", "Средняя за м²"),
 
+        // ---------- Imzo daftari / Журнал подписей ----------
+        "ed_tab_signlog" => ("Imzo daftari", "Журнал подписей"),
+        "sl_hint" => (
+            "Daftar tuzatilmaydi: yozuv qo'shiladi, o'chirilmaydi. Har yozuv oldingisiga bog'langan, shuning uchun keyingi tuzatish ko'rinib qoladi. Bu hujjat butunligi yozuvi — davlat elektron imzosi emas.",
+            "Журнал не правится: записи добавляются, но не удаляются. Каждая запись связана с предыдущей, поэтому позднейшая правка становится видна. Это запись целостности документа, а не государственная ЭЦП.",
+        ),
+        "sl_empty" => ("Daftarda yozuv yo'q", "В журнале нет записей"),
+        "sl_intact" => ("Daftar butun", "Журнал цел"),
+        "sl_break_chain" => (
+            "yozuv keyin o'zgartirilgan yoki o'chirilgan",
+            "запись изменена или удалена после подписания",
+        ),
+        "sl_break_text" => (
+            "imzolangan matn o'zgargan",
+            "подписанный текст изменился",
+        ),
+        "sl_sign_btn" => ("Daftarga imzo", "Подпись в журнал"),
+        "sl_sign_hint" => (
+            "Hujjat matnining xeshi daftarga yoziladi va oldingi yozuvga bog'lanadi. Serversiz ham ishlaydi.",
+            "Хеш текста документа записывается в журнал и связывается с предыдущей записью. Работает и без сервера.",
+        ),
+        "sl_signed" => ("Daftarga yozildi:", "Записано в журнал:"),
+        "sl_nothing_to_sign" => ("Imzolanadigan hujjat yo'q", "Нет документа для подписи"),
+        "sl_records" => ("Yozuv", "Записей"),
+        "sl_head" => ("Zanjir uchi", "Конец цепочки"),
+        "sl_marks" => ("Serverdagi belgi", "Отметок на сервере"),
+        "sl_no_marks" => ("Serverda belgi yo'q", "На сервере отметок нет"),
+        "sl_marks_hint" => (
+            "Zanjir uchi sinxronizatsiyada serverga yoziladi: baza fayli ochiq bo'lgani uchun dalilning bir uchi tashqarida turadi.",
+            "Конец цепочки записывается на сервер при синхронизации: файл базы открыт, поэтому один конец доказательства хранится снаружи.",
+        ),
+        "sl_mark" => ("Serverdagi belgi", "Отметка на сервере"),
+        "sl_mark_differs" => (
+            "daftardagi uch boshqa — daftar o'zgartirilgan",
+            "конец в журнале другой — журнал изменён",
+        ),
+        "sl_mark_missing" => (
+            "daftarda bunchalik yozuv yo'q — yozuv o'chirilgan",
+            "в журнале столько записей нет — запись удалена",
+        ),
+        "sl_conflict" => (
+            "Serverda shu uzunlik uchun boshqa uch qayd etilgan",
+            "На сервере для этой длины записан другой конец",
+        ),
+        "sl_col_signer" => ("Imzoladi", "Подписал"),
+        "sl_col_state" => ("Holat", "Состояние"),
+        "sl_col_digest" => ("Xesh", "Хеш"),
+        "sl_col_doc" => ("Hujjat", "Документ"),
+        "sl_approved" => ("Tasdiqlangan", "Утверждено"),
+        "sl_rejected" => ("Rad etilgan", "Отклонено"),
+
         // ---------- Yozishma / Переписка ----------
         "nt_tab_list" => ("Bildirishnomalar", "Уведомления"),
         "nt_tab_chat" => ("Ofis bilan yozishma", "Переписка с офисом"),

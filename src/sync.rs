@@ -361,6 +361,45 @@ pub struct Refs {
     pub workers: Vec<WorkerOut>,
     pub summary: Vec<SummaryOut>,
     pub labels: Vec<LabelOut>,
+    /// Imzo daftarining uzunligi va uchi (TZ IV.18, V.32).
+    pub chain: (i64, String),
+}
+
+/// Serverda qayd etilgan imzo zanjiri belgisi (TZ IV.18, V.32).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChainMark {
+    pub count: i64,
+    pub head: String,
+    pub at: String,
+}
+
+/// Zanjir belgisi so'rovining tanasi.
+pub fn chain_body(project: &str, count: i64, head: &str) -> String {
+    format!(
+        "{{\"project\":{},\"count\":{count},\"head\":{}}}",
+        json_string(project),
+        json_string(head)
+    )
+}
+
+/// Zanjir belgilari javobini o'qiydi.
+pub fn parse_chain(body: &str) -> Vec<ChainMark> {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(body) else {
+        return Vec::new();
+    };
+    v["marks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|m| {
+            let count = m["count"].as_i64()?;
+            Some(ChainMark {
+                count,
+                head: m["head"].as_str().unwrap_or_default().to_string(),
+                at: m["at"].as_str().unwrap_or_default().to_string(),
+            })
+        })
+        .collect()
 }
 
 /// Serverga yuboriladigan bitta signal.
@@ -585,6 +624,42 @@ pub fn fetch_messages(cfg: &Config, project: &str, since: i64) -> Result<Vec<Mes
     Ok(parse_messages(&body))
 }
 
+/// Imzo daftarining uchini serverga qayd etadi.
+///
+/// `Ok(Some(eski))` — shu uzunlik uchun serverda **boshqa** uch turibdi,
+/// ya'ni daftar keyinchalik o'zgartirilgan.
+#[cfg(feature = "sync")]
+pub fn send_chain(
+    cfg: &Config,
+    project: &str,
+    count: i64,
+    head: &str,
+) -> Result<Option<String>, Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    let body = send(
+        cfg,
+        "POST",
+        "api/chain",
+        Some(&cfg.token),
+        Some(&chain_body(project, count, head)),
+    )?;
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap_or(serde_json::Value::Null);
+    Ok(v["conflict"].as_str().map(|s| s.to_string()))
+}
+
+/// Serverdagi zanjir belgilarini oladi.
+#[cfg(feature = "sync")]
+pub fn fetch_chain(cfg: &Config, project: &str) -> Result<Vec<ChainMark>, Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    let path = format!("api/chain?project={}", urlencode(project));
+    let body = send(cfg, "GET", &path, Some(&cfg.token), None)?;
+    Ok(parse_chain(&body))
+}
+
 /// Hujjatni masofadan imzolaydi.
 #[cfg(feature = "sync")]
 pub fn sign(
@@ -660,6 +735,10 @@ pub struct Outcome {
     pub pulled: Pulled,
     /// Yangi kelgan xabarlar (TZ VI.32).
     pub messages: Vec<MessageIn>,
+    /// Serverda qayd etilgan zanjir belgilari.
+    pub chain_marks: Vec<ChainMark>,
+    /// Server shu uzunlik uchun boshqa uchni eslab qolgan bo'lsa — o'sha uch.
+    pub chain_conflict: Option<String>,
 }
 
 /// Sinxronizatsiyaning yozishma qismi.
@@ -710,11 +789,17 @@ pub fn spawn(
                 send_message(&cfg, &project, &chat.outgoing)?;
             }
             let messages = fetch_messages(&cfg, &project, chat.since)?;
+            // Imzo daftarining uchi: dalilning bir uchi ilovadan
+            // tashqarida tursin.
+            let chain_conflict = send_chain(&cfg, &project, refs.chain.0, &refs.chain.1)?;
+            let chain_marks = fetch_chain(&cfg, &project)?;
             let pulled = pull(&cfg, &project, cfg.last_pull)?;
             Ok(Outcome {
                 pushed,
                 pulled,
                 messages,
+                chain_marks,
+                chain_conflict,
             })
         })();
         let _ = tx.send(result);

@@ -601,6 +601,57 @@ impl Store {
             .unwrap_or_default()
     }
 
+    // --------------------------------------------------------- Imzo zanjiri
+
+    /// Imzo daftarining uchini qayd etadi (TZ IV.18, V.32).
+    ///
+    /// Ilovadagi baza fayli ochiq, shuning uchun dalilning bir uchi
+    /// **bu yerda** turishi kerak. Belgi bir marta yoziladi va
+    /// **o'zgartirilmaydi**: shu uzunlikda boshqa uch kelsa, demak
+    /// daftar keyinchalik o'zgartirilgan va bu qaytariladi.
+    ///
+    /// `Ok(None)` — belgi qabul qilindi yoki avvalgisi bilan bir xil.
+    /// `Ok(Some(eski))` — shu uzunlik uchun boshqa uch yozilgan edi.
+    pub fn mark_chain(
+        &self,
+        project: &str,
+        count: i64,
+        head: &str,
+        at: &str,
+    ) -> Result<Option<String>, String> {
+        let conn = self.lock();
+        let existing: Option<String> = conn
+            .query_row(
+                "SELECT head FROM chain_mark WHERE project=?1 AND count=?2",
+                params![project, count],
+                |r| r.get(0),
+            )
+            .ok();
+        if let Some(old) = existing {
+            return Ok((old != head).then_some(old));
+        }
+        conn.execute(
+            "INSERT INTO chain_mark (project,count,head,at) VALUES (?1,?2,?3,?4)",
+            params![project, count, head, at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(None)
+    }
+
+    /// Qayd etilgan barcha belgilar — ilova o'zini tekshirishi uchun.
+    pub fn chain_marks(&self, project: &str) -> Vec<(i64, String, String)> {
+        let conn = self.lock();
+        let mut st = match conn
+            .prepare("SELECT count,head,at FROM chain_mark WHERE project=?1 ORDER BY count")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)));
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
     // ------------------------------------------------------- Forma belgisi
 
     /// Formaning bir martalik belgisini ishlatadi (TZ VI.28).
@@ -961,6 +1012,13 @@ CREATE TABLE IF NOT EXISTS worker_ref (
     position TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS worker_ref_project ON worker_ref(project);
+CREATE TABLE IF NOT EXISTS chain_mark (
+    project TEXT NOT NULL,
+    count INTEGER NOT NULL,
+    head TEXT NOT NULL,
+    at TEXT NOT NULL,
+    PRIMARY KEY (project, count)
+);
 CREATE TABLE IF NOT EXISTS form_nonce (
     nonce TEXT PRIMARY KEY,
     at TEXT NOT NULL
