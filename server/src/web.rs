@@ -282,7 +282,8 @@ pub async fn object(
     if auth::can(&user.role, Access::Write) {
         body.push_str(&format!(
             "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{p}/journal\">Ochish</a></div><div class=\"card\"><b>Tabel</b><div class=\"muted\">Bugungi soat va kun turi</div><a href=\"/o/{p}/timesheet\">Ochish</a></div><div class=\"card\"><b>Ishlar</b><div class=\"muted\">Muddat va bajarilish</div><a href=\"/o/{p}/tasks\">Ochish</a></div><div class=\"card\"><b>Kirish / chiqish</b><div class=\"muted\">Maydonchaga kelish va ketish belgisi</div><a href=\"/o/{p}/checkin\">Ochish</a></div><div class=\"card\"><b>QR o'qish</b><div class=\"muted\">Yorliqdagi kod nimaligini ko'rsatadi</div><a href=\"/o/{p}/scan\">Ochish</a></div><div class=\"card\"><b>Ofis bilan yozishma</b><div class=\"muted\">Savol bering, javobni shu yerda oling</div><a href=\"/o/{p}/chat\">Ochish</a></div>\
-<div class=\"card\"><b>Texnika smenasi</b><div class=\"muted\">Motosoat, yoqilg'i va joy</div><a href=\"/o/{p}/machine\">Ochish</a></div>",
+<div class=\"card\"><b>Texnika smenasi</b><div class=\"muted\">Motosoat, yoqilg'i va joy</div><a href=\"/o/{p}/machine\">Ochish</a></div>\
+<div class=\"card\"><b>Ariza</b><div class=\"muted\">Material, texnika yoki ishchi kuchi</div><a href=\"/o/{p}/request\">Ochish</a></div>",
             p = esc(&project)
         ));
     }
@@ -1360,6 +1361,175 @@ fn short_stamp(iso: &str) -> String {
     }
 }
 
+// ================================================================ Arizalar
+
+/// Telefondan kiritilgan ariza (TZ IX.2, X.29).
+#[derive(Deserialize)]
+pub struct RequestForm {
+    pub title: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub qty: String,
+    #[serde(default)]
+    pub unit: String,
+    #[serde(default)]
+    pub need_date: String,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub gps: String,
+    #[serde(default)]
+    pub nonce: String,
+}
+
+/// Ariza paketini tuzadi.
+///
+/// Raqam **ilovada** beriladi: bir necha telefon bir vaqtda yuborsa,
+/// serverda berilgan raqam takrorlanib qolardi.
+pub fn request_package(project: &str, at: &str, requester: &str, f: &RequestForm) -> String {
+    let cols = [
+        "date",
+        "kind",
+        "title",
+        "qty",
+        "unit",
+        "requester",
+        "need_date",
+        "note",
+        "gps",
+    ];
+    let today = at.split('T').next().unwrap_or("").to_string();
+    let qty = {
+        let v = f.qty.trim().replace(',', ".");
+        if v.is_empty() {
+            "0".to_string()
+        } else {
+            v
+        }
+    };
+    let row = [
+        today,
+        f.kind.trim().to_string(),
+        f.title.trim().to_string(),
+        qty,
+        f.unit.trim().to_string(),
+        requester.to_string(),
+        f.need_date.trim().to_string(),
+        f.note.trim().to_string(),
+        clean_gps(&f.gps),
+    ];
+    format!(
+        "QURAI-PACKAGE\t1\nPROJECT\t{}\nCREATED\t{}\n\n#request\n{}\n{}\n",
+        pkg_escape(project),
+        pkg_escape(at),
+        cols.join("\t"),
+        row.iter()
+            .map(|c| pkg_escape(c))
+            .collect::<Vec<_>>()
+            .join("\t")
+    )
+}
+
+/// `GET /o/{project}/request` — maydonchadan ariza (TZ IX.2, X.29).
+///
+/// Ariza aynan maydonchada tug'iladi: material tugadi, texnika kerak
+/// bo'ldi. Uni ofisga qaytib borib yozish kechikish demakdir, shuning
+/// uchun forma telefonda turadi va ovoz bilan ham to'ldiriladi.
+pub async fn request_form(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Sizning rolingiz ariza kiritmaydi.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    let need = crate::plus_days(14);
+    let need = need.split('T').next().unwrap_or("").to_string();
+    let body = format!(
+        "<div class=\"row\"><h1>Ariza</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">{obj} · {name}</p>\
+<form method=\"post\" action=\"/o/{p}/request\">\
+{nonce}\
+<label>Nima kerak<input name=\"title\" id=\"text\" required placeholder=\"Sement M400\"></label>\
+{voice}\
+<label>Turi<select name=\"kind\">\
+<option value=\"material\">Material</option>\
+<option value=\"machine\">Texnika</option>\
+<option value=\"transport\">Transport</option>\
+<option value=\"repair\">Ta'mir</option>\
+<option value=\"labor\">Ishchi kuchi</option>\
+<option value=\"service\">Xizmat</option>\
+<option value=\"document\">Hujjat</option>\
+<option value=\"other\">Boshqa</option>\
+</select></label>\
+<div class=\"row\"><label style=\"flex:1\">Miqdor<input name=\"qty\" inputmode=\"decimal\"></label>\
+<label style=\"flex:1\">Birlik<input name=\"unit\" placeholder=\"kg\"></label></div>\
+<label>Qachongacha<input type=\"date\" name=\"need_date\" value=\"{need}\"></label>\
+<label>Izoh<textarea name=\"note\" rows=\"2\"></textarea></label>\
+{geo}\
+<button type=\"submit\">Yuborish</button></form>\
+<p class=\"muted\">Ariza ofisdagi ilovaga tushadi va u yerda raqam oladi. Tasdiqlash ofisda qoladi.</p>",
+        p = esc(&project),
+        obj = esc(&project),
+        name = esc(&user.name),
+        need = esc(&need),
+        geo = geo_block(),
+        nonce = nonce_field(),
+        voice = voice_block("text"),
+    );
+    page("QURAi — ariza", &body).into_response()
+}
+
+/// `POST /o/{project}/request`
+pub async fn request_submit(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+    Form(form): Form<RequestForm>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Huquq yo'q.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    if form.title.trim().is_empty() {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Nima kerakligi yozilmagan.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+    let at = crate::now();
+    if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
+        return Redirect::to(&format!("/o/{project}")).into_response();
+    }
+    let body = request_package(&project, &at, &user.name, &form);
+    let _ = state
+        .store
+        .push_change(project.trim(), &body, &user.login, &at, 1);
+    state.store.log(&user.login, "ariza", project.trim(), &at);
+    Redirect::to(&format!("/o/{project}")).into_response()
+}
+
 // ================================================================ Texnika
 
 /// Telefondan kiritilgan texnika smenasi (TZ XVI.6, XVI.11).
@@ -1400,7 +1570,7 @@ pub fn machine_package(project: &str, at: &str, driver: &str, f: &MachineForm) -
         clean_gps(&f.gps),
     ];
     format!(
-        "QURAI-PACKAGE\t1\nPROJECT\t{}\nCREATED\t{}\n\n#machine\n{}\n{}\n",
+        "QURAI-PACKAGE\t1\nPROJECT\t{}\nCREATED\t{}\n\n#machine_log\n{}\n{}\n",
         pkg_escape(project),
         pkg_escape(at),
         cols.join("\t"),

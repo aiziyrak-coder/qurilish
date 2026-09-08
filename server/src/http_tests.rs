@@ -1455,7 +1455,7 @@ fn a_machine_shift_carries_its_place() {
 
         let (_, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
         let text = body["changes"][0]["body"].as_str().expect("matn");
-        assert!(text.contains("#machine"), "{text}");
+        assert!(text.contains("#machine_log"), "{text}");
         assert!(text.contains("Ekskavator"), "{text}");
         // Vergul nuqtaga o'giriladi.
         assert!(text.contains("7.5"), "{text}");
@@ -1483,5 +1483,70 @@ fn an_unknown_machine_is_refused() {
             .await
             .expect("javob");
         assert_eq!(resp.status(), StatusCode::OK);
+    });
+}
+
+/// TZ IX.2, X.29: ariza maydonchadan yuboriladi va ofisga tushadi.
+///
+/// Raqam serverda berilmaydi: bir necha telefon bir vaqtda yuborsa u
+/// takrorlanib qolardi. Tasdiqlash ham ofisda qoladi.
+#[test]
+fn a_request_from_the_site_reaches_the_office() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let (code, html) = page_text(&app, "/o/OBY-1/request", &cookie).await;
+        assert_eq!(code, StatusCode::OK);
+        // Ovoz tugmasi shu formada ham bor (TZ X.29).
+        assert!(html.contains("Ovoz"), "{html}");
+
+        let form = "title=Sement+M400&kind=material&qty=2000&unit=kg&need_date=2026-09-15&note=Tugadi&gps=41.299500%2C69.240100";
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/request")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(form))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+        let (_, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
+        let text = body["changes"][0]["body"].as_str().expect("matn");
+        assert!(text.contains("#request"), "{text}");
+        assert!(text.contains("Sement M400"), "{text}");
+        assert!(text.contains("2000"), "{text}");
+        // Raqam serverda berilmaydi.
+        assert!(!text.contains("number"), "{text}");
+    });
+}
+
+/// Nima kerakligi yozilmagan ariza qabul qilinmaydi.
+#[test]
+fn an_empty_request_is_refused() {
+    runtime().block_on(async {
+        let (app, state) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/request")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("title=+&kind=material"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(state.store.changes_since("OBY-1", 0, 10).is_empty());
     });
 }

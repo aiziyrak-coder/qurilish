@@ -301,6 +301,71 @@ fn special_tab(ui: &mut egui::Ui, app: &mut App) {
 // ================================================================ Kun tahlili
 
 /// Kunlik hajm bilan sarflangan material va yozuvlardagi ichki ziddiyatlar
+/// Prorabga beriladigan savollar (TZ V.25).
+///
+/// Har savolning yonida javob maydoni turadi: savol berib, javobni
+/// boshqa joyga yozdirish odamni ikki marta ishlatardi. Javob bugungi
+/// kunlik yozuvning izohiga tushadi — savol ham o'sha yozuvlardan
+/// tug'ilgan.
+fn questions_block(ui: &mut egui::Ui, app: &mut App) {
+    let questions = app.foreman_questions();
+    ui.label(
+        RichText::new(format!(
+            "{} · {}",
+            t("q_title"),
+            if questions.is_empty() {
+                t("q_none")
+            } else {
+                t("q_hint")
+            }
+        ))
+        .size(11.0)
+        .color(theme::muted()),
+    );
+    if questions.is_empty() {
+        return;
+    }
+    ui.add_space(4.0);
+
+    let mut answered: Option<(crate::checks::Question, String)> = None;
+    for (i, q) in questions.iter().enumerate() {
+        let key = egui::Id::new(("jr_answer", i));
+        let mut text = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("?").color(theme::accent()).strong());
+            ui.label(RichText::new(q.text()).size(12.0));
+        });
+        ui.horizontal(|ui| {
+            let w = (ui.available_width() - 130.0).max(120.0);
+            let changed = ui
+                .add(
+                    egui::TextEdit::singleline(&mut text)
+                        .desired_width(w)
+                        .hint_text(t("q_answer")),
+                )
+                .changed();
+            if changed {
+                ui.data_mut(|d| d.insert_temp(key, text.clone()));
+            }
+            if ui
+                .add_enabled(
+                    !text.trim().is_empty(),
+                    egui::Button::new(t("q_answer_btn")),
+                )
+                .clicked()
+            {
+                answered = Some((q.clone(), text.clone()));
+                ui.data_mut(|d| d.remove::<String>(key));
+            }
+        });
+        ui.add_space(4.0);
+    }
+
+    if let Some((q, text)) = answered {
+        app.answer_question(&q, &text);
+    }
+}
+
 /// (TZ V.10-11, 32).
 fn day_tab(ui: &mut egui::Ui, app: &mut App) {
     use super::warehouse::{cell_l, cell_r};
@@ -313,6 +378,11 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
             .size(11.0)
             .color(theme::muted()),
     );
+    ui.add_space(10.0);
+
+    // Savollar eng tepada: kun yakunini yopishdan oldin ular javob
+    // talab qiladi (TZ V.25).
+    questions_block(ui, app);
     ui.add_space(10.0);
 
     // ---------- Direktor uchun kunlik xulosa (TZ V.24) ----------
@@ -1076,9 +1146,19 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                         // 4-qator: fotofiksatsiya (TZ V).
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            if ui.small_button(t("jr_add_photo")).clicked() {
+                            if ui
+                                .small_button(t("jr_add_media"))
+                                .on_hover_text(t("jr_add_media_hint"))
+                                .clicked()
+                            {
                                 if let Some(files) = rfd::FileDialog::new()
-                                    .add_filter(t("photos"), &["jpg", "jpeg", "png", "bmp", "webp"])
+                                    .add_filter(
+                                        t("jr_media"),
+                                        &[
+                                            "jpg", "jpeg", "png", "bmp", "webp", "mp4", "mov",
+                                            "avi", "mkv", "webm", "3gp",
+                                        ],
+                                    )
                                     .pick_files()
                                 {
                                     let mut all = photo_list(&e.photos);
@@ -1135,7 +1215,28 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                 for (i, path) in list.iter().enumerate() {
                                     ui.vertical(|ui| {
                                         ui.set_width(104.0);
-                                        if std::path::Path::new(path).exists() {
+                                        // Video eskizi ko'rsatilmaydi: kadr
+                                        // chiqarish uchun alohida
+                                        // kutubxona kerak. O'rniga fayl
+                                        // nomi ko'rinadi va bosilganda
+                                        // tizim pleyerida ochiladi.
+                                        if crate::photocheck::is_video(path) {
+                                            let (r, resp) = ui.allocate_exact_size(
+                                                vec2(104.0, 72.0),
+                                                Sense::click(),
+                                            );
+                                            ui.painter().rect_filled(r, 4.0, theme::track());
+                                            ui.painter().text(
+                                                r.center(),
+                                                Align2::CENTER_CENTER,
+                                                "▶",
+                                                egui::FontId::proportional(20.0),
+                                                theme::muted(),
+                                            );
+                                            if resp.on_hover_text(path).clicked() {
+                                                open_path(path);
+                                            }
+                                        } else if std::path::Path::new(path).exists() {
                                             let img = egui::Image::new(format!("file://{path}"))
                                                 .fit_to_exact_size(vec2(104.0, 72.0))
                                                 .maintain_aspect_ratio(true)

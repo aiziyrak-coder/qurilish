@@ -2370,6 +2370,212 @@ date\tauthor\ttext\tgps\n\
         );
     }
 
+    /// TZ V.25: savollar modullararo ziddiyatdan tug'iladi.
+    ///
+    /// Bu kun yakuni ro'yxati emas: u nima to'ldirilmaganini aytadi,
+    /// savol esa nima tushunarsiz ekanini so'raydi.
+    #[test]
+    fn the_foreman_is_asked_about_what_does_not_add_up() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let today = app.today;
+
+        // Bugungi barcha yozuvlarni tozalaymiz: sinov o'z holatini
+        // o'zi tuzsin.
+        for j in app.journal.clone().iter().filter(|j| j.date == today) {
+            app.db.del("journal", j.id);
+        }
+        for w in app.workers.clone() {
+            app.db.set_timesheet(pid, w.id, today, 0.0);
+        }
+        app.reload_modules();
+
+        // --- Odam ishladi, hajm yozilmadi.
+        let worker = app.workers.first().expect("ishchi").id;
+        app.db.set_timesheet(pid, worker, today, 8.0);
+        app.reload_modules();
+        let q = app.foreman_questions();
+        assert!(
+            q.iter()
+                .any(|x| matches!(x, crate::checks::Question::CrewWithoutVolume { .. })),
+            "{q:?}"
+        );
+
+        // --- Hajm yozildi, ombordan hech narsa berilmadi.
+        let entry = crate::domain::JournalEntry {
+            id: 0,
+            project_id: pid,
+            date: today,
+            author: "Prorab".into(),
+            weather: "ochiq".into(),
+            temperature: 0.0,
+            workers: 1,
+            machines: 0,
+            task_id: None,
+            volume: 12.5,
+            unit: "m3".into(),
+            text: "Beton quyildi".into(),
+            remarks: String::new(),
+            photos: String::new(),
+            gps: String::new(),
+        };
+        app.db.insert_journal(&entry);
+        app.reload_modules();
+        let q = app.foreman_questions();
+        assert!(
+            q.iter()
+                .any(|x| matches!(x, crate::checks::Question::VolumeWithoutMaterial { .. })),
+            "{q:?}"
+        );
+        // Hajm bor — endi «odam ishladi, hajm yo'q» savoli yo'qoladi.
+        assert!(!q
+            .iter()
+            .any(|x| matches!(x, crate::checks::Question::CrewWithoutVolume { .. })));
+    }
+
+    /// Sovuqdagi beton haqida so'raladi; harorat yozilmagan bo'lsa — yo'q.
+    #[test]
+    fn concrete_in_the_cold_raises_a_question_only_when_the_temperature_is_known() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let today = app.today;
+        for j in app.journal.clone().iter().filter(|j| j.date == today) {
+            app.db.del("journal", j.id);
+        }
+
+        let mut entry = crate::domain::JournalEntry {
+            id: 0,
+            project_id: pid,
+            date: today,
+            author: "Prorab".into(),
+            weather: "sovuq".into(),
+            // Harorat yozilmagan: nol daraja «sovuq» degani emas,
+            // «yozilmagan» degani.
+            temperature: 0.0,
+            workers: 1,
+            machines: 0,
+            task_id: None,
+            volume: 10.0,
+            unit: "m3".into(),
+            text: "Beton quyildi".into(),
+            remarks: String::new(),
+            photos: String::new(),
+            gps: String::new(),
+        };
+        let id = app.db.insert_journal(&entry);
+        app.reload_modules();
+        assert!(!app
+            .foreman_questions()
+            .iter()
+            .any(|x| matches!(x, crate::checks::Question::ConcreteInWeather { .. })));
+
+        // Harorat yozildi va u xavfli.
+        entry.id = id;
+        entry.temperature = -4.0;
+        assert!(app.db.update_journal(&entry));
+        app.reload_modules();
+        assert!(app
+            .foreman_questions()
+            .iter()
+            .any(|x| matches!(x, crate::checks::Question::ConcreteInWeather { .. })));
+
+        // Oddiy harorat — savol yo'q.
+        entry.temperature = 18.0;
+        assert!(app.db.update_journal(&entry));
+        app.reload_modules();
+        assert!(!app
+            .foreman_questions()
+            .iter()
+            .any(|x| matches!(x, crate::checks::Question::ConcreteInWeather { .. })));
+    }
+
+    /// Javob kunlik yozuvning izohiga tushadi; yozuv bo'lmasa yozilmaydi.
+    #[test]
+    fn an_answer_goes_into_the_journal_note() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let today = app.today;
+        for j in app.journal.clone().iter().filter(|j| j.date == today) {
+            app.db.del("journal", j.id);
+        }
+        app.reload_modules();
+
+        let q = crate::checks::Question::CrewWithoutVolume { workers: 5 };
+        // Bugungi yozuv yo'q — javob ham yozilmaydi.
+        assert!(!app.answer_question(&q, "Kutildi"));
+
+        app.db.insert_journal(&crate::domain::JournalEntry {
+            id: 0,
+            project_id: pid,
+            date: today,
+            author: "Prorab".into(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers: 5,
+            machines: 0,
+            task_id: None,
+            volume: 0.0,
+            unit: String::new(),
+            text: "Tayyorgarlik".into(),
+            remarks: String::new(),
+            photos: String::new(),
+            gps: String::new(),
+        });
+        app.reload_modules();
+
+        assert!(app.answer_question(&q, "Beton kutildi, kelmadi"));
+        let entry = app.journal.iter().find(|j| j.date == today).expect("yozuv");
+        assert!(entry.remarks.contains("Beton kutildi"), "{}", entry.remarks);
+        // Bo'sh javob yozilmaydi.
+        assert!(!app.answer_question(&q, "   "));
+    }
+
+    /// TZ IX.2, X.29: maydonchadan kelgan ariza ilovada raqam oladi va
+    /// tasdiqlanmagan holatda qoladi.
+    #[test]
+    fn a_request_from_the_phone_gets_its_number_in_the_app() {
+        let field = TempDb::new();
+        let pid = field.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&field.path).unwrap());
+        app.select_project(pid);
+        let before = app.requests.len();
+
+        let text = "QURAI-PACKAGE	1
+PROJECT	OBY
+
+#request
+date	kind	title	qty	unit	requester	need_date	note	gps
+2026-09-08	material	Sement M400	2000	kg	Alisher	2026-09-15	Tugadi	41.2995,69.2401
+";
+        let pkg = crate::package::read(text).expect("o'qildi");
+        let (added, _) = app.import_package(&pkg);
+        assert_eq!(added, 1);
+        app.reload_modules();
+        assert_eq!(app.requests.len(), before + 1);
+
+        let q = app
+            .requests
+            .iter()
+            .find(|q| q.title == "Sement M400")
+            .expect("ariza");
+        assert!(!q.number.trim().is_empty(), "raqam berilmadi");
+        assert_eq!(q.qty, 2000.0);
+        assert_eq!(q.requester, "Alisher");
+        // Tasdiqlash ofisda qoladi.
+        assert_eq!(q.status, crate::domain::RequestStatus::New);
+
+        // Takroriy import dublikat yaratmaydi.
+        let (added2, existing2) = app.import_package(&pkg);
+        assert_eq!(added2, 0);
+        assert!(existing2 > 0);
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {

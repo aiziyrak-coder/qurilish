@@ -573,6 +573,12 @@ QURAI_BIND=0.0.0.0:8080 QURAI_DB=/var/qurai/server.db qurai-server
 Ilovada: «Sozlamalar → Server bilan sinxronizatsiya» — manzil, login va parol.
 Parol saqlanmaydi, faqat seans belgisi.
 
+Telefon sahifalari: kunlik yozuv, tabel, ishlar, **kirish/chiqish**, **QR
+o'qish**, **ariza**, **texnika smenasi**, **ofis bilan yozishma** va
+buyurtmachi kabineti. Sahifa bosh ekranga o'rnatiladi (PWA): aloqasiz
+ochiladi va yuborilmagan forma navbatda turadi — takror yozuvdan har
+formaning bir martalik belgisi himoya qiladi.
+
 **Xavfsizlik chegarasi ochiq aytiladi:**
 
 - Server **HTTP** beradi. Internetga chiqarilganda **HTTPS beruvchi teskari
@@ -602,20 +608,73 @@ chiziladi (namuna, bo'sh baza, faqat-o'qish roli, tor oyna va chekka ma'lumot),
 server haqiqiy so'rovlarni qabul qiladi, desktop mijozi haqiqiy server bilan
 gaplashadi, PDF va Excel fayllari haqiqatda yoziladi va qayta o'qiladi.
 
-## Ilova ichida hal bo'lmaydigan narsalar
+## Tashqi shartga bog'liq bandlar
 
-Bular kod bilan emas, tashqi shart bilan hal bo'ladi va shu sababli ochiq
-qoldirilgan:
+TZ da tashqi xizmat talab qiladigan bandlar bor. Ularning har biri ikki
+guruhga bo'lingan va farqi muhim.
+
+### Haqiqatan bloklangan
+
+Bu yerda o'rniga qo'yiladigan narsa yo'q va shunday deb aytiladi.
 
 1. **DWG va RVT** — yopiq formatlar. CAD dan **DXF** eksport qilinadi va u
    o'qiladi; IFC ham o'qiladi.
-2. **3D ko'rinish (BIM)** — geometriya yadrosi talab qiladi. IFC dan elementlar,
-   bog'lanishlar va kolliziyalar ro'yxati olinadi.
-3. **Push bildirishnoma** (SMS, Telegram) — tashqi xizmat va shartnoma kerak.
-   Ilova ichidagi bildirishnomalar markazi va telefon sahifasi ishlaydi.
-4. **Davlat elektron raqamli imzosi** — kalitlar va akkreditatsiya masalasi.
-   Serverdagi imzo kim, qachon va qaysi matnni tasdiqlaganini qayd etadi.
-5. **Ovozli kiritish** — mikrofon va nutqni tanish xizmati kerak.
-6. **Native mobil ilova** — hozir telefon brauzeri orqali ishlanadi.
+2. **3D geometriya bo'yicha kolliziya** — element **shaklini** talab qiladi.
+   IFC dan uning **joyi** olinadi va joylashuv rejasi chiziladi; kolliziyalar
+   esa qoidalar bo'yicha topiladi (kesishish, teshik, uklon).
+3. **AR / vizual tekshiruv** — qurilma va kamera kalibrlashini talab qiladi.
+4. **Rasm mazmunini tanish** — tashqi model. Rasmning **ichidagi yozuv**
+   (EXIF) esa o'qiladi: qachon, qayerda olingani, tahrirlangani va boshqa
+   yozuvda ishlatilgani tekshiriladi.
+5. **Davlat elektron raqamli imzosi** — markazdagi kalit va litsenziya.
+   O'rniga **imzo daftari** ishlaydi: imzolangan matnning SHA-256 xeshi
+   olinadi, yozuv oldingisiga bog'lanadi va zanjir uchi serverga qayd
+   etiladi — keyin qilingan tuzatish ko'rinib qoladi. Bu hujjat butunligini
+   isbotlaydi, imzo egasining shaxsini emas.
+
+### Ulanish nuqtasi qo'yilgan
+
+Bularda aniq bir xizmat tanlanmagan: har tashkilotda u boshqacha. Ilova
+ularsiz ham to'liq ishlaydi.
+
+1. **Push (SMS, Telegram)** — jiddiy signal ko'rsatilgan manzilga oddiy HTTP
+   so'rovi bilan yuboriladi (tashkilotning boti, korporativ shlyuzi yoki
+   avtomatlashtirish xizmati). **Sukut bo'yicha o'chiq**; kalit faqat
+   `Authorization` sarlavhasida ketadi.
+2. **Bozor narxi va narxlar bazasi** — narx ro'yxati Excel/CSV dan yuklanadi
+   (ta'minotchi praysi, resurs normativlari, tender natijalari). Undan
+   diapazon chiqadi va smeta narxi shu bilan solishtiriladi. Tashqi bozor
+   manbasi ulanmagan va **uydirma son ishlatilmaydi**.
+3. **Narx prognozi** — o'z kirimlarimizdagi yo'nalish hisoblanadi (kamida
+   uchta kirim). Bu **tendensiya**, prognoz emas va shunday deb ataladi.
+4. **Ob-havo xizmati** — jurnalga yozilgan harorat sifat bilan bog'langan:
+   beton ishi +5 dan past yoki +35 dan yuqori haroratda bo'lsa, prorabdan
+   qanday tadbir ko'rilgani so'raladi. Harorat yozilmagan bo'lsa hukm
+   chiqarilmaydi.
+5. **Ovozli kiritish** — telefon sahifasida brauzerning o'z tanishi bilan
+   (kunlik yozuv, ariza, yozishma). Ba'zi brauzerlar buni internet orqali
+   bajaradi va bu tugmaning yonida yozilgan.
+6. **Native mobil ilova** — telefonga **o'rnatiladigan ko'rinish** (PWA):
+   bosh ekranda belgi, o'z oynasida ochiladi, aloqasiz o'qiladi va
+   yuborilmagan formalar navbatda turadi. Do'kondagi ilova alohida loyiha.
 7. **Skanni tanish (OCR)** — mahalliy Tesseract chaqiriladi; u o'rnatilmagan
    bo'lsa ilova buni ochiq aytadi va taxmin qilmaydi.
+
+### Maydonchadagi qurilma nima beradi
+
+GPS, kamera va mikrofon ish stolida yo'q — ular **telefonda** bor. Shuning
+uchun quyidagilar telefon sahifasidan keladi va ilova ularni **hosil
+qilmaydi**:
+
+- **Koordinata** — kunlik yozuv, tabel, ariza, kirish-chiqish va texnika
+  smenasiga qo'shiladi. Obyekt geozonasi pasportda beriladi; telefonning
+  aniqligi radiusga qo'shiladi, koordinata bo'lmasa esa hukm chiqarilmaydi.
+- **QR o'qish** — brauzerdagi `BarcodeDetector` bilan; u yo'q bo'lsa kod
+  qo'lda kiritiladi. O'qilgan kod nimaligi serverdagi yorliq ro'yxatidan
+  ko'rsatiladi.
+- **Ovoz** — matn maydonlarini to'ldiradi.
+- **Foto** — EXIF orqali qachon va qayerda olingani tekshiriladi.
+
+Xarita **tayllari yuklanmaydi**: ilova lokal qoladi. O'rniga nuqtalar
+sxemasi chiziladi — obyekt markaziga nisbatan metrda, o'lchov chizig'i
+bilan.

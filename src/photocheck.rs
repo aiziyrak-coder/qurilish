@@ -234,6 +234,20 @@ fn normalize(path: &str) -> String {
     path.trim().replace('\\', "/").to_lowercase()
 }
 
+/// Video kengaytmalari.
+///
+/// Videoda EXIF bo'lmaydi va uni «ma'lumot yo'q» deb belgilash shovqin
+/// bo'lardi: har video uchun bir e'tiroz chiqib, haqiqiy topilmalarni
+/// ko'mib yuborardi. Shuning uchun video tekshiruvdan chetlab o'tiladi
+/// va bu ochiq aytiladi.
+pub const VIDEO: [&str; 6] = ["mp4", "mov", "avi", "mkv", "webm", "3gp"];
+
+/// Fayl videomi.
+pub fn is_video(path: &str) -> bool {
+    let ext = path.rsplit('.').next().unwrap_or("").trim().to_lowercase();
+    VIDEO.contains(&ext.as_str())
+}
+
 /// Jurnal yozuvlaridan tekshiriladigan ro'yxat tuzadi.
 pub fn from_journal(entries: &[crate::domain::JournalEntry]) -> Vec<Shot> {
     entries
@@ -242,7 +256,7 @@ pub fn from_journal(entries: &[crate::domain::JournalEntry]) -> Vec<Shot> {
             e.photos
                 .split(';')
                 .map(str::trim)
-                .filter(|p| !p.is_empty())
+                .filter(|p| !p.is_empty() && !is_video(p))
                 .map(|p| Shot {
                     file: p.to_string(),
                     owner: e.date.to_string(),
@@ -390,6 +404,39 @@ mod tests {
             Some(meta(Some(day(2026, 9, 8)), None, "A536BXXU9DXH2"))
         });
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// Video foto-nazoratdan chetlab o'tiladi.
+    ///
+    /// Videoda EXIF bo'lmaydi; har video uchun «ma'lumot yo'q» e'tirozi
+    /// chiqsa, u haqiqiy topilmalarni ko'mib yuborardi.
+    #[test]
+    fn video_is_not_checked_as_a_photo() {
+        assert!(is_video("C:/foto/IMG_0001.MP4"));
+        assert!(is_video("kadr.mov"));
+        assert!(!is_video("foto.jpg"));
+        assert!(!is_video("hujjat"));
+
+        let entry = crate::domain::JournalEntry {
+            id: 1,
+            project_id: 1,
+            date: day(2026, 9, 8),
+            author: String::new(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers: 0,
+            machines: 0,
+            task_id: None,
+            volume: 0.0,
+            unit: String::new(),
+            text: String::new(),
+            remarks: String::new(),
+            photos: "a.jpg;kadr.mp4;b.JPEG".into(),
+            gps: String::new(),
+        };
+        let shots = from_journal(std::slice::from_ref(&entry));
+        assert_eq!(shots.len(), 2, "{shots:?}");
+        assert!(shots.iter().all(|s| !is_video(&s.file)));
     }
 
     /// Markaz taklifi faqat haqiqiy nuqtalardan chiqadi.

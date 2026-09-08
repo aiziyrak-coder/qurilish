@@ -20,30 +20,39 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 |---|---:|---:|---:|---:|---:|
 | I. Loyihani boshqarish | 3 | 3 | 0 | 0 | 0 |
 | II. AI loyiha tekshiruvi | 22 | 20 | 1 | 1 | 1 |
-| III. AI smeta tekshiruvi | 34 | 32 | 0 | 2 | 2 |
-| IV. Ijro hujjatlari | 30 | 28 | 0 | 2 | 2 |
-| V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
-| VI. Prorab ilovasi | 37 | 29 | 3 | 5 | 5 |
+| III. AI smeta tekshiruvi | 34 | 34 | 0 | 0 | 0 |
+| IV. Ijro hujjatlari | 30 | 29 | 1 | 0 | 0 |
+| V. Kunlik ishlar jurnali | 34 | 31 | 3 | 0 | 0 |
+| VI. Prorab ilovasi | 37 | 33 | 4 | 0 | 0 |
 | VII. Texnik nazorat kabineti | 38 | 36 | 0 | 2 | 2 |
-| VIII. Buyurtmachi kabineti | 37 | 35 | 1 | 1 | 1 |
-| IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
-| X. Xaridlar | 48 | 47 | 0 | 1 | 1 |
-| XI. Ombor | 48 | 47 | 0 | 1 | 1 |
-| XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
-| XIII. Tabel | 44 | 38 | 0 | 6 | 6 |
-| XIV. Sifat | 41 | 39 | 0 | 2 | 2 |
-| XV. Xavfsizlik | 41 | 38 | 0 | 3 | 3 |
-| XVI. Mashinalar | 50 | 47 | 1 | 2 | 2 |
+| VIII. Buyurtmachi kabineti | 37 | 35 | 2 | 0 | 0 |
+| IX. Arizalar | 42 | 42 | 0 | 0 | 0 |
+| X. Xaridlar | 48 | 47 | 1 | 0 | 0 |
+| XI. Ombor | 48 | 48 | 0 | 0 | 0 |
+| XII. Materiallar | 41 | 41 | 0 | 0 | 0 |
+| XIII. Tabel | 44 | 41 | 3 | 0 | 0 |
+| XIV. Sifat | 41 | 39 | 2 | 0 | 0 |
+| XV. Xavfsizlik | 41 | 38 | 3 | 0 | 0 |
+| XVI. Mashinalar | 50 | 50 | 0 | 0 | 0 |
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 16 | 15 | 1 | 0 | 0 |
-| **Jami** | **702** | **651** | **14** | **37** | **37** |
+| **Jami** | **702** | **671** | **28** | **3** | **3** |
 
-Ya'ni **~93 % to'liq**, **~2 % qisman**, **~5 % hali yo'q**.
+Ya'ni **~96 % to'liq**, **~4 % qisman**, **~0 % hali yo'q**.
 
-Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
-Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
-generatsiyasi va modullararo avtomatik zanjirlar**.
+Qolgan uch band (**⬜**) va qisman bandlardagi 🔒 belgilar **tashqi shartga**
+bog'liq. Ular ikki turga bo'linadi va farqi muhim:
+
+* **Haqiqatan bloklangan** — geometriya yadrosi (3D kolliziya, AR) va yopiq
+  formatlar (DWG, RVT). Bu yerda o'rniga qo'yiladigan narsa yo'q.
+* **Tashqi xizmatga bog'liq** — davlat ERI si, ob-havo xizmati, bozor narxi
+  manbasi, SMS/Telegram shlyuzi, rasm mazmunini tanuvchi model. Bularda
+  **ulanish nuqtasi** yoki **kiritiladigan ma'lumot** qo'yilgan: ilova
+  ularsiz ham to'liq ishlaydi, uydirma son esa hech qayerda ishlatilmaydi.
+
+Har bir qatordagi izohda nima **bor** va nima **yo'q** ekani ochiq yozilgan —
+bu ro'yxatning asosiy vazifasi shu.
 
 ---
 
@@ -98,8 +107,8 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 12. Materiallarni tekshirish — *marka va standart talab qilinadi*
 - [x] 13. Marka va xarakteristikani tekshirish
 - [x] 14. Narxlarni tekshirish — *narx farqi va tijorat taklifi bilan solishtirish*
-- [ ] 🔒 14.1–14.4. Tarixiy narx, taklif narxi, bozor diapazoni bilan solishtirish
-- [ ] 🔒 15. **Narxlar bazasi (PRICE DATABASE)**
+- [x] 14.1–14.4. Tarixiy narx, taklif narxi, bozor diapazoni bilan solishtirish — *tarixiy narx o'z kirimlarimizdan, taklif narxi KP dan, diapazon esa yuklangan narx ro'yxatidan; chetlanish 15 % dan oshsa nomuvofiqlik ochiladi*
+- [x] 15. **Narxlar bazasi (PRICE DATABASE)** — *Excel/CSV dan yuklanadi: nom, birlik, narx, manba, sana, hudud. Bir necha ro'yxat birga tursa diapazon chiqadi. Tashqi bozor manbasi ulanmagan va uydirma son ishlatilmaydi — bu ochiq aytilgan*
 - [x] 16. Tijorat takliflari (KP) — *smeta narxi taklif bilan solishtiriladi*
 - [x] 17. Koeffitsiyentlarni tekshirish — *ko'rsatilmagani va haddan tashqarisi*
 - [x] 18. Ustama xarajatlarni tekshirish — *to'g'ridan-to'g'ri xarajatdan foizda*
@@ -131,7 +140,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 6. **AOSR** — *ish, ishlatilgan material, sertifikat, imzo joylari*
 - [x] 7. Ijro sxemalari — *geodezik o'lchovga tayanadi*
 - [x] 8. Fotolar — *hujjatga biriktiriladi*
-- [ ] 🔒 9. Geolokatsiya va vaqt
+- [x] 9. Geolokatsiya va vaqt — *hujjatga biriktirilgan fotoning ichidagi yozuvdan (EXIF) sana, vaqt va koordinata olinadi; obyekt geozonasi bilan solishtiriladi*
 - [x] 10. Material sertifikatlari — *muddat nazorati va kirim tekshiruvi*
 - [x] 11. AI sertifikat tekshiruvi (OCR) — *skandan raqam, berilgan sana, amal muddati, GOST/O'z DSt va ishlab chiqaruvchi ajratiladi; natija qoralama va to'ldirilgan maydon ustiga yozilmaydi*
 - [x] 12. Beton pasporti
@@ -140,7 +149,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 15. Prorabning kunlik hisoboti
 - [x] 16. Yashirin ishlar nazorati
 - [x] 17. Kelishuv workflow — *marshrut hujjat holatidan ko'rinadi*
-- [ ] 🔒 18. Elektron imzo
+- [~] 18. Elektron imzo — *imzo daftari: imzolangan matnning SHA-256 xeshi olinadi va yozuv oldingisiga bog'lanadi, shuning uchun keyingi tuzatish ko'rinib qoladi; zanjir uchi serverga qayd etiladi. Davlat ERI si 🔒 — u markazdagi kalit va litsenziyani talab qiladi*
 - [x] 19. Versiyalilik
 - [x] 20. Imzolashdan oldin AI tekshiruvi
 - [x] 21. Loyiha bilan solishtirish — *versiya va topshirish sanasi bo'yicha*
@@ -166,11 +175,11 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 6. Tabel — *alohida modul, bog'langan*
 - [x] 7. Bajarilgan ishlar
 - [x] 8. Fotofiksatsiya
-- [ ] 🔒 9. Fotolarni AI tahlili
+- [~] 9. Fotolarni AI tahlili — *rasmning ichidagi yozuv tekshiriladi: qachon, qayerda olingani, tahrirlangani va boshqa yozuvda ishlatilgani. Rasm **mazmunini** tanish 🔒 — tashqi model talab qiladi*
 - [x] 10. Materiallar — *kunlik hajm bo'yicha sarf*
 - [x] 11. Material sarfini nazorat — *kun ichida norma bilan solishtiriladi*
 - [x] 12. Texnika
-- [ ] 🔒 13. GPS bilan avtomatik bog'lanish
+- [x] 13. GPS bilan avtomatik bog'lanish — *telefondan kelgan yozuvga koordinata qo'shiladi; ish stolida GPS yo'q va koordinata o'ylab topilmaydi*
 - [x] 14. GPR bajarilishi — *jurnal hajmi ishga o'tadi*
 - [x] 15. Kechikish tahlili — *AN-S2, AN-S3, AN-S4*
 - [x] 16. Ertangi kunga reja
@@ -182,10 +191,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 22. Sifat nazorati
 - [x] 23. Mehnat muhofazasi
 - [x] 24. Direktorning kunlik hisoboti
-- [ ] 🔒 25. AI prorabga savol beradi
-- [ ] 🔒 26. Ovozli rejim
-- [ ] 🔒 27. Geolokatsiya nazorati
-- [ ] 🔒 28. Hisobotni imzolash
+- [x] 25. AI prorabga savol beradi — *savollar modullararo ziddiyatdan tug'iladi: hajm bor — material yo'q, odam ishladi — hajm yo'q, beton xavfli haroratda, ish kechikdi — sabab yozilmagan. Javob kunlik yozuvning izohiga tushadi. Bu til modeli emas, qoidalar — va shunday deb aytiladi*
+- [~] 26. Ovozli rejim — *telefon sahifasida ovoz bilan matn kiritish (brauzerning o'z tanishi); ish stolida 🔒*
+- [x] 27. Geolokatsiya nazorati — *yozuv obyekt geozonasiga tushdimi; telefonning aniqligi radiusga qo'shiladi, koordinata bo'lmasa hukm chiqarilmaydi*
+- [~] 28. Hisobotni imzolash — *imzo daftari va zanjir bor (IV.18); kunlik hisobotni telefondan imzolash 🔒*
 - [x] 29. Tarix
 - [x] 30. AI qidiruv — *«aprelda beton quyish» kabi so'rov: oy va yil davrga aylanadi, topilgan kun jurnalda ajratiladi*
 - [x] 31. Boshqa modullar bilan bog'lanish
@@ -207,19 +216,19 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 4. Mening vazifalarim — *bugungi ishlar*
 - [x] 5. Mobil GPR — *telefonda ishlar muddat bo'yicha ro'yxat sifatida: bajarilish foizi, bo'lim, muddati o'tgani ajratilgan. Grafik chizmasi ataylab yo'q — kichik ekranda o'qilmaydi*
 - [x] 6. Kunlik hisobot
-- [ ] 🔒 7. Ovozli kiritish
+- [~] 7. Ovozli kiritish — *telefon sahifasida kunlik yozuv va yozishma maydonlarida; tanish brauzerning o'zida bajariladi va ba'zi brauzerlarda internet orqali ketishi ochiq aytiladi*
 - [x] 8. Foto — *jurnal va yozuvlarga biriktirish*
-- [ ] 🔒 9. Fotoni AI tahlili
-- [ ] 🔒 10. Video
-- [~] 11. QR-kod — *kvartira, material partiyasi va hujjat uchun QR yorliq chiqariladi (A4 da 21 ta); kamera bilan **o'qish** 🔒 — qurilma va kutubxona kerak*
+- [~] 9. Fotoni AI tahlili — *EXIF bo'yicha nazorat (V.9); mazmunni tanish 🔒*
+- [~] 10. Video — *fotoga o'xshab biriktiriladi (yo'li saqlanadi) va tizim pleyerida ochiladi; videoda EXIF bo'lmagani uchun foto-nazoratdan chetlab o'tiladi. Telefondan video yuklash 🔒 — u fayl saqlash xizmatini talab qiladi*
+- [x] 11. QR-kod — *kvartira, partiya, hujjat va ishchi uchun yorliq chiqariladi (A4 da 21 ta); telefon sahifasida kamera bilan o'qiladi va u yo'q brauzerda kod qo'lda kiritiladi; o'qilgan kod nimaligi serverdagi yorliq ro'yxatidan ko'rsatiladi*
 - [x] 12. Chizmalar bilan ishlash — *topshirilgan versiya prorab ekranida*
-- [~] 13. BIM bilan ishlash — *IFC o'qiladi, elementlar va kolliziyalar ro'yxati bor; 3D ko'rinish 🔒 — geometriya yadrosi talab qiladi*
+- [~] 13. BIM bilan ishlash — *IFC o'qiladi: elementlar, kolliziyalar va endi **joylashuv rejasi** (element qaysi qavatda va qayerda). 3D ko'rinish 🔒 — u element shaklini talab qiladi, IFC dan esa joyi olinadi*
 - [x] 14. Bajarilgan ishlar
 - [x] 15. Materiallar
 - [x] 16. Materialga ariza
 - [x] 17. AI ariza taklifi — *jurnaldagi hajmdan norma bo'yicha*
 - [x] 18. Ishchilar hisobi
-- [ ] 🔒 19. Geolokatsiya
+- [x] 19. Geolokatsiya — *telefon brauzeri koordinatani so'raydi va yozuvga qo'shadi; ruxsat berilmasa yozuv baribir yuboriladi*
 - [x] 20. Texnika
 - [x] 21. Texnika buzilishi
 - [x] 22. Izohlar — *har qanday yozuvga izoh va javob*
@@ -229,10 +238,10 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. Texnika xavfsizligi
 - [x] 27. Instruktaj
 - [x] 28. Internetsiz ishlash — *ilova butunlay lokal ishlaydi: baza yonida, tarmoq talab qilinmaydi. Server ixtiyoriy va u yo'q bo'lganda ham hamma narsa ochiladi; almashish paket fayli orqali*
-- [~] 29. Bildirishnomalar — *ilova ichida markaz; server orqali telefonda ham ko'rinadi (ilova hisoblaydi, server saqlaydi); push (SMS/Telegram) 🔒*
+- [x] 29. Bildirishnomalar — *ilova ichida markaz; server orqali telefonda ham ko'rinadi; jiddiy signal tashqi manzilga yuboriladi (tashkilotning boti yoki shlyuzi). SMS/Telegram bevosita ulanmaydi: ular shartnoma va kalit talab qiladi va har tashkilotda boshqacha*
 - [x] 30. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 31. AI aniq obyektni bilishi
-- [ ] 🔒 32. Ofis bilan chat
+- [x] 32. Ofis bilan chat — *obyekt bo'yicha umumiy yozishma: telefonda ham, ilovada ham; xabarlar serverda saqlanadi va aloqasiz paytda eski xabarlar ochiladi*
 - [x] 33. Ish kunining avtomatik yakunlanishi — *yakuniy tekshiruv ro'yxati*
 - [x] 34. Hisobotni yuborishdan oldin AI tekshiruvi
 - [x] 35. Prorabning bosh paneli
@@ -291,7 +300,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 3. Obyekt holati
 - [x] 4. Obyekt foto va videosi — *jurnal va yozuvlarga biriktirilgan fotolar*
 - [x] 5. Obyekt tarixi — *oxirgi ish kunlari va versiyalar*
-- [ ] 🔒 6. 3D / BIM
+- [~] 6. 3D / BIM — *joylashuv rejasi bor (VI.13); uch o'lchovli ko'rinish 🔒*
 - [x] 7. Ishlar grafigi — *bo'limlar kesimi va haftalik hisobot*
 - [x] 8. Grafikni AI tahlili
 - [x] 9. Moliya
@@ -307,7 +316,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 19. Ijro hujjatlari — *imzolanganlar va qabulga tayyorlik*
 - [x] 20. Ijro hujjatlarini AI tekshiruvi — *imzoga to'siqlar*
 - [x] 21. Ishlarni qabul qilish — *topshirildi → qabul/rad etildi, sabab bilan*
-- [~] 22. Elektron kelishuv — *serverda masofadan imzolash: kim, qachon va qaysi matn (xesh bilan bog'lanadi); davlat ERI si 🔒*
+- [~] 22. Elektron kelishuv — *serverda masofadan imzolash va ilovadagi imzo daftari: kim, qachon va qaysi matn (SHA-256 bilan bog'lanadi, zanjir buzilishi ko'rinadi); davlat ERI si 🔒*
 - [x] 23. Loyiha hujjatlari — *versiya va o'zgartirish belgisi bilan*
 - [x] 24. Loyiha versiyalarini AI solishtirishi — *kartochka ma'lumoti bo'yicha*
 - [x] 25. Loyiha xatolarini nazorat qilish — *kritik nomuvofiqliklar*
@@ -356,7 +365,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 26. Xizmatga ariza — *ariza turi*
 - [x] 27. Xodimga ariza — *kasb va ehtiyoj hisobi*
 - [x] 28. Foto va hujjatlar
-- [ ] 🔒 29. Ovozli arizalar
+- [x] 29. Ovozli arizalar — *telefon sahifasida ariza formasi bor va «Nima kerak» maydoni ovoz bilan to'ldiriladi; ariza ofisdagi ilovaga tushib, u yerda raqam oladi va tasdiqlanmagan holatda qoladi*
 - [x] 30. Ijroni nazorat qilish — *qoplanish*
 - [x] 31. Ariza tarixi — *kim, qachon, qanday qaror qildi*
 - [x] 32. Rad etish sababi — *sababsiz rad ogohlantiriladi*
@@ -418,7 +427,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 41. Korrupsiya riskini nazorat qilish — *yetkazib beruvchi ulushi, taklifsiz xarid, narx oshishi, shoshilinch ulushi*
 - [x] 42. Xaridlarni avtomatik bo'lish
 - [x] 43. Shoshilinch xaridlar — *belgi va ulush nazorati*
-- [ ] 🔒 44. AI narx prognozi
+- [~] 44. AI narx prognozi — *o'z kirimlarimizdagi narx yo'nalishi hisoblanadi (kamida uchta kirim). Bu **tendensiya**, prognoz emas va shunday deb ataladi; bozor manbasi 🔒*
 - [x] 45. Direktorning bosh hisoboti — *«Rahbar» ekranida*
 - [x] 46. Xaridchi samaradorligi — *xarid soni, summa, muddatida %, taklif bilan %*
 - [x] 47. Modulning to'liq zanjiri
@@ -432,7 +441,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 2. Omborning bosh ekrani
 - [x] 3. **Bir necha ombor** — *tur, mas'ul, ombor kesimida qoldiq*
 - [x] 4. Material kartochkasi
-- [ ] 🔒 5. QR / shtrix-kod
+- [x] 5. QR / shtrix-kod — *partiya yorlig'i chiqariladi va telefon kamerasi bilan o'qiladi; o'qilgan kod partiya kartochkasini ochadi*
 - [x] 6. Materialni qabul qilish
 - [x] 7. Kirish nazorati — *sifat moduli va kirim tekshiruvi*
 - [x] 8. AI material tekshiruvi — *kirim hujjati va partiyasi*
@@ -494,13 +503,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 11. Almashtiruvchi tanlash — *kartochkada narx va qoldiq bilan*
 - [x] 12. Juda muhim qoida — *bir material — bitta kartochka*
 - [x] 13. Sertifikatlar
-- [ ] 🔒 14. AI OCR sertifikatlar
+- [x] 14. AI OCR sertifikatlar — *IV.11 bilan bitta mexanizm: skandan raqam, sana, muddat va standart ajratiladi (mahalliy Tesseract), natija qoralama bo'lib qoladi*
 - [x] 15. AI sertifikatni tekshiradi — *raqam, muddat va ishlatilgani*
 - [x] 16. Hujjat amal qilish muddati
 - [x] 17. Material → partiya — *ombor partiyalari*
 - [x] 18. Material → yetkazib beruvchi — *kartochkada ta'minotchilar ro'yxati*
 - [x] 19. Narx tarixi — *kirimlardan, o'zgarish foizi bilan*
-- [ ] 🔒 20. Bozor narxi
+- [x] 20. Bozor narxi — *yuklangan narx ro'yxatidan diapazon; material kartochkasida chetlanish va o'z kirimlarimizdagi tendensiya ko'rinadi*
 - [x] 21. Material → sarf normalari
 - [x] 22. AI ortiqcha sarfni tahlil qilishi — *kartochkada fakt/norma*
 - [x] 23. Obyektlar bo'yicha materiallar
@@ -530,9 +539,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Modul maqsadi
 - [x] 2. Bosh ekran — *haftalik jadval*
 - [x] 3. **Obyektlar** — *obyektlar kesimida xodim, soat va ish haqi*
-- [ ] 🔒 4. Kirish/chiqishni hisobga olish
-- [ ] 🔒 5. Obyekt geozonasi
-- [ ] 🔒 6. QR-kirish
+- [x] 4. Kirish/chiqishni hisobga olish — *telefondan «kirdim/chiqdim»; kun juftlanadi va tabel bilan solishtiriladi. Juftlanmagan kun soat bermaydi — u «ochiq» deb belgilanadi*
+- [x] 5. Obyekt geozonasi — *pasportda markaz va radius; telefonning aniqligi radiusga qo'shiladi, chetlanish esa ko'rsatiladi*
+- [x] 6. QR-kirish — *ishchi bejigi chiqariladi; o'qilganda uning kirish-chiqish sahifasi ochiladi va belgi «QR» deb qayd etiladi*
 - [x] 7. Prorabning mobil tabeli — *telefondan ishchilar ro'yxati bo'yicha soat va kun turi kiritiladi; bo'sh katak yuborilmaydi; yozuv ilovaning tabeliga tushadi*
 - [x] 8. **Brigadalar** — *brigadir, ish, ishchilar tarkibi*
 - [x] 9. Ishchilarni obyektlar bo'yicha taqsimlash
@@ -563,9 +572,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 34. Tabelni tuzatish — *davrni qayta ochish orqali, sabab bilan*
 - [x] 35. Oyni yopish — *yopilgan oy tasodifan o'zgarmaydi*
 - [x] 36. Tasdiqlash — *kim va qachon yopgani yoziladi; qayta ochish iz qoldiradi*
-- [ ] 🔒 37. Elektron imzo
-- [ ] 🔒 38. Mobil ilova
-- [ ] 🔒 39. Ovozli kiritish
+- [~] 37. Elektron imzo — *imzo daftari va zanjir (IV.18); davlat ERI si 🔒*
+- [~] 38. Mobil ilova — *telefonga o'rnatiladigan ko'rinish (PWA): bosh ekranda belgi, o'z oynasida ochiladi, aloqasiz o'qiladi va yuborilmagan formalar navbatda turadi. Do'kondagi native ilova 🔒*
+- [~] 39. Ovozli kiritish — *telefon sahifasida (VI.7)*
 - [x] 40. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 41. Rahbar nazorati — *«Rahbar» ekranida*
 - [x] 42. Bosh hisobot — *«Rahbar» ekranida*
@@ -587,9 +596,9 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 9. Yashirin ishlar nazorati — *chek-list bandi sifatida*
 - [x] 10. Keyingi bosqichni bloklash — *ochiq nuqson ishni yopishga qo'ymaydi*
 - [x] 11. Sifat fotofiksatsiyasi
-- [ ] 🔒 12. Fotolarni AI tahlili
+- [~] 12. Fotolarni AI tahlili — *EXIF bo'yicha nazorat (V.9); mazmunni tanish 🔒*
 - [x] 13. Geometriya nazorati — *geodeziya: loyiha/fakt/dopusk (VII)*
-- [ ] 🔒 14. BIM Quality Control
+- [~] 14. BIM Quality Control — *IFC dan kelgan elementlar sifat tekshiruvlariga bog'lanadi va joylashuv rejasida ko'rinadi; model bilan **haqiqiy** bajarilganni solishtirish 🔒 — u geometriya va o'lchov ma'lumotini talab qiladi*
 - [x] 15. Bo'limlarni nazorat qilish — *bo'lim kesimida ball*
 - [x] 16. Kolliziyalarni tekshirish — *AI tekshiruvida: kesish va teshik*
 - [x] 17. Izohlar
@@ -635,7 +644,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 11. **Naryad-dopusk** — *ish, muddat, odamlar, chora-tadbirlar*
 - [x] 12. Naryadni tekshirish — *ruxsat, SIZ, muddat, mas'ul*
 - [x] 13. Balandlikdagi ishlar — *ruxsat turi va naryad*
-- [ ] 🔒 14. AI foto-nazorat
+- [~] 14. AI foto-nazorat — *EXIF bo'yicha nazorat (V.9); mazmunni tanish 🔒*
 - [x] 15. Xavfli zonalarni nazorat qilish — *zona, chora, mas'ul va tekshiruv muddati*
 - [x] 16. Yuk ko'tarish ishlari — *ruxsat turi va xavfli zona*
 - [x] 17. Texnika — *texnik ko'rik muddati va kunlik ko'rik*
@@ -652,13 +661,13 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 28. Root Cause Analysis — *sakkizta ildiz sabab; faqat haqiqiy hodisalar sanaladi*
 - [x] 29. Korrektiv chora-tadbirlar
 - [x] 30. Bartaraf etishni nazorat qilish
-- [ ] 🔒 31. Bartaraf etilgandan keyin AI foto tekshiruvi
+- [~] 31. Bartaraf etilgandan keyin AI foto tekshiruvi — *foto sanasi bartaraf etilgan kunga mos kelishi tekshiriladi (V.9); mazmunni tanish 🔒*
 - [x] 32. Kunlik Safety Report
 - [x] 33. **Safety Score** — *hodisa, ruxsat, SIZ va naryad kamchiliklari*
 - [x] 34. Obyektlar reytingi — *«Obyektlar» ekranida xavfsizlik balli*
 - [x] 35. Mas'ullar reytingi — *hodisa, buzilish, baxtsiz hodisa, ochiq va muddati o'tgan*
 - [x] 36. Risk Prediction — *zona chorasi, takrorlangan sabab, ishga qo'yib bo'lmaydigan ishchi, kamchilikli naryad*
-- [ ] 🔒 37. Ob-havo bilan bog'lanish
+- [~] 37. Ob-havo bilan bog'lanish — *jurnalga yozilgan harorat sifat bilan bog'landi: beton ishi +5 dan past yoki +35 dan yuqori haroratda bo'lsa, prorabdan qanday tadbir ko'rilgani so'raladi. Ob-havo xizmatiga ulanish 🔒 — u tashqi manba va kalit talab qiladi; harorat yozilmagan bo'lsa hukm chiqarilmaydi*
 - [x] 38. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 39. Rahbar kabineti — *«Rahbar» ekranida*
 - [x] 40. Boshqa modullar bilan bog'lanish
@@ -673,7 +682,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 3. Mashina kartochkasi
 - [x] 4. Har mashina uchun saqlanadigan ma'lumot
 - [x] 5. Texnika toifalari
-- [ ] 🔒 6. Texnika qayerda — *GPS*
+- [x] 6. Texnika qayerda — *operator smenani telefondan yozganda koordinata qo'shiladi; «Joyi» tabida oxirgi ma'lum joy ko'rinadi. Mashinada tracker yo'q va bor deb ko'rsatilmaydi*
 - [x] 7. Holatlar
 - [x] 8. Texnikaga ariza — *zanjirda arizalar soni ko'rinadi*
 - [x] 9. Texnikani taqsimlash — *bandlik rejasi: qaysi texnika qaysi ishda*
@@ -707,12 +716,12 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 37. Texnika bo'sh turishi — *bo'sh kunlar soni*
 - [x] 38. Foydalanish koeffitsiyenti — *ish kunlariga nisbatan*
 - [x] 39. AI parkni optimallashtirishi — *foydalanish koeffitsiyenti va tavsiya*
-- [ ] 🔒 40. Texnika xaritasi
+- [x] 40. Texnika xaritasi — *joy sxemasi: nuqtalar obyekt markaziga nisbatan metrda, o'lchov chizig'i bilan. Xarita tayli yuklanmaydi — ilova lokal qoladi*
 - [x] 41. Mashina tarixi — *yo'l varaqalari*
 - [x] 42. Samaradorlik tahlili — *foydalanish, ishonchlilik va yoqilg'i intizomi*
 - [x] 43. «Ta'mirlash yoki almashtirish» — *ta'mir qiymati balansning 40 % idan oshsa belgilanadi*
 - [x] 44. Mashina hujjatlari — *texnik ko'rik va kunlik ko'rik yozuvlari*
-- [~] 45. Bildirishnomalar — *TX muddati markazga va telefon sahifasiga chiqadi; push 🔒*
+- [x] 45. Bildirishnomalar — *TX muddati markazga va telefon sahifasiga chiqadi; jiddiy signal tashqi manzilga ham yuboriladi (VI.29)*
 - [x] 46. Mexanik kabineti
 - [x] 47. Direktor kabineti — *«Rahbar» ekranida*
 - [x] 48. XVI ning bosh zanjiri
@@ -795,7 +804,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 1. Asosiy vazifa — *qisman: savol-javob*
 - [x] 2. Bosh ekran
 - [x] 3. Tabiiy nutqni tushunish — *OpenAI modeli; kalit so'zlar zaxira sifatida*
-- [~] 4–10. Ovoz, kontekst, ko'p bosqichli suhbat — *suhbat va kontekst bor; ovoz 🔒*
+- [~] 4–10. Ovoz, kontekst, ko'p bosqichli suhbat — *suhbat va kontekst bor; ovoz telefon sahifasida (VI.7), ish stolida 🔒*
 - [x] 11. Rol bo'yicha kirish chegarasi
 - [x] 12–20. Qoralamalar — *ariza, xarid, ijro hujjati, kelishuv marshruti, ta'mir, rejali TX, ishchi kuchi*
 - [x] 21–30. Amalni bajarish — *tasdiqdan keyin, rol huquqi bilan*
@@ -818,7 +827,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] Baza migratsiyasi (eski baza ochilaveradi)
 - [x] **Bir necha obyekt bo'yicha konsolidatsiya** — *«Obyektlar» ekrani, vaznlangan bajarilish, Excel eksporti*
 - [x] **Server va sinxronizatsiya** — *`server/` krati: kirish nazorati, paket navbati, masofadan imzolash; ilova sozlamada yoqiladi*
-- [~] **Mobil klient** — *telefon brauzeri uchun ko'rinish (server beradi); native ilova 🔒*
+- [~] **Mobil klient** — *telefonga o'rnatiladigan ko'rinish (PWA): aloqasiz ochiladi, yuborilmagan forma navbatda turadi va takror yozuvdan bir martalik belgi himoya qiladi; do'kondagi native ilova 🔒*
 - [x] **Hujjat generatsiyasi** — *KS-2, KS-3, M-29, AOSR — `.xlsx` shaklida*
 - [x] **Hisobotlar bo'limi** — *20 ta hisobot, har biri o'z moduli funksiyasidan; davr (bugun/hafta/oy/chorak/yil/butun), ekranda ko'rish, Excel yoki PDF ga saqlash, «hammasi bitta kitobda» — har modul alohida varaqda*
 - [x] **Sotuv tahlili** — *voronka (bo'sh/band/shartnoma/sotilgan va sotuv ulushi), qavatlar kesimi, menejerlar kesimi, muddati o'tgan bronlar, qarzdorlik kechikish muddati bo'yicha (30/60/90/90+)*

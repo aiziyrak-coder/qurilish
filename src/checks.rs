@@ -8439,6 +8439,230 @@ pub fn maker_comparison(quotes: &[Quote], purchases: &[Purchase]) -> Vec<MakerCo
 
 // ================= VI.25, 33-34. Kunni yakunlash va ishni yopish =================
 
+// ============================ V.25. Prorabga beriladigan savollar ============
+
+/// Prorabga beriladigan savol (TZ V.25, XIV.37).
+///
+/// Bu **tekshiruv ro'yxati emas**: kun yakunidagi ro'yxat nima
+/// to'ldirilmaganini aytadi, bu yerdagi savollar esa **javob talab
+/// qiladigan ziddiyatlarni** ko'rsatadi. Ular modullararo yozuvlarni
+/// solishtirishdan tug'iladi: jurnal, tabel, ombor va grafik bir-biriga
+/// mos kelmasa, buni faqat odam tushuntira oladi.
+///
+/// Savollar **ayblov emas**. Har birining ortida oddiy sabab bo'lishi
+/// mumkin va u yozib qo'yilishi kerak — shuning uchun javob kunlik
+/// yozuvning izohiga tushadi.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Question {
+    /// Hajm yozilgan, lekin o'sha kuni ombordan hech narsa berilmagan.
+    VolumeWithoutMaterial {
+        task: String,
+        volume: f64,
+        unit: String,
+    },
+    /// Ombordan material berilgan, lekin hajm yozilmagan.
+    MaterialWithoutVolume {
+        material: String,
+        qty: f64,
+        unit: String,
+    },
+    /// Odam ishlagan, lekin bajarilgan hajm yo'q.
+    CrewWithoutVolume { workers: i64 },
+    /// Beton ishi sovuqda yoki jaziramada.
+    ConcreteInWeather { temperature: f64 },
+    /// Ish muddati o'tgan, lekin jurnalda sababi yo'q.
+    OverdueWithoutReason { task: String, days: i64 },
+}
+
+impl Question {
+    /// Savol matni.
+    pub fn text(&self) -> String {
+        use crate::i18n::t;
+        match self {
+            Question::VolumeWithoutMaterial { task, volume, unit } => format!(
+                "{} «{task}» — {} {unit}. {}",
+                t("q_volume_no_material_1"),
+                fmt(*volume),
+                t("q_volume_no_material_2")
+            ),
+            Question::MaterialWithoutVolume {
+                material,
+                qty,
+                unit,
+            } => format!(
+                "{} «{material}» — {} {unit}. {}",
+                t("q_material_no_volume_1"),
+                fmt(*qty),
+                t("q_material_no_volume_2")
+            ),
+            Question::CrewWithoutVolume { workers } => {
+                format!("{workers} {}", t("q_crew_no_volume"))
+            }
+            Question::ConcreteInWeather { temperature } => {
+                format!("{temperature:.0} °C — {}", t("q_concrete_weather"))
+            }
+            Question::OverdueWithoutReason { task, days } => format!(
+                "«{task}» {days} {} {}",
+                t("days_short"),
+                t("q_overdue_reason")
+            ),
+        }
+    }
+}
+
+/// Beton ishlarini nomidan tanish uchun so'zlar.
+///
+/// Ro'yxat qisqa va ochiq: u faqat **savol berish** uchun ishlatiladi,
+/// hisobga ta'sir qilmaydi. Noto'g'ri tanilsa — ortiqcha savol bo'ladi,
+/// javobsiz qolgan xato emas.
+const CONCRETE_WORDS: [&str; 6] = ["beton", "бетон", "monolit", "монолит", "quyish", "заливк"];
+
+/// Beton uchun xavfli harorat chegaralari.
+///
+/// +5 dan past — gidratatsiya sekinlashadi, +35 dan yuqori — tez
+/// qotadi va yorilib ketadi. Ikkalasida ham alohida tadbir kerak, va
+/// savolning maqsadi shu tadbir yozib qo'yilishini ta'minlash.
+pub const CONCRETE_COLD: f64 = 5.0;
+pub const CONCRETE_HOT: f64 = 35.0;
+
+/// Savollar uchun manba.
+pub struct QuestionCtx<'a> {
+    pub day: NaiveDate,
+    pub journal: &'a [JournalEntry],
+    pub timesheet: &'a [TimesheetEntry],
+    pub moves: &'a [StockMove],
+    pub materials: &'a [Material],
+    pub tasks: &'a [Task],
+    /// Ishning rejadagi tugash sanasi — kechikish shundan hisoblanadi.
+    pub finish: &'a dyn Fn(i64) -> Option<NaiveDate>,
+}
+
+/// Bugungi yozuvlardan savollar tug'diradi.
+pub fn foreman_questions(ctx: &QuestionCtx) -> Vec<Question> {
+    let mut out = Vec::new();
+
+    let today_journal: Vec<&JournalEntry> =
+        ctx.journal.iter().filter(|j| j.date == ctx.day).collect();
+    let today_out: Vec<&StockMove> = ctx
+        .moves
+        .iter()
+        .filter(|m| m.date == ctx.day && m.kind == MoveKind::Out && m.qty > 0.0)
+        .collect();
+    let hours: f64 = ctx
+        .timesheet
+        .iter()
+        .filter(|e| e.date == ctx.day)
+        .map(|e| e.hours)
+        .sum();
+    let workers: i64 = ctx
+        .timesheet
+        .iter()
+        .filter(|e| e.date == ctx.day && e.hours > 0.0)
+        .count() as i64;
+    let volume: f64 = today_journal.iter().map(|j| j.volume).sum();
+
+    // --- Hajm bor, material yo'q.
+    if volume > 0.0 && today_out.is_empty() {
+        if let Some(j) = today_journal.iter().find(|j| j.volume > 0.0) {
+            let task = ctx
+                .tasks
+                .iter()
+                .find(|t| Some(t.id) == j.task_id)
+                .map(|t| t.name.clone())
+                .unwrap_or_else(|| j.text.clone());
+            out.push(Question::VolumeWithoutMaterial {
+                task,
+                volume: j.volume,
+                unit: j.unit.clone(),
+            });
+        }
+    }
+
+    // --- Material bor, hajm yo'q.
+    if volume <= 0.0 {
+        if let Some(m) = today_out.first() {
+            let material = ctx
+                .materials
+                .iter()
+                .find(|x| x.id == m.material_id)
+                .map(|x| x.name.clone())
+                .unwrap_or_default();
+            if !material.is_empty() {
+                out.push(Question::MaterialWithoutVolume {
+                    material,
+                    qty: m.qty,
+                    unit: ctx
+                        .materials
+                        .iter()
+                        .find(|x| x.id == m.material_id)
+                        .map(|x| x.unit.clone())
+                        .unwrap_or_default(),
+                });
+            }
+        }
+    }
+
+    // --- Odam ishladi, hajm yo'q.
+    if hours > 0.0 && volume <= 0.0 && workers > 0 {
+        out.push(Question::CrewWithoutVolume { workers });
+    }
+
+    // --- Beton va harorat.
+    for j in &today_journal {
+        let text = format!("{} {}", j.text, j.remarks).to_lowercase();
+        let task_name = ctx
+            .tasks
+            .iter()
+            .find(|t| Some(t.id) == j.task_id)
+            .map(|t| t.name.to_lowercase())
+            .unwrap_or_default();
+        let concrete = CONCRETE_WORDS
+            .iter()
+            .any(|w| text.contains(w) || task_name.contains(w));
+        // Harorat kiritilmagan bo'lsa savol berilmaydi: nol daraja
+        // «sovuq» degani emas, «yozilmagan» degani.
+        let risky = j.temperature < CONCRETE_COLD || j.temperature > CONCRETE_HOT;
+        if concrete && j.temperature != 0.0 && risky {
+            out.push(Question::ConcreteInWeather {
+                temperature: j.temperature,
+            });
+        }
+    }
+
+    // --- Kechikkan ish, izohsiz.
+    let remarks: String = today_journal
+        .iter()
+        .map(|j| format!("{} {}", j.text, j.remarks))
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase();
+    for t in ctx.tasks {
+        if t.progress >= 100.0 || t.fact_end.is_some() {
+            continue;
+        }
+        let Some(finish) = (ctx.finish)(t.id) else {
+            continue;
+        };
+        let days = (ctx.day - finish).num_days();
+        if days <= 0 {
+            continue;
+        }
+        // Ish jurnalda tilga olingan bo'lsa — sabab yozilgan deb
+        // hisoblaymiz va savol berilmaydi.
+        if remarks.contains(&t.name.to_lowercase()) {
+            continue;
+        }
+        out.push(Question::OverdueWithoutReason {
+            task: t.name.clone(),
+            days,
+        });
+    }
+
+    // Savol ko'p bo'lsa hech biri o'qilmaydi: eng muhim beshtasi qoladi.
+    out.truncate(5);
+    out
+}
+
 /// Kun yakunlanishidan oldin topilgan kamchilik (TZ VI.33-34).
 #[derive(Debug, Clone, PartialEq)]
 pub enum DayIssue {

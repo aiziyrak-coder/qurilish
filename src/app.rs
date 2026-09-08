@@ -1481,6 +1481,9 @@ impl App {
                 "hours".into(),
                 "fuel".into(),
                 "task".into(),
+                "driver".into(),
+                "note".into(),
+                "gps".into(),
             ],
             rows: self
                 .machine_logs
@@ -1498,6 +1501,9 @@ impl App {
                         l.hours.to_string(),
                         l.fuel.to_string(),
                         name(l.task_id),
+                        l.driver.clone(),
+                        l.note.clone(),
+                        l.gps.clone(),
                     ]
                 })
                 .collect(),
@@ -1659,45 +1665,53 @@ impl App {
             }
         }
 
-        // ---- Texnika smenasi: telefondan keladi (TZ XVI.6).
-        if let Some(t) = pkg.table("machine") {
+        // ---- Ariza: maydonchadan keladi (TZ IX.2, X.29).
+        //
+        // Raqam **shu yerda** beriladi: bir necha telefon bir vaqtda
+        // yuborsa, serverda berilgan raqam takrorlanib qolardi.
+        if let Some(t) = pkg.table("request") {
             for row in &t.rows {
                 let m = row_map(t, row);
-                let name = m.get("machine").copied().unwrap_or("").trim().to_string();
-                let d = date(m.get("date").copied().unwrap_or(""));
-                // Ro'yxatda yo'q texnikaga smena yozilmaydi: texnika
-                // ilovada yuritiladi va u yerda bo'lmagani bu yerda
-                // paydo bo'lmasligi kerak.
-                let Some(machine) = self.machines.iter().find(|x| x.name == name) else {
-                    existing += 1;
+                let title = m.get("title").copied().unwrap_or("").trim().to_string();
+                if title.is_empty() {
                     continue;
-                };
-                let hours = num(m.get("hours").copied().unwrap_or(""));
+                }
+                let d = date(m.get("date").copied().unwrap_or(""));
                 if self
-                    .machine_logs
+                    .requests
                     .iter()
-                    .any(|l| l.machine_id == machine.id && l.date == d && l.hours == hours)
+                    .any(|q| q.date == d && q.title == title)
                 {
                     existing += 1;
                     continue;
                 }
-                self.db.insert_machine_log(&crate::domain::MachineLog {
+                let need = m.get("need_date").copied().unwrap_or("");
+                let number = format!("Z-{:03}", self.requests.len() + added + 1);
+                self.db.insert_request(&crate::domain::Request {
                     id: 0,
                     project_id: pid,
-                    machine_id: machine.id,
+                    number,
                     date: d,
-                    hours,
-                    fuel: num(m.get("fuel").copied().unwrap_or("")),
+                    kind: crate::domain::RequestKind::parse(
+                        m.get("kind").copied().unwrap_or("material"),
+                    ),
+                    title,
+                    material_id: None,
+                    qty: num(m.get("qty").copied().unwrap_or("")),
+                    unit: m.get("unit").copied().unwrap_or("").into(),
+                    requester: m.get("requester").copied().unwrap_or("").into(),
+                    need_date: if need.trim().is_empty() {
+                        d + chrono::Duration::days(14)
+                    } else {
+                        date(need)
+                    },
+                    priority: crate::domain::Priority::Normal,
+                    // Tasdiqlash ofisda qoladi: maydonchadan kelgan ariza
+                    // darrov xaridga o'tmaydi.
+                    status: crate::domain::RequestStatus::New,
                     task_id: None,
-                    number: String::new(),
-                    driver: m.get("driver").copied().unwrap_or("").into(),
-                    route: String::new(),
-                    odo_start: 0.0,
-                    odo_end: 0.0,
-                    trips: 0,
-                    cargo: 0.0,
+                    reject_reason: String::new(),
                     note: m.get("note").copied().unwrap_or("").into(),
-                    gps: m.get("gps").copied().unwrap_or("").into(),
                 });
                 added += 1;
             }
@@ -1808,14 +1822,16 @@ impl App {
                     fuel: num(m.get("fuel").copied().unwrap_or("")),
                     task_id: self.task_id_by_name(m.get("task").copied().unwrap_or("")),
                     number: String::new(),
-                    driver: String::new(),
+                    driver: m.get("driver").copied().unwrap_or("").into(),
                     route: String::new(),
                     odo_start: 0.0,
                     odo_end: 0.0,
                     trips: 0,
                     cargo: 0.0,
-                    note: String::new(),
-                    gps: String::new(),
+                    note: m.get("note").copied().unwrap_or("").into(),
+                    // Telefondan kelgan smenada koordinata bo'ladi;
+                    // ilovaning o'z paketida u bo'sh.
+                    gps: m.get("gps").copied().unwrap_or("").into(),
                 });
                 added += 1;
             }
@@ -2688,6 +2704,61 @@ impl App {
             open_issues,
             day: self.today,
         })
+    }
+
+    /// Prorabga beriladigan savollar (TZ V.25, XIV.37).
+    ///
+    /// Kun yakuni ro'yxati nima **to'ldirilmaganini** aytadi; bu esa
+    /// nima **tushunarsiz** ekanini so'raydi. Ikkalasi bir joyda emas:
+    /// biri belgi qo'yish uchun, ikkinchisi javob yozish uchun.
+    pub fn foreman_questions(&self) -> Vec<checks::Question> {
+        let finish = |id: i64| {
+            self.schedule
+                .get(id)
+                .map(|c| self.origin() + chrono::Duration::days(c.ef.max(0)))
+        };
+        checks::foreman_questions(&checks::QuestionCtx {
+            day: self.today,
+            journal: &self.journal,
+            timesheet: &self.timesheet,
+            moves: &self.stock_moves,
+            materials: &self.materials,
+            tasks: &self.tasks,
+            finish: &finish,
+        })
+    }
+
+    /// Savolga javobni bugungi kunlik yozuvning izohiga qo'shadi.
+    ///
+    /// Javob alohida jadvalga emas, **jurnalga** yoziladi: savol
+    /// jurnaldagi ziddiyatdan tug'ilgan va javobi ham o'sha yerda
+    /// turishi kerak. Bugungi yozuv bo'lmasa javob ham yozilmaydi —
+    /// yozuvni javob uchun o'zi yaratib qo'yish chalkashlik bo'lardi.
+    pub fn answer_question(&mut self, question: &checks::Question, answer: &str) -> bool {
+        let answer = answer.trim();
+        if answer.is_empty() {
+            return false;
+        }
+        let Some(mut entry) = self.journal.iter().find(|j| j.date == self.today).cloned() else {
+            self.notify(t("q_needs_journal").to_string());
+            return false;
+        };
+        let line = format!("{} — {answer}", question.text());
+        entry.remarks = if entry.remarks.trim().is_empty() {
+            line
+        } else {
+            format!(
+                "{}
+{line}",
+                entry.remarks
+            )
+        };
+        let ok = self.db.update_journal(&entry);
+        if ok {
+            self.reload_modules();
+            self.notify(t("q_answered").to_string());
+        }
+        ok
     }
 
     /// Ishni yopishdan oldingi ogohlantirishlar (TZ VI.25).

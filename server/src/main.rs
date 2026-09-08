@@ -237,6 +237,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/o/{project}/journal", post(web::journal_submit))
         .route("/o/{project}/checkin", get(web::checkin_page))
         .route("/o/{project}/checkin", post(web::checkin_submit))
+        .route("/o/{project}/request", get(web::request_form))
+        .route("/o/{project}/request", post(web::request_submit))
         .route("/o/{project}/machine", get(web::machine_form))
         .route("/o/{project}/machine", post(web::machine_submit))
         .route("/o/{project}/scan", get(web::scan_page))

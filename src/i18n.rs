@@ -2041,6 +2041,12 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "jr_photos_hint" => ("jurnalga biriktirilgan", "прикреплено к журналу"),
         "jr_add_photo" => ("+ Foto", "+ Фото"),
         "jr_no_photos" => ("foto biriktirilmagan", "фото не прикреплены"),
+        "jr_add_media" => ("Foto / video", "Фото / видео"),
+        "jr_media" => ("Foto va video", "Фото и видео"),
+        "jr_add_media_hint" => (
+            "Fayllar ko'chirilmaydi — faqat yo'li saqlanadi. Videoda EXIF bo'lmaydi, shuning uchun foto-nazoratdan chetlab o'tiladi va bosilganda tizim pleyerida ochiladi.",
+            "Файлы не копируются — сохраняется только путь. У видео нет EXIF, поэтому оно не участвует в фотоконтроле и открывается системным плеером по щелчку.",
+        ),
 
         // ---------- Umumiy qidiruv / Общий поиск ----------
         "search_title" => ("Qidiruv", "Поиск"),
@@ -6378,6 +6384,43 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_overdue_pay" => ("Muddati o'tgan", "Просрочено"),
         "kpi_overdue_pay_hint" => ("to'lov sanasi o'tdi", "срок платежа прошел"),
         "kpi_avg_m2" => ("O'rtacha 1 m²", "Средняя за м²"),
+
+        // ---------- Prorabga savollar / Вопросы прорабу ----------
+        "q_title" => ("Savollar", "Вопросы"),
+        "q_hint" => (
+            "Savollar yozuvlarni bir-biriga solishtirishdan tug'iladi: jurnal, tabel, ombor va grafik mos kelmasa, buni odam tushuntiradi. Bu ayblov emas — javob kunlik yozuvning izohiga tushadi.",
+            "Вопросы рождаются из сопоставления записей: если журнал, табель, склад и график расходятся, объяснить это может только человек. Это не обвинение — ответ попадёт в примечание дневной записи.",
+        ),
+        "q_none" => ("Savol yo'q: yozuvlar bir-biriga mos", "Вопросов нет: записи согласованы"),
+        "q_answer" => ("Javob", "Ответ"),
+        "q_answer_btn" => ("Javob berish", "Ответить"),
+        "q_answered" => ("Javob jurnalga yozildi", "Ответ записан в журнал"),
+        "q_needs_journal" => (
+            "Bugungi kunlik yozuv yo'q: avval yozuv kiriting, javob uning izohiga tushadi",
+            "Нет дневной записи за сегодня: сначала внесите запись, ответ попадёт в её примечание",
+        ),
+        "q_volume_no_material_1" => ("Bajarildi:", "Выполнено:"),
+        "q_volume_no_material_2" => (
+            "Bugun ombordan material berilmagan — u qayerdan olindi?",
+            "Со склада сегодня ничего не выдавалось — откуда взят материал?",
+        ),
+        "q_material_no_volume_1" => ("Ombordan berildi:", "Выдано со склада:"),
+        "q_material_no_volume_2" => (
+            "Bajarilgan hajm yozilmagan — qancha qilindi?",
+            "Выполненный объём не записан — сколько сделано?",
+        ),
+        "q_crew_no_volume" => (
+            "kishi ishladi, lekin hajm yozilmagan — nima qilindi?",
+            "человек работали, но объём не записан — что было сделано?",
+        ),
+        "q_concrete_weather" => (
+            "beton uchun xavfli harorat. Qanday tadbir ko'rildi?",
+            "опасная для бетона температура. Какие меры приняты?",
+        ),
+        "q_overdue_reason" => (
+            "kechikdi, jurnalda sababi yo'q. Nima to'sqinlik qilyapti?",
+            "просрочено, причина в журнале не указана. Что мешает?",
+        ),
 
         // ---------- Reja chizmasi / План-схема ----------
         "plan_empty" => (
