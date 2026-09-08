@@ -281,7 +281,8 @@ pub async fn object(
     // ---- Kunlik yozuv havolasi (yozish huquqi borlarga)
     if auth::can(&user.role, Access::Write) {
         body.push_str(&format!(
-            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{p}/journal\">Ochish</a></div><div class=\"card\"><b>Tabel</b><div class=\"muted\">Bugungi soat va kun turi</div><a href=\"/o/{p}/timesheet\">Ochish</a></div><div class=\"card\"><b>Ishlar</b><div class=\"muted\">Muddat va bajarilish</div><a href=\"/o/{p}/tasks\">Ochish</a></div><div class=\"card\"><b>Kirish / chiqish</b><div class=\"muted\">Maydonchaga kelish va ketish belgisi</div><a href=\"/o/{p}/checkin\">Ochish</a></div><div class=\"card\"><b>QR o'qish</b><div class=\"muted\">Yorliqdagi kod nimaligini ko'rsatadi</div><a href=\"/o/{p}/scan\">Ochish</a></div><div class=\"card\"><b>Ofis bilan yozishma</b><div class=\"muted\">Savol bering, javobni shu yerda oling</div><a href=\"/o/{p}/chat\">Ochish</a></div>",
+            "<div class=\"card\"><b>Kunlik yozuv</b><div class=\"muted\">Maydonchadan to'g'ridan-to'g'ri kiritish</div><a href=\"/o/{p}/journal\">Ochish</a></div><div class=\"card\"><b>Tabel</b><div class=\"muted\">Bugungi soat va kun turi</div><a href=\"/o/{p}/timesheet\">Ochish</a></div><div class=\"card\"><b>Ishlar</b><div class=\"muted\">Muddat va bajarilish</div><a href=\"/o/{p}/tasks\">Ochish</a></div><div class=\"card\"><b>Kirish / chiqish</b><div class=\"muted\">Maydonchaga kelish va ketish belgisi</div><a href=\"/o/{p}/checkin\">Ochish</a></div><div class=\"card\"><b>QR o'qish</b><div class=\"muted\">Yorliqdagi kod nimaligini ko'rsatadi</div><a href=\"/o/{p}/scan\">Ochish</a></div><div class=\"card\"><b>Ofis bilan yozishma</b><div class=\"muted\">Savol bering, javobni shu yerda oling</div><a href=\"/o/{p}/chat\">Ochish</a></div>\
+<div class=\"card\"><b>Texnika smenasi</b><div class=\"muted\">Motosoat, yoqilg'i va joy</div><a href=\"/o/{p}/machine\">Ochish</a></div>",
             p = esc(&project)
         ));
     }
@@ -572,6 +573,42 @@ t.textContent='Joy: '+c.latitude.toFixed(5)+', '+c.longitude.toFixed(5)+' (\u{b1
     )
 }
 
+/// Ovoz bilan matn kiritish tugmasi (TZ V.26, VI.7, X.29, XV.39).
+///
+/// Tanish **brauzerning o'zida** bajariladi: ilova hech qanday ovoz
+/// xizmatiga ulanmaydi va yozuvni hech qayerga yubormaydi. Shuning uchun
+/// imkoniyat brauzerga bog'liq — u yo'q bo'lsa tugma umuman
+/// ko'rsatilmaydi va odam avvalgidek yozadi.
+///
+/// Ochiq aytiladigan narsa: ba'zi brauzerlar (masalan Chrome) tanishni
+/// **o'z serveri orqali** bajaradi. Bu ilovaning tanlovi emas, lekin
+/// foydalanuvchi buni bilishi kerak — shuning uchun izoh tugmaning
+/// yonida turadi.
+///
+/// Tanilgan matn maydonga **qo'shiladi**, ustiga yozilmaydi: aytilgan
+/// gap yozilganini o'chirib yuborishi mumkin emas.
+fn voice_block(field: &str) -> String {
+    let script = format!(
+        "(function(){{\
+var R=window.SpeechRecognition||window.webkitSpeechRecognition;\
+var b=document.getElementById('mic_{field}'),f=document.getElementById('{field}'),n=document.getElementById('micnote_{field}');\
+if(!b||!f){{return;}}\
+if(!R){{b.style.display='none';if(n){{n.style.display='none';}}return;}}\
+var r=new R();r.lang='uz-UZ';r.interimResults=false;r.continuous=false;\
+b.onclick=function(){{b.disabled=true;b.textContent='Tinglanmoqda\\u2026';try{{r.start();}}catch(e){{b.disabled=false;b.textContent='\\ud83c\\udfa4 Ovoz';}}}};\
+r.onresult=function(e){{var s='';for(var i=0;i<e.results.length;i++){{s+=e.results[i][0].transcript;}}\
+f.value=(f.value?f.value+' ':'')+s.trim();}};\
+r.onend=function(){{b.disabled=false;b.textContent='\\ud83c\\udfa4 Ovoz';}};\
+r.onerror=function(){{b.disabled=false;b.textContent='\\ud83c\\udfa4 Ovoz';if(n){{n.textContent='Ovoz tanilmadi \\u2014 qo\\u2018lda yozing.';}}}};\
+}})();"
+    );
+    format!(
+        "<button type=\"button\" class=\"ghost\" id=\"mic_{field}\">\u{1f3a4} Ovoz</button>\
+<p class=\"muted\" id=\"micnote_{field}\">Ovozni brauzerning o\u{2018}zi taniydi. Ba\u{2019}zi brauzerlar buni internet orqali bajaradi.</p>\
+<script>{script}</script>"
+    )
+}
+
 /// `GET /o/{project}/journal` — kunlik yozuv formasi.
 pub async fn journal_form(
     State(state): State<Arc<AppState>>,
@@ -629,7 +666,8 @@ pub async fn journal_form(
 <div class=\"row\"><label style=\"flex:1\">Ishchi<input name=\"workers\" inputmode=\"numeric\"></label>\
 <label style=\"flex:1\">Texnika<input name=\"machines\" inputmode=\"numeric\"></label></div>\
 <label>Ob-havo<input name=\"weather\"></label>\
-<label>Nima qilindi<textarea name=\"text\" rows=\"3\" required></textarea></label>\
+<label>Nima qilindi<textarea name=\"text\" id=\"text\" rows=\"3\" required></textarea></label>\
+{voice}\
 <label>Muammo yoki izoh<textarea name=\"remarks\" rows=\"2\"></textarea></label>\
 {geo}{nonce}\
 <button type=\"submit\">Yuborish</button></form>\
@@ -641,6 +679,7 @@ pub async fn journal_form(
         task_field = task_field,
         geo = geo_block(),
         nonce = nonce_field(),
+        voice = voice_block("text"),
     );
     page("QURAi — kunlik yozuv", &body).into_response()
 }
@@ -1247,10 +1286,11 @@ pub async fn chat_page(
     let form = if auth::can(&user.role, Access::Write) {
         format!(
             "<form method=\"post\" action=\"/o/{p}/chat\">\
-<label>Xabar<textarea name=\"text\" rows=\"3\" required></textarea></label>{nonce}\
+<label>Xabar<textarea name=\"text\" id=\"text\" rows=\"3\" required></textarea></label>{voice}{nonce}\
 <button type=\"submit\">Yuborish</button></form>",
             p = esc(&project),
-            nonce = nonce_field()
+            nonce = nonce_field(),
+            voice = voice_block("text")
         )
     } else {
         "<p class=\"muted\">Sizning rolingiz xabar yozmaydi — faqat o'qiydi.</p>".to_string()
@@ -1318,6 +1358,188 @@ fn short_stamp(iso: &str) -> String {
     } else {
         format!("{date} {hm}")
     }
+}
+
+// ================================================================ Texnika
+
+/// Telefondan kiritilgan texnika smenasi (TZ XVI.6, XVI.11).
+#[derive(Deserialize)]
+pub struct MachineForm {
+    pub machine: String,
+    pub date: String,
+    #[serde(default)]
+    pub hours: String,
+    #[serde(default)]
+    pub fuel: String,
+    #[serde(default)]
+    pub note: String,
+    #[serde(default)]
+    pub gps: String,
+    #[serde(default)]
+    pub nonce: String,
+}
+
+/// Smena paketini tuzadi.
+pub fn machine_package(project: &str, at: &str, driver: &str, f: &MachineForm) -> String {
+    let cols = ["machine", "date", "hours", "fuel", "driver", "note", "gps"];
+    let num = |s: &str| {
+        let v = s.trim().replace(',', ".");
+        if v.is_empty() {
+            "0".to_string()
+        } else {
+            v
+        }
+    };
+    let row = [
+        f.machine.trim().to_string(),
+        f.date.trim().to_string(),
+        num(&f.hours),
+        num(&f.fuel),
+        driver.to_string(),
+        f.note.trim().to_string(),
+        clean_gps(&f.gps),
+    ];
+    format!(
+        "QURAI-PACKAGE\t1\nPROJECT\t{}\nCREATED\t{}\n\n#machine\n{}\n{}\n",
+        pkg_escape(project),
+        pkg_escape(at),
+        cols.join("\t"),
+        row.iter()
+            .map(|c| pkg_escape(c))
+            .collect::<Vec<_>>()
+            .join("\t")
+    )
+}
+
+/// `GET /o/{project}/machine` — texnika smenasi (TZ XVI.6, XVI.11).
+///
+/// «Texnika qayerda» degan savolga javob shu yerdan chiqadi: mashinada
+/// tracker yo'q, lekin operatorning telefoni bor. Koordinata smenaga
+/// qo'shiladi va ofisda oxirgi ma'lum joy sifatida ko'rinadi.
+pub async fn machine_form(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Sizning rolingiz smena kiritmaydi.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    let machines = state.store.machines(&project);
+    if machines.is_empty() {
+        return page(
+            "QURAi — texnika",
+            &format!(
+                "<div class=\"row\"><h1>Texnika</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">Texnika ro'yxati hali kelmagan: ofisdagi ilova sinxronizatsiya qilganda paydo bo'ladi.</p>",
+                p = esc(&project)
+            ),
+        )
+        .into_response();
+    }
+    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let options: String = machines
+        .iter()
+        .map(|m| {
+            let label = if m.reg_no.trim().is_empty() {
+                m.name.clone()
+            } else {
+                format!("{} · {}", m.name, m.reg_no)
+            };
+            format!(
+                "<option value=\"{}\">{}</option>",
+                esc(&m.name),
+                esc(&label)
+            )
+        })
+        .collect();
+    let body = format!(
+        "<div class=\"row\"><h1>Texnika smenasi</h1><a href=\"/o/{p}\">Ortga</a></div>\
+<p class=\"muted\">{obj} · {name}</p>\
+<form method=\"post\" action=\"/o/{p}/machine\">\
+{nonce}\
+<label>Texnika<select name=\"machine\" required>{options}</select></label>\
+<label>Sana<input type=\"date\" name=\"date\" value=\"{today}\" required></label>\
+<div class=\"row\"><label style=\"flex:1\">Motosoat<input name=\"hours\" inputmode=\"decimal\"></label>\
+<label style=\"flex:1\">Yoqilg'i, l<input name=\"fuel\" inputmode=\"decimal\"></label></div>\
+<label>Izoh<textarea name=\"note\" rows=\"2\"></textarea></label>\
+{geo}\
+<button type=\"submit\">Yuborish</button></form>\
+<p class=\"muted\">Koordinata smenaga qo'shiladi: ofisda texnikaning oxirgi ma'lum joyi shundan ko'rinadi.</p>",
+        p = esc(&project),
+        obj = esc(&project),
+        name = esc(&user.name),
+        today = esc(&today),
+        options = options,
+        geo = geo_block(),
+        nonce = nonce_field(),
+    );
+    page("QURAi — texnika", &body).into_response()
+}
+
+/// `POST /o/{project}/machine`
+pub async fn machine_submit(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+    Form(form): Form<MachineForm>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return (
+            StatusCode::FORBIDDEN,
+            page(
+                "QURAi",
+                "<p class=\"err\">Huquq yo'q.</p><a href=\"/\">Ortga</a>",
+            ),
+        )
+            .into_response();
+    }
+    // Ro'yxatda yo'q texnikaga smena yozilmaydi: texnika ofisda
+    // yuritiladi va u yerda bo'lmagan mashina bu yerda paydo bo'lmasin.
+    let machine = form.machine.trim().to_string();
+    if machine.is_empty()
+        || !state
+            .store
+            .machines(&project)
+            .iter()
+            .any(|m| m.name == machine)
+    {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Texnika ro'yxatda yo'q.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+    if form.date.trim().is_empty() {
+        return page(
+            "QURAi",
+            "<p class=\"err\">Sana to'ldirilmagan.</p><a href=\"/\">Ortga</a>",
+        )
+        .into_response();
+    }
+
+    let at = crate::now();
+    if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
+        return Redirect::to(&format!("/o/{project}")).into_response();
+    }
+    let body = machine_package(&project, &at, &user.name, &form);
+    let _ = state
+        .store
+        .push_change(project.trim(), &body, &user.login, &at, 1);
+    state.store.log(&user.login, "texnika", project.trim(), &at);
+    Redirect::to(&format!("/o/{project}")).into_response()
 }
 
 // ================================================== Kirish/chiqish va QR

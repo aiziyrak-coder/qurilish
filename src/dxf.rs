@@ -272,6 +272,8 @@ pub fn to_elements(dw: &Drawing, project_id: i64, sheet: &str) -> Vec<Element> {
             // Qatlam nomi saqlanadi: bo'lim noto'g'ri aniqlansa, muhandis
             // qayerdan kelganini ko'radi.
             note: format!("{}: {}", crate::i18n::t("dxf_layer"), e.layer),
+            // DXF ikki o'lchovli chizma: uch o'lchovli joylashuv yo'q.
+            pos: None,
         });
     }
     out

@@ -336,6 +336,60 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         });
         ui.add_space(12.0);
 
+        // ---- Tashqi xabar (push) ----
+        card_frame(ui, t("set_group_hook"), w, |ui| {
+            ui.label(
+                RichText::new(t("set_hook_note"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            let mut changed = false;
+            field(ui, t("set_hook_on"), |ui| {
+                changed |= ui
+                    .checkbox(&mut app.hook.on, t("set_hook_on_hint"))
+                    .changed();
+            });
+            field(ui, t("set_hook_url"), |ui| {
+                changed |= ui
+                    .add_sized(
+                        [320.0, 24.0],
+                        egui::TextEdit::singleline(&mut app.hook.url).hint_text("https://..."),
+                    )
+                    .changed();
+            });
+            field(ui, t("set_hook_token"), |ui| {
+                changed |= ui
+                    .add_sized(
+                        [320.0, 24.0],
+                        egui::TextEdit::singleline(&mut app.hook.token).password(true),
+                    )
+                    .on_hover_text(t("set_hook_token_hint"))
+                    .changed();
+            });
+            field(ui, "", |ui| {
+                if ui
+                    .add_enabled(app.hook.ready(), egui::Button::new(t("set_hook_send")))
+                    .on_hover_text(t("set_hook_send_hint"))
+                    .clicked()
+                {
+                    app.send_hook();
+                }
+            });
+            if let Some((message, bad)) = &app.hook_status {
+                ui.add_space(4.0);
+                ui.label(RichText::new(message).size(11.5).color(if *bad {
+                    theme::danger()
+                } else {
+                    theme::ok()
+                }));
+            }
+            if changed {
+                app.save_hook();
+            }
+        });
+        ui.add_space(12.0);
+
         // ---- Matnni tanish (OCR) ----
         card_frame(ui, t("set_group_ocr"), w, |ui| {
             ui.label(

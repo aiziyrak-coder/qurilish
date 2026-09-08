@@ -953,6 +953,7 @@ mod tests {
             trips: 0,
             cargo: 0.0,
             note: String::new(),
+            gps: String::new(),
         });
         app.db.insert_machine_check(&MachineCheck {
             id: 0,

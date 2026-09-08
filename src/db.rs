@@ -1530,6 +1530,7 @@ mod tests {
             items: &items,
             declared_total: estimate.declared_total,
             norms: &norms,
+            prices: &[],
         };
 
         let project_issues = checks::check_project(&ctx);
@@ -1572,6 +1573,7 @@ mod tests {
             items: &[],
             declared_total: 0.0,
             norms: &norms,
+            prices: &[],
         };
         let found = checks::check_project(&ctx);
         t.db.replace_auto_issues(pid, IssueModule::Project, &found);
@@ -2070,6 +2072,7 @@ mod tests {
             items: &items,
             declared_total: estimate.declared_total,
             norms: &norms,
+            prices: &[],
         };
         for (title, list) in [
             ("LOYIHA", checks::check_project(&ctx)),
@@ -3731,6 +3734,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             trips: 0,
             cargo: 0.0,
             note: String::new(),
+            gps: String::new(),
         };
         // Uch kun ishlagan, kuniga 8 soat.
         let logs = vec![
@@ -3816,6 +3820,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 trips: 0,
                 cargo: 0.0,
                 note: String::new(),
+                gps: String::new(),
             }],
             today,
             today,
@@ -7298,6 +7303,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             value_name: String::new(),
             sheet: "L-1".into(),
             note: String::new(),
+            pos: None,
         }
     }
 
@@ -7335,6 +7341,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 items: &[],
                 declared_total: 0.0,
                 norms: &norms,
+                prices: &[],
             })
         };
 
@@ -7416,6 +7423,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 items: &[],
                 declared_total: 0.0,
                 norms: &norms,
+                prices: &[],
             })
         };
 
@@ -8496,6 +8504,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             trips: 0,
             cargo: 0.0,
             note: String::new(),
+            gps: String::new(),
         };
         let run = |logs: &[MachineLog]| {
             stock_control(&StockCtx {
@@ -8636,6 +8645,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
             trips: 0,
             cargo: 0.0,
             note: String::new(),
+            gps: String::new(),
         };
         let mut clean = m.clone();
         clean.inspection_until = Some(today + chrono::Duration::days(90));
@@ -8793,6 +8803,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                     trips: 0,
                     cargo: 0.0,
                     note: String::new(),
+                    gps: String::new(),
                 })
                 .collect()
         };
@@ -9607,6 +9618,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 items: &[],
                 declared_total: 0.0,
                 norms: &norms,
+                prices: &[],
             })
         };
 
@@ -9754,6 +9766,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 items: &[],
                 declared_total: 0.0,
                 norms: &norms,
+                prices: &[],
             })
         };
         let has = |out: &[crate::domain::Issue], key: &str| {
@@ -9841,6 +9854,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 items: &[],
                 declared_total: 0.0,
                 norms: &norms,
+                prices: &[],
             })
         };
         let has = |out: &[crate::domain::Issue], key: &str| {
@@ -10241,6 +10255,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
                 trips: 0,
                 cargo: 0.0,
                 note: String::new(),
+                gps: String::new(),
             })
             .collect();
 

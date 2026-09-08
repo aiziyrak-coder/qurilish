@@ -274,6 +274,32 @@ pub fn workers_body(project: &str, items: &[WorkerOut]) -> String {
     )
 }
 
+/// Serverga yuboriladigan texnika (TZ XVI.6).
+#[derive(Debug, Clone, PartialEq)]
+pub struct MachineOut {
+    pub name: String,
+    pub reg_no: String,
+}
+
+/// Texnika ro'yxati so'rovining tanasi.
+pub fn machines_body(project: &str, items: &[MachineOut]) -> String {
+    let rows: Vec<String> = items
+        .iter()
+        .map(|m| {
+            format!(
+                "{{\"name\":{},\"reg_no\":{}}}",
+                json_string(&m.name),
+                json_string(&m.reg_no)
+            )
+        })
+        .collect();
+    format!(
+        "{{\"project\":{},\"items\":[{}]}}",
+        json_string(project),
+        rows.join(",")
+    )
+}
+
 /// Serverga yuboriladigan bitta QR yorliq (TZ VI.11).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LabelOut {
@@ -361,6 +387,7 @@ pub struct Refs {
     pub workers: Vec<WorkerOut>,
     pub summary: Vec<SummaryOut>,
     pub labels: Vec<LabelOut>,
+    pub machines: Vec<MachineOut>,
     /// Imzo daftarining uzunligi va uchi (TZ IV.18, V.32).
     pub chain: (i64, String),
 }
@@ -597,6 +624,22 @@ pub fn send_labels(cfg: &Config, project: &str, items: &[LabelOut]) -> Result<()
     Ok(())
 }
 
+/// Texnika ro'yxatini serverga yuboradi.
+#[cfg(feature = "sync")]
+pub fn send_machines(cfg: &Config, project: &str, items: &[MachineOut]) -> Result<(), Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    send(
+        cfg,
+        "POST",
+        "api/machines",
+        Some(&cfg.token),
+        Some(&machines_body(project, items)),
+    )?;
+    Ok(())
+}
+
 /// Ofisdan xabar yuboradi (TZ VI.32).
 #[cfg(feature = "sync")]
 pub fn send_message(cfg: &Config, project: &str, text: &str) -> Result<(), Error> {
@@ -783,6 +826,9 @@ pub fn spawn(
             send_summary(&cfg, &project, &refs.summary)?;
             // QR yorliqlar: telefon o'qigan kod nimaligini ko'rsatishi uchun.
             send_labels(&cfg, &project, &refs.labels)?;
+            // Texnika ro'yxati: telefondagi smena formasi shu bo'yicha
+            // to'ldiriladi.
+            send_machines(&cfg, &project, &refs.machines)?;
             // Yozishma: avval yuboriladi, keyin olinadi — shunda o'z
             // xabaring darrov ro'yxatda ko'rinadi.
             if !chat.outgoing.trim().is_empty() {

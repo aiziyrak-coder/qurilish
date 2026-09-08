@@ -6379,6 +6379,113 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_overdue_pay_hint" => ("to'lov sanasi o'tdi", "срок платежа прошел"),
         "kpi_avg_m2" => ("O'rtacha 1 m²", "Средняя за м²"),
 
+        // ---------- Reja chizmasi / План-схема ----------
+        "plan_empty" => (
+            "Chizma uchun koordinata yo'q",
+            "Для схемы нет координат",
+        ),
+        "plan_title" => ("Joylashuv rejasi", "План расположения"),
+        "plan_hint" => (
+            "Bu 3D ko'rinish emas: IFC dan elementning shakli emas, joyi olinadi. Burilish hisobga olinmaydi, shuning uchun chizma qavat ichidagi joylashuvni ko'rsatadi.",
+            "Это не 3D-вид: из IFC берётся не форма элемента, а его расположение. Поворот не учитывается, поэтому схема показывает размещение в пределах этажа.",
+        ),
+        "plan_level" => ("Qavat", "Этаж"),
+        "plan_all_levels" => ("Hammasi", "Все"),
+        "plan_no_pos" => (
+            "IFC dan yuklangan element yo'q: joylashuv faqat IFC bilan keladi",
+            "Нет элементов из IFC: расположение приходит только с IFC",
+        ),
+        "plan_shown" => ("Chizmada", "На схеме"),
+        "plan_map" => ("Joy sxemasi", "Схема места"),
+        "mch_tab_map" => ("Joyi", "Расположение"),
+        "mch_map_hint" => (
+            "Texnikada tracker yo'q: joy operator telefondan smena yozganda qo'shiladi. Bu oxirgi ma'lum joy, jonli kuzatuv emas.",
+            "На технике нет трекера: место добавляется, когда оператор вносит смену с телефона. Это последнее известное место, а не слежение в реальном времени.",
+        ),
+        "mch_map_empty" => (
+            "Koordinatali smena yo'q: operator telefondan smena yozganda paydo bo'ladi",
+            "Смен с координатами нет: появятся, когда оператор внесёт смену с телефона",
+        ),
+        "plan_map_hint" => (
+            "Nuqtalar obyekt markaziga nisbatan metrda joylashtirilgan. Xarita tayllari internetdan keladi va ilova ularsiz ishlaydi — shuning uchun bu sxema, xarita emas.",
+            "Точки расположены в метрах относительно центра объекта. Тайлы карты приходят из интернета, а приложение работает без них — поэтому это схема, а не карта.",
+        ),
+
+        // ---------- Narxlar bazasi / База цен ----------
+        "pb_title" => ("Narxlar bazasi", "База цен"),
+        "pb_hint" => (
+            "Baza tashqi manbadan olinmaydi — u yuklanadi: ta'minotchi prays-listi, resurs normativlari yoki tender natijalari. Bozor narxini o'ylab topish xatoning eng yomon turi bo'lardi.",
+            "База не берётся из внешнего источника — она загружается: прайс поставщика, ресурсные нормативы или результаты тендеров. Выдумывать рыночную цену — худший вид ошибки.",
+        ),
+        "pb_import" => ("Narx ro'yxatini yuklash", "Загрузить прайс"),
+        "pb_import_hint" => (
+            "Excel yoki CSV: nom, birlik, narx. Kod, manba, sana va hudud ustunlari ixtiyoriy.",
+            "Excel или CSV: наименование, единица, цена. Столбцы кода, источника, даты и региона — необязательные.",
+        ),
+        "pb_clear" => ("Bazani tozalash", "Очистить базу"),
+        "pb_empty" => (
+            "Narxlar bazasi bo'sh: narx ro'yxatini yuklang",
+            "База цен пуста: загрузите прайс",
+        ),
+        "pb_rows" => ("Qator", "Строк"),
+        "pb_no_data" => ("bazada yo'q", "нет в базе"),
+        "pb_inside" => ("diapazon ichida", "в пределах диапазона"),
+        "pb_below" => ("diapazondan past", "ниже диапазона на"),
+        "pb_above" => ("diapazondan yuqori", "выше диапазона на"),
+        "pb_range" => ("Diapazon", "Диапазон"),
+        "pb_market" => ("Bazadagi narx", "Цена по базе"),
+        "pb_trend" => ("Tendensiya", "Тенденция"),
+        "pb_month" => ("oy", "мес"),
+        "pb_points" => ("kirim", "приходов"),
+        "pb_trend_hint" => (
+            "Faqat o'z kirimlaringiz tarixidan hisoblanadi va kelajakdagi narxni aytmaydi: bu yo'nalish, prognoz emas.",
+            "Считается только по истории ваших приходов и не называет будущую цену: это направление, а не прогноз.",
+        ),
+        "pb_imported" => ("Yuklandi:", "Загружено:"),
+        "pb_cleared" => ("Tozalandi:", "Очищено:"),
+        "chk_market_title" => (
+            "Narx bazadagi diapazondan tashqarida",
+            "Цена вне диапазона базы цен",
+        ),
+        "chk_market_fix" => (
+            "Narxni yuklangan narx ro'yxati bilan solishtiring: farq asosli bo'lsa (hajm, yetkazish, muddat) izohda ko'rsating.",
+            "Сверьте цену с загруженным прайсом: если расхождение обосновано (объём, доставка, срок) — укажите это в примечании.",
+        ),
+        "pb_clear_confirm" => (
+            "Narxlar bazasidagi hamma qator o'chiriladi. Bu qaytarilmaydi.",
+            "Все строки базы цен будут удалены. Это необратимо.",
+        ),
+        "pb_search" => ("Qidirish", "Поиск"),
+        "pb_source" => ("Manba", "Источник"),
+        "pb_region" => ("Hudud", "Регион"),
+
+        // ---------- Tashqi xabar / Внешние уведомления ----------
+        "set_group_hook" => ("Tashqi xabar", "Внешние уведомления"),
+        "set_hook_note" => (
+            "Jiddiy signallarni ko'rsatilgan manzilga yuboradi: tashkilotning boti, korporativ shlyuzi yoki avtomatlashtirish xizmati. SMS va Telegram bevosita ulanmaydi — ular shartnoma va kalit talab qiladi, va har tashkilotda boshqacha. Standart holatda o'chiq: manzil kiritilib, belgilanmaguncha ilova hech qayerga ulanmaydi.",
+            "Отправляет серьёзные сигналы на указанный адрес: бот организации, корпоративный шлюз или сервис автоматизации. SMS и Telegram напрямую не подключаются — они требуют договора и ключа и у каждой организации свои. По умолчанию выключено: пока адрес не введён и не отмечен, приложение никуда не подключается.",
+        ),
+        "set_hook_on" => ("Yuborish", "Отправка"),
+        "set_hook_on_hint" => ("yoqilgan", "включена"),
+        "set_hook_url" => ("Manzil", "Адрес"),
+        "set_hook_token" => ("Kalit", "Ключ"),
+        "set_hook_token_hint" => (
+            "Faqat Authorization sarlavhasida ketadi: manzilga ham, so'rov tanasiga ham, jurnalga ham yozilmaydi.",
+            "Уходит только в заголовке Authorization: не пишется ни в адрес, ни в тело запроса, ни в журнал.",
+        ),
+        "set_hook_send" => ("Hozir yuborish", "Отправить сейчас"),
+        "set_hook_send_hint" => (
+            "Yangi va jiddiy signallarni yuboradi. Bir signal bir marta ketadi.",
+            "Отправляет новые и серьёзные сигналы. Один сигнал уходит один раз.",
+        ),
+        "hook_off" => (
+            "Tashqi xabar o'chiq: Sozlamalarda manzilni kiriting",
+            "Внешние уведомления выключены: укажите адрес в Настройках",
+        ),
+        "hook_nothing" => ("Yangi signal yo'q", "Новых сигналов нет"),
+        "hook_sent" => ("Yuborildi:", "Отправлено:"),
+        "hook_failed" => ("Yuborilmadi", "Не отправлено"),
+
         // ---------- Imzo daftari / Журнал подписей ----------
         "ed_tab_signlog" => ("Imzo daftari", "Журнал подписей"),
         "sl_hint" => (

@@ -168,6 +168,20 @@ pub struct MessagesQuery {
 pub const MESSAGE_LIMIT: i64 = 200;
 
 #[derive(Deserialize)]
+pub struct MachinesReq {
+    pub project: String,
+    #[serde(default)]
+    pub items: Vec<MachineItem>,
+}
+
+#[derive(Deserialize)]
+pub struct MachineItem {
+    pub name: String,
+    #[serde(default)]
+    pub reg_no: String,
+}
+
+#[derive(Deserialize)]
 pub struct LabelsReq {
     pub project: String,
     #[serde(default)]
@@ -542,6 +556,39 @@ pub async fn workers(
         })
         .collect();
     match state.store.set_workers(req.project.trim(), &items) {
+        Ok(n) => Json(json!({ "saved": n })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
+/// `POST /api/machines` — telefondagi smena formasi uchun texnika ro'yxati.
+pub async fn machines(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<MachinesReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt ko'rsatilmagan");
+    }
+    if req.items.len() > MAX_TASKS {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "texnika juda ko'p");
+    }
+    let items: Vec<crate::store::MachineRef> = req
+        .items
+        .into_iter()
+        .filter(|m| !m.name.trim().is_empty())
+        .map(|m| crate::store::MachineRef {
+            name: m.name,
+            reg_no: m.reg_no,
+        })
+        .collect();
+    match state.store.set_machines(req.project.trim(), &items) {
         Ok(n) => Json(json!({ "saved": n })).into_response(),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }

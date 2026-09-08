@@ -429,6 +429,86 @@ fn mark_of(e: &Entity) -> String {
     String::new()
 }
 
+// ================================================================ Joylashuv
+
+/// Elementning modeldagi o'rni (TZ VI.13, VIII.6).
+///
+/// IFC da har element **joylashuv zanjiri** bilan bog'lanadi: element →
+/// qavat → bino → uchastka. Har bo'g'inda o'z koordinatasi turadi va
+/// haqiqiy o'rin ularning yig'indisi bo'ladi.
+///
+/// **Nima hisobga olinmaydi va nega:** burilish (rotatsiya). To'liq
+/// hisob uchun har bo'g'inning o'q yo'nalishini ham qo'llash kerak.
+/// Burilgan qavat kam uchraydi, xato esa qavat ichida qoladi — shuning
+/// uchun bu yerda faqat siljish yig'iladi va natija **reja** deb
+/// ataladi, 3D model deb emas.
+pub fn position(model: &Model, entity: &Entity) -> Option<[f64; 3]> {
+    // IfcProduct: 5-argument — ObjectPlacement.
+    let placement = entity.arg(5)?.as_ref_id()?;
+    let mut sum = [0.0f64; 3];
+    let mut at = Some(placement);
+    // Zanjir uzunligi cheklangan: buzilgan fayl bizni cheksiz aylanishga
+    // tortmasligi kerak (havolalar halqa hosil qilishi mumkin).
+    for _ in 0..32 {
+        let Some(id) = at else { break };
+        let Some(node) = model.get(id) else { break };
+        if node.kind != "IFCLOCALPLACEMENT" {
+            break;
+        }
+        if let Some(p) = axis_point(model, node.arg(1).and_then(|v| v.as_ref_id())) {
+            for i in 0..3 {
+                sum[i] += p[i];
+            }
+        }
+        at = node.arg(0).and_then(|v| v.as_ref_id());
+    }
+    (sum != [0.0; 3]).then_some(sum)
+}
+
+/// `IfcAxis2Placement3D` dan nuqtani oladi.
+fn axis_point(model: &Model, id: Option<u64>) -> Option<[f64; 3]> {
+    let node = model.get(id?)?;
+    if node.kind != "IFCAXIS2PLACEMENT3D" && node.kind != "IFCAXIS2PLACEMENT2D" {
+        return None;
+    }
+    cartesian(model, node.arg(0).and_then(|v| v.as_ref_id()))
+}
+
+/// `IfcCartesianPoint` koordinatalari.
+fn cartesian(model: &Model, id: Option<u64>) -> Option<[f64; 3]> {
+    let node = model.get(id?)?;
+    if node.kind != "IFCCARTESIANPOINT" {
+        return None;
+    }
+    let Value::List(coords) = node.arg(0)? else {
+        return None;
+    };
+    let mut out = [0.0f64; 3];
+    for (i, v) in coords.iter().take(3).enumerate() {
+        if let Value::Number(n) = v {
+            out[i] = *n;
+        }
+    }
+    Some(out)
+}
+
+/// Joylashuvni yozuvga saqlash ko'rinishi: `x,y,z`.
+pub fn pos_text(p: Option<[f64; 3]>) -> String {
+    match p {
+        Some(v) => format!("{:.3},{:.3},{:.3}", v[0], v[1], v[2]),
+        None => String::new(),
+    }
+}
+
+/// Saqlangan matndan joylashuvni o'qiydi.
+pub fn pos_parse(s: &str) -> Option<[f64; 3]> {
+    let parts: Vec<f64> = s
+        .split(',')
+        .filter_map(|p| p.trim().parse::<f64>().ok())
+        .collect();
+    (parts.len() == 3).then(|| [parts[0], parts[1], parts[2]])
+}
+
 /// O'qilgan modeldan bilimlar grafi tuzadi.
 pub fn to_graph(model: &Model, project_id: i64) -> Graph {
     let mut g = Graph::default();
@@ -498,6 +578,7 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
             // Manba ko'rsatiladi: bu qiymat qo'lda emas, IFC dan kelgan.
             sheet: "IFC".into(),
             note: e.kind.clone(),
+            pos: position(model, e),
         });
     }
 
@@ -560,6 +641,78 @@ pub fn to_graph(model: &Model, project_id: i64) -> Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// TZ VI.13: element joyi joylashuv zanjiridan yig'iladi.
+    ///
+    /// Zanjir: element → qavat → bino. Har bo'g'inda o'z siljishi bor va
+    /// haqiqiy o'rin ularning yig'indisi bo'ladi.
+    #[test]
+    fn a_position_is_summed_along_the_placement_chain() {
+        let src = r#"
+ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1= IFCCARTESIANPOINT((100.,200.,0.));
+#2= IFCAXIS2PLACEMENT3D(#1,$,$);
+#3= IFCLOCALPLACEMENT($,#2);
+#4= IFCCARTESIANPOINT((0.,0.,3.5));
+#5= IFCAXIS2PLACEMENT3D(#4,$,$);
+#6= IFCLOCALPLACEMENT(#3,#5);
+#7= IFCCARTESIANPOINT((5.,7.,0.));
+#8= IFCAXIS2PLACEMENT3D(#7,$,$);
+#9= IFCLOCALPLACEMENT(#6,#8);
+#10= IFCWALLSTANDARDCASE('3vB',$,'Devor',$,$,#9,$,'D-1');
+#11= IFCWALLSTANDARDCASE('4vB',$,'Joysiz devor',$,$,$,$,'D-2');
+ENDSEC;
+END-ISO-10303-21;
+"#;
+        let model = parse(src);
+        let wall = model.get(10).expect("devor");
+        let pos = position(&model, wall).expect("joylashuv");
+        // 100+0+5, 200+0+7, 0+3,5+0
+        assert!((pos[0] - 105.0).abs() < 1e-9, "{pos:?}");
+        assert!((pos[1] - 207.0).abs() < 1e-9, "{pos:?}");
+        assert!((pos[2] - 3.5).abs() < 1e-9, "{pos:?}");
+
+        // Joylashuvsiz element — «yo'q», nol emas.
+        let other = model.get(11).expect("ikkinchi devor");
+        assert!(position(&model, other).is_none());
+
+        // Saqlash va qayta o'qish qiymatni buzmaydi.
+        let text = pos_text(Some(pos));
+        let back = pos_parse(&text).expect("qayta o'qildi");
+        assert!((back[0] - 105.0).abs() < 1e-3);
+        assert_eq!(pos_text(None), "");
+        assert!(pos_parse("").is_none());
+        assert!(pos_parse("1,2").is_none());
+    }
+
+    /// Halqali havola cheksiz aylanishga olib kelmaydi.
+    #[test]
+    fn a_looping_placement_does_not_hang() {
+        let src = r#"
+ISO-10303-21;
+HEADER;
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1= IFCCARTESIANPOINT((1.,1.,1.));
+#2= IFCAXIS2PLACEMENT3D(#1,$,$);
+#3= IFCLOCALPLACEMENT(#4,#2);
+#4= IFCLOCALPLACEMENT(#3,#2);
+#10= IFCWALLSTANDARDCASE('3vB',$,'Devor',$,$,#3,$,'D-1');
+ENDSEC;
+END-ISO-10303-21;
+"#;
+        let model = parse(src);
+        let wall = model.get(10).expect("devor");
+        // Muhimi — qaytib kelishi; qiymat esa cheklangan qadamlar
+        // yig'indisi bo'ladi.
+        let pos = position(&model, wall).expect("joylashuv");
+        assert!(pos[0].is_finite());
+    }
 
     const SAMPLE: &str = r#"
 ISO-10303-21;

@@ -294,6 +294,8 @@ pub enum CheckTab {
     Issues,
     Clash,
     Action,
+    /// Elementlarning joylashuv rejasi (TZ VI.13, VIII.6).
+    Plan,
     Graph,
     Elements,
     Relations,
@@ -301,10 +303,11 @@ pub enum CheckTab {
 }
 
 impl CheckTab {
-    pub const ALL: [CheckTab; 7] = [
+    pub const ALL: [CheckTab; 8] = [
         CheckTab::Issues,
         CheckTab::Clash,
         CheckTab::Action,
+        CheckTab::Plan,
         CheckTab::Graph,
         CheckTab::Elements,
         CheckTab::Relations,
@@ -316,6 +319,7 @@ impl CheckTab {
             CheckTab::Issues => t("tab_issues"),
             CheckTab::Clash => t("tab_clash"),
             CheckTab::Action => t("tab_action"),
+            CheckTab::Plan => t("plan_title"),
             CheckTab::Graph => t("tab_graph"),
             CheckTab::Elements => t("tab_elements"),
             CheckTab::Relations => t("tab_relations"),
@@ -567,6 +571,10 @@ pub struct App {
     pub sign_log: Vec<crate::domain::SignEntry>,
     /// Serverda qayd etilgan zanjir belgilari.
     pub chain_marks: Vec<crate::sync::ChainMark>,
+    /// Narxlar bazasi (TZ III.15). Obyektga bog'liq emas.
+    pub price_book: Vec<crate::prices::PriceRow>,
+    /// Narxlar bazasini tozalash tasdig'i kutilyaptimi.
+    pub confirm_clear_prices: bool,
     /// Oxirgi foto-nazorat natijasi (TZ V.9). Tugma bosilganda hisoblanadi:
     /// fayllar diskdan o'qiladi va bu har kadrda qilinadigan ish emas.
     pub photo_report: Option<Vec<crate::photocheck::PhotoIssue>>,
@@ -649,6 +657,13 @@ pub struct App {
     pub llm: crate::llm::Config,
     /// Server bilan sinxronizatsiya sozlamasi (TZ VI.36).
     pub sync: crate::sync::Config,
+    /// Tashqi xabar nuqtasi (TZ VI.29, XVI.45). Sukut bo'yicha o'chiq.
+    pub hook: crate::hook::Config,
+    /// Kutilayotgan yuborish natijasi.
+    #[allow(clippy::type_complexity)]
+    pub hook_pending: Option<std::sync::mpsc::Receiver<(crate::hook::Outcome, Vec<String>)>>,
+    /// Oxirgi yuborish natijasi: xabar va u xatomi.
+    pub hook_status: Option<(String, bool)>,
     /// Kutilayotgan sinxronizatsiya natijasi.
     pub sync_pending:
         Option<std::sync::mpsc::Receiver<Result<crate::sync::Outcome, crate::sync::Error>>>,
@@ -800,6 +815,8 @@ impl App {
             chat_outgoing: String::new(),
             sign_log: Vec::new(),
             chain_marks: Vec::new(),
+            price_book: Vec::new(),
+            confirm_clear_prices: false,
             photo_report: None,
             materials: Vec::new(),
             stock_moves: Vec::new(),
@@ -854,6 +871,9 @@ impl App {
             timesheet_week: None,
             llm: crate::llm::Config::default(),
             sync: crate::sync::Config::default(),
+            hook: crate::hook::Config::default(),
+            hook_pending: None,
+            hook_status: None,
             sync_pending: None,
             sync_status: None,
             copilot_intent: None,
@@ -950,6 +970,13 @@ impl App {
                 .and_then(|v| v.parse::<i64>().ok())
                 .unwrap_or(0),
         };
+
+        // Narxlar bazasi obyektdan mustaqil: bir marta o'qiladi.
+        app.price_book = app.db.price_book();
+
+        // Tashqi xabar nuqtasi: manzil kiritilib, belgilanmaguncha
+        // ilova hech qayerga ulanmaydi.
+        app.hook = Self::load_hook(&app.db);
 
         // Rollar: oxirgi tanlangan foydalanuvchi tiklanadi.
         app.reload_users();
@@ -1224,6 +1251,7 @@ impl App {
             items: &self.estimate_items,
             declared_total: self.estimate().map(|e| e.declared_total).unwrap_or(0.0),
             norms: &self.norms,
+            prices: &self.price_book,
         }
     }
 
@@ -1631,6 +1659,50 @@ impl App {
             }
         }
 
+        // ---- Texnika smenasi: telefondan keladi (TZ XVI.6).
+        if let Some(t) = pkg.table("machine") {
+            for row in &t.rows {
+                let m = row_map(t, row);
+                let name = m.get("machine").copied().unwrap_or("").trim().to_string();
+                let d = date(m.get("date").copied().unwrap_or(""));
+                // Ro'yxatda yo'q texnikaga smena yozilmaydi: texnika
+                // ilovada yuritiladi va u yerda bo'lmagani bu yerda
+                // paydo bo'lmasligi kerak.
+                let Some(machine) = self.machines.iter().find(|x| x.name == name) else {
+                    existing += 1;
+                    continue;
+                };
+                let hours = num(m.get("hours").copied().unwrap_or(""));
+                if self
+                    .machine_logs
+                    .iter()
+                    .any(|l| l.machine_id == machine.id && l.date == d && l.hours == hours)
+                {
+                    existing += 1;
+                    continue;
+                }
+                self.db.insert_machine_log(&crate::domain::MachineLog {
+                    id: 0,
+                    project_id: pid,
+                    machine_id: machine.id,
+                    date: d,
+                    hours,
+                    fuel: num(m.get("fuel").copied().unwrap_or("")),
+                    task_id: None,
+                    number: String::new(),
+                    driver: m.get("driver").copied().unwrap_or("").into(),
+                    route: String::new(),
+                    odo_start: 0.0,
+                    odo_end: 0.0,
+                    trips: 0,
+                    cargo: 0.0,
+                    note: m.get("note").copied().unwrap_or("").into(),
+                    gps: m.get("gps").copied().unwrap_or("").into(),
+                });
+                added += 1;
+            }
+        }
+
         // ---- Tabel: bir ishchining bir kuni bitta bo'ladi.
         if let Some(t) = pkg.table("timesheet") {
             for row in &t.rows {
@@ -1743,6 +1815,7 @@ impl App {
                     trips: 0,
                     cargo: 0.0,
                     note: String::new(),
+                    gps: String::new(),
                 });
                 added += 1;
             }
@@ -2125,6 +2198,14 @@ impl App {
                 workers,
                 summary,
                 labels: self.label_refs(),
+                machines: self
+                    .machines
+                    .iter()
+                    .map(|m| crate::sync::MachineOut {
+                        name: m.name.clone(),
+                        reg_no: m.reg_no.clone(),
+                    })
+                    .collect(),
                 chain: {
                     let (count, head) = crate::signlog::head(&self.sign_log);
                     (count as i64, head)
@@ -2875,6 +2956,171 @@ impl App {
             }
         }
         out
+    }
+
+    /// Tashqi xabar sozlamasini o'qiydi (TZ VI.29, XVI.45).
+    fn load_hook(db: &Db) -> crate::hook::Config {
+        crate::hook::Config {
+            on: db.get_setting("hook.on").as_deref() == Some("1"),
+            url: db.get_setting("hook.url").unwrap_or_default(),
+            token: db.get_setting("hook.token").unwrap_or_default(),
+        }
+    }
+
+    /// Sozlamani saqlaydi.
+    pub fn save_hook(&mut self) {
+        let _ = self
+            .db
+            .set_setting("hook.on", if self.hook.on { "1" } else { "0" });
+        let _ = self.db.set_setting("hook.url", &self.hook.url);
+        let _ = self.db.set_setting("hook.token", &self.hook.token);
+    }
+
+    /// Yuborilgan signallar ro'yxati.
+    ///
+    /// Ro'yxat cheklangan: eskisi tashlanadi, chunki bartaraf etilgan
+    /// signal qaytib kelsa u **yangi xabar** bo'lishi kerak.
+    fn hook_sent(&self) -> Vec<String> {
+        self.db
+            .get_setting("hook.sent")
+            .unwrap_or_default()
+            .lines()
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    }
+
+    /// Yangi yuborilganlarni ro'yxatga qo'shadi.
+    fn remember_sent(&mut self, keys: &[String]) {
+        let mut all = self.hook_sent();
+        for k in keys {
+            if !all.contains(k) {
+                all.push(k.clone());
+            }
+        }
+        // Oxirgi 200 tasi yetarli: undan eskisi allaqachon boshqa xabar.
+        let start = all.len().saturating_sub(200);
+        let _ = self.db.set_setting("hook.sent", &all[start..].join("\n"));
+    }
+
+    /// Signallarni tashqi manzilga yuboradi (TZ VI.29, XVI.45).
+    ///
+    /// Faqat **yangi va jiddiy** signallar ketadi: hamma narsani
+    /// yuborish odamni xabarga befarq qilib qo'yadi.
+    pub fn send_hook(&mut self) {
+        if self.hook_pending.is_some() {
+            return;
+        }
+        if !self.hook.ready() {
+            self.hook_status = Some((crate::hook::Outcome::Off.text(), true));
+            return;
+        }
+        let Some(project) = self.project().map(project_key) else {
+            self.notify(t("no_object_selected").to_string());
+            return;
+        };
+        let items: Vec<crate::hook::Item> = self
+            .notices
+            .iter()
+            .filter(|n| n.severity <= crate::domain::Severity::Major)
+            .map(|n| crate::hook::Item {
+                code: n.code.to_string(),
+                severity: n.severity.code().to_string(),
+                title: n.title.clone(),
+                detail: n.detail.clone(),
+            })
+            .collect();
+        let fresh = crate::hook::fresh(&items, &self.hook_sent());
+        if fresh.is_empty() {
+            self.hook_status = Some((crate::hook::Outcome::Nothing.text(), false));
+            return;
+        }
+
+        let cfg = self.hook.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let keys: Vec<String> = fresh.iter().map(|i| i.key()).collect();
+        std::thread::spawn(move || {
+            let _ = tx.send((crate::hook::send(&cfg, &project, &fresh), keys));
+        });
+        self.hook_pending = Some(rx);
+    }
+
+    /// Fon oqimidagi yuborish natijasini oladi.
+    pub fn poll_hook(&mut self) {
+        let Some(rx) = &self.hook_pending else {
+            return;
+        };
+        let Ok((outcome, keys)) = rx.try_recv() else {
+            return;
+        };
+        self.hook_pending = None;
+        // Faqat haqiqatan yuborilgani eslab qolinadi: xato bo'lsa xabar
+        // keyingi safar qayta urinishi kerak.
+        if matches!(outcome, crate::hook::Outcome::Sent(_)) {
+            self.remember_sent(&keys);
+        }
+        self.hook_status = Some((outcome.text(), outcome.bad()));
+    }
+
+    /// Narx ro'yxatini fayldan yuklaydi (TZ III.15).
+    pub fn import_prices(&mut self) {
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(t("pb_import"))
+            .add_filter(
+                t("import_file_filter"),
+                &["xlsx", "xlsm", "xls", "ods", "csv"],
+            )
+            .pick_file()
+        else {
+            return;
+        };
+        match crate::import::prices_from_file(&path) {
+            Ok(rows) => {
+                let n = self.db.add_prices(&rows);
+                self.price_book = self.db.price_book();
+                self.notify(format!("{} {n}", t("pb_imported")));
+            }
+            Err(e) => self.notify(format!("{}: {e}", t("import_failed"))),
+        }
+    }
+
+    /// Narxlar bazasini tozalaydi.
+    ///
+    /// Bu **qaytarilmaydigan** amal, shuning uchun tasdiqdan keyin
+    /// bajariladi: tugma faqat so'roqni ochadi.
+    pub fn clear_prices(&mut self) {
+        let n = self.db.clear_price_book();
+        self.price_book.clear();
+        self.notify(format!("{} {n}", t("pb_cleared")));
+    }
+
+    /// Material uchun bazadagi narx diapazoni (TZ XII.20, III.14.3).
+    pub fn market_range(&self, material: &crate::domain::Material) -> Option<crate::prices::Range> {
+        let found = crate::prices::find(
+            &self.price_book,
+            &material.name,
+            &material.code,
+            &material.unit,
+        );
+        crate::prices::range(&found)
+    }
+
+    /// Materialning o'z kirimlaridagi narx yo'nalishi (TZ X.44).
+    ///
+    /// Faqat kirimlar olinadi: chiqim narxi hisob narxi bo'lib, u bozor
+    /// haqida hech nima aytmaydi.
+    pub fn price_trend(&self, material_id: i64) -> Option<crate::prices::Trend> {
+        let history: Vec<(chrono::NaiveDate, f64)> = self
+            .stock_moves
+            .iter()
+            .filter(|m| {
+                m.material_id == material_id
+                    && m.kind == crate::domain::MoveKind::In
+                    && m.price > 0.0
+            })
+            .map(|m| (m.date, m.price))
+            .collect();
+        crate::prices::trend(&history)
     }
 
     /// Sertifikat nazorati (TZ IV.11, XII.27).

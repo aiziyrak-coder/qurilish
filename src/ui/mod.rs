@@ -22,6 +22,7 @@ pub mod materials;
 mod notes;
 mod notices;
 mod passport;
+mod plan;
 mod portfolio;
 mod ppr;
 mod purchases;
@@ -156,6 +157,7 @@ pub fn draw(ctx: &Context, app: &mut App) {
 
     // Fon oqimidagi sinxronizatsiya natijasi tayyor bo'lsa qo'llanadi.
     app.poll_sync();
+    app.poll_hook();
 
     // Bazada yozuv o'zgargan bo'lsa bildirishnomalarni qayta yig'amiz.
     // Tekshiruv — bitta atomik son bilan, hisob esa faqat kerak bo'lganda.
@@ -1354,7 +1356,7 @@ mod screen_tests {
     ];
 
     /// Eng ko'p tabli ekrandagi tab soni.
-    const TABS: u8 = 8;
+    const TABS: u8 = 9;
 
     /// Bitta kadrni oynasiz chizadi.
     ///

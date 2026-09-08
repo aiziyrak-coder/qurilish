@@ -71,6 +71,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (3, t("mch_tab_plan")),
                 (4, t("mch_tab_repairs")),
                 (6, t("mch_tab_chain")),
+                (7, t("mch_tab_map")),
             ],
         );
         ui.data_mut(|d| d.insert_temp(tab_key, tab));
@@ -83,6 +84,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             4 => repairs_tab(ui, app),
             5 => mech_tab(ui, app),
             6 => chain_tab(ui, app),
+            7 => map_tab(ui, app),
             _ => park_tab(ui, app),
         }
     }
@@ -127,6 +129,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 trips: 0,
                 cargo: 0.0,
                 note: String::new(),
+                gps: String::new(),
             });
             app.reload_modules();
             ui.data_mut(|d| d.insert_temp(tab_key, 1u8));
@@ -1831,4 +1834,96 @@ fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {
 
 fn head_r(ui: &mut egui::Ui, w: f32, s: &str) {
     cell_r(ui, w, RichText::new(s).color(theme::muted()).size(11.0));
+}
+
+/// Texnika joyi (TZ XVI.6, XVI.40).
+///
+/// Mashinada tracker yo'q va bor deb ko'rsatilmaydi. Joy **operatorning
+/// telefonidan** keladi: u smenani telefondan yozganda koordinata ham
+/// qo'shiladi. Shuning uchun bu yerda ko'rinadigan narsa — «oxirgi
+/// ma'lum joy», jonli kuzatuv emas, va sana shuning uchun har qatorda
+/// turadi.
+fn map_tab(ui: &mut egui::Ui, app: &mut App) {
+    ui.label(
+        RichText::new(t("mch_map_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    // Har texnikaning oxirgi koordinatali smenasi.
+    let mut last: std::collections::BTreeMap<i64, &crate::domain::MachineLog> = Default::default();
+    for l in &app.machine_logs {
+        if crate::geo::parse(&l.gps).is_none() {
+            continue;
+        }
+        last.entry(l.machine_id)
+            .and_modify(|cur| {
+                if l.date > cur.date {
+                    *cur = l;
+                }
+            })
+            .or_insert(l);
+    }
+
+    if last.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("mch_map_empty"))
+                    .color(theme::muted())
+                    .size(14.0),
+            );
+        });
+        return;
+    }
+
+    // Markaz: geozona bo'lsa u, aks holda birinchi nuqta. Markazsiz
+    // nuqtalarni bir-biriga nisbatan joylashtirib bo'lmaydi.
+    let fence = app.fence();
+    let center = fence
+        .map(|f| f.center)
+        .or_else(|| last.values().next().and_then(|l| crate::geo::parse(&l.gps)));
+    let Some(center) = center else { return };
+
+    let name_of = |id: i64| {
+        app.machines
+            .iter()
+            .find(|m| m.id == id)
+            .map(|m| m.name.clone())
+            .unwrap_or_default()
+    };
+    let dots: Vec<super::plan::Dot> = last
+        .iter()
+        .filter_map(|(id, l)| {
+            let p = crate::geo::parse(&l.gps)?;
+            let (x, y) = super::plan::to_meters(center, p);
+            let outside = fence.map(|f| f.check(p).outside()).unwrap_or(false);
+            Some(super::plan::Dot {
+                x,
+                y,
+                color: if outside {
+                    theme::warn()
+                } else {
+                    theme::accent()
+                },
+                label: name_of(*id),
+                hint: format!(
+                    "{} · {} · {}",
+                    name_of(*id),
+                    l.date.format("%d.%m.%Y"),
+                    fence
+                        .map(|f| f.check(p).label())
+                        .unwrap_or_else(|| p.label())
+                ),
+            })
+        })
+        .collect();
+
+    super::plan::draw(
+        ui,
+        &dots,
+        (ui.available_height() - 20.0).max(240.0),
+        fence.map(|f| f.radius),
+    );
 }

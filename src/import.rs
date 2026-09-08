@@ -301,6 +301,142 @@ pub fn estimate_from_file(path: &Path) -> Result<Imported, String> {
     rows_to_items(&rows, name)
 }
 
+/// Narx ro'yxati importi (TZ III.15).
+///
+/// Smeta importidan farqi: bu yerda **miqdor kerak emas** — prays-listda
+/// faqat nom, birlik va narx bo'ladi. Shu sababli sarlavhani topish
+/// sharti ham boshqacha, lekin ustunlarni tanish bir xil kod bilan
+/// bajariladi: ikkita mustaqil tanish bir kun kelib ajralib qolardi.
+pub fn prices_from_file(path: &Path) -> Result<Vec<crate::prices::PriceRow>, String> {
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let rows = match ext.as_str() {
+        "csv" | "txt" => read_csv(path)?,
+        "xlsx" | "xlsm" | "xls" | "xlsb" | "ods" => read_spreadsheet(path)?,
+        _ => return Err(crate::i18n::t("import_bad_format").to_string()),
+    };
+    let source = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().to_string())
+        .unwrap_or_default();
+    rows_to_prices(&rows, &source)
+}
+
+/// Prays-listda uchraydigan qo'shimcha ustunlar.
+#[derive(Default, Clone, Copy)]
+struct ExtraColumns {
+    source: Option<usize>,
+    date: Option<usize>,
+    region: Option<usize>,
+}
+
+fn detect_extra(row: &[Cell]) -> ExtraColumns {
+    let mut c = ExtraColumns::default();
+    for (i, cell) in row.iter().enumerate() {
+        let k = key(&cell.text);
+        if k.is_empty() {
+            continue;
+        }
+        let hit = |variants: &[&str]| variants.iter().any(|v| k == *v || k.starts_with(v));
+        if c.source.is_none()
+            && hit(&[
+                "manba",
+                "источник",
+                "поставщик",
+                "yetkazib",
+                "taminotchi",
+                "supplier",
+            ])
+        {
+            c.source = Some(i);
+        } else if c.date.is_none() && hit(&["sana", "дата", "date"]) {
+            c.date = Some(i);
+        } else if c.region.is_none() && hit(&["hudud", "регион", "область", "viloyat", "region"])
+        {
+            c.region = Some(i);
+        }
+    }
+    c
+}
+
+/// Qatorlardan narx ro'yxatini yig'adi.
+fn rows_to_prices(
+    rows: &[Vec<Cell>],
+    file_source: &str,
+) -> Result<Vec<crate::prices::PriceRow>, String> {
+    // Sarlavha: nom va narx ustunlari bo'lishi yetarli.
+    let mut header = None;
+    for (i, row) in rows.iter().take(40).enumerate() {
+        let c = detect_columns(row);
+        if c.name.is_some() && c.price.is_some() {
+            header = Some((i, c, detect_extra(row)));
+            break;
+        }
+    }
+    let Some((header_row, cols, extra)) = header else {
+        return Err(crate::i18n::t("import_no_header").to_string());
+    };
+
+    let mut out = Vec::new();
+    for row in rows.iter().skip(header_row + 1) {
+        if row.iter().all(|c| c.is_empty()) {
+            continue;
+        }
+        let cell = |idx: Option<usize>| -> Cell {
+            idx.and_then(|i| row.get(i)).cloned().unwrap_or_default()
+        };
+        let name = cell(cols.name).text.trim().to_string();
+        let price = cell(cols.price).number().unwrap_or(0.0);
+        // Nomsiz yoki narxsiz qator prays emas: u sarlavha, izoh yoki
+        // yakuniy qator bo'lishi mumkin va u jimgina tashlanadi.
+        if name.is_empty() || price <= 0.0 {
+            continue;
+        }
+        let source = {
+            let s = cell(extra.source).text.trim().to_string();
+            if s.is_empty() {
+                file_source.to_string()
+            } else {
+                s
+            }
+        };
+        out.push(crate::prices::PriceRow {
+            id: 0,
+            code: cell(cols.code).text.trim().to_string(),
+            name,
+            unit: cell(cols.unit).text.trim().to_string(),
+            price,
+            source,
+            date: parse_any_date(&cell(extra.date).text),
+            region: cell(extra.region).text.trim().to_string(),
+        });
+    }
+
+    if out.is_empty() {
+        return Err(crate::i18n::t("import_no_items").to_string());
+    }
+    Ok(out)
+}
+
+/// Prays-listdagi sanani o'qiydi.
+///
+/// Fayllarda sana turli ko'rinishda yoziladi; tanilmagani **bo'sh**
+/// qoladi — noto'g'ri sana qo'yishdan ko'ra sanasiz qator yaxshiroq.
+fn parse_any_date(s: &str) -> Option<chrono::NaiveDate> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    for fmt in ["%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"] {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(s, fmt) {
+            return Some(d);
+        }
+    }
+    None
+}
+
 /// PDF dan jadval o'qiydi (TZ III.2).
 ///
 /// PDF da jadval tuzilmasi saqlanmaydi — u matn parchalarining
@@ -452,6 +588,57 @@ fn split_csv(line: &str, sep: char) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// TZ III.15: prays-list miqdorsiz ham o'qiladi.
+    ///
+    /// Smeta importidan farqi shu: prays-listda «miqdor» ustuni
+    /// bo'lmaydi va uni talab qilish ro'yxatni o'qib bo'lmaydigan qilib
+    /// qo'yardi.
+    #[test]
+    fn a_price_list_is_read_without_a_quantity_column() {
+        let rows = vec![
+            cells(&["Ta'minotchi prays-listi", "", "", "", ""]),
+            cells(&["Kod", "Nomi", "Birlik", "Narx", "Manba"]),
+            cells(&["C-400", "Sement M400", "kg", "1 200", "Qizilqum"]),
+            cells(&["", "G'isht qizil M150", "dona", "950,50", ""]),
+            // Narxsiz qator tashlanadi: u izoh yoki yakuniy qator.
+            cells(&["", "Jami", "", "", ""]),
+        ];
+        let out = rows_to_prices(&rows, "prays-2026").expect("o'qildi");
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].code, "C-400");
+        assert_eq!(out[0].name, "Sement M400");
+        assert_eq!(out[0].price, 1200.0);
+        assert_eq!(out[0].source, "Qizilqum");
+        // Manba ustuni bo'sh bo'lsa fayl nomi ishlatiladi.
+        assert_eq!(out[1].source, "prays-2026");
+        assert!((out[1].price - 950.5).abs() < 1e-9);
+    }
+
+    /// Sarlavha topilmasa import jim turmaydi.
+    #[test]
+    fn a_file_without_a_price_column_is_refused() {
+        let rows = vec![cells(&["Nomi", "Izoh"]), cells(&["Sement", "yaxshi"])];
+        assert!(rows_to_prices(&rows, "x").is_err());
+        // Sarlavha bor, lekin birorta ham qator narxsiz.
+        let rows = vec![cells(&["Nomi", "Narx"]), cells(&["Sement", ""])];
+        assert!(rows_to_prices(&rows, "x").is_err());
+    }
+
+    /// Sana turli ko'rinishda yozilishi mumkin; tanilmagani bo'sh qoladi.
+    #[test]
+    fn a_date_is_read_or_left_empty() {
+        assert_eq!(
+            parse_any_date("2026-09-08").map(|d| d.to_string()),
+            Some("2026-09-08".into())
+        );
+        assert_eq!(
+            parse_any_date("08.09.2026").map(|d| d.to_string()),
+            Some("2026-09-08".into())
+        );
+        assert!(parse_any_date("sentabr").is_none());
+        assert!(parse_any_date("").is_none());
+    }
 
     fn cells(row: &[&str]) -> Vec<Cell> {
         row.iter()

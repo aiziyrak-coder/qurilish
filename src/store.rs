@@ -282,6 +282,18 @@ impl Db {
                 UNIQUE(worker_id, date)
             );
 
+            CREATE TABLE IF NOT EXISTS price_book (
+                id INTEGER PRIMARY KEY,
+                code TEXT NOT NULL DEFAULT '',
+                name TEXT NOT NULL,
+                unit TEXT NOT NULL DEFAULT '',
+                price REAL NOT NULL DEFAULT 0,
+                source TEXT NOT NULL DEFAULT '',
+                date TEXT NOT NULL DEFAULT '',
+                region TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_price_name ON price_book(name);
+
             CREATE TABLE IF NOT EXISTS sign_log (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL REFERENCES project(id) ON DELETE CASCADE,
@@ -920,6 +932,7 @@ impl Db {
             "ALTER TABLE issue ADD COLUMN deadline TEXT",
             "ALTER TABLE journal ADD COLUMN photos TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE journal ADD COLUMN gps TEXT NOT NULL DEFAULT ''",
+            "ALTER TABLE element ADD COLUMN pos TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE stock_move ADD COLUMN warehouse_id INTEGER",
             "ALTER TABLE worker ADD COLUMN brigade_id INTEGER",
             "ALTER TABLE purchase ADD COLUMN delivered_qty REAL NOT NULL DEFAULT 0",
@@ -960,6 +973,7 @@ impl Db {
             "ALTER TABLE machine_log ADD COLUMN odo_end REAL NOT NULL DEFAULT 0",
             "ALTER TABLE machine_log ADD COLUMN trips INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE machine_log ADD COLUMN cargo REAL NOT NULL DEFAULT 0",
+            "ALTER TABLE machine_log ADD COLUMN gps TEXT NOT NULL DEFAULT ''",
             "ALTER TABLE quality_check ADD COLUMN fixed_at TEXT",
             "ALTER TABLE purchase ADD COLUMN section TEXT NOT NULL DEFAULT 'none'",
             "ALTER TABLE purchase ADD COLUMN task_id INTEGER",
@@ -2448,7 +2462,7 @@ impl Db {
 
     pub fn elements(&self, pid: i64) -> Vec<Element> {
         self.list(
-            "SELECT id,project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note
+            "SELECT id,project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note,pos
              FROM element WHERE project_id=?1 ORDER BY id",
             pid,
             |r| {
@@ -2467,6 +2481,7 @@ impl Db {
                     value_name: r.get(11)?,
                     sheet: r.get(12)?,
                     note: r.get(13)?,
+                    pos: crate::ifc::pos_parse(&r.get::<_, String>(14)?),
                 })
             },
         )
@@ -2474,11 +2489,12 @@ impl Db {
 
     pub fn insert_element(&self, e: &Element) -> i64 {
         self.ins(
-            "INSERT INTO element (project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
+            "INSERT INTO element (project_id,section,kind,mark,room,axis,level,size,unit,value,value_name,sheet,note,pos)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
             params![
                 e.project_id, e.section.code(), e.kind.code(), e.mark, e.room, e.axis, e.level,
-                e.size, e.unit, e.value, e.value_name, e.sheet, e.note
+                e.size, e.unit, e.value, e.value_name, e.sheet, e.note,
+                crate::ifc::pos_text(e.pos)
             ],
         )
     }
@@ -2486,7 +2502,7 @@ impl Db {
     pub fn update_element(&self, e: &Element) -> bool {
         self.upd(
             "UPDATE element SET section=?2,kind=?3,mark=?4,room=?5,axis=?6,level=?7,size=?8,
-                    unit=?9,value=?10,value_name=?11,sheet=?12,note=?13 WHERE id=?1",
+                    unit=?9,value=?10,value_name=?11,sheet=?12,note=?13,pos=?14 WHERE id=?1",
             params![
                 e.id,
                 e.section.code(),
@@ -2500,7 +2516,8 @@ impl Db {
                 e.value,
                 e.value_name,
                 e.sheet,
-                e.note
+                e.note,
+                crate::ifc::pos_text(e.pos)
             ],
         )
     }
@@ -3513,6 +3530,80 @@ impl Db {
             "UPDATE worker SET project_id=?2, brigade_id=NULL WHERE id=?1",
             params![worker_id, to_project],
         )
+    }
+
+    // ---------- III.15. Narxlar bazasi ----------
+
+    /// Narxlar bazasi.
+    ///
+    /// Baza **obyektga bog'liq emas**: narx ro'yxati ma'lumotnoma va u
+    /// hamma obyektga birdek tegishli.
+    pub fn price_book(&self) -> Vec<crate::prices::PriceRow> {
+        let mut st = match self.conn().prepare(
+            "SELECT id,code,name,unit,price,source,date,region FROM price_book ORDER BY name, price",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map([], |r| {
+            let date: String = r.get(6)?;
+            Ok(crate::prices::PriceRow {
+                id: r.get(0)?,
+                code: r.get(1)?,
+                name: r.get(2)?,
+                unit: r.get(3)?,
+                price: r.get(4)?,
+                source: r.get(5)?,
+                date: odate(Some(date).filter(|d| !d.trim().is_empty())),
+                region: r.get(7)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
+    /// Narx ro'yxatini bazaga qo'shadi va nechta qator qo'shilganini
+    /// qaytaradi.
+    ///
+    /// Eski qatorlar o'chirilmaydi: bir necha ta'minotchining ro'yxati
+    /// birga turgani **diapazon** beradi va TZ dagi «bozor diapazoni»
+    /// aynan shu.
+    pub fn add_prices(&self, rows: &[crate::prices::PriceRow]) -> usize {
+        let mut added = 0;
+        for r in rows {
+            let ok = self.conn().execute(
+                "INSERT INTO price_book (code,name,unit,price,source,date,region)
+                 VALUES (?1,?2,?3,?4,?5,?6,?7)",
+                params![
+                    r.code,
+                    r.name,
+                    r.unit,
+                    r.price,
+                    r.source,
+                    r.date.map(|d| d.to_string()).unwrap_or_default(),
+                    r.region
+                ],
+            );
+            if ok.is_ok() {
+                added += 1;
+            }
+        }
+        if added > 0 {
+            self.audit(AuditAction::Insert, "price_book", 0);
+        }
+        added
+    }
+
+    /// Bazani tozalaydi.
+    pub fn clear_price_book(&self) -> usize {
+        let n = self
+            .conn()
+            .execute("DELETE FROM price_book", [])
+            .unwrap_or(0);
+        if n > 0 {
+            self.audit(AuditAction::Delete, "price_book", 0);
+        }
+        n
     }
 
     // ---------- IV.18, V.28. Imzo daftari ----------
@@ -4976,7 +5067,7 @@ impl Db {
     pub fn machine_logs(&self, pid: i64) -> Vec<MachineLog> {
         self.list(
             "SELECT id,project_id,machine_id,date,hours,fuel,task_id,number,driver,route,
-                    odo_start,odo_end,trips,cargo,note
+                    odo_start,odo_end,trips,cargo,note,gps
              FROM machine_log WHERE project_id=?1 ORDER BY date DESC,id DESC",
             pid,
             |r| {
@@ -4996,6 +5087,7 @@ impl Db {
                     trips: r.get(12)?,
                     cargo: r.get(13)?,
                     note: r.get(14)?,
+                    gps: r.get(15)?,
                 })
             },
         )
@@ -5004,8 +5096,8 @@ impl Db {
     pub fn insert_machine_log(&self, l: &MachineLog) -> i64 {
         self.ins(
             "INSERT INTO machine_log (project_id,machine_id,date,hours,fuel,task_id,number,driver,
-                                      route,odo_start,odo_end,trips,cargo,note)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14)",
+                                      route,odo_start,odo_end,trips,cargo,note,gps)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
             params![
                 l.project_id,
                 l.machine_id,
@@ -5020,7 +5112,8 @@ impl Db {
                 l.odo_end,
                 l.trips,
                 l.cargo,
-                l.note
+                l.note,
+                l.gps
             ],
         )
     }
@@ -5028,7 +5121,8 @@ impl Db {
     pub fn update_machine_log(&self, l: &MachineLog) -> bool {
         self.upd(
             "UPDATE machine_log SET machine_id=?2,date=?3,hours=?4,fuel=?5,task_id=?6,number=?7,
-                    driver=?8,route=?9,odo_start=?10,odo_end=?11,trips=?12,cargo=?13,note=?14
+                    driver=?8,route=?9,odo_start=?10,odo_end=?11,trips=?12,cargo=?13,note=?14,
+                    gps=?15
              WHERE id=?1",
             params![
                 l.id,
@@ -5044,7 +5138,8 @@ impl Db {
                 l.odo_end,
                 l.trips,
                 l.cargo,
-                l.note
+                l.note,
+                l.gps
             ],
         )
     }
@@ -5095,6 +5190,7 @@ impl Db {
                 value_name: value_name.into(),
                 sheet: sheet.into(),
                 note: String::new(),
+                pos: None,
             })
         };
 
@@ -9330,6 +9426,7 @@ impl Db {
                         trips,
                         cargo,
                         note: String::new(),
+                        gps: String::new(),
                     });
                 }
             };

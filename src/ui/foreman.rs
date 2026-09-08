@@ -730,6 +730,7 @@ fn machines_block(ui: &mut egui::Ui, app: &mut App, pid: i64) {
             trips: 0,
             cargo: 0.0,
             note: String::new(),
+            gps: String::new(),
         });
         app.reload_modules();
     }

@@ -160,6 +160,10 @@ pub struct Ctx<'a> {
     pub items: &'a [EstimateItem],
     pub declared_total: f64,
     pub norms: &'a HashMap<String, Norm>,
+    /// Narxlar bazasi (TZ III.14.3, III.15). Bo'sh bo'lsa narx
+    /// diapazoni bo'yicha tekshiruv o'tkazilmaydi — bu «narx to'g'ri»
+    /// degani emas, «solishtiradigan narsa yo'q» degani.
+    pub prices: &'a [crate::prices::PriceRow],
 }
 
 impl<'a> Ctx<'a> {
@@ -525,6 +529,52 @@ pub fn check_estimate(ctx: &Ctx) -> Vec<Issue> {
                 String::new(),
             ));
         }
+    }
+
+    // --- III.14.3 Narxlar bazasidagi diapazon bilan solishtirish ---
+    //
+    // Baza yuklanmagan bo'lsa tekshiruv umuman o'tkazilmaydi: bu «narx
+    // to'g'ri» degani emas, «solishtiradigan narsa yo'q» degani.
+    for it in ctx.items {
+        if it.price <= 0.0 {
+            continue;
+        }
+        let found = crate::prices::find(ctx.prices, &it.name, &it.code, &it.unit);
+        let Some(range) = crate::prices::range(&found) else {
+            continue;
+        };
+        let verdict = crate::prices::compare(it.price, Some(range));
+        if !verdict.outside() {
+            continue;
+        }
+        let severity = match verdict {
+            // Baholangan narx bazadan yuqori — pul ortiqcha ketadi.
+            crate::prices::Verdict::Above { .. } => Severity::Major,
+            // Past narx ham muammo: ish ko'tarilmay qolishi mumkin.
+            _ => Severity::Warning,
+        };
+        out.push(b.make(
+            "EST_MARKET",
+            "SM",
+            it.section,
+            severity,
+            crate::i18n::t("chk_market_title").to_string(),
+            format!(
+                "{}: {} · {}: {} — {} ({} {})",
+                crate::i18n::t("chk_in_estimate"),
+                fmt(it.price),
+                crate::i18n::t("pb_range"),
+                fmt(range.min),
+                fmt(range.max),
+                range.count,
+                crate::i18n::t("pb_rows")
+            ),
+            it.name.clone(),
+            it.code.clone(),
+            String::new(),
+            crate::i18n::t("chk_market_fix").to_string(),
+            crate::i18n::t("ur_estimator").to_string(),
+        ));
     }
 
     // --- III.9 Narx anomaliyalari: bir xil ish uchun turli narx ---
@@ -4829,6 +4879,7 @@ mod tests {
             value_name: String::new(),
             sheet: sheet.into(),
             note: String::new(),
+            pos: None,
         }
     }
 
@@ -4839,6 +4890,7 @@ mod tests {
         items: Vec<EstimateItem>,
         declared: f64,
         norms: HashMap<String, Norm>,
+        prices: Vec<crate::prices::PriceRow>,
     }
 
     impl Fixture {
@@ -4851,6 +4903,7 @@ mod tests {
                 items: &self.items,
                 declared_total: self.declared,
                 norms: &self.norms,
+                prices: &self.prices,
             }
         }
     }
@@ -4863,7 +4916,55 @@ mod tests {
             items: Vec::new(),
             declared: 0.0,
             norms: HashMap::new(),
+            prices: Vec::new(),
         }
+    }
+
+    /// TZ III.14.3: smetadagi narx yuklangan narx ro'yxati bilan
+    /// solishtiriladi.
+    ///
+    /// Baza bo'lmasa tekshiruv umuman o'tkazilmaydi — «narx to'g'ri»
+    /// degan xulosa chiqarilmaydi.
+    #[test]
+    fn estimate_price_is_compared_with_the_price_book() {
+        use crate::prices::PriceRow;
+
+        let mut f = empty();
+        f.items = vec![
+            item(1, "Sement M400", "kg", 1000.0, 1_800.0, 1_800_000.0),
+            item(2, "G'isht qizil", "dona", 1000.0, 950.0, 950_000.0),
+        ];
+
+        // Baza bo'sh — e'tiroz yo'q.
+        assert!(!check_estimate(&f.ctx())
+            .iter()
+            .any(|i| i.title == crate::i18n::t("chk_market_title")));
+
+        let price = |name: &str, unit: &str, value: f64| PriceRow {
+            id: 0,
+            code: String::new(),
+            name: name.into(),
+            unit: unit.into(),
+            price: value,
+            source: "Prays".into(),
+            date: None,
+            region: String::new(),
+        };
+        f.prices = vec![
+            price("Sement M400", "kg", 1000.0),
+            price("Sement M400", "kg", 1200.0),
+            price("G'isht qizil", "dona", 900.0),
+            price("G'isht qizil", "dona", 1000.0),
+        ];
+
+        let found: Vec<_> = check_estimate(&f.ctx())
+            .into_iter()
+            .filter(|i| i.title == crate::i18n::t("chk_market_title"))
+            .collect();
+        // Sement 1800 — diapazon 1000–1200 dan 50% yuqori.
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].severity, Severity::Major);
+        assert!(found[0].location.contains("Sement"), "{:?}", found[0]);
     }
 
     /// TZ III.4: miqdor x narx summaga teng bo'lmasa — kritik xato.

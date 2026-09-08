@@ -101,6 +101,13 @@ pub struct WorkerRef {
     pub position: String,
 }
 
+/// Texnika ma'lumotnomasi (TZ XVI.6).
+#[derive(Debug, Clone)]
+pub struct MachineRef {
+    pub name: String,
+    pub reg_no: String,
+}
+
 /// Ofis va maydoncha o'rtasidagi xabar (TZ VI.32).
 #[derive(Debug, Clone)]
 pub struct Message {
@@ -740,6 +747,43 @@ impl Store {
             .unwrap_or_default()
     }
 
+    // ------------------------------------------------------------ Texnika
+
+    /// Texnika ro'yxatini almashtiradi (TZ XVI.6).
+    pub fn set_machines(&self, project: &str, items: &[MachineRef]) -> Result<usize, String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM machine_ref WHERE project=?1", params![project])
+            .map_err(|e| e.to_string())?;
+        for m in items {
+            tx.execute(
+                "INSERT INTO machine_ref (project,name,reg_no) VALUES (?1,?2,?3)",
+                params![project, m.name, m.reg_no],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(items.len())
+    }
+
+    pub fn machines(&self, project: &str) -> Vec<MachineRef> {
+        let conn = self.lock();
+        let mut st = match conn
+            .prepare("SELECT name,reg_no FROM machine_ref WHERE project=?1 ORDER BY id")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        let rows = st.query_map(params![project], |r| {
+            Ok(MachineRef {
+                name: r.get(0)?,
+                reg_no: r.get(1)?,
+            })
+        });
+        rows.map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default()
+    }
+
     // ---------------------------------------------------------- Yorliqlar
 
     /// QR yorliqlar ro'yxatini almashtiradi (TZ VI.11).
@@ -1023,6 +1067,13 @@ CREATE TABLE IF NOT EXISTS form_nonce (
     nonce TEXT PRIMARY KEY,
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS machine_ref (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    name TEXT NOT NULL,
+    reg_no TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS machine_ref_project ON machine_ref(project);
 CREATE TABLE IF NOT EXISTS message (
     id INTEGER PRIMARY KEY,
     project TEXT NOT NULL,

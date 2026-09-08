@@ -156,6 +156,12 @@ pub struct Element {
     pub value_name: String,
     pub sheet: String,
     pub note: String,
+    /// Modeldagi o'rni: `[x, y, z]`, metrda (TZ VI.13, VIII.6).
+    ///
+    /// Faqat IFC dan kelgan elementda to'ladi. Qo'lda kiritilgan
+    /// elementda **bo'sh qoladi** va reja chizmasida ko'rinmaydi —
+    /// joyi noma'lum narsani xaritaga qo'yish yolg'on bo'lardi.
+    pub pos: Option<[f64; 3]>,
 }
 
 enum_kind!(Relation {
@@ -1512,6 +1518,12 @@ pub struct MachineLog {
     pub trips: i64,
     pub cargo: f64,
     pub note: String,
+    /// Smena qayerda yozilgani: `kenglik,uzunlik[,aniqlik]` (TZ XVI.6).
+    ///
+    /// Faqat telefondan kelgan yozuvda to'ladi — texnikada GPS tracker
+    /// yo'q va uni bor deb ko'rsatilmaydi. «Texnika qayerda» degan
+    /// savolga javob operatorning belgisidan chiqadi.
+    pub gps: String,
 }
 
 impl MachineLog {

@@ -54,11 +54,117 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         CheckTab::Issues => issues_tab(ui, app),
         CheckTab::Clash => clash_tab(ui, app),
         CheckTab::Action => action_tab(ui, app),
+        CheckTab::Plan => plan_tab(ui, app),
         CheckTab::Graph => graph_tab(ui, app),
         CheckTab::Elements => elements_tab(ui, app),
         CheckTab::Relations => relations_tab(ui, app),
         CheckTab::Norms => norms_tab(ui, app),
     }
+}
+
+// ---------------------------------------------------------------- REJA
+
+/// Joylashuv rejasi (TZ VI.13, VIII.6).
+///
+/// IFC dan elementning **joyi** olinadi, shakli emas. Shuning uchun bu
+/// nuqtalar rejasi: qavat tanlanadi va shu qavatdagi elementlar bo'lim
+/// rangi bilan chiziladi. Uch o'lchovli ko'rinish geometriya yadrosini
+/// talab qiladi va u yo'q — bu ochiq aytiladi.
+fn plan_tab(ui: &mut egui::Ui, app: &mut App) {
+    ui.label(
+        RichText::new(t("plan_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    let placed: Vec<&Element> = app.elements.iter().filter(|e| e.pos.is_some()).collect();
+    if placed.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("plan_no_pos"))
+                    .color(theme::muted())
+                    .size(14.0),
+            );
+        });
+        return;
+    }
+
+    // Qavatlar ro'yxati: element qaysi qavatda ekani IFC dan keladi.
+    let mut levels: Vec<String> = placed
+        .iter()
+        .map(|e| e.level.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect();
+    levels.sort();
+    levels.dedup();
+
+    let key = egui::Id::new("plan_level");
+    let mut level = ui.data(|d| d.get_temp::<String>(key)).unwrap_or_default();
+    if !level.is_empty() && !levels.contains(&level) {
+        level.clear();
+    }
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(t("plan_level")).size(12.0));
+        if ui
+            .selectable_label(level.is_empty(), t("plan_all_levels"))
+            .clicked()
+        {
+            level.clear();
+        }
+        for l in &levels {
+            if ui.selectable_label(&level == l, l).clicked() {
+                level = l.clone();
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(key, level.clone()));
+
+    let shown: Vec<&Element> = placed
+        .iter()
+        .filter(|e| level.is_empty() || e.level.trim() == level)
+        .copied()
+        .collect();
+    ui.label(
+        RichText::new(format!("{}: {}", t("plan_shown"), shown.len()))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    let dots: Vec<super::plan::Dot> = shown
+        .iter()
+        .filter_map(|e| {
+            let p = e.pos?;
+            Some(super::plan::Dot {
+                x: p[0],
+                y: p[1],
+                color: theme::section_color(e.section.color()),
+                // Yorliq faqat markasi bo'lgan elementga: hamma nuqtaga
+                // yozuv qo'yilsa chizma o'qilmay qoladi.
+                label: if shown.len() <= 60 {
+                    e.mark.clone()
+                } else {
+                    String::new()
+                },
+                hint: format!(
+                    "{} · {} · {} {:.1}\n{} {:.2}, {:.2}, {:.2}",
+                    e.mark,
+                    e.kind.label(),
+                    t("plan_level"),
+                    p[2],
+                    t("geo_center"),
+                    p[0],
+                    p[1],
+                    p[2]
+                ),
+            })
+        })
+        .collect();
+
+    let h = (ui.available_height() - 20.0).max(220.0);
+    super::plan::draw(ui, &dots, h, None);
 }
 
 // ---------------------------------------------------------------- ACTION
@@ -813,6 +919,8 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
                 value_name: String::new(),
                 sheet: String::new(),
                 note: String::new(),
+                // Qo'lda kiritilgan element: joyi noma'lum.
+                pos: None,
             };
             let id = app.db.insert_element(&el);
             app.reload_modules();

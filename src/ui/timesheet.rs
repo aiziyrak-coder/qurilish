@@ -710,6 +710,46 @@ fn attendance_tab(ui: &mut egui::Ui, app: &mut App) {
         }
     }
 
+    // --- Joy sxemasi: geozona va belgilar. Faqat ikkalasi ham bo'lsa
+    // chiziladi — markazsiz nuqtalarni bir-biriga nisbatan joylashtirib
+    // bo'lmaydi.
+    if let Some(f) = fence {
+        let dots: Vec<super::plan::Dot> = app
+            .attendance
+            .iter()
+            .filter_map(|a| {
+                let p = crate::geo::parse(&a.gps)?;
+                let (x, y) = super::plan::to_meters(f.center, p);
+                let outside = f.check(p).outside();
+                Some(super::plan::Dot {
+                    x,
+                    y,
+                    color: if outside {
+                        theme::danger()
+                    } else {
+                        theme::ok()
+                    },
+                    label: String::new(),
+                    hint: format!(
+                        "{} · {} · {}",
+                        a.worker,
+                        a.at.format("%d.%m %H:%M"),
+                        f.check(p).label()
+                    ),
+                })
+            })
+            .collect();
+        if !dots.is_empty() {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(t("plan_map_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            super::plan::draw(ui, &dots, 220.0, Some(f.radius));
+        }
+    }
+
     ui.add_space(10.0);
     egui::ScrollArea::vertical()
         .id_salt("attendance_days")

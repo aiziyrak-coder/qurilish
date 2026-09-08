@@ -61,6 +61,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 (3, t("mat_tab_alts")),
                 (4, t("mat_tab_trace")),
                 (7, t("mat_tab_kits")),
+                (8, t("pb_title")),
             ],
         );
         ui.data_mut(|d| d.insert_temp(tab_key, tab));
@@ -77,6 +78,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             5 => ready_tab(ui, app),
             6 => fit_tab(ui, app),
             7 => kits_tab(ui, app),
+            8 => prices_tab(ui, app),
             _ => table(ui, app),
         }
     }
@@ -2124,4 +2126,144 @@ pub fn stock_bar(ui: &mut egui::Ui, balance: f64, min_stock: f64, width: f32) {
             Stroke::new(1.5_f32, theme::text().gamma_multiply(0.6)),
         );
     }
+}
+
+/// Narxlar bazasi (TZ III.15, XII.20, X.44).
+///
+/// Ekran ikki qismdan: yuqorida **materiallarimiz** bazadagi narx bilan
+/// solishtiriladi (nima uchun baza kerakligi shu), pastda esa bazaning
+/// o'zi ko'rinadi.
+fn prices_tab(ui: &mut egui::Ui, app: &mut App) {
+    ui.label(RichText::new(t("pb_hint")).size(11.0).color(theme::muted()));
+    ui.add_space(6.0);
+
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .button(t("pb_import"))
+            .on_hover_text(t("pb_import_hint"))
+            .clicked()
+        {
+            app.import_prices();
+        }
+        ui.label(
+            RichText::new(format!("{}: {}", t("pb_rows"), app.price_book.len()))
+                .size(12.0)
+                .color(theme::muted()),
+        );
+        if !app.price_book.is_empty()
+            && ui
+                .button(RichText::new(t("pb_clear")).color(theme::danger()))
+                .clicked()
+        {
+            app.confirm_clear_prices = true;
+        }
+    });
+
+    // Qaytarilmaydigan amal — tasdiqdan keyin.
+    if app.confirm_clear_prices {
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(t("pb_clear_confirm"))
+                    .size(12.0)
+                    .color(theme::danger()),
+            );
+            if ui.button(t("yes")).clicked() {
+                app.clear_prices();
+                app.confirm_clear_prices = false;
+            }
+            if ui.button(t("no")).clicked() {
+                app.confirm_clear_prices = false;
+            }
+        });
+    }
+    ui.add_space(8.0);
+
+    if app.price_book.is_empty() {
+        ui.add_space(30.0);
+        ui.vertical_centered(|ui| {
+            ui.label(
+                RichText::new(t("pb_empty"))
+                    .color(theme::muted())
+                    .size(14.0),
+            );
+        });
+        return;
+    }
+
+    // --- Materiallarimiz baza bilan.
+    let materials = app.materials.clone();
+    egui::ScrollArea::vertical()
+        .id_salt("price_compare")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("price_grid")
+                .striped(true)
+                .num_columns(5)
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    for h in [
+                        t("col_material"),
+                        t("col_price"),
+                        t("pb_market"),
+                        t("pb_range"),
+                        t("pb_trend"),
+                    ] {
+                        ui.label(RichText::new(h).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+
+                    for m in &materials {
+                        let range = app.market_range(m);
+                        let verdict = crate::prices::compare(m.price, range);
+                        ui.label(RichText::new(&m.name).size(12.0))
+                            .on_hover_text(&m.unit);
+                        ui.label(RichText::new(super::money(m.price)).size(12.0));
+                        let v = RichText::new(verdict.text()).size(12.0);
+                        ui.label(if verdict.outside() {
+                            v.color(theme::warn())
+                        } else {
+                            v.color(theme::muted())
+                        });
+                        ui.label(
+                            RichText::new(match range {
+                                Some(r) => format!(
+                                    "{} — {} ({})",
+                                    super::money(r.min),
+                                    super::money(r.max),
+                                    r.count
+                                ),
+                                None => "—".to_string(),
+                            })
+                            .size(12.0),
+                        );
+                        match app.price_trend(m.id) {
+                            Some(tr) => {
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{:+.1}% / {}",
+                                        tr.per_month,
+                                        t("pb_month")
+                                    ))
+                                    .size(12.0)
+                                    .color(if tr.rising() {
+                                        theme::warn()
+                                    } else {
+                                        theme::ok()
+                                    }),
+                                )
+                                .on_hover_text(format!(
+                                    "{}\n{}",
+                                    tr.text(),
+                                    t("pb_trend_hint")
+                                ));
+                            }
+                            None => {
+                                ui.label(RichText::new("—").size(12.0).color(theme::muted()));
+                            }
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
 }

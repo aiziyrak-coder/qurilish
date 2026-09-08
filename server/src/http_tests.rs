@@ -1414,3 +1414,74 @@ fn a_read_only_role_cannot_mark_the_chain() {
         assert_eq!(code, StatusCode::FORBIDDEN);
     });
 }
+
+/// TZ XVI.6: texnika smenasi telefondan keladi va koordinata bilan.
+#[test]
+fn a_machine_shift_carries_its_place() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/machines",
+                Some(&token),
+                json!({"project":"OBY-1","items":[{"name":"Ekskavator","reg_no":"01A123BB"}]}),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let (code, html) = page_text(&app, "/o/OBY-1/machine", &cookie).await;
+        assert_eq!(code, StatusCode::OK);
+        assert!(html.contains("01A123BB"), "{html}");
+
+        let form = "machine=Ekskavator&date=2026-09-08&hours=7%2C5&fuel=60&note=Kotlovan&gps=41.299500%2C69.240100%2C15";
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/machine")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from(form))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::SEE_OTHER);
+
+        let (_, body) = send(&app, get("/api/pull?project=OBY-1&since=0", Some(&token))).await;
+        let text = body["changes"][0]["body"].as_str().expect("matn");
+        assert!(text.contains("#machine"), "{text}");
+        assert!(text.contains("Ekskavator"), "{text}");
+        // Vergul nuqtaga o'giriladi.
+        assert!(text.contains("7.5"), "{text}");
+        assert!(text.contains("41.299500,69.240100,15"), "{text}");
+    });
+}
+
+/// Ro'yxatda yo'q texnikaga smena yozilmaydi.
+#[test]
+fn an_unknown_machine_is_refused() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let cookie = cookie_for(&app, "prorab", "prorab-parol-1").await;
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/o/OBY-1/machine")
+                    .header(header::COOKIE, &cookie)
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("machine=Notanish&date=2026-09-08&hours=8"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::OK);
+    });
+}
