@@ -571,6 +571,11 @@ pub struct App {
     pub sign_log: Vec<crate::domain::SignEntry>,
     /// Serverda qayd etilgan zanjir belgilari.
     pub chain_marks: Vec<crate::sync::ChainMark>,
+    /// Geometriya bo'yicha kolliziyalar (TZ II, VII.31).
+    ///
+    /// Elementlar o'qilganda bir marta hisoblanadi: ekran har kadrda
+    /// qayta chiziladi va u yerda qayta hisoblash ortiqcha bo'lardi.
+    pub clashes: Vec<crate::clash::Clash>,
     /// Narxlar bazasi (TZ III.15). Obyektga bog'liq emas.
     pub price_book: Vec<crate::prices::PriceRow>,
     /// Narxlar bazasini tozalash tasdig'i kutilyaptimi.
@@ -815,6 +820,7 @@ impl App {
             chat_outgoing: String::new(),
             sign_log: Vec::new(),
             chain_marks: Vec::new(),
+            clashes: Vec::new(),
             price_book: Vec::new(),
             confirm_clear_prices: false,
             photo_report: None,
@@ -1194,6 +1200,9 @@ impl App {
         }
         self.elements = self.db.elements(id);
         self.element_links = self.db.element_links(id);
+        // Kolliziya bir marta hisoblanadi: elementlar kamdan-kam
+        // o'zgaradi, ekran esa soniyasiga o'nlab marta qayta chiziladi.
+        self.clashes = crate::clash::find(&self.elements, &self.element_links);
         self.estimates = self.db.estimates(id);
         self.norms = self.db.norms();
 
@@ -2710,9 +2719,10 @@ impl App {
     ///
     /// Qoidalar bo'yicha topilmalardan alohida: bu yerdagi xulosa
     /// elementlarning **o'lchamiga** tayanadi va faqat shakli tanilgan
-    /// elementlarni qamraydi.
-    pub fn geometry_clashes(&self) -> Vec<crate::clash::Clash> {
-        crate::clash::find(&self.elements, &self.element_links)
+    /// elementlarni qamraydi. Ro'yxat elementlar o'qilganda hisoblanadi
+    /// va shu yerda faqat qaytariladi.
+    pub fn geometry_clashes(&self) -> &[crate::clash::Clash] {
+        &self.clashes
     }
 
     /// Prorabga beriladigan savollar (TZ V.25, XIV.37).

@@ -95,24 +95,45 @@ pub fn find(elements: &[Element], links: &[ElementLink]) -> Vec<Clash> {
         linked.insert(pair(l.from_el, l.to_el));
     }
 
-    let boxed: Vec<&Element> = elements.iter().filter(|e| e.bbox.is_some()).collect();
+    // Har juftni tekshirish katta modelda ishlamaydi: 50 000 element —
+    // milliarddan ortiq juft. Shuning uchun **supurish** ishlatiladi:
+    // qutilar X bo'yicha tartiblanadi va faqat X oralig'i ustma-ust
+    // tushganlari solishtiriladi. Natija aynan bir xil, ish esa
+    // amaliyotda chiziqli.
+    let mut boxed: Vec<(&Element, [f64; 6])> = elements
+        .iter()
+        .filter_map(|e| e.bbox.map(|b| (e, b)))
+        .collect();
+    boxed.sort_by(|x, y| {
+        x.1[0]
+            .partial_cmp(&y.1[0])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
     let mut out = Vec::new();
-    for (i, a) in boxed.iter().enumerate() {
-        for b in boxed.iter().skip(i + 1) {
+    // X bo'yicha hali tugamagan qutilar.
+    let mut active: Vec<usize> = Vec::new();
+    for i in 0..boxed.len() {
+        let (a, ba) = boxed[i];
+        // Chapda qolganlar endi kesisha olmaydi.
+        active.retain(|&j| boxed[j].1[3] > ba[0] + MIN_OVERLAP);
+        for &j in &active {
+            let (b, bb) = boxed[j];
             if linked.contains(&pair(a.id, b.id)) {
                 continue;
             }
-            let (Some(ba), Some(bb)) = (a.bbox, b.bbox) else {
-                continue;
-            };
             if let Some(o) = overlap(ba, bb) {
+                // Tartib doim bir xil bo'lsin: juftlik qaysi tomondan
+                // kelganiga qarab o'zgarmasin.
+                let (first, second) = pair(a.id, b.id);
                 out.push(Clash {
-                    a: a.id,
-                    b: b.id,
+                    a: first,
+                    b: second,
                     overlap: o,
                 });
             }
         }
+        active.push(i);
     }
 
     // Eng katta kesishish oldinda: ro'yxat qisqarganda muhimi qolsin.
@@ -247,6 +268,47 @@ mod tests {
         // 1↔3 to'liq ustma-ust (hajm 1), 1↔2 va 2↔3 esa 0,1.
         assert!(found[0].volume() > found[1].volume(), "{found:?}");
         assert_eq!((found[0].a, found[0].b), (1, 3));
+    }
+
+    /// Supurish usuli har juftni tekshirish bilan bir xil natija beradi.
+    ///
+    /// Tezlik uchun qilingan soddalashtirish natijani o'zgartirmasligi
+    /// kerak — bu sinov aynan shuni tekshiradi va tasodifiy emas,
+    /// takrorlanadigan ma'lumotda ishlaydi.
+    #[test]
+    fn the_sweep_finds_exactly_what_a_full_scan_would() {
+        // Takrorlanadigan «tasodif»: oddiy chiziqli generator.
+        let mut seed = 12_345u64;
+        let mut next = || {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            ((seed >> 33) % 1000) as f64 / 100.0
+        };
+        let elements: Vec<Element> = (1..=200)
+            .map(|id| {
+                let (x, y, z) = (next(), next(), next());
+                let (dx, dy, dz) = (next() / 5.0 + 0.1, next() / 5.0 + 0.1, next() / 5.0 + 0.1);
+                el(id, Some([x, y, z, x + dx, y + dy, z + dz]))
+            })
+            .collect();
+
+        // To'g'ridan-to'g'ri hisob: har juft.
+        let mut brute: Vec<(i64, i64)> = Vec::new();
+        for (i, a) in elements.iter().enumerate() {
+            for b in elements.iter().skip(i + 1) {
+                if let (Some(ba), Some(bb)) = (a.bbox, b.bbox) {
+                    if overlap(ba, bb).is_some() {
+                        brute.push(pair(a.id, b.id));
+                    }
+                }
+            }
+        }
+        brute.sort();
+
+        let mut fast: Vec<(i64, i64)> = find(&elements, &[]).iter().map(|c| (c.a, c.b)).collect();
+        fast.sort();
+
+        assert!(!brute.is_empty(), "sinov ma'lumotida kesishish yo'q");
+        assert_eq!(fast, brute, "supurish boshqa natija berdi");
     }
 
     /// Faqat bitta o'q bo'yicha kesishish kolliziya emas.

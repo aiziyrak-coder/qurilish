@@ -155,7 +155,7 @@ fn geometry_clash_block(ui: &mut egui::Ui, app: &App) {
                         ui.label(RichText::new(h).size(11.0).color(theme::muted()));
                     }
                     ui.end_row();
-                    for c in &found {
+                    for c in found {
                         ui.label(RichText::new(name(c.a)).size(12.0));
                         ui.label(RichText::new(name(c.b)).size(12.0));
                         ui.label(

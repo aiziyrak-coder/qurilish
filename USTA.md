@@ -161,7 +161,7 @@ Tekshiruv:
 
 | Nima | Natija |
 |---|---|
-| `cargo test --workspace` | 467 desktop + 53 server + 3 xesh sinov o'tadi |
+| `cargo test --workspace` | 468 desktop + 53 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
 | `cargo test --no-default-features` | 457 sinov (tarmoq kodisiz yig'ilish) |
@@ -207,7 +207,9 @@ ma'lumot **telefon sahifasidan** keladi va ilova uni hosil qilmaydi:
 - `src/prices.rs` — yuklangan narx ro'yxati, diapazon va tendensiya
 - `src/hook.rs` — tashqi xabar nuqtasi (sukut bo'yicha o'chiq)
 - `src/clash.rs` — o'lcham bo'yicha kolliziya: qutilar kesishishi,
-  chuqurlik va hajm bilan. O'lchami yo'q element hisobga kirmaydi
+  chuqurlik va hajm bilan. O'lchami yo'q element hisobga kirmaydi.
+  Hisob **supurish** usulida (X bo'yicha tartib) va u har juftni
+  tekshirish bilan bir xil natija berishi sinov bilan qoplangan
 
 Telefon tomonida: joyni so'rash, QR o'qish, ovoz bilan matn, kirish-chiqish,
 ariza, texnika smenasi, ofis bilan yozishma va PWA (aloqasiz o'qish,
