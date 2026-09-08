@@ -4362,6 +4362,167 @@ fn fmt(v: f64) -> String {
     }
 }
 
+// ================= IV.11, XII.27. Sertifikat nazorati =================
+
+/// Sertifikat bo'yicha e'tiroz.
+///
+/// Tekshiruv sertifikatning **o'zini** emas, uning qurilish yozuvlari
+/// bilan mosligini qaraydi: qachon kelgan, qachon ishlatilgan va
+/// hujjatda nima yozilgan. Sertifikatning haqiqiyligini tekshirish
+/// (davlat reyestridan) ilova ichida qilinmaydi — bu tashqi manba.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CertIssue {
+    /// Partiya sertifikatsiz kelgan.
+    BatchWithoutCert { batch_id: i64, number: String },
+    /// Sertifikat partiya kelgan kunda allaqachon tugagan.
+    ExpiredAtDelivery {
+        batch_id: i64,
+        number: String,
+        days: i64,
+    },
+    /// Material sertifikat muddati tugagandan keyin ishga berilgan.
+    UsedAfterExpiry {
+        material_id: i64,
+        date: NaiveDate,
+        qty: f64,
+    },
+    /// Tavsifda me'yoriy hujjat bor, lekin sertifikat raqami yo'q.
+    StandardWithoutCert { material_id: i64, standard: String },
+    /// Sertifikat muddati tugayapti, omborda esa qoldiq bor.
+    ExpiringWithStock {
+        material_id: i64,
+        days: i64,
+        balance: f64,
+    },
+}
+
+impl CertIssue {
+    /// Ishni to'xtatishga arziydigan holat.
+    ///
+    /// Sertifikatsiz yoki muddati o'tgan material — bu hujjat kamchiligi
+    /// emas, konstruksiyaga kirib ketgan noma'lum material.
+    pub fn severe(&self) -> bool {
+        matches!(
+            self,
+            CertIssue::BatchWithoutCert { .. }
+                | CertIssue::ExpiredAtDelivery { .. }
+                | CertIssue::UsedAfterExpiry { .. }
+        )
+    }
+
+    /// Qaysi materialga tegishli (partiya bo'yicha bo'lsa — `None`).
+    pub fn material(&self) -> Option<i64> {
+        match self {
+            CertIssue::UsedAfterExpiry { material_id, .. }
+            | CertIssue::StandardWithoutCert { material_id, .. }
+            | CertIssue::ExpiringWithStock { material_id, .. } => Some(*material_id),
+            _ => None,
+        }
+    }
+}
+
+/// Tavsifda me'yoriy hujjat belgisi bormi.
+fn has_standard(spec: &str) -> Option<String> {
+    const MARKS: [&str; 5] = ["ГОСТ", "GOST", "O'z DSt", "ШНК", "СНиП"];
+    let upper = spec.to_uppercase();
+    MARKS
+        .iter()
+        .find(|m| upper.contains(&m.to_uppercase()))
+        .map(|m| m.to_string())
+}
+
+/// TZ IV.11, XII.27: sertifikatni kelish va sarf yozuvlari bilan solishtiradi.
+///
+/// Beshta savol beriladi:
+///
+/// 1. Partiya sertifikat bilan keldimi?
+/// 2. Sertifikat kelgan kunda amal qilarmidi?
+/// 3. Material muddati tugagandan keyin ishga berilmadimi?
+/// 4. Tavsifda GOST yozilgan bo'lsa, uni tasdiqlaydigan hujjat bormi?
+/// 5. Muddati tugayotgan sertifikatli material omborda qolmadimi?
+///
+/// Har javob **yozuvga tayanadi**: sertifikat matni o'qilmaydi va
+/// haqiqiyligi tekshirilmaydi — bu tashqi reyestr ishi.
+pub fn cert_control(
+    materials: &[Material],
+    batches: &[Batch],
+    moves: &[StockMove],
+    stock: &[StockLine],
+    today: NaiveDate,
+) -> Vec<CertIssue> {
+    let mut out = Vec::new();
+
+    // ---- Partiyalar: kelishdagi holat.
+    for b in batches {
+        if b.cert_no.trim().is_empty() {
+            out.push(CertIssue::BatchWithoutCert {
+                batch_id: b.id,
+                number: b.number.clone(),
+            });
+            continue;
+        }
+        if let Some(until) = b.cert_until {
+            if until < b.received {
+                out.push(CertIssue::ExpiredAtDelivery {
+                    batch_id: b.id,
+                    number: b.number.clone(),
+                    days: (b.received - until).num_days(),
+                });
+            }
+        }
+    }
+
+    // ---- Materiallar: sarf va qoldiq.
+    for m in materials {
+        if let Some(until) = m.cert_until {
+            // Muddatdan keyingi eng katta chiqim — bittasi yetadi:
+            // ro'yxatni bir xil material bilan to'ldirish shovqin bo'lardi.
+            let late = moves
+                .iter()
+                .filter(|x| {
+                    x.material_id == m.id && matches!(x.kind, MoveKind::Out) && x.date > until
+                })
+                .max_by(|a, b| a.qty.total_cmp(&b.qty));
+            if let Some(x) = late {
+                out.push(CertIssue::UsedAfterExpiry {
+                    material_id: m.id,
+                    date: x.date,
+                    qty: x.qty,
+                });
+            }
+
+            let days = (until - today).num_days();
+            let balance = stock
+                .iter()
+                .find(|l| l.material_id == m.id)
+                .map(|l| l.balance)
+                .unwrap_or(0.0);
+            // Qoldiq bo'lmasa ogohlantirishning ma'nosi yo'q: ishlatadigan
+            // narsa qolmagan.
+            if (0..=CERT_WARN_DAYS).contains(&days) && balance > 0.0 {
+                out.push(CertIssue::ExpiringWithStock {
+                    material_id: m.id,
+                    days,
+                    balance,
+                });
+            }
+        }
+
+        if m.cert_no.trim().is_empty() {
+            if let Some(standard) = has_standard(&m.spec) {
+                out.push(CertIssue::StandardWithoutCert {
+                    material_id: m.id,
+                    standard,
+                });
+            }
+        }
+    }
+
+    // Jiddiylari oldinda.
+    out.sort_by_key(|i| !i.severe());
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4498,6 +4659,158 @@ mod tests {
                 !listed.iter().any(|m| m.task_id == t.id)
             );
         }
+    }
+
+    /// Sinov uchun material yozuvi.
+    fn material(code: &str, name: &str, unit: &str) -> Material {
+        Material {
+            id: 0,
+            project_id: 1,
+            code: code.into(),
+            name: name.into(),
+            unit: unit.into(),
+            section: Section::None,
+            spec: String::new(),
+            cert_no: String::new(),
+            cert_until: None,
+            min_stock: 0.0,
+            price: 0.0,
+            estimate_code: String::new(),
+            spec_ref: String::new(),
+            special: String::new(),
+            banned: false,
+            ban_reason: String::new(),
+            note: String::new(),
+        }
+    }
+
+    /// TZ IV.11, XII.27: sertifikat kelish va sarf yozuvlari bilan
+    /// solishtiriladi.
+    #[test]
+    fn certificate_is_checked_against_the_records() {
+        use crate::checks::{cert_control, CertIssue};
+        use crate::domain::{Batch, MoveKind, StockMove};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 9, 8).unwrap();
+        let day = |n: i64| today - chrono::Duration::days(n);
+
+        let mut cement = material("M-1", "Sement", "kg");
+        cement.id = 1;
+        cement.spec = "ГОСТ 31108-2020".into();
+        cement.cert_no = "C-1".into();
+        // Sertifikat 20 kun oldin tugagan.
+        cement.cert_until = Some(day(20));
+
+        let mut brick = material("M-2", "G'isht", "dona");
+        brick.id = 2;
+        // Tavsifda GOST bor, sertifikat raqami yo'q.
+        brick.spec = "ГОСТ 530-2012".into();
+
+        let batch = |id: i64,
+                     cert: &str,
+                     until: Option<chrono::NaiveDate>,
+                     received: chrono::NaiveDate| Batch {
+            id,
+            project_id: 1,
+            material_id: 1,
+            number: format!("P-{id}"),
+            received,
+            supplier: String::new(),
+            cert_no: cert.into(),
+            cert_until: until,
+            expires: None,
+            note: String::new(),
+        };
+        let batches = vec![
+            // Sertifikatsiz kelgan.
+            batch(1, "", None, day(30)),
+            // Kelgan kunda sertifikat allaqachon tugagan.
+            batch(2, "C-9", Some(day(60)), day(40)),
+            // To'g'ri partiya.
+            batch(3, "C-1", Some(day(-100)), day(10)),
+        ];
+
+        // Sertifikat tugagandan keyin ishga berilgan.
+        let moves = vec![StockMove {
+            id: 1,
+            project_id: 1,
+            material_id: 1,
+            warehouse_id: None,
+            batch_id: None,
+            date: day(5),
+            kind: MoveKind::Out,
+            qty: 500.0,
+            price: 1.0,
+            document: String::new(),
+            counterparty: String::new(),
+            task_id: None,
+            note: String::new(),
+        }];
+
+        let issues = cert_control(
+            &[cement.clone(), brick.clone()],
+            &batches,
+            &moves,
+            &[],
+            today,
+        );
+
+        assert!(issues
+            .iter()
+            .any(|i| matches!(i, CertIssue::BatchWithoutCert { batch_id: 1, .. })));
+        assert!(issues.iter().any(|i| matches!(
+            i,
+            CertIssue::ExpiredAtDelivery { batch_id: 2, days, .. } if *days == 20
+        )));
+        assert!(issues
+            .iter()
+            .any(|i| matches!(i, CertIssue::UsedAfterExpiry { material_id: 1, .. })));
+        assert!(issues
+            .iter()
+            .any(|i| matches!(i, CertIssue::StandardWithoutCert { material_id: 2, .. })));
+        // To'g'ri partiya e'tiroz bermaydi.
+        assert!(!issues
+            .iter()
+            .any(|i| matches!(i, CertIssue::BatchWithoutCert { batch_id: 3, .. })));
+
+        // Jiddiylari oldinda.
+        let first_light = issues.iter().position(|i| !i.severe());
+        let last_severe = issues.iter().rposition(|i| i.severe());
+        if let (Some(f), Some(l)) = (first_light, last_severe) {
+            assert!(l < f, "tartib buzilgan");
+        }
+    }
+
+    /// Qoldiq bo'lmasa, muddat haqida ogohlantirilmaydi: ishlatadigan
+    /// narsa qolmagan.
+    #[test]
+    fn expiring_certificate_matters_only_with_stock() {
+        use crate::checks::{cert_control, CertIssue, StockLine};
+
+        let today = chrono::NaiveDate::from_ymd_opt(2026, 9, 8).unwrap();
+        let mut m = material("M-1", "Sement", "kg");
+        m.id = 1;
+        m.cert_no = "C-1".into();
+        // Yetti kundan keyin tugaydi.
+        m.cert_until = Some(today + chrono::Duration::days(7));
+
+        // Qoldiq yo'q — ogohlantirish ham yo'q.
+        let issues = cert_control(std::slice::from_ref(&m), &[], &[], &[], today);
+        assert!(!issues
+            .iter()
+            .any(|i| matches!(i, CertIssue::ExpiringWithStock { .. })));
+
+        // Qoldiq bor — ogohlantiriladi.
+        let stock = vec![StockLine {
+            material_id: 1,
+            balance: 1200.0,
+            ..Default::default()
+        }];
+        let issues = cert_control(std::slice::from_ref(&m), &[], &[], &stock, today);
+        assert!(issues.iter().any(|i| matches!(
+            i,
+            CertIssue::ExpiringWithStock { days: 7, balance, .. } if *balance == 1200.0
+        )));
     }
 
     fn el(id: i64, section: Section, kind: ElementKind, mark: &str, sheet: &str) -> Element {

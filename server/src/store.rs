@@ -101,6 +101,18 @@ pub struct WorkerRef {
     pub position: String,
 }
 
+/// Obyekt yakunining bitta qatori (TZ VIII.35).
+///
+/// Buyurtmachi kabineti shu qatorlarni ko'rsatadi. Ular serverda
+/// hisoblanmaydi — ilova hisoblab yuboradi, shuning uchun kabinetdagi
+/// son pudratchi ekranidagi son bilan bir xil bo'ladi.
+#[derive(Debug, Clone)]
+pub struct SummaryRow {
+    pub module: String,
+    pub indicator: String,
+    pub value: String,
+}
+
 /// Baza. Bitta ulanish mutex ostida: server kichik va yozuvlar qisqa.
 pub struct Store {
     conn: Mutex<Connection>,
@@ -546,6 +558,60 @@ impl Store {
             .unwrap_or_default()
     }
 
+    // ------------------------------------------------------------- Yakun
+
+    /// Obyekt yakunini almashtiradi (TZ VIII.35).
+    pub fn set_summary(
+        &self,
+        project: &str,
+        at: &str,
+        rows: &[SummaryRow],
+    ) -> Result<usize, String> {
+        let mut conn = self.lock();
+        let tx = conn.transaction().map_err(|e| e.to_string())?;
+        tx.execute("DELETE FROM summary WHERE project=?1", params![project])
+            .map_err(|e| e.to_string())?;
+        for r in rows {
+            tx.execute(
+                "INSERT INTO summary (project,module,indicator,value,at)
+                 VALUES (?1,?2,?3,?4,?5)",
+                params![project, r.module, r.indicator, r.value, at],
+            )
+            .map_err(|e| e.to_string())?;
+        }
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(rows.len())
+    }
+
+    /// Obyekt yakuni va u qachon hisoblangani.
+    pub fn summary(&self, project: &str) -> (Vec<SummaryRow>, String) {
+        let conn = self.lock();
+        let at: String = conn
+            .query_row(
+                "SELECT COALESCE(MAX(at),'') FROM summary WHERE project=?1",
+                params![project],
+                |r| r.get(0),
+            )
+            .unwrap_or_default();
+        let mut st = match conn
+            .prepare("SELECT module,indicator,value FROM summary WHERE project=?1 ORDER BY id")
+        {
+            Ok(s) => s,
+            Err(_) => return (Vec::new(), at),
+        };
+        let rows = st.query_map(params![project], |r| {
+            Ok(SummaryRow {
+                module: r.get(0)?,
+                indicator: r.get(1)?,
+                value: r.get(2)?,
+            })
+        });
+        let list = rows
+            .map(|it| it.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default();
+        (list, at)
+    }
+
     // --------------------------------------------------------------- Jurnal
 
     /// Amallar jurnali: kim, qachon, nima qildi.
@@ -641,6 +707,15 @@ CREATE TABLE IF NOT EXISTS worker_ref (
     position TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS worker_ref_project ON worker_ref(project);
+CREATE TABLE IF NOT EXISTS summary (
+    id INTEGER PRIMARY KEY,
+    project TEXT NOT NULL,
+    module TEXT NOT NULL,
+    indicator TEXT NOT NULL,
+    value TEXT NOT NULL,
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS summary_project ON summary(project);
 CREATE TABLE IF NOT EXISTS notice_state (
     project TEXT PRIMARY KEY,
     at TEXT NOT NULL

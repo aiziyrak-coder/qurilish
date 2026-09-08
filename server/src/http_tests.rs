@@ -860,3 +860,90 @@ fn phone_shows_the_schedule_by_deadline() {
         assert!(html.contains("10.01"), "sana ko'rsatilmadi");
     });
 }
+
+/// Buyurtmachi kabineti: sonlar ilovadan keladi va sahifa faqat
+/// ko'rish uchun.
+#[test]
+fn client_cabinet_shows_what_the_app_sent() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let token = login(&app, "prorab", "prorab-parol-1").await;
+
+        let (code, body) = send(
+            &app,
+            post(
+                "/api/summary",
+                Some(&token),
+                json!({ "project": "OBY-1", "items": [
+                    { "module": "I.2", "indicator": "Bajarilish", "value": "42 %" },
+                    { "module": "XX", "indicator": "Tushum", "value": "1 200 000" }
+                ] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK, "{body}");
+        assert_eq!(body["saved"], 2);
+
+        // Buyurtmachi kirib ko'radi.
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/login")
+                    .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+                    .body(Body::from("login=mijoz&password=mijoz-parol-11"))
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        let cookie = resp
+            .headers()
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .expect("cookie")
+            .to_string();
+
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/o/OBY-1/client")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::empty())
+                    .expect("so'rov"),
+            )
+            .await
+            .expect("javob");
+        assert_eq!(resp.status(), StatusCode::OK);
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&bytes);
+        assert!(html.contains("Bajarilish"), "{html}");
+        assert!(html.contains("42 %"));
+        assert!(html.contains("1 200 000"));
+        // Faqat ko'rish uchun: forma ham, tugma ham yo'q.
+        assert!(!html.contains("<form"), "kabinetda forma bor");
+        assert!(!html.contains("<button"), "kabinetda tugma bor");
+    });
+}
+
+/// Faqat ko'ruvchi rol yakun yubora olmaydi.
+#[test]
+fn read_only_role_cannot_send_summary() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        let mijoz = login(&app, "mijoz", "mijoz-parol-11").await;
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/summary",
+                Some(&mijoz),
+                json!({ "project": "OBY-1", "items": [] }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::FORBIDDEN);
+    });
+}

@@ -178,6 +178,9 @@ fn control_tab(ui: &mut egui::Ui, app: &mut App) {
                 );
             }
 
+            // ---------- Sertifikat nazorati (TZ IV.11, XII.27) ----------
+            cert_block(ui, app);
+
             // ---------- Nazoratsiz hisobdan chiqarish (TZ XI.23) ----------
             let offs = app.write_offs();
             ui.add_space(16.0);
@@ -291,6 +294,93 @@ fn control_tab(ui: &mut egui::Ui, app: &mut App) {
 }
 
 /// Ombor e'tirozini odam o'qiydigan gapga aylantiradi.
+/// Sertifikat nazorati (TZ IV.11, XII.27).
+///
+/// Tekshiruv sertifikatning haqiqiyligini emas, uning **qurilish
+/// yozuvlari bilan mosligini** qaraydi: partiya sertifikat bilan
+/// keldimi, kelgan kunda amal qilarmidi, material muddat tugagandan
+/// keyin ishga berilmadimi.
+fn cert_block(ui: &mut egui::Ui, app: &App) {
+    use crate::checks::CertIssue as C;
+
+    let issues = app.cert_control();
+    ui.add_space(16.0);
+    ui.label(RichText::new(t("wh_cert")).size(13.5).strong());
+    ui.label(
+        RichText::new(t("wh_cert_hint"))
+            .size(11.0)
+            .color(theme::muted()),
+    );
+    ui.add_space(6.0);
+
+    if issues.is_empty() {
+        ui.label(
+            RichText::new(t("wh_cert_none"))
+                .size(12.5)
+                .color(theme::ok()),
+        );
+        return;
+    }
+
+    let name = |id: i64| super::materials::material_label(app, id);
+    for i in issues.iter().take(30) {
+        let text = match i {
+            C::BatchWithoutCert { number, .. } => {
+                format!("{} — {}", t("cert_no_batch"), number)
+            }
+            C::ExpiredAtDelivery { number, days, .. } => format!(
+                "{} — {} ({} {} {})",
+                t("cert_expired_delivery"),
+                number,
+                t("cert_before"),
+                days,
+                t("days_short")
+            ),
+            C::UsedAfterExpiry {
+                material_id,
+                date,
+                qty,
+            } => format!(
+                "{} — {} · {} · {}",
+                t("cert_used_after"),
+                name(*material_id),
+                date.format("%d.%m.%Y"),
+                super::materials::trim_num(*qty)
+            ),
+            C::StandardWithoutCert {
+                material_id,
+                standard,
+            } => format!(
+                "{} — {} ({standard})",
+                t("cert_standard_no_doc"),
+                name(*material_id)
+            ),
+            C::ExpiringWithStock {
+                material_id,
+                days,
+                balance,
+            } => format!(
+                "{} — {} · {} {} · {} {}",
+                t("cert_expiring"),
+                name(*material_id),
+                days,
+                t("days_short"),
+                t("col_balance"),
+                super::materials::trim_num(*balance)
+            ),
+        };
+        ui.label(
+            RichText::new(format!("· {text}"))
+                .size(12.0)
+                .color(if i.severe() {
+                    theme::danger()
+                } else {
+                    theme::warn()
+                }),
+        );
+    }
+}
+
 fn stock_issue_text(i: &crate::checks::StockIssue) -> String {
     use crate::checks::StockIssue as S;
     match i {
@@ -1415,9 +1505,20 @@ fn batches_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut edited: Option<Batch> = None;
     let mut removed: Option<i64> = None;
 
-    ui.horizontal(|ui| {
+    let mut labels = false;
+    ui.horizontal_wrapped(|ui| {
         if ui.button(t("add_batch")).clicked() {
             add = true;
+        }
+        // QR yorliq partiyaga yopishtiriladi: omborda qaysi partiya
+        // ekanini qidirib o'tirmaslik uchun.
+        if !app.batches.is_empty()
+            && ui
+                .button(t("qr_labels"))
+                .on_hover_text(t("qr_labels_hint"))
+                .clicked()
+        {
+            labels = true;
         }
         ui.label(
             RichText::new(t("batches_hint"))
@@ -1425,6 +1526,24 @@ fn batches_tab(ui: &mut egui::Ui, app: &mut App) {
                 .color(theme::muted()),
         );
     });
+    if labels {
+        let rows: Vec<(String, String, String)> = app
+            .batches
+            .iter()
+            .map(|b| {
+                (
+                    b.number.clone(),
+                    format!("{} {}", t("col_batch"), b.number),
+                    format!(
+                        "{} · {}",
+                        super::materials::material_label(app, b.material_id),
+                        b.received.format("%d.%m.%Y")
+                    ),
+                )
+            })
+            .collect();
+        app.save_labels(crate::qr::Kind::Batch, rows);
+    }
     ui.add_space(6.0);
 
     if app.batches.is_empty() {

@@ -23,11 +23,11 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | III. AI smeta tekshiruvi | 34 | 32 | 0 | 2 | 2 |
 | IV. Ijro hujjatlari | 30 | 28 | 0 | 2 | 2 |
 | V. Kunlik ishlar jurnali | 34 | 28 | 0 | 6 | 6 |
-| VI. Prorab ilovasi | 37 | 28 | 2 | 7 | 7 |
-| VII. Texnik nazorat kabineti | 38 | 35 | 0 | 3 | 3 |
-| VIII. Buyurtmachi kabineti | 37 | 34 | 1 | 2 | 2 |
+| VI. Prorab ilovasi | 37 | 29 | 3 | 5 | 5 |
+| VII. Texnik nazorat kabineti | 38 | 36 | 0 | 2 | 2 |
+| VIII. Buyurtmachi kabineti | 37 | 35 | 1 | 1 | 1 |
 | IX. Arizalar | 42 | 41 | 0 | 1 | 1 |
-| X. Xaridlar | 48 | 46 | 0 | 2 | 2 |
+| X. Xaridlar | 48 | 47 | 0 | 1 | 1 |
 | XI. Ombor | 48 | 47 | 0 | 1 | 1 |
 | XII. Materiallar | 41 | 39 | 0 | 2 | 2 |
 | XIII. Tabel | 44 | 38 | 0 | 6 | 6 |
@@ -37,9 +37,9 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 16 | 15 | 1 | 0 | 0 |
-| **Jami** | **702** | **647** | **13** | **42** | **42** |
+| **Jami** | **702** | **651** | **14** | **37** | **37** |
 
-Ya'ni **~92 % to'liq**, **~2 % qisman**, **~6 % hali yo'q**.
+Ya'ni **~93 % to'liq**, **~2 % qisman**, **~5 % hali yo'q**.
 
 Asosiy sabab: qurilgan qism — har modulning **yadrosi** (ma'lumot, ekran, hisob).
 Yetishmayotgani — asosan **AI tahlili, tashqi manbalar, mobil klient, hujjat
@@ -211,7 +211,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. Foto — *jurnal va yozuvlarga biriktirish*
 - [ ] 🔒 9. Fotoni AI tahlili
 - [ ] 🔒 10. Video
-- [ ] 🔒 11. QR-kod
+- [~] 11. QR-kod — *kvartira, material partiyasi va hujjat uchun QR yorliq chiqariladi (A4 da 21 ta); kamera bilan **o'qish** 🔒 — qurilma va kutubxona kerak*
 - [x] 12. Chizmalar bilan ishlash — *topshirilgan versiya prorab ekranida*
 - [~] 13. BIM bilan ishlash — *IFC o'qiladi, elementlar va kolliziyalar ro'yxati bor; 3D ko'rinish 🔒 — geometriya yadrosi talab qiladi*
 - [x] 14. Bajarilgan ishlar
@@ -228,7 +228,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 25. Ishni yopishdan oldin ogohlantirish
 - [x] 26. Texnika xavfsizligi
 - [x] 27. Instruktaj
-- [ ] 🔒 28. Internetsiz ishlash — *lokal baza; sinxronizatsiya paket orqali*
+- [x] 28. Internetsiz ishlash — *ilova butunlay lokal ishlaydi: baza yonida, tarmoq talab qilinmaydi. Server ixtiyoriy va u yo'q bo'lganda ham hamma narsa ochiladi; almashish paket fayli orqali*
 - [~] 29. Bildirishnomalar — *ilova ichida markaz; server orqali telefonda ham ko'rinadi (ilova hisoblaydi, server saqlaydi); push (SMS/Telegram) 🔒*
 - [x] 30. AI-yordamchi — *modul ekranidan ochiladi*
 - [x] 31. AI aniq obyektni bilishi
@@ -253,7 +253,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 8. Loyihaga muvofiqlikni tekshirish — *AI tekshiruvi va versiya nazorati*
 - [x] 9. Materiallarni tekshirish
 - [x] 10. Kirish nazorati
-- [ ] 🔒 11. AI sertifikat tekshiruvi
+- [x] 11. AI sertifikat tekshiruvi — *skandan maydonlar ajratiladi; partiya sertifikatsizmi, kelgan kunda amal qilarmidi, muddat tugagach ishga berilmadimi, tavsifdagi GOST hujjat bilan tasdiqlanganmi*
 - [x] 12. Betonni tekshirish — *7 va 28 kunlik namunalar, laboratoriya natijasi talab bilan solishtiriladi*
 - [x] 13. Hajmlarni nazorat qilish — *hajm tekshiruvi va qabul hujjati*
 - [x] 14. Geodeziyani tekshirish — *loyiha/fakt/dopusk, chetlanish hisoblanadi*
@@ -320,7 +320,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 32. Buyurtmachining AI-yordamchisi — *modul ekranidan ochiladi*
 - [x] 33. Haftalik hisobot — *kabinetdagi blok: bajarilish, ishlar, tekshiruv, pul*
 - [x] 34. Kirish darajalari — *rollar*
-- [ ] 🔒 35. Mobil kabinet
+- [x] 35. Mobil kabinet — *telefon brauzerida buyurtmachi sahifasi: obyekt ko'rsatkichlari va imzolangan hujjatlar, faqat ko'rish uchun*
 - [x] 36. Kabinetning eng muhim funksiyasi
 - [x] 37. Asosiy tamoyil
 
@@ -401,7 +401,7 @@ generatsiyasi va modullararo avtomatik zanjirlar**.
 - [x] 24. Yetkazishni nazorat qilish
 - [x] 25. Obyektda qabul qilish — *zanjirda yetkazish va kirim*
 - [x] 26. Kirish nazorati — *zanjirda nazoratsiz yetkazish ko'rinadi*
-- [ ] 🔒 27. AI sertifikatni tekshiradi
+- [x] 27. AI sertifikatni tekshiradi — *kelish va sarf yozuvlari bilan solishtiriladi (IV.11 bilan bitta funksiya)*
 - [x] 28. Qabulda foto
 - [x] 29. Ombor bilan bog'lanish — *bir bosishda kirim*
 - [x] 30. Qisman yetkazish — *kelgan miqdor, qoldiq, kirim*

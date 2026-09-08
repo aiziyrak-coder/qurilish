@@ -1129,6 +1129,28 @@ fn list(ui: &mut egui::Ui, app: &mut App, fill: bool) {
     let mut make_aosr: Option<i64> = None;
     let mut open_notes: Option<i64> = None;
 
+    // QR yorliq hujjat jildiga bosiladi: qog'oz papkadan bazadagi
+    // yozuvga o'tish uchun.
+    if ui
+        .button(t("qr_labels"))
+        .on_hover_text(t("qr_labels_hint"))
+        .clicked()
+    {
+        let rows: Vec<(String, String, String)> = app
+            .exec_docs
+            .iter()
+            .map(|d| {
+                (
+                    d.number.clone(),
+                    format!("{} {}", d.kind.label(), d.number),
+                    format!("{} · {}", d.name, d.date.format("%d.%m.%Y")),
+                )
+            })
+            .collect();
+        app.save_labels(crate::qr::Kind::Document, rows);
+    }
+    ui.add_space(6.0);
+
     egui::ScrollArea::both()
         .auto_shrink([false, !fill])
         .max_height(if fill { f32::INFINITY } else { 320.0 })

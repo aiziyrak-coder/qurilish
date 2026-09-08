@@ -220,6 +220,34 @@ pub fn tasks_body(project: &str, items: &[TaskOut]) -> String {
     )
 }
 
+/// Buyurtmachi kabineti uchun yakun qatori.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SummaryOut {
+    pub module: String,
+    pub indicator: String,
+    pub value: String,
+}
+
+/// Yakun so'rovining tanasi.
+pub fn summary_body(project: &str, items: &[SummaryOut]) -> String {
+    let rows: Vec<String> = items
+        .iter()
+        .map(|r| {
+            format!(
+                "{{\"module\":{},\"indicator\":{},\"value\":{}}}",
+                json_string(&r.module),
+                json_string(&r.indicator),
+                json_string(&r.value)
+            )
+        })
+        .collect();
+    format!(
+        "{{\"project\":{},\"items\":[{}]}}",
+        json_string(project),
+        rows.join(",")
+    )
+}
+
 /// Tabel uchun yuboriladigan ishchi.
 #[derive(Debug, Clone, PartialEq)]
 pub struct WorkerOut {
@@ -409,6 +437,22 @@ pub fn send_workers(cfg: &Config, project: &str, items: &[WorkerOut]) -> Result<
     Ok(())
 }
 
+/// Obyekt yakunini serverga yuboradi.
+#[cfg(feature = "sync")]
+pub fn send_summary(cfg: &Config, project: &str, items: &[SummaryOut]) -> Result<(), Error> {
+    if !cfg.ready() {
+        return Err(Error::NotConfigured);
+    }
+    send(
+        cfg,
+        "POST",
+        "api/summary",
+        Some(&cfg.token),
+        Some(&summary_body(project, items)),
+    )?;
+    Ok(())
+}
+
 /// Hujjatni masofadan imzolaydi.
 #[cfg(feature = "sync")]
 pub fn sign(
@@ -496,6 +540,7 @@ pub fn spawn(
     notices: Vec<NoticeOut>,
     tasks: Vec<TaskOut>,
     workers: Vec<WorkerOut>,
+    summary: Vec<SummaryOut>,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -513,6 +558,9 @@ pub fn spawn(
             // yuritiladi, shuning uchun yo'nalish bir tomonlama.
             send_tasks(&cfg, &project, &tasks)?;
             send_workers(&cfg, &project, &workers)?;
+            // Buyurtmachi kabineti uchun yakun: sonlar ilovada
+            // hisoblanadi, kabinet faqat ko'rsatadi.
+            send_summary(&cfg, &project, &summary)?;
             let pulled = pull(&cfg, &project, cfg.last_pull)?;
             Ok(Outcome { pushed, pulled })
         })();
@@ -530,6 +578,7 @@ pub fn spawn(
     _notices: Vec<NoticeOut>,
     _tasks: Vec<TaskOut>,
     _workers: Vec<WorkerOut>,
+    _summary: Vec<SummaryOut>,
 ) -> Receiver<Result<Outcome, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
     let _ = tx.send(Err(Error::NotConfigured));
@@ -684,6 +733,12 @@ mod tests {
                 position: "Beton quyuvchi".into(),
             }];
             send_workers(&cfg, "OBY-1", &workers).map_err(|e| format!("ishchilar: {e:?}"))?;
+            let summary = vec![SummaryOut {
+                module: "I.2".into(),
+                indicator: "Bajarilish".into(),
+                value: "42 %".into(),
+            }];
+            send_summary(&cfg, "OBY-1", &summary).map_err(|e| format!("yakun: {e:?}"))?;
 
             // ---- Prorab imzolamaydi: server rad etadi
             match sign(&cfg, "OBY-1", "AOSR-1", "matn", "") {

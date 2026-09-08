@@ -270,6 +270,9 @@ fn scan_certificate(app: &mut App, material_id: i64) {
 }
 
 fn table(ui: &mut egui::Ui, app: &mut App) {
+    // Sertifikat e'tirozlari: qaysi materialga tegishli ekani shu yerda
+    // kerak, shuning uchun ular material bo'yicha guruhlanadi.
+    let cert_issues = app.cert_control();
     let card_key = egui::Id::new("mat_card");
     let mut open_card: Option<i64> = None;
     let mut edited: Option<Material> = None;
@@ -351,6 +354,21 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
                                     egui::TextEdit::singleline(&mut m.cert_no),
                                 )
                                 .changed();
+                            // Sertifikat bo'yicha e'tiroz shu yerda
+                            // ko'rinadi: nazorat ekraniga o'tmasdan.
+                            let mine: Vec<&crate::checks::CertIssue> = cert_issues
+                                .iter()
+                                .filter(|i| i.material() == Some(m.id))
+                                .collect();
+                            if !mine.is_empty() {
+                                let severe = mine.iter().any(|i| i.severe());
+                                ui.label(RichText::new("!").strong().color(if severe {
+                                    theme::danger()
+                                } else {
+                                    theme::warn()
+                                }))
+                                .on_hover_text(t("wh_cert"));
+                            }
                             // Skandan o'qish: OCR o'rnatilgan bo'lsagina.
                             if crate::ocr::tesseract().is_some()
                                 && ui

@@ -139,6 +139,22 @@ pub struct WorkerItem {
     pub position: String,
 }
 
+#[derive(Deserialize)]
+pub struct SummaryReq {
+    pub project: String,
+    #[serde(default)]
+    pub items: Vec<SummaryItem>,
+}
+
+#[derive(Deserialize)]
+pub struct SummaryItem {
+    #[serde(default)]
+    pub module: String,
+    pub indicator: String,
+    #[serde(default)]
+    pub value: String,
+}
+
 /// Xatoni bir xil ko'rinishda qaytaradi.
 fn err(code: StatusCode, message: &str) -> axum::response::Response {
     (code, Json(json!({ "error": message }))).into_response()
@@ -481,6 +497,43 @@ pub async fn workers(
         })
         .collect();
     match state.store.set_workers(req.project.trim(), &items) {
+        Ok(n) => Json(json!({ "saved": n })).into_response(),
+        Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
+    }
+}
+
+/// `POST /api/summary` — obyekt yakuni (buyurtmachi kabineti uchun).
+pub async fn summary(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Json(req): Json<SummaryReq>,
+) -> axum::response::Response {
+    let Some(user) = caller(&state, &headers) else {
+        return err(StatusCode::UNAUTHORIZED, "kirish kerak");
+    };
+    if !auth::can(&user.role, Access::Write) {
+        return err(StatusCode::FORBIDDEN, "bu rol ma'lumot yubormaydi");
+    }
+    if req.project.trim().is_empty() {
+        return err(StatusCode::BAD_REQUEST, "obyekt ko'rsatilmagan");
+    }
+    if req.items.len() > MAX_NOTICES {
+        return err(StatusCode::PAYLOAD_TOO_LARGE, "qator juda ko'p");
+    }
+    let rows: Vec<crate::store::SummaryRow> = req
+        .items
+        .into_iter()
+        .filter(|i| !i.indicator.trim().is_empty())
+        .map(|i| crate::store::SummaryRow {
+            module: i.module,
+            indicator: i.indicator,
+            value: i.value,
+        })
+        .collect();
+    match state
+        .store
+        .set_summary(req.project.trim(), &crate::now(), &rows)
+    {
         Ok(n) => Json(json!({ "saved": n })).into_response(),
         Err(e) => err(StatusCode::INTERNAL_SERVER_ERROR, &e),
     }

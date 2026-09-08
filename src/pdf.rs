@@ -35,7 +35,7 @@ const FONTS: [&str; 4] = [
 ];
 
 /// Tizim shriftini o'qiydi.
-fn font_bytes() -> Option<Vec<u8>> {
+pub(crate) fn font_bytes() -> Option<Vec<u8>> {
     FONTS.iter().find_map(|p| std::fs::read(p).ok())
 }
 
@@ -225,6 +225,112 @@ fn rule(layer: &PdfLayerReference, y: f32) {
         ],
         is_closed: false,
     });
+}
+
+// ================================================================ Erkin sahifa
+
+/// A4 tik sahifa balandligi va eni, millimetrda.
+pub const PAGE_H_PORTRAIT: f32 = 297.0;
+pub const PAGE_W_PORTRAIT: f32 = 210.0;
+
+/// Chizish uchun sahifa.
+///
+/// Jadval yozish `write_table` ning ishi; bu yerda esa **erkin chizish**
+/// kerak bo'ladi (QR yorliqlari kabi). Shu sababli faqat uchta amal
+/// beriladi: to'ldirilgan to'rtburchak, ramka va matn. Ko'proq narsa
+/// kerak bo'lganda uni shu yerga qo'shish oson, lekin hozir kerak emas.
+pub struct Page {
+    layer: PdfLayerReference,
+    font: IndirectFontRef,
+}
+
+impl Page {
+    /// To'ldirilgan to'rtburchak. Koordinata — chap-past burchak.
+    pub fn fill_rect(&self, x: f32, y: f32, w: f32, h: f32) {
+        if w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let points = vec![
+            (Point::new(Mm(x), Mm(y)), false),
+            (Point::new(Mm(x + w), Mm(y)), false),
+            (Point::new(Mm(x + w), Mm(y + h)), false),
+            (Point::new(Mm(x), Mm(y + h)), false),
+        ];
+        self.layer
+            .set_fill_color(printpdf::Color::Greyscale(printpdf::Greyscale::new(
+                0.0, None,
+            )));
+        self.layer.add_polygon(printpdf::Polygon {
+            rings: vec![points],
+            mode: printpdf::path::PaintMode::Fill,
+            winding_order: printpdf::path::WindingOrder::NonZero,
+        });
+    }
+
+    /// Ramka — yorliqni qirqish chizig'i.
+    pub fn frame(&self, x: f32, y: f32, w: f32, h: f32) {
+        self.layer.set_outline_thickness(0.2);
+        self.layer.add_line(Line {
+            points: vec![
+                (Point::new(Mm(x), Mm(y)), false),
+                (Point::new(Mm(x + w), Mm(y)), false),
+                (Point::new(Mm(x + w), Mm(y + h)), false),
+                (Point::new(Mm(x), Mm(y + h)), false),
+            ],
+            is_closed: true,
+        });
+    }
+
+    /// Matn. Koordinata — chap-past burchak.
+    pub fn text(&self, s: &str, size: f32, x: f32, y: f32) {
+        if s.trim().is_empty() {
+            return;
+        }
+        self.layer.use_text(s, size, Mm(x), Mm(y), &self.font);
+    }
+}
+
+/// Bir necha tik sahifali PDF yozadi.
+///
+/// Har sahifa uchun `draw` chaqiriladi; sahifa raqami noldan boshlanadi.
+pub fn write_pages(
+    path: &Path,
+    title: &str,
+    pages: usize,
+    draw: impl Fn(&Page, usize),
+) -> Result<(), String> {
+    let Some(bytes) = font_bytes() else {
+        return Err(crate::i18n::t("pdf_no_font").to_string());
+    };
+    let pages = pages.max(1);
+
+    let (doc, first_page, first_layer) =
+        PdfDocument::new(title, Mm(PAGE_W_PORTRAIT), Mm(PAGE_H_PORTRAIT), "1");
+    let font = doc
+        .add_external_font(&bytes[..])
+        .map_err(|e| format!("{e}"))?;
+
+    for index in 0..pages {
+        let layer = if index == 0 {
+            doc.get_page(first_page).get_layer(first_layer)
+        } else {
+            let (p, l) = doc.add_page(
+                Mm(PAGE_W_PORTRAIT),
+                Mm(PAGE_H_PORTRAIT),
+                format!("{}", index + 1),
+            );
+            doc.get_page(p).get_layer(l)
+        };
+        let page = Page {
+            layer,
+            font: font.clone(),
+        };
+        draw(&page, index);
+    }
+
+    let file = std::fs::File::create(path).map_err(|e| format!("{e}"))?;
+    doc.save(&mut BufWriter::new(file))
+        .map_err(|e| format!("{e}"))
 }
 
 #[cfg(test)]

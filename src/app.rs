@@ -454,6 +454,21 @@ impl Settings {
     }
 }
 
+/// Hisobot katagini matnga aylantiradi — serverga yuborish uchun.
+///
+/// Formatlash shu yerda bir marta qilinadi: kabinetda ham, ekranda ham
+/// son bir xil ko'rinishda bo'lsin.
+fn cell_text(c: Option<&crate::docgen::Cell>) -> String {
+    use crate::docgen::Cell;
+    match c {
+        Some(Cell::Text(s)) => s.clone(),
+        Some(Cell::Num(v)) => crate::ui::materials::trim_num(*v),
+        Some(Cell::Money(v)) => crate::ui::money(*v),
+        Some(Cell::Date(d)) => d.format("%d.%m.%Y").to_string(),
+        _ => String::new(),
+    }
+}
+
 /// Obyektning server tomonidagi kaliti.
 ///
 /// Kod bo'sh bo'lishi mumkin, shuning uchun nom zaxira sifatida olinadi:
@@ -2009,6 +2024,23 @@ impl App {
                 position: w.position.clone(),
             })
             .collect();
+        // Obyekt yakuni — «Hisobotlar» dagi bilan bitta funksiyadan:
+        // buyurtmachi kabinetidagi son ekrandagi son bilan bir xil.
+        let period = crate::reports::Preset::All.period(
+            self.today,
+            self.project().map(|p| p.start_date).unwrap_or(self.today),
+        );
+        let table = crate::reports::build(self, crate::reports::Kind::Summary, period);
+        let summary: Vec<crate::sync::SummaryOut> = table
+            .rows
+            .iter()
+            .map(|r| crate::sync::SummaryOut {
+                module: cell_text(r.first()),
+                indicator: cell_text(r.get(1)),
+                value: cell_text(r.get(2)),
+            })
+            .collect();
+
         self.sync_pending = Some(crate::sync::spawn(
             self.sync.clone(),
             project,
@@ -2016,6 +2048,7 @@ impl App {
             notices,
             tasks,
             workers,
+            summary,
         ));
         self.sync_status = Some((t("sync_running").to_string(), false));
     }
@@ -2458,6 +2491,62 @@ impl App {
             &self.stock_moves,
             &self.timesheet,
             &self.journal,
+        )
+    }
+
+    /// QR yorliqlarni PDF ga saqlaydi (TZ VI.11).
+    ///
+    /// Kod ichida server manzili bo'lsa havola, bo'lmasa obyekt va yozuv
+    /// turi yoziladi — ikkala holatda ham telefon nimaligini ko'rsatadi.
+    pub fn save_labels(&mut self, kind: crate::qr::Kind, rows: Vec<(String, String, String)>) {
+        if rows.is_empty() {
+            self.notify(t("qr_empty").to_string());
+            return;
+        }
+        let project = self.project().map(project_key).unwrap_or_default();
+        let base = if self.sync.ready() {
+            self.sync.url.clone()
+        } else {
+            String::new()
+        };
+        let labels: Vec<crate::qr::Label> = rows
+            .into_iter()
+            .map(|(number, title, note)| crate::qr::Label {
+                code: crate::qr::code(&base, &project, kind, &number),
+                title,
+                note,
+            })
+            .collect();
+
+        let name = format!(
+            "qurai-{}-{}-{}.pdf",
+            project.to_lowercase(),
+            kind.tag(),
+            self.today.format("%Y-%m-%d")
+        );
+        let Some(path) = rfd::FileDialog::new()
+            .set_title(t("qr_labels"))
+            .set_file_name(name)
+            .add_filter("PDF", &["pdf"])
+            .save_file()
+        else {
+            return;
+        };
+        let count = labels.len();
+        match crate::qr::write_labels(&path, t("qr_labels"), &labels) {
+            Ok(()) => self.notify(format!("{} {count} · {}", t("qr_done"), path.display())),
+            Err(e) => self.notify(format!("{}: {e}", t("export_failed"))),
+        }
+    }
+
+    /// Sertifikat nazorati (TZ IV.11, XII.27).
+    pub fn cert_control(&self) -> Vec<checks::CertIssue> {
+        checks::cert_control(
+            &self.materials,
+            &self.batches,
+            &self.stock_moves,
+            &self.stock(),
+            self.today,
         )
     }
 

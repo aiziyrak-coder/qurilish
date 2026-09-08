@@ -258,6 +258,13 @@ pub async fn object(
         ));
     }
 
+    // ---- Buyurtmachi kabineti: hamma rolga ko'rinadi, chunki u faqat
+    // o'qish uchun va obyekt holatini bir qarashda beradi.
+    body.push_str(&format!(
+        "<div class=\"card\"><b>Obyekt holati</b><div class=\"muted\">Ko'rsatkichlar va imzolangan hujjatlar</div><a href=\"/o/{}/client\">Ochish</a></div>",
+        esc(&project)
+    ));
+
     // ---- Oxirgi o'zgarishlar
     body.push_str("<h2>Oxirgi o'zgarishlar</h2>");
     if changes.is_empty() {
@@ -839,6 +846,77 @@ fn short_date(iso: &str) -> String {
     } else {
         iso.to_string()
     }
+}
+
+// ================================================================ Buyurtmachi
+
+/// `GET /o/{project}/client` — buyurtmachi kabineti (TZ VIII.35).
+///
+/// Kabinet **faqat o'qish uchun**: bu yerdan hech narsa o'zgartirilmaydi.
+/// Sonlar ilova hisoblab yuborgan yakundan olinadi — pudratchi ekranidagi
+/// son bilan bir xil bo'lishi shart, aks holda ikki tomon ikki xil raqam
+/// bilan gaplashadi.
+pub async fn client_page(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(project): Path<String>,
+) -> Response {
+    let Some(user) = viewer(&state, &headers) else {
+        return login_page("").into_response();
+    };
+    let (rows, at) = state.store.summary(&project);
+    let signatures = state.store.signatures(&project);
+
+    let mut body = format!(
+        "<div class=\"row\"><h1>{}</h1><a href=\"/\">Ortga</a></div>\
+<p class=\"muted\">{} · {}</p>",
+        esc(&project),
+        esc(&user.name),
+        esc(&role_name(&user.role))
+    );
+
+    if rows.is_empty() {
+        body.push_str(
+            "<p class=\"muted\">Yakun hali yuborilmagan. Ofisdagi ilova \
+sinxronizatsiya qilgach, ko'rsatkichlar shu yerda chiqadi.</p>",
+        );
+        return page("QURAi — buyurtmachi", &body).into_response();
+    }
+
+    body.push_str(&format!(
+        "<h2>Obyekt holati</h2><p class=\"muted\">Ilova hisoblab yuborgan · {}</p>\
+<table><tr><th>Bo'lim</th><th>Ko'rsatkich</th><th>Qiymat</th></tr>",
+        esc(&at)
+    ));
+    for r in &rows {
+        body.push_str(&format!(
+            "<tr><td class=\"muted\">{}</td><td>{}</td><td><b>{}</b></td></tr>",
+            esc(&r.module),
+            esc(&r.indicator),
+            esc(&r.value)
+        ));
+    }
+    body.push_str("</table>");
+
+    // Imzolar buyurtmachiga ham ko'rinadi: hujjat kim tomonidan
+    // tasdiqlanganini bilish uning haqqi.
+    if !signatures.is_empty() {
+        body.push_str("<h2>Imzolangan hujjatlar</h2><table><tr><th>Hujjat</th><th>Kim</th><th>Qachon</th></tr>");
+        for s in signatures.iter().filter(|s| s.rejected.is_empty()).take(20) {
+            body.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
+                esc(&s.document),
+                esc(&s.user),
+                esc(&s.at)
+            ));
+        }
+        body.push_str("</table>");
+    }
+    body.push_str(
+        "<p class=\"muted\">Bu sahifa faqat ko'rish uchun: bu yerdan hech narsa \
+o'zgartirilmaydi.</p>",
+    );
+    page("QURAi — buyurtmachi", &body).into_response()
 }
 
 /// Rol kodining o'qiladigan nomi.

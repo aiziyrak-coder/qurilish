@@ -63,6 +63,35 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         &[(0, t("sales_tab_board")), (1, t("sales_tab_list"))],
         &[(2, t("sales_tab_review"))],
     );
+    // QR yorliq: kvartira eshigiga osiladi, telefon bilan o'qilganda
+    // o'sha kvartira sahifasi ochiladi.
+    if tab == 1 && !app.units.is_empty() {
+        ui.add_space(4.0);
+        if ui
+            .button(t("qr_labels"))
+            .on_hover_text(t("qr_labels_hint"))
+            .clicked()
+        {
+            let rows: Vec<(String, String, String)> = app
+                .units
+                .iter()
+                .map(|u| {
+                    (
+                        u.number.clone(),
+                        format!("{} {}", t("col_unit"), u.number),
+                        format!(
+                            "{} {} · {} m² · {}",
+                            u.floor,
+                            t("floor_short"),
+                            super::materials::trim_num(u.area),
+                            u.kind.label()
+                        ),
+                    )
+                })
+                .collect();
+            app.save_labels(crate::qr::Kind::Unit, rows);
+        }
+    }
     ui.data_mut(|d| d.insert_temp(tab_key, tab));
     ui.add_space(8.0);
 
