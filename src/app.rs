@@ -2994,7 +2994,17 @@ impl App {
     /// keyin o'zgarmaganmi. Hujjat topilmasa hukm chiqarilmaydi — u
     /// o'chirilgan bo'lishi mumkin va bu boshqa masala.
     pub fn sign_breaks(&self) -> Vec<crate::signlog::Break> {
+        let today_report = self.day_report_number();
         crate::signlog::verify_with_text(&self.sign_log, |e| {
+            // Kunlik hisobot: matni qayta hisoblanadi. Faqat **bugungi**
+            // hisobot tekshiriladi — o'tgan kunning ma'lumotini qayta
+            // tuzish uchun o'sha kundagi holat kerak va u saqlanmaydi.
+            if e.document == today_report {
+                return Some(self.day_report_text());
+            }
+            if e.document.starts_with("KUN-") {
+                return None;
+            }
             self.exec_docs
                 .iter()
                 .find(|d| d.number == e.document)
@@ -3649,6 +3659,48 @@ impl App {
             &self.exec_docs,
             self.day_close().len(),
         )
+    }
+
+    /// Kunlik hisobotning imzolanadigan matni (TZ V.28).
+    ///
+    /// Matn **bitta joyda** tuziladi: imzolashda ham, keyin tekshirishda
+    /// ham shu funksiya chaqiriladi. Ichida faqat sanaladigan qiymatlar
+    /// bor — matn o'zgarsa, demak kun ma'lumoti o'zgargan va imzo
+    /// endi boshqa narsani tasdiqlaydi.
+    pub fn day_report_text(&self) -> String {
+        let d = self.day_report();
+        format!(
+            "{date} · {running}/{logged} · {workers} · {hours:.1} · {machines} · \
+{material:.0} · {safety} · {quality} · {docs}",
+            date = d.day,
+            running = d.logged,
+            logged = d.running,
+            workers = d.workers,
+            hours = d.hours,
+            machines = d.machines,
+            material = d.material_cost,
+            safety = d.safety_new,
+            quality = d.quality_new,
+            docs = d.docs_signed,
+        )
+    }
+
+    /// Kunlik hisobot hujjatining raqami.
+    pub fn day_report_number(&self) -> String {
+        format!("KUN-{}", self.today)
+    }
+
+    /// Kunlik hisobotni imzo daftariga yozadi (TZ V.28, V.32).
+    pub fn sign_day_report(&mut self) {
+        let number = self.day_report_number();
+        let text = self.day_report_text();
+        self.sign_document(&number, t("jr_day_report"), &text, "");
+    }
+
+    /// Bugungi hisobot imzolanganmi.
+    pub fn day_report_signed(&self) -> bool {
+        let number = self.day_report_number();
+        self.sign_log.iter().any(|e| e.document == number)
     }
 
     /// Bugungi jurnal yozuvidan ariza takliflari (TZ V.17).

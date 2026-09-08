@@ -2576,6 +2576,55 @@ date	kind	title	qty	unit	requester	need_date	note	gps
         assert!(existing2 > 0);
     }
 
+    /// TZ V.28: kunlik hisobot imzolanadi va keyin kun ma'lumoti
+    /// o'zgarsa, imzo boshqa narsani tasdiqlagani ko'rinadi.
+    #[test]
+    fn signing_the_day_notices_a_later_change() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        let today = app.today;
+
+        assert!(!app.day_report_signed());
+        app.sign_day_report();
+        assert!(app.day_report_signed(), "imzo yozilmadi");
+        assert!(app.sign_breaks().is_empty(), "{:?}", app.sign_breaks());
+
+        // Kun ma'lumoti o'zgardi: yangi yozuv qo'shildi.
+        app.db.insert_journal(&crate::domain::JournalEntry {
+            id: 0,
+            project_id: pid,
+            date: today,
+            author: "Prorab".into(),
+            weather: String::new(),
+            temperature: 0.0,
+            workers: 3,
+            machines: 1,
+            task_id: None,
+            volume: 40.0,
+            unit: "m3".into(),
+            text: "Qo'shimcha hajm".into(),
+            remarks: String::new(),
+            photos: String::new(),
+            gps: String::new(),
+        });
+        app.reload_modules();
+
+        let breaks = app.sign_breaks();
+        assert!(
+            breaks
+                .iter()
+                .any(|b| matches!(b, crate::signlog::Break::Text { .. })),
+            "{breaks:?}"
+        );
+        // Zanjirning o'zi butun: yozuv tuzatilmagan, faqat hisobot
+        // o'zgargan.
+        assert!(!breaks
+            .iter()
+            .any(|b| matches!(b, crate::signlog::Break::Chain { .. })));
+    }
+
     /// TZ VI-VIII: rol yozuvchi amallarni to'sadi, ko'rishga xalaqit bermaydi.
     #[test]
     fn role_blocks_writes_but_not_reads() {

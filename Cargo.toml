@@ -5,7 +5,7 @@ members = [".", "hash", "server"]
 
 [package]
 name = "qurai"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "Construction Intelligence Platform — native desktop client"
 

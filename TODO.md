@@ -22,7 +22,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | II. AI loyiha tekshiruvi | 22 | 20 | 1 | 1 | 1 |
 | III. AI smeta tekshiruvi | 34 | 34 | 0 | 0 | 0 |
 | IV. Ijro hujjatlari | 30 | 29 | 1 | 0 | 0 |
-| V. Kunlik ishlar jurnali | 34 | 31 | 3 | 0 | 0 |
+| V. Kunlik ishlar jurnali | 34 | 32 | 2 | 0 | 0 |
 | VI. Prorab ilovasi | 37 | 33 | 4 | 0 | 0 |
 | VII. Texnik nazorat kabineti | 38 | 36 | 0 | 2 | 2 |
 | VIII. Buyurtmachi kabineti | 37 | 35 | 2 | 0 | 0 |
@@ -37,7 +37,7 @@ Har bir qatordagi *kursiv* izoh — nima bor va nima yetishmayotgani.
 | XVII. AI analitika | 51 | 51 | 0 | 0 | 0 |
 | XVIII. AI Copilot | 45 | 38 | 7 | 0 | 0 |
 | Umumiy (TZ dan tashqari) | 16 | 15 | 1 | 0 | 0 |
-| **Jami** | **702** | **671** | **28** | **3** | **3** |
+| **Jami** | **702** | **672** | **27** | **3** | **3** |
 
 Ya'ni **~96 % to'liq**, **~4 % qisman**, **~0 % hali yo'q**.
 
@@ -194,7 +194,7 @@ bu ro'yxatning asosiy vazifasi shu.
 - [x] 25. AI prorabga savol beradi — *savollar modullararo ziddiyatdan tug'iladi: hajm bor — material yo'q, odam ishladi — hajm yo'q, beton xavfli haroratda, ish kechikdi — sabab yozilmagan. Javob kunlik yozuvning izohiga tushadi. Bu til modeli emas, qoidalar — va shunday deb aytiladi*
 - [~] 26. Ovozli rejim — *telefon sahifasida ovoz bilan matn kiritish (brauzerning o'z tanishi); ish stolida 🔒*
 - [x] 27. Geolokatsiya nazorati — *yozuv obyekt geozonasiga tushdimi; telefonning aniqligi radiusga qo'shiladi, koordinata bo'lmasa hukm chiqarilmaydi*
-- [~] 28. Hisobotni imzolash — *imzo daftari va zanjir bor (IV.18); kunlik hisobotni telefondan imzolash 🔒*
+- [x] 28. Hisobotni imzolash — *«Kun» tabidagi tugma hisobot sonlarini xeshlab imzo daftariga yozadi; keyin kun ma'lumoti o'zgarsa, imzo boshqa narsani tasdiqlagani ko'rinadi. Telefondan ham imzolanadi — imzolash huquqi bo'lgan rol uchun*
 - [x] 29. Tarix
 - [x] 30. AI qidiruv — *«aprelda beton quyish» kabi so'rov: oy va yil davrga aylanadi, topilgan kun jurnalda ajratiladi*
 - [x] 31. Boshqa modullar bilan bog'lanish

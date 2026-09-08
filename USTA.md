@@ -146,22 +146,27 @@ yozilgan va yoqishni foydalanuvchi o'zi tanlaydi. Modelga beriladigan ko'rsatma
 qat'iy: **sonni o'ylab topma, bilmasang ochiq ayt**. So'rov tuzish va javobni
 o'qish tarmoqsiz sinaladi.
 
-## Holat: 1.0.0 — ishlab chiqarishga tayyor (2026-09-07)
+## Holat: 1.1.0 — tashqi bandlar yopildi (2026-09-08)
 
-TZ bo'yicha **647 / 702 band to'liq**, 13 tasi qisman, 42 tasi tashqi shartga
-bog'liq (DWG/RVT, 3D geometriya, push xizmati, davlat ERI si, ovoz, native
-mobil ilova). Qolganlarining har birida nima bloklagani TODO.md da yozilgan.
+TZ bo'yicha **672 / 702 band to'liq**, 27 tasi qisman, 3 tasi ochiq. Uchala
+ochiq band bitta sababga borib taqaladi: **element geometriyasi** (3D
+kolliziya, AR) — u yerda o'rniga qo'yiladigan narsa yo'q.
+
+Qolgan 🔒 belgilari qisman bandlar ichida: davlat ERI si, ob-havo xizmati,
+bozor narxi manbasi, SMS/Telegram shlyuzi, rasm mazmunini tanuvchi model,
+do'kondagi native ilova. Ularning har birida **ulanish nuqtasi** yoki
+**kiritiladigan ma'lumot** qo'yilgan — ilova ularsiz ham to'liq ishlaydi.
 
 Tekshiruv:
 
 | Nima | Natija |
 |---|---|
-| `cargo test --workspace` | 399 desktop + 36 server sinov o'tadi |
-| `cargo test --no-default-features` | 398 sinov (tarmoq kodisiz yig'ilish) |
+| `cargo test --workspace` | 458 desktop + 53 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
-| `cargo build --release --workspace` | `qurai.exe` (~19 MB), `qurai-server.exe` (~3 MB) |
+| `cargo build --release --workspace` | `qurai.exe` (~20 MB), `qurai-server.exe` (~4 MB) |
 | Yangi bazada ishga tushirish | baza yaratiladi va namuna bilan to'ladi |
+| Server sahifalari | `/manifest.webmanifest`, `/sw.js`, `/icon.svg`, `/offline` — 200 |
 
 Qo'riqchi sinovlar (regressiyani ushlaydi):
 
@@ -174,8 +179,33 @@ Qo'riqchi sinovlar (regressiyani ushlaydi):
   nusxa emas, sanaladigan qiymatlarning nomi bor
 - hisobot sonlari modul funksiyalari bilan bir xil; «JAMI» qatori haqiqiy
   yig'indi; Ctrl+E tanlangan hisobotni beradi
+- SHA-256 rasmiy sinov qiymatlariga solishtiriladi (bo'sh matn, `abc`, bir
+  million belgi) — imzo zanjiri shu xeshga tayanadi
+- imzo daftaridan yozuv o'chirilsa yoki tuzatilsa zanjir buziladi va
+  serverdagi belgi bilan farq ko'rinadi
+- EXIF o'quvchi haqiqiy bayt tartibidagi JPEG da sinaladi
+- aloqasiz navbatdan qayta kelgan forma ikkinchi yozuv yaratmaydi
 - server: kim kira oladi, kim kira olmaydi, paket tartibi, imzo huquqi
 - desktop mijozi haqiqiy server dasturi bilan gaplashadi (boshdan-oxir)
+
+## Maydonchadagi qurilma (1.1.0 da qo'shilgan)
+
+GPS, kamera va mikrofon ish stolida yo'q — ular telefonda. Shuning uchun bu
+ma'lumot **telefon sahifasidan** keladi va ilova uni hosil qilmaydi:
+
+- `src/geo.rs` — masofa, obyekt geozonasi, «koordinata yo'q — hukm yo'q»
+- `src/exif.rs` — fotoning ichidagi yozuv (qo'lda yozilgan JPEG/TIFF o'quvchi)
+- `src/photocheck.rs` — rasm dalil bo'la oladimi: kun, joy, tahrir, takror
+- `src/attend.rs` — kirish-chiqish belgilaridan kun va uni tabel bilan
+  solishtirish
+- `src/ui/plan.rs` — nuqtalar rejasi (IFC joylashuvi va geo nuqtalar uchun)
+- `src/signlog.rs` + `hash/` — imzo daftari, SHA-256 zanjiri
+- `src/prices.rs` — yuklangan narx ro'yxati, diapazon va tendensiya
+- `src/hook.rs` — tashqi xabar nuqtasi (sukut bo'yicha o'chiq)
+
+Telefon tomonida: joyni so'rash, QR o'qish, ovoz bilan matn, kirish-chiqish,
+ariza, texnika smenasi, ofis bilan yozishma va PWA (aloqasiz o'qish,
+yuborilmagan formalar navbati, takrordan himoya).
 
 ## Server (`server/`)
 
@@ -188,9 +218,15 @@ Alohida krat: `axum` + SQLite. Desktop ilovaga uning kutubxonalari kirmaydi.
   paketlarni oladi. Server paketni ochmaydi: format desktop ilovaniki.
 - **Masofadan imzolash** — kim, qachon va qaysi matnni tasdiqlagani; matn xeshi
   bilan bog'lanadi. Bu davlat ERI si emas va shunday deb atalmaydi.
-- **Mobil ko'rinish** — telefon brauzeri uchun sahifalar (JavaScript yo'q):
-  obyektlar, «bugun nima qilish kerak», ishlar grafigi (muddat bo'yicha
-  ro'yxat), kunlik yozuv, tabel va imzo.
+- **Mobil ko'rinish** — telefon brauzeri uchun sahifalar: obyektlar, «bugun
+  nima qilish kerak», ishlar grafigi, kunlik yozuv, tabel, imzo, kirish-chiqish,
+  QR o'qish, ariza, texnika smenasi va ofis bilan yozishma. Sahifalar
+  **JavaScript siz ham ishlaydi**: skript faqat qurilma beradigan narsani
+  qo'shadi (joy, QR, ovoz) va u ishlamasa forma avvalgidek yuboriladi.
+- **Telefonga o'rnatiladi (PWA)** — manifest va xizmat ishchisi: ochilgan
+  sahifa aloqasiz ham ochiladi, yuborilmagan forma navbatda turadi va aloqa
+  qaytganda o'zi ketadi. Takror yozuvdan **bir martalik belgi** himoya qiladi:
+  server bir xil belgini ikkinchi marta qabul qilmaydi.
 - **Ma'lumot yo'nalishi bir tomonlama.** Grafik, ishchilar ro'yxati va signal
   ilovada hisoblanadi va serverga **nusxa** sifatida chiqadi; telefon ularni
   qayta hisoblamaydi. Teskari yo'nalishda esa faqat maydonchada tug'iladigan

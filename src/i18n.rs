@@ -6387,6 +6387,13 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
 
         // ---------- Prorabga savollar / Вопросы прорабу ----------
         "q_title" => ("Savollar", "Вопросы"),
+        "jr_day_report" => ("Kunlik hisobot", "Дневной отчёт"),
+        "jr_sign_day" => ("Kunni imzolash", "Подписать день"),
+        "jr_sign_day_hint" => (
+            "Kunlik hisobotning sonlari xeshlanib imzo daftariga yoziladi. Keyin kun ma'lumoti o'zgarsa, imzo boshqa narsani tasdiqlagani ko'rinib qoladi.",
+            "Числа дневного отчёта хешируются и записываются в журнал подписей. Если потом данные дня изменятся, станет видно, что подпись подтверждала другое.",
+        ),
+        "jr_day_signed" => ("Kun imzolangan", "День подписан"),
         "q_hint" => (
             "Savollar yozuvlarni bir-biriga solishtirishdan tug'iladi: jurnal, tabel, ombor va grafik mos kelmasa, buni odam tushuntiradi. Bu ayblov emas — javob kunlik yozuvning izohiga tushadi.",
             "Вопросы рождаются из сопоставления записей: если журнал, табель, склад и график расходятся, объяснить это может только человек. Это не обвинение — ответ попадёт в примечание дневной записи.",

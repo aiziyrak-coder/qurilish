@@ -17,7 +17,7 @@ smetani tekshirish, ijro hujjatlari va kundalik ishlar jurnali.
 cargo run --release
 ```
 
-Tayyor fayl: `target/release/qurai.exe` (~19 MB, tashqi bog'liqliksiz —
+Tayyor fayl: `target/release/qurai.exe` — ~20 MB, tashqi bog'liqliksiz —
 SQLite, Excel va PDF yozish, IFC/DXF/PDF o'qish hammasi ichida).
 Ma'lumotlar bazasi — exe yonidagi `data/qurai.db`; birinchi ishga tushirishda
 namoyish obyekti yaratiladi: «Navro'z» TJM, 20 ta ish, 25 ta bog'lanish,
@@ -531,8 +531,8 @@ Natija ikkita fayl:
 
 | Fayl | Nima |
 |---|---|
-| `target/release/qurai.exe` | Desktop ilova. Tashqi bog'liqliksiz ishlaydi |
-| `target/release/qurai-server.exe` | Server (ixtiyoriy): kirish nazorati, sinxronizatsiya, telefon ko'rinishi |
+| `target/release/qurai.exe` | Desktop ilova (~20 MB). Tashqi bog'liqliksiz ishlaydi |
+| `target/release/qurai-server.exe` | Server (~4 MB, ixtiyoriy): kirish nazorati, sinxronizatsiya, telefon ko'rinishi |
 
 Tarmoq kodisiz yig'ish (ilova hech qayerga ulanmasligi kafolatlansin):
 

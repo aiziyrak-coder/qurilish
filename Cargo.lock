@@ -3040,7 +3040,7 @@ dependencies = [
 
 [[package]]
 name = "qurai"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "calamine",
  "chrono",
@@ -3064,11 +3064,11 @@ dependencies = [
 
 [[package]]
 name = "qurai-hash"
-version = "1.0.0"
+version = "1.1.0"
 
 [[package]]
 name = "qurai-server"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "argon2",
  "axum",

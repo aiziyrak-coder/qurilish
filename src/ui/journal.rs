@@ -385,6 +385,28 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
     questions_block(ui, app);
     ui.add_space(10.0);
 
+    // Kunni imzolash (TZ V.28): hisobot sonlari xeshlanib daftarga
+    // yoziladi. Imzolangan kun ma'lumoti keyin o'zgarsa, buni
+    // «Ijro hujjatlari → Imzo daftari» ko'rsatadi.
+    ui.horizontal_wrapped(|ui| {
+        let signed = app.day_report_signed();
+        if ui
+            .add_enabled(!signed, egui::Button::new(t("jr_sign_day")))
+            .on_hover_text(t("jr_sign_day_hint"))
+            .clicked()
+        {
+            app.sign_day_report();
+        }
+        if signed {
+            ui.label(
+                RichText::new(format!("✓ {}", t("jr_day_signed")))
+                    .size(12.0)
+                    .color(theme::ok()),
+            );
+        }
+    });
+    ui.add_space(10.0);
+
     // ---------- Direktor uchun kunlik xulosa (TZ V.24) ----------
     let d = app.day_report();
     stat_row(
