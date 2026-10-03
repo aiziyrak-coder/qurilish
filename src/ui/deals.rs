@@ -8,7 +8,7 @@
 use super::materials::trim_num;
 use super::warehouse::{cell_l, cell_r};
 use super::*;
-use crate::domain::{Deal, DealStatus, PayKind, Payment, UnitStatus};
+use crate::domain::{Deal, DealStatus, PayKind, Payment};
 use crate::sales;
 
 /// Shartnoma kartochkasining kengligi.
@@ -416,12 +416,28 @@ fn detail(ui: &mut egui::Ui, app: &mut App) {
         app.screen = Screen::Sales;
     }
     if rebuild {
-        app.db.clear_payments(d.id);
-        for p in sales::build_schedule(&d) {
-            app.db.insert_payment(&p);
+        // Tushgan pul saqlanadi: qayta qurish rejani yangilaydi, faktni
+        // emas.
+        let plan = sales::rebuild_schedule(&d, &app.payments);
+        for id in &plan.remove {
+            app.db.del("payment", *id);
+        }
+        for p in &plan.add {
+            app.db.insert_payment(p);
         }
         app.reload_modules();
-        app.notify(t("schedule_rebuilt").to_string());
+        let note = if plan.kept_rows > 0 {
+            format!(
+                "{} · {} {} ({})",
+                t("schedule_rebuilt"),
+                plan.kept_rows,
+                t("schedule_kept"),
+                money(plan.kept)
+            )
+        } else {
+            t("schedule_rebuilt").to_string()
+        };
+        app.notify(note);
     }
     if add_row {
         app.db.insert_payment(&Payment {
@@ -443,14 +459,10 @@ fn detail(ui: &mut egui::Ui, app: &mut App) {
         app.db.del("deal", did);
         app.selected_deal = None;
         app.reload_modules();
-        // Shartnoma o'chdi — kvartira yana bo'sh bo'ladi.
-        if let Some(u) = app.units.iter_mut().find(|u| u.id == unit) {
-            if u.status != UnitStatus::Unavailable {
-                u.status = UnitStatus::Free;
-                let copy = u.clone();
-                app.db.update_unit(&copy);
-            }
-        }
+        // Holat umumiy qoidadan qayta hisoblanadi. Avval bu yerda «bo'sh»
+        // deb qo'yilardi — birlikda boshqa amaldagi shartnoma qolgan
+        // bo'lsa ham, va kvartira ikkinchi marta sotilishi mumkin edi.
+        app.sync_unit_status(unit);
     }
 }
 

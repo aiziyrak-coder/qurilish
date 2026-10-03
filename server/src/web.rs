@@ -668,7 +668,7 @@ pub async fn journal_form(
         )
             .into_response();
     }
-    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let today = today(&state);
     // Ish grafikdan tanlanadi: qo'lda yozilgan nom keyin grafikka
     // ulanmay qolardi. Ro'yxat bo'sh bo'lsa — oddiy maydon.
     let tasks = state.store.tasks(&project);
@@ -843,7 +843,7 @@ ro'yxat shu yerda chiqadi.</p>",
         .into_response();
     }
 
-    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let today = today(&state);
     let mut rows = String::new();
     for w in &workers {
         rows.push_str(&format!(
@@ -976,7 +976,7 @@ pub async fn tasks_page(
         return login_page("").into_response();
     };
     let tasks = state.store.tasks(&project);
-    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let today = today(&state);
 
     let mut body = format!(
         "<div class=\"row\"><h1>Ishlar</h1><a href=\"/o/{p}\">Ortga</a></div>\
@@ -1455,7 +1455,13 @@ pub struct RequestForm {
 ///
 /// Raqam **ilovada** beriladi: bir necha telefon bir vaqtda yuborsa,
 /// serverda berilgan raqam takrorlanib qolardi.
-pub fn request_package(project: &str, at: &str, requester: &str, f: &RequestForm) -> String {
+pub fn request_package(
+    project: &str,
+    at: &str,
+    tz_minutes: i32,
+    requester: &str,
+    f: &RequestForm,
+) -> String {
     let cols = [
         "date",
         "kind",
@@ -1467,7 +1473,12 @@ pub fn request_package(project: &str, at: &str, requester: &str, f: &RequestForm
         "note",
         "gps",
     ];
-    let today = at.split('T').next().unwrap_or("").to_string();
+    // Ariza sanasi — maydonchadagi kun, UTC dagi emas.
+    let today = crate::in_zone(at, tz_minutes)
+        .split('T')
+        .next()
+        .unwrap_or("")
+        .to_string();
     let qty = {
         let v = f.qty.trim().replace(',', ".");
         if v.is_empty() {
@@ -1590,7 +1601,7 @@ pub async fn request_submit(
     if !form.nonce.trim().is_empty() && !state.store.use_nonce(&form.nonce, &at) {
         return Redirect::to(&object_url(&project, "")).into_response();
     }
-    let body = request_package(&project, &at, &user.name, &form);
+    let body = request_package(&project, &at, state.config.tz_minutes, &user.name, &form);
     let _ = state
         .store
         .push_change(project.trim(), &body, &user.login, &at, 1);
@@ -1684,7 +1695,7 @@ pub async fn machine_form(
         )
         .into_response();
     }
-    let today = crate::now().split('T').next().unwrap_or("").to_string();
+    let today = today(&state);
     let options: String = machines
         .iter()
         .map(|m| {
@@ -1834,10 +1845,13 @@ pub fn attendance_package(project: &str, at: &str, a: &crate::store::Attendance)
 ///
 /// Faqat soatni ko'rsatish xato edi: kechagi belgi bugungidek
 /// ko'rinardi va «kim bugun keldi» degan savolga yolg'on javob berardi.
-fn short_time(iso: &str) -> String {
-    let (day, time) = iso.split_once('T').unwrap_or((iso, ""));
+fn short_time(state: &AppState, iso: &str) -> String {
+    // Vaqt bazada UTC da turadi, telefondagi odam esa maydoncha vaqtida
+    // yashaydi: avval keltiriladi, keyin ko'rsatiladi.
+    let local = crate::in_zone(iso, state.config.tz_minutes);
+    let (day, time) = local.split_once('T').unwrap_or((local.as_str(), ""));
     let hm: String = time.chars().take(5).collect();
-    if day == today() {
+    if day == today(state) {
         return hm;
     }
     let parts: Vec<&str> = day.split('-').collect();
@@ -1848,9 +1862,14 @@ fn short_time(iso: &str) -> String {
     }
 }
 
-/// Bugungi sana, `YYYY-MM-DD`.
-fn today() -> String {
-    crate::now().split('T').next().unwrap_or("").to_string()
+/// Maydonchadagi bugungi sana, `YYYY-MM-DD`.
+fn today(state: &AppState) -> String {
+    crate::site_today(state.config.tz_minutes)
+}
+
+/// Yozuv maydoncha vaqti bo'yicha bugunmi.
+fn is_today(state: &AppState, iso: &str) -> bool {
+    crate::in_zone(iso, state.config.tz_minutes).starts_with(&today(state))
 }
 
 /// `GET /o/{project}/checkin` — maydonchaga kirish va undan chiqish.
@@ -1890,7 +1909,7 @@ pub async fn checkin_page(
         // aks holda odam ertalab kelib «Chiqdim» tugmasini ko'rardi.
         let today_mark = last
             .as_ref()
-            .filter(|a| a.at.starts_with(&today()))
+            .filter(|a| is_today(&state, &a.at))
             .map(|a| a.kind.as_str());
         let next = match today_mark {
             Some("in") => "out",
@@ -1900,7 +1919,7 @@ pub async fn checkin_page(
             Some(a) => format!(
                 "<p class=\"muted\">Oxirgi belgi: {} · {}</p>",
                 if a.kind == "in" { "kirish" } else { "chiqish" },
-                esc(&short_time(&a.at))
+                esc(&short_time(&state, &a.at))
             ),
             None => "<p class=\"muted\">Bugun belgi qo'yilmagan.</p>".to_string(),
         };
@@ -1955,7 +1974,7 @@ pub async fn checkin_page(
             .map(|a| {
                 format!(
                     "<tr><td>{}</td><td>{}</td><td>{}</td></tr>",
-                    esc(&short_time(&a.at)),
+                    esc(&short_time(&state, &a.at)),
                     esc(&a.worker),
                     if a.kind == "in" { "kirish" } else { "chiqish" }
                 )
@@ -2288,5 +2307,70 @@ mod tests {
     fn unknown_role_shows_its_code() {
         assert_eq!(role_name("foreman"), "Prorab");
         assert_eq!(role_name("yangi-rol"), "yangi-rol");
+    }
+
+    /// Sinov uchun maydoncha mintaqasi qo'yilgan holat.
+    fn state_with_zone(tz_minutes: i32) -> Arc<AppState> {
+        Arc::new(AppState {
+            store: crate::store::Store::memory().expect("baza"),
+            config: crate::state::Config {
+                tz_minutes,
+                ..Default::default()
+            },
+        })
+    }
+
+    /// Maydoncha vaqtidagi `today HH:MM` ni UTC yozuviga aylantiradi.
+    fn utc_of_site(tz_minutes: i32, hm: &str) -> String {
+        let today = crate::site_today(tz_minutes);
+        let dt =
+            chrono::NaiveDateTime::parse_from_str(&format!("{today}T{hm}:00"), "%Y-%m-%dT%H:%M:%S")
+                .expect("vaqt");
+        (dt - chrono::Duration::minutes(i64::from(tz_minutes)))
+            .format("%Y-%m-%dT%H:%M:%SZ")
+            .to_string()
+    }
+
+    /// Soat maydoncha vaqtida ko'rsatiladi, UTC da emas.
+    ///
+    /// Avval telefonda soat 08:00 da qo'yilgan belgi 03:00 bo'lib
+    /// ko'rinardi: vaqt bazada UTC da turadi va shundayligicha
+    /// chiqarilardi.
+    #[test]
+    fn the_clock_shows_site_time() {
+        let state = state_with_zone(300);
+        assert_eq!(short_time(&state, &utc_of_site(300, "08:00")), "08:00");
+        assert_eq!(short_time(&state, &utc_of_site(300, "23:30")), "23:30");
+        assert_eq!(short_time(&state, &utc_of_site(300, "00:10")), "00:10");
+
+        // Manfiy siljish ham to'g'ri ko'rsatiladi.
+        let state = state_with_zone(-210);
+        assert_eq!(short_time(&state, &utc_of_site(-210, "08:00")), "08:00");
+    }
+
+    /// Kun chegarasi maydoncha vaqtida o'tadi.
+    ///
+    /// Shu sababli yarim tundan keyin kirgan ishchi ertalab yana
+    /// «Kirdim» tugmasini ko'rmaydi: uning belgisi maydoncha kunida
+    /// bugungi deb hisoblanadi.
+    #[test]
+    fn the_day_boundary_follows_the_site() {
+        let state = state_with_zone(300);
+        // Maydoncha kunining boshi ham, oxiri ham — bugun.
+        assert!(is_today(&state, &utc_of_site(300, "00:10")));
+        assert!(is_today(&state, &utc_of_site(300, "08:00")));
+        assert!(is_today(&state, &utc_of_site(300, "23:50")));
+
+        // Bir kun oldingi va keyingi belgi — bugungi emas.
+        let today = crate::site_today(300);
+        let day = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d").expect("sana");
+        for shift in [-1, 1] {
+            let other = day + chrono::Duration::days(shift);
+            let dt = other.and_hms_opt(12, 0, 0).expect("vaqt");
+            let utc = (dt - chrono::Duration::minutes(300))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string();
+            assert!(!is_today(&state, &utc), "{utc}");
+        }
     }
 }

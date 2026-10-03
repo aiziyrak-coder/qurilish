@@ -1032,7 +1032,9 @@ fn units(app: &App) -> Table {
         .iter()
         .map(|u| {
             let block = app.blocks.iter().find(|b| b.id == u.block_id);
-            let deal = app.deals.iter().find(|d| d.unit_id == u.id);
+            // Amaldagi shartnoma: bekor qilingani raqam ham, mijoz ham
+            // bo'lib ko'rinmasligi kerak edi.
+            let deal = crate::sales::active_deal(&app.deals, u.id);
             vec![
                 txt(block.map(|b| b.name.clone()).unwrap_or_default()),
                 Cell::Num(u.floor as f64),
@@ -1041,13 +1043,8 @@ fn units(app: &App) -> Table {
                 Cell::Num(u.area),
                 Cell::Money(u.price_per_m2),
                 Cell::Money(u.price()),
-                // Holat shartnomadan hisoblanadi: shartnoma bo'lmasa —
-                // birlikning o'z holati.
-                txt(
-                    crate::sales::status_for(app.deals.iter().find(|d| d.unit_id == u.id))
-                        .unwrap_or(u.status)
-                        .label(),
-                ),
+                // Holat butun dastur bilan bitta qoidadan.
+                txt(crate::sales::unit_status(u, &app.deals).label()),
                 txt(deal.map(|d| d.number.clone()).unwrap_or_default()),
                 txt(deal.map(|d| d.client.clone()).unwrap_or_default()),
             ]

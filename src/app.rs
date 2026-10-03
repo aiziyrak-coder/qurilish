@@ -2460,24 +2460,37 @@ impl App {
         crate::sales::sales_summary(&self.units, &self.deals, &self.payments, self.today)
     }
 
+    /// Kun almashgan bo'lsa «bugun» ni yangilaydi.
+    ///
+    /// Har kadrda chaqiriladi, lekin ish faqat sana o'zgarganda bajariladi:
+    /// modullarni qayta hisoblash qimmat.
+    pub fn refresh_today(&mut self) {
+        let now = chrono::Local::now().date_naive();
+        if now == self.today {
+            return;
+        }
+        self.today = now;
+        // Muddat, kechikish va signallar sanaga bog'liq — ular qayta
+        // hisoblanishi kerak.
+        self.reload_modules();
+    }
+
     /// Birlik holatini amaldagi shartnomaga moslaydi va bazaga yozadi.
     ///
     /// Shartnoma holati o'zgarganda shaxmatkadagi rang ham o'zgarishi kerak,
     /// aks holda «sotilgan» kvartira bo'sh bo'lib ko'rinib qoladi.
     pub fn sync_unit_status(&mut self, unit_id: i64) {
-        let deal = crate::sales::active_deal(&self.deals, unit_id).cloned();
-        let Some(want) = crate::sales::status_for(deal.as_ref()) else {
+        let Some(pos) = self.units.iter().position(|u| u.id == unit_id) else {
             return;
         };
-        let Some(u) = self.units.iter_mut().find(|u| u.id == unit_id) else {
-            return;
-        };
-        // «Sotuvda emas» qo'lda qo'yiladi — uni shartnoma bekor qilmaydi.
-        if u.status == want || u.status == crate::domain::UnitStatus::Unavailable {
+        // Qoida `unit_status` da: «sotuvda emas» ni ham, amaldagi shartnoma
+        // yo'qligini ham o'sha hal qiladi.
+        let want = crate::sales::unit_status(&self.units[pos], &self.deals);
+        if self.units[pos].status == want {
             return;
         }
-        u.status = want;
-        let copy = u.clone();
+        self.units[pos].status = want;
+        let copy = self.units[pos].clone();
         self.db.update_unit(&copy);
     }
 

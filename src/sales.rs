@@ -93,7 +93,7 @@ pub fn sales_summary(
     for u in units {
         s.area_total += u.area;
         s.value_total += u.price();
-        match u.status {
+        match unit_status(u, deals) {
             UnitStatus::Free => {
                 s.free += 1;
                 s.area_free += u.area;
@@ -121,17 +121,25 @@ pub fn sales_summary(
     s
 }
 
-/// Shartnoma holatidan kelib chiqadigan birlik holati.
+/// Birlikning holati — amaldagi shartnomadan kelib chiqadi.
 ///
-/// Shaxmatkadagi rang shartnomaga ergashishi kerak: qo'lda qo'yilgan holat
-/// bilan shartnoma bir-biriga zid bo'lib qolmasin.
-pub fn status_for(deal: Option<&Deal>) -> Option<UnitStatus> {
-    match deal?.status {
-        DealStatus::Reserved => Some(UnitStatus::Reserved),
-        DealStatus::Signed => Some(UnitStatus::Contract),
-        DealStatus::Completed => Some(UnitStatus::Sold),
-        // Bekor qilingan shartnoma birlikni bo'shatadi.
-        DealStatus::Cancelled => Some(UnitStatus::Free),
+/// Qoida **bitta joyda** turadi: shaxmatka, qavatlar kesimi, yig'indi,
+/// hisobot, eksport va portfel shu funksiyadan o'qiydi. Avval ba'zi joy
+/// yozuvdagi holatni, ba'zi joy shartnomadan hisoblangan holatni olardi va
+/// bitta ekranda ikki xil son chiqib turardi.
+pub fn unit_status(unit: &Unit, deals: &[Deal]) -> UnitStatus {
+    // «Sotuvda emas» — odamning qarori; shartnoma uni o'zgartirmaydi.
+    if unit.status == UnitStatus::Unavailable {
+        return UnitStatus::Unavailable;
+    }
+    match active_deal(deals, unit.id).map(|d| d.status) {
+        Some(DealStatus::Reserved) => UnitStatus::Reserved,
+        Some(DealStatus::Signed) => UnitStatus::Contract,
+        Some(DealStatus::Completed) => UnitStatus::Sold,
+        // Amaldagi shartnoma yo'q — bekor qilingan yoki umuman bo'lmagan.
+        // Avval bekor qilingan shartnoma birlikni bo'shatmasdi: `active_deal`
+        // uni chetlab o'tar, holat esa «Shartnoma» bo'lib qolaverardi.
+        Some(DealStatus::Cancelled) | None => UnitStatus::Free,
     }
 }
 
@@ -177,6 +185,52 @@ pub fn build_schedule(deal: &Deal) -> Vec<Payment> {
         rows.push(row(deal, add_months(deal.date, i), amount));
     }
     rows
+}
+
+/// Grafikni qayta qurish rejasi.
+#[derive(Debug, Default, Clone)]
+pub struct Rebuild {
+    /// O'chiriladigan qatorlar — faqat to'lov tushmaganlari.
+    pub remove: Vec<i64>,
+    /// Qo'shiladigan yangi qatorlar.
+    pub add: Vec<Payment>,
+    /// Saqlanib qolgan, allaqachon tushgan summa.
+    pub kept: f64,
+    /// Saqlanib qolgan qatorlar soni.
+    pub kept_rows: usize,
+}
+
+/// Grafikni qayta quradi va **tushgan pulni saqlaydi**.
+///
+/// To'lov tushgan qator — fakt: shartnoma sharti o'zgargani uni o'chirish
+/// sababi emas. Avval tugma butun grafikni o'chirib, rejani noldan
+/// yozardi — kvitansiya raqamlari ham, tushgan summalar ham yo'qolardi va
+/// qarz yana to'liq summaga chiqib ketardi.
+///
+/// Endi: to'lov tushgan qatorlar joyida qoladi, qolgan summaga
+/// (shartnoma summasi minus tushgani) yangi grafik tuziladi.
+pub fn rebuild_schedule(deal: &Deal, payments: &[Payment]) -> Rebuild {
+    let mut out = Rebuild::default();
+    for p in payments.iter().filter(|p| p.deal_id == deal.id) {
+        if p.paid > 0.0 {
+            out.kept += p.paid;
+            out.kept_rows += 1;
+        } else {
+            out.remove.push(p.id);
+        }
+    }
+    let rest = (deal.total() - out.kept).max(0.0);
+    if rest <= 0.0 {
+        return out;
+    }
+    let mut plan = deal.clone();
+    // Qolgan summa uchun grafik: `total()` = narx - chegirma.
+    plan.price = rest + deal.discount;
+    // Tushgan pul boshlang'ich to'lov o'rnini bosadi — uni ikkinchi marta
+    // rejalashtirmaymiz.
+    plan.prepayment = (deal.prepayment - out.kept).max(0.0);
+    out.add = build_schedule(&plan);
+    out
 }
 
 fn row(deal: &Deal, due: NaiveDate, planned: f64) -> Payment {
@@ -384,8 +438,7 @@ impl Funnel {
 
 /// TZ XIX: kvartiralar holati bo'yicha voronka.
 ///
-/// Holat shartnomadan olinadi (`status_for`), kvartira yozuvidan emas:
-/// shartnoma bor bo'lsa u haqiqatni ko'rsatadi.
+/// Holat `unit_status` dan olinadi — butun dastur bilan bitta qoidadan.
 pub fn funnel(units: &[Unit], deals: &[Deal]) -> Funnel {
     let mut f = Funnel {
         total: units.len(),
@@ -393,8 +446,7 @@ pub fn funnel(units: &[Unit], deals: &[Deal]) -> Funnel {
         ..Default::default()
     };
     for u in units {
-        let status = status_for(active_deal(deals, u.id)).unwrap_or(u.status);
-        match status {
+        match unit_status(u, deals) {
             UnitStatus::Free => f.free += 1,
             UnitStatus::Reserved => f.reserved += 1,
             UnitStatus::Contract => {
@@ -504,8 +556,7 @@ pub struct FloorStat {
 pub fn by_floor(units: &[Unit], deals: &[Deal]) -> Vec<FloorStat> {
     let mut out: Vec<FloorStat> = Vec::new();
     for u in units {
-        let status = status_for(active_deal(deals, u.id)).unwrap_or(u.status);
-        let free = status == UnitStatus::Free;
+        let free = unit_status(u, deals) == UnitStatus::Free;
         match out.iter_mut().find(|f| f.floor == u.floor) {
             Some(f) => {
                 f.units += 1;

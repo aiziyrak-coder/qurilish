@@ -1470,6 +1470,270 @@ mod tests {
         }
     }
 
+    /// Serverdan kelgan vaqt mahalliy vaqtga keltiriladi.
+    ///
+    /// Server vaqtni UTC da yozadi (`...Z`). Avval `Z` shunchaki tashlab
+    /// yuborilardi va soat o'zgarmasdan qolardi: Toshkentda telefondan
+    /// 08:00 da qo'yilgan belgi ilovada 03:00 bo'lib ko'rinardi, kechki
+    /// belgi esa boshqa kunga tushib ketardi.
+    ///
+    /// Ilovaning o'zi yozgan vaqtda siljish yo'q — u o'zgartirilmaydi.
+    #[test]
+    fn a_time_from_the_server_arrives_in_local_time() {
+        use chrono::TimeZone;
+        let utc = "2026-10-03T03:00:00Z";
+        let got = crate::store::parse_stamp(utc);
+
+        // Kutilgan qiymat shu kompyuterning mintaqasida hisoblanadi:
+        // sinov qaysi mintaqada ishlashiga bog'liq bo'lmasligi kerak.
+        let want = chrono::Utc
+            .with_ymd_and_hms(2026, 10, 3, 3, 0, 0)
+            .single()
+            .expect("vaqt")
+            .with_timezone(&chrono::Local)
+            .naive_local();
+        assert_eq!(got, want, "serverdan kelgan vaqt keltirilmadi");
+
+        // Aniq siljish bilan yozilgan vaqt ham xuddi shunday.
+        let same = crate::store::parse_stamp("2026-10-03T08:00:00+05:00");
+        let want = chrono::Utc
+            .with_ymd_and_hms(2026, 10, 3, 3, 0, 0)
+            .single()
+            .expect("vaqt")
+            .with_timezone(&chrono::Local)
+            .naive_local();
+        assert_eq!(same, want);
+
+        // Siljishsiz vaqt — allaqachon mahalliy, o'zgarmaydi.
+        let local = crate::store::parse_stamp("2026-10-03T08:00:00");
+        assert_eq!(
+            local.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            "2026-10-03T08:00:00"
+        );
+        let spaced = crate::store::parse_stamp("2026-10-03 08:00:00");
+        assert_eq!(spaced, local);
+
+        // Faqat sana — kun boshi.
+        let day = crate::store::parse_stamp("2026-10-03");
+        assert_eq!(
+            day.format("%Y-%m-%dT%H:%M:%S").to_string(),
+            "2026-10-03T00:00:00"
+        );
+    }
+
+    /// Bekor qilingan shartnoma kvartirani bo'shatadi.
+    ///
+    /// Avval `active_deal` bekor qilinganini chetlab o'tar, holat esa
+    /// «Shartnoma» bo'lib qolaverardi: sotuvga qaytgan kvartira
+    /// shaxmatkada band ko'rinardi va yangi mijozga taklif qilinmasdi.
+    #[test]
+    fn a_cancelled_deal_frees_the_flat() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let deal = app
+            .deals
+            .iter()
+            .find(|d| d.status == crate::domain::DealStatus::Signed)
+            .cloned()
+            .expect("imzolangan shartnoma");
+        let unit_id = deal.unit_id;
+        assert_eq!(
+            crate::sales::unit_status(
+                app.units.iter().find(|u| u.id == unit_id).unwrap(),
+                &app.deals
+            ),
+            crate::domain::UnitStatus::Contract
+        );
+
+        let mut cancelled = deal.clone();
+        cancelled.status = crate::domain::DealStatus::Cancelled;
+        app.db.update_deal(&cancelled);
+        app.reload_modules();
+        app.sync_unit_status(unit_id);
+
+        let u = app.units.iter().find(|u| u.id == unit_id).unwrap();
+        assert_eq!(
+            u.status,
+            crate::domain::UnitStatus::Free,
+            "yozuvdagi holat bo'shamadi"
+        );
+        assert_eq!(
+            crate::sales::unit_status(u, &app.deals),
+            crate::domain::UnitStatus::Free,
+            "qoida bo'yicha holat bo'shamadi"
+        );
+        // Bazada ham qoldi.
+        let saved = Db::open(&t.path).unwrap().units(pid);
+        let saved = saved.iter().find(|x| x.id == unit_id).unwrap();
+        assert_eq!(saved.status, crate::domain::UnitStatus::Free);
+    }
+
+    /// Shartnoma o'chirilsa, boshqa amaldagi shartnoma hisobga olinadi.
+    ///
+    /// Avval bu yerda holat to'g'ridan-to'g'ri «bo'sh» deb qo'yilardi va
+    /// kvartirani ikkinchi marta sotish mumkin bo'lib qolardi.
+    #[test]
+    fn deleting_one_deal_does_not_free_a_flat_that_still_has_another() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let base = app
+            .deals
+            .iter()
+            .find(|d| d.status == crate::domain::DealStatus::Signed)
+            .cloned()
+            .expect("shartnoma");
+        let unit_id = base.unit_id;
+
+        // Eski, bekor qilingan shartnoma — o'chiriladigani shu.
+        let mut old = base.clone();
+        old.id = 0;
+        old.number = "S-ESKI".into();
+        old.status = crate::domain::DealStatus::Cancelled;
+        old.date = base.date - chrono::Duration::days(60);
+        let old_id = app.db.insert_deal(&old);
+        app.reload_modules();
+
+        app.db.del("deal", old_id);
+        app.reload_modules();
+        app.sync_unit_status(unit_id);
+
+        let u = app.units.iter().find(|u| u.id == unit_id).unwrap();
+        assert_eq!(
+            u.status,
+            crate::domain::UnitStatus::Contract,
+            "amaldagi shartnoma bor kvartira bo'shab qoldi"
+        );
+    }
+
+    /// Grafikni qayta qurish tushgan pulni yo'qotmaydi.
+    ///
+    /// Avval tugma butun grafikni o'chirib tashlardi: kvitansiya raqamlari
+    /// va tushgan summalar yo'qolib, qarz yana to'liq summaga chiqardi.
+    #[test]
+    fn rebuilding_the_schedule_keeps_the_money_received() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let app = crate::app::App::new(Db::open(&t.path).unwrap());
+        let mut app = app;
+        app.select_project(pid);
+
+        let deal = app
+            .deals
+            .iter()
+            .find(|d| {
+                app.payments
+                    .iter()
+                    .any(|p| p.deal_id == d.id && p.paid > 0.0)
+            })
+            .cloned()
+            .expect("to'lov tushgan shartnoma");
+
+        let before: f64 = app
+            .payments
+            .iter()
+            .filter(|p| p.deal_id == deal.id)
+            .map(|p| p.paid)
+            .sum();
+        assert!(before > 0.0);
+
+        let plan = crate::sales::rebuild_schedule(&deal, &app.payments);
+        assert_eq!(plan.kept, before, "tushgan pul saqlanmadi");
+        assert!(plan.kept_rows > 0);
+        // O'chiriladiganlar orasida to'lov tushgani yo'q.
+        for id in &plan.remove {
+            let p = app.payments.iter().find(|p| p.id == *id).unwrap();
+            assert_eq!(p.paid, 0.0, "to'langan qator o'chirilmoqda");
+        }
+        // Yangi reja qolgan summani qoplaydi.
+        let planned: f64 = plan.add.iter().map(|p| p.planned).sum();
+        let rest = deal.total() - before;
+        assert!((planned - rest).abs() < 0.5, "{planned} != {rest}");
+
+        // Haqiqatda bajarilganda ham summa saqlanadi.
+        for id in &plan.remove {
+            app.db.del("payment", *id);
+        }
+        for p in &plan.add {
+            app.db.insert_payment(p);
+        }
+        app.reload_modules();
+        let after: f64 = app
+            .payments
+            .iter()
+            .filter(|p| p.deal_id == deal.id)
+            .map(|p| p.paid)
+            .sum();
+        assert_eq!(after, before, "qayta qurishdan keyin pul yo'qoldi");
+    }
+
+    /// Butun to'langan shartnomada qayta qurish yangi qator qo'shmaydi.
+    #[test]
+    fn a_fully_paid_deal_gets_no_new_schedule() {
+        let deal = crate::domain::Deal {
+            id: 7,
+            project_id: 1,
+            unit_id: 1,
+            number: "S-100".into(),
+            date: chrono::NaiveDate::from_ymd_opt(2026, 1, 10).unwrap(),
+            client: "Mijoz".into(),
+            phone: String::new(),
+            client_doc: String::new(),
+            pay_kind: crate::domain::PayKind::Cash,
+            price: 100_000_000.0,
+            discount: 0.0,
+            prepayment: 0.0,
+            months: 12,
+            status: crate::domain::DealStatus::Completed,
+            manager: String::new(),
+            note: String::new(),
+        };
+        let paid = crate::domain::Payment {
+            id: 1,
+            project_id: 1,
+            deal_id: 7,
+            due: deal.date,
+            planned: 100_000_000.0,
+            paid: 100_000_000.0,
+            paid_date: Some(deal.date),
+            kind: crate::domain::PayKind::Cash,
+            document: "KV-1".into(),
+            note: String::new(),
+        };
+        let plan = crate::sales::rebuild_schedule(&deal, &[paid]);
+        assert!(plan.add.is_empty(), "to'langan shartnomaga reja qo'shildi");
+        assert!(plan.remove.is_empty());
+        assert_eq!(plan.kept, 100_000_000.0);
+    }
+
+    /// Kun almashganda «bugun» ham almashadi.
+    #[test]
+    fn the_app_notices_a_new_day() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        // Dastur kechadan beri ochiq turganini ko'rsatamiz.
+        app.today -= chrono::Duration::days(1);
+        app.refresh_today();
+        assert_eq!(
+            app.today,
+            chrono::Local::now().date_naive(),
+            "bugun yangilanmadi"
+        );
+
+        // Kun o'zgarmagan bo'lsa hech narsa buzilmaydi.
+        let same = app.today;
+        app.refresh_today();
+        assert_eq!(app.today, same);
+    }
+
     impl Drop for TempDb {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.path);
@@ -3097,7 +3361,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
     /// shartnomaga mos keladi.
     #[test]
     fn demo_sales_is_consistent() {
-        use crate::domain::{DealStatus, UnitStatus};
+        use crate::domain::DealStatus;
 
         let t = TempDb::new();
         let pid = t.db.seed_demo().unwrap();
@@ -3114,7 +3378,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
 
         for d in &deals {
             let u = units.iter().find(|u| u.id == d.unit_id).expect("kvartira");
-            let want = crate::sales::status_for(Some(d)).unwrap();
+            let want = crate::sales::unit_status(u, &deals);
             assert_eq!(u.status, want, "{} holati mos emas", d.number);
 
             // Har bir shartnomaning grafigi shartnoma summasiga teng.
@@ -3131,7 +3395,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         // Sotilgan va band qilingan kvartiralar bor, bo'shlari ham qolgan.
         let free = units
             .iter()
-            .filter(|u| u.status == UnitStatus::Free)
+            .filter(|u| u.status == crate::domain::UnitStatus::Free)
             .count();
         assert!(free > 0 && free < units.len());
         assert!(deals.iter().any(|d| d.status == DealStatus::Completed));

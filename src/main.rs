@@ -102,6 +102,11 @@ impl eframe::App for Root {
         if self.app.poll_llm() {
             ctx.request_repaint();
         }
+        // Dastur sutkalab ochiq turishi mumkin — ofisdagi kompyuter
+        // o'chirilmaydi. «Bugun» faqat ishga tushishda olinganda, yarim
+        // tundan keyin muddat, kechikish va kunlik hisobot kechagi kunda
+        // qolib ketardi.
+        self.app.refresh_today();
         ui::draw(ctx, &mut self.app);
     }
 }

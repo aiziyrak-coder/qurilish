@@ -23,7 +23,19 @@ fn date(s: &str) -> NaiveDate {
 /// O'qib bo'lmasa kun boshiga tushadi — yozuv yo'qolib ketgandan ko'ra
 /// noaniq vaqt bilan turgani yaxshiroq, va bu ekranda ko'rinadi.
 pub fn parse_stamp(s: &str) -> NaiveDateTime {
-    let clean = s.trim().trim_end_matches('Z');
+    let t = s.trim();
+    // Oxiridagi `Z` yoki `+05:00` — bu vaqt **boshqa mintaqada** yozilgan.
+    // Serverdan kelgan har bir vaqt UTC da keladi, shuning uchun uni
+    // mahalliy vaqtga keltirmasak, telefondan soat 08:00 da qo'yilgan
+    // belgi ilovada 03:00 bo'lib ko'rinardi va kech soatdagi belgi
+    // boshqa kunga tushib ketardi.
+    //
+    // Ilovaning o'zi yozgan vaqtda siljish yo'q — u allaqachon mahalliy
+    // va o'zgartirilmaydi.
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(t) {
+        return dt.with_timezone(&chrono::Local).naive_local();
+    }
+    let clean = t.trim_end_matches('Z');
     NaiveDateTime::parse_from_str(clean, "%Y-%m-%dT%H:%M:%S")
         .or_else(|_| NaiveDateTime::parse_from_str(clean, "%Y-%m-%d %H:%M:%S"))
         .unwrap_or_else(|_| date(clean).and_hms_opt(0, 0, 0).unwrap_or_default())
@@ -9752,12 +9764,10 @@ impl Db {
                 self.insert_payment(&row);
             }
 
-            // Kvartira holati shartnomaga ergashadi.
-            if let Some(want) = crate::sales::status_for(Some(&deal)) {
-                let mut copy = u.clone();
-                copy.status = want;
-                self.update_unit(&copy);
-            }
+            // Kvartira holati shartnomaga ergashadi — umumiy qoidadan.
+            let mut copy = u.clone();
+            copy.status = crate::sales::unit_status(&copy, std::slice::from_ref(&deal));
+            self.update_unit(&copy);
         }
     }
 

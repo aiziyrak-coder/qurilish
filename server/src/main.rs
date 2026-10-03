@@ -51,6 +51,33 @@ pub fn plus_days(days: i64) -> String {
         .to_string()
 }
 
+/// UTC yozuvni maydoncha vaqtiga keltiradi (ko'rsatish uchun).
+///
+/// Bazadagi vaqt UTC bo'lib qoladi — bu yerda faqat **ko'rinishi**
+/// o'zgaradi. Siljishi ko'rsatilmagan matn o'zgartirilmaydi: u qayerdan
+/// kelganini bilmaymiz va taxmin qilish xato vaqt berardi.
+pub fn in_zone(iso: &str, tz_minutes: i32) -> String {
+    let t = iso.trim();
+    let Ok(dt) = chrono::DateTime::parse_from_rfc3339(t) else {
+        return t.to_string();
+    };
+    let Some(off) = chrono::FixedOffset::east_opt(tz_minutes * 60) else {
+        return t.to_string();
+    };
+    dt.with_timezone(&off)
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
+}
+
+/// Maydonchadagi bugungi sana, `YYYY-MM-DD`.
+pub fn site_today(tz_minutes: i32) -> String {
+    in_zone(&now(), tz_minutes)
+        .split('T')
+        .next()
+        .unwrap_or("")
+        .to_string()
+}
+
 /// `minutes` daqiqa oldingi vaqt — urinishlar oynasining boshi.
 pub fn minus_minutes(minutes: i64) -> String {
     (chrono::Utc::now() - chrono::Duration::minutes(minutes))
@@ -148,6 +175,9 @@ Muhit o'zgaruvchilari:
   QURAI_DB     baza fayli (sukut: qurai-server.db)
   QURAI_HTTPS  1 — server HTTPS beruvchi proksi ortida: seans belgisiga
                `Secure` qo'yiladi va u HTTP orqali ketmaydi
+  QURAI_TZ     maydoncha vaqt mintaqasi, masalan `+05:00` (sukut: server
+               kompyuterining mintaqasi). Telefondagi «bugun» va soat shu
+               bo'yicha hisoblanadi; bazada vaqt UTC da qoladi
 
 Internetga chiqarishda HTTPS beruvchi teskari proksi ortiga qo'ying.";
 
@@ -346,6 +376,16 @@ fn serve(state: Arc<AppState>) {
             }
         };
         println!("QURAi server: http://{bind}");
+        // Mintaqa ko'rinib tursin: noto'g'ri siljish bilan «bugun» boshqa
+        // kun bo'lib qolardi va buni keyin topish qiyin.
+        let tz = state.config.tz_minutes;
+        println!(
+            "Maydoncha vaqti: UTC{}{:02}:{:02} · bugun {}",
+            if tz < 0 { '-' } else { '+' },
+            tz.abs() / 60,
+            tz.abs() % 60,
+            site_today(tz)
+        );
         let local = bind.starts_with("127.0.0.1") || bind.starts_with("localhost");
         if !local {
             println!(
@@ -483,6 +523,28 @@ mod tests {
         let mut out = Vec::new();
         sock.read_to_end(&mut out).await.expect("o'qish");
         String::from_utf8_lossy(&out).to_string()
+    }
+
+    /// Maydoncha vaqti UTC dan siljiydi va kun chegarasi ham siljiydi.
+    ///
+    /// Toshkentda (UTC+5) yarim tundan keyingi belgi UTC da hali
+    /// **kechagi** kunga tegishli edi: tunda kirgan ishchi ertalab yana
+    /// «Kirdim» tugmasini ko'rardi va kunlik yozuv formasi kechagi sanani
+    /// taklif qilardi.
+    #[test]
+    fn site_time_moves_the_day_boundary() {
+        // UTC yarim tundan oldin — Toshkentda allaqachon ertangi kun.
+        assert_eq!(in_zone("2026-10-03T21:30:00Z", 300), "2026-10-04T02:30:00");
+        assert_eq!(in_zone("2026-10-03T03:00:00Z", 300), "2026-10-03T08:00:00");
+        // Manfiy siljish ham ishlaydi.
+        assert_eq!(in_zone("2026-10-03T02:00:00Z", -210), "2026-10-02T22:30:00");
+        // Siljish nol — vaqt o'zgarmaydi.
+        assert_eq!(in_zone("2026-10-03T03:00:00Z", 0), "2026-10-03T03:00:00");
+        // Siljishi ko'rsatilmagan matn o'zgartirilmaydi.
+        assert_eq!(in_zone("2026-10-03", 300), "2026-10-03");
+        assert_eq!(in_zone("", 300), "");
+        // Bugungi sana — o'n belgi.
+        assert_eq!(site_today(300).len(), 10);
     }
 
     /// Rollar ro'yxati va huquqlar bir-biriga mos.

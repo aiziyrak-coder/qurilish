@@ -655,7 +655,10 @@ fn board_tab(ui: &mut egui::Ui, app: &mut App) {
 /// Bitta katak. Bosilgan bo'lsa `true`.
 fn cell(ui: &mut egui::Ui, app: &App, u: &Unit) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(CELL_W, CELL_H), Sense::click());
-    let color = status_color(u.status);
+    // Rang shartnomadan kelib chiqadi — hisobot va yig'indi bilan bitta
+    // qoidadan, aks holda shaxmatka boshqa narsa ko'rsatardi.
+    let status = sales::unit_status(u, &app.deals);
+    let color = status_color(status);
     let selected = app.selected_unit == Some(u.id);
     let p = ui.painter();
 
@@ -714,7 +717,7 @@ fn cell(ui: &mut egui::Ui, app: &App, u: &Unit) -> bool {
     let label = format!(
         "{} · {} · {} m² · {}",
         u.number,
-        u.status.label(),
+        status.label(),
         super::materials::trim_num(u.area),
         money(u.price())
     );
@@ -722,7 +725,20 @@ fn cell(ui: &mut egui::Ui, app: &App, u: &Unit) -> bool {
 }
 
 fn legend(ui: &mut egui::Ui, app: &App) {
-    let count = |s: UnitStatus| app.units.iter().filter(|u| u.status == s).count();
+    // Son shaxmatkada ko'rinayotgan birliklar bo'yicha: avval butun
+    // obyekt bo'yicha sanalardi va taxtadagi kataklar bilan to'g'ri
+    // kelmasdi.
+    let shown: Vec<&Unit> = app
+        .units
+        .iter()
+        .filter(|u| app.sales_block.is_none_or(|b| u.block_id == b))
+        .collect();
+    let count = |s: UnitStatus| {
+        shown
+            .iter()
+            .filter(|u| sales::unit_status(u, &app.deals) == s)
+            .count()
+    };
     ui.horizontal_wrapped(|ui| {
         for s in UnitStatus::ALL {
             let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
@@ -749,6 +765,10 @@ fn unit_card(ui: &mut egui::Ui, app: &mut App) {
         return;
     };
     let mut u = src.clone();
+    // Holat qoidadan oldindan hisoblanadi: UI bloki ichida `app` band
+    // bo'ladi, qoida esa bitta joydan o'qilishi kerak.
+    let derived = sales::unit_status(&u, &app.deals);
+    let has_deal = sales::active_deal(&app.deals, u.id).is_some();
     let mut changed = false;
     let mut make_deal = false;
     let mut go_deal: Option<i64> = None;
@@ -852,18 +872,28 @@ fn unit_card(ui: &mut egui::Ui, app: &mut App) {
                             ui.label(RichText::new(money(u.price())).size(14.0).strong());
                         });
                         fld(ui, t("col_status"), |ui| {
-                            egui::ComboBox::from_id_salt("uc_status")
-                                .selected_text(
-                                    RichText::new(u.status.label()).color(status_color(u.status)),
-                                )
-                                .width(150.0)
-                                .show_ui(ui, |ui| {
-                                    for s in UnitStatus::ALL {
-                                        changed |= ui
-                                            .selectable_value(&mut u.status, *s, s.label())
-                                            .changed();
-                                    }
-                                });
+                            let st = derived;
+                            if has_deal {
+                                // Shartnoma bor — holat shundan kelib
+                                // chiqadi. Qo'lda o'zgartirilsa, shaxmatka
+                                // shartnomaga zid bo'lib qolardi.
+                                ui.label(RichText::new(st.label()).color(status_color(st)));
+                            } else {
+                                // Shartnomasiz birlikda odam faqat bitta
+                                // narsani hal qiladi: sotuvdami yoki yo'q.
+                                egui::ComboBox::from_id_salt("uc_status")
+                                    .selected_text(
+                                        RichText::new(st.label()).color(status_color(st)),
+                                    )
+                                    .width(150.0)
+                                    .show_ui(ui, |ui| {
+                                        for s in [UnitStatus::Free, UnitStatus::Unavailable] {
+                                            changed |= ui
+                                                .selectable_value(&mut u.status, s, s.label())
+                                                .changed();
+                                        }
+                                    });
+                            }
                         });
                         fld(ui, t("col_layout"), |ui| {
                             changed |= ui
@@ -1075,17 +1105,21 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App) {
                             )
                             .changed();
                         cell_r(ui, 140.0, RichText::new(money(u.price())).size(12.5));
-                        egui::ComboBox::from_id_salt(("ul_st", u.id))
-                            .selected_text(
-                                RichText::new(u.status.label()).color(status_color(u.status)),
-                            )
-                            .width(130.0)
-                            .show_ui(ui, |ui| {
-                                for s in UnitStatus::ALL {
-                                    changed |=
-                                        ui.selectable_value(&mut u.status, *s, s.label()).changed();
-                                }
-                            });
+                        let st = sales::unit_status(&u, &app.deals);
+                        if sales::active_deal(&app.deals, u.id).is_some() {
+                            cell_l(ui, 130.0, RichText::new(st.label()).color(status_color(st)));
+                        } else {
+                            egui::ComboBox::from_id_salt(("ul_st", u.id))
+                                .selected_text(RichText::new(st.label()).color(status_color(st)))
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    for s in [UnitStatus::Free, UnitStatus::Unavailable] {
+                                        changed |= ui
+                                            .selectable_value(&mut u.status, s, s.label())
+                                            .changed();
+                                    }
+                                });
+                        }
                         let client = sales::active_deal(&app.deals, u.id)
                             .map(|d| d.client.clone())
                             .unwrap_or_else(|| t("dash").to_string());

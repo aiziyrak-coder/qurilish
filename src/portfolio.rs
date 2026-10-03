@@ -178,13 +178,26 @@ fn one(db: &Db, p: &Project, today: NaiveDate) -> ProjectSummary {
         units_sold: units
             .iter()
             .filter(|u| {
-                crate::sales::status_for(deals.iter().find(|d| d.unit_id == u.id))
-                    .unwrap_or(u.status)
-                    == crate::domain::UnitStatus::Sold
+                matches!(
+                    crate::sales::unit_status(u, &deals),
+                    crate::domain::UnitStatus::Sold | crate::domain::UnitStatus::Contract
+                )
             })
             .count(),
         units_total: units.len(),
-        sales_paid: payments.iter().map(|x| x.paid).sum(),
+        // Faqat bekor qilinmagan shartnomalar bo'yicha tushum. Sotuv
+        // ekranidagi «tushdi» ham shunday hisoblanadi; avval portfel bekor
+        // qilingan shartnoma pulini ham qo'shib, ikki ekranda ikki xil son
+        // chiqarardi.
+        sales_paid: payments
+            .iter()
+            .filter(|x| {
+                deals
+                    .iter()
+                    .any(|d| d.id == x.deal_id && d.status != crate::domain::DealStatus::Cancelled)
+            })
+            .map(|x| x.paid)
+            .sum(),
     }
 }
 

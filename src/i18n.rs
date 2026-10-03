@@ -6355,6 +6355,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "График пуст — нажмите «Пересобрать график»",
         ),
         "schedule_rebuilt" => ("To'lov grafigi qayta qurildi", "График платежей пересобран"),
+        "schedule_kept" => (
+            "tushgan to'lov saqlandi",
+            "поступивших платежей сохранено",
+        ),
         "schedule_mismatch" => (
             "Grafik summasi shartnoma summasiga to'g'ri kelmaydi.",
             "Сумма графика не совпадает с суммой договора.",

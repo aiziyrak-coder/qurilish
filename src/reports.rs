@@ -1245,7 +1245,7 @@ fn sales(app: &App, name: String) -> Table {
                 Cell::Num(u.area),
                 Cell::Money(u.price_per_m2),
                 Cell::Money(u.price()),
-                txt(crate::sales::status_for(deal).unwrap_or(u.status).label()),
+                txt(crate::sales::unit_status(u, &app.deals).label()),
                 txt(deal.map(|d| d.client.clone()).unwrap_or_default()),
             ]
         })

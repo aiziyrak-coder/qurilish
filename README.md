@@ -582,6 +582,13 @@ qurai-server --add-user prorab "Ism Familiya" foreman
 QURAI_BIND=0.0.0.0:8080 QURAI_DB=/var/qurai/server.db QURAI_HTTPS=1 qurai-server
 ```
 
+`QURAI_TZ=+05:00` — maydoncha vaqt mintaqasi. Telefondagi «bugun» va soat shu
+bo'yicha hisoblanadi, bazada esa vaqt UTC da qoladi. Qo'yilmasa server
+kompyuterining mintaqasi olinadi. Bu muhim: siljishsiz, Toshkentda yarim tundan
+ertalabki beshgacha server hali **kechagi** kunda turardi — tunda kirgan ishchi
+ertalab yana «Kirdim» tugmasini ko'rardi va kunlik yozuv formasi kechagi sanani
+taklif qilardi.
+
 `QURAI_HTTPS=1` — server HTTPS beruvchi proksi ortida turganini aytadi va seans
 belgisiga `Secure` qo'yiladi: shundan keyin brauzer belgini HTTP orqali umuman
 yubormaydi. Bu **sozlama**, taxmin emas — `X-Forwarded-Proto` sarlavhasini
