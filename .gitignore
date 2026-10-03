@@ -3,3 +3,7 @@
 *.db
 *.db-wal
 *.db-shm
+
+# O'rnatuvchi yig'ilishi va tayyor fayl — git da saqlanmaydi.
+/dist
+/installer/target

@@ -1,0 +1,90 @@
+﻿QURAi 1.1.0 — tekshiruv ro'yxati
+
+Har bandni ochib ko'ring va yoniga belgi qo'ying:
+  [+] ishlaydi    [-] ishlamaydi yoki noto'g'ri    [?] tushunarsiz
+
+Kamchilik topsangiz quyidagicha yozing:
+  Qaysi bo'lim / Nima qildim / Nima kutgandim / Nima bo'ldi
+
+-------------------------------------------------------------------------
+1. OBYEKT VA REJA
+-------------------------------------------------------------------------
+[ ] Obyekt pasporti ochiladi, maydonlar to'ldiriladi va saqlanadi
+[ ] Yangi obyekt yaratiladi (chap pastdagi tugma)
+[ ] GPR — Gantt diagrammasi ko'rinadi, kritik yo'l qizil
+[ ] Ishni sichqoncha bilan surish va cho'zish ishlaydi
+[ ] Bog'lanish qo'shiladi; sikl hosil qiluvchisi rad etiladi
+[ ] PPR — kartalar, resurs gistogrammasi, ishlar qoplanishi
+
+-------------------------------------------------------------------------
+2. TEKSHIRUVLAR
+-------------------------------------------------------------------------
+[ ] AI loyiha tekshiruvi — nomuvofiqliklar ro'yxati chiqadi
+[ ] AI smeta tekshiruvi — pozitsiyalar va signallar
+[ ] Har signal bosilganda tegishli joyga olib boradi
+[ ] "Ma'lumot yo'q" holatida hukm chiqarilmasligi (soxta son yo'q)
+
+-------------------------------------------------------------------------
+3. KUNDALIK ISH
+-------------------------------------------------------------------------
+[ ] Ishlar jurnali — yozuv qo'shiladi, foto biriktiriladi
+[ ] Foto nazorati — sana, joy, tahrir qilingani haqida izoh
+[ ] Tabel — ishchi qo'shiladi, kun belgilanadi, soat hisoblanadi
+[ ] Ijro hujjatlari — hujjat yaratiladi va imzolanadi
+[ ] Imzo daftari — zanjir butunligi ko'rsatiladi
+
+-------------------------------------------------------------------------
+4. TA'MINOT
+-------------------------------------------------------------------------
+[ ] Ariza yaratiladi, raqami takrorlanmaydi
+[ ] Xarid, yetkazib berish, ombor kirimi zanjiri
+[ ] Ombor qoldiqlari to'g'ri hisoblanadi
+[ ] Materiallar — narx bazasi yuklanadi, narx solishtiriladi
+
+-------------------------------------------------------------------------
+5. SOTUV (kvartiralar)
+-------------------------------------------------------------------------
+[ ] Blok yaratiladi; nom, birinchi qavat va qavatlar soni o'zgartiriladi
+[ ] Kvartiralar generatori ishlaydi
+[ ] Shaxmatka: bo'sh / band / shartnoma / sotilgan ranglari
+[ ] Shartnoma yaratiladi, to'lov grafigi quriladi
+[ ] To'lov kiritiladi — qarz va tushum o'zgaradi
+[ ] Shartnoma bekor qilinsa — kvartira bo'shaydi
+[ ] Grafikni qayta qurish TUSHGAN PULNI SAQLAYDI
+[ ] Naqd / kredit / subsidiya / barter turlari
+[ ] Qarz yoshi (30 / 90 / 90+ kun) to'g'ri guruhlanadi
+
+-------------------------------------------------------------------------
+6. SIFAT VA XAVFSIZLIK
+-------------------------------------------------------------------------
+[ ] Sifat nuqsoni yaratiladi, bartaraf etiladi
+[ ] Xavfsizlik tekshiruvi va ko'rsatma
+[ ] Ishchi ruxsatnomasi muddati kuzatiladi
+
+-------------------------------------------------------------------------
+7. HISOBOT VA EKSPORT
+-------------------------------------------------------------------------
+[ ] Hisobotlar bo'limida hisobot yaratiladi
+[ ] Excel ga eksport — fayl ochiladi va sonlar to'g'ri
+[ ] PDF ga eksport — fayl ochiladi
+[ ] Ekrandagi son bilan hisobotdagi son BIR XIL
+
+-------------------------------------------------------------------------
+8. UMUMIY
+-------------------------------------------------------------------------
+[ ] Ctrl+K — umumiy qidiruv hamma bo'lim bo'ylab ishlaydi
+[ ] Til o'zbekcha <-> ruscha almashadi, ma'lumot buzilmaydi
+[ ] Qorong'i ko'rinish o'qilarli
+[ ] Oyna kichraytirilganda ham hamma narsa ko'rinadi
+[ ] Dastur yopilib qayta ochilganda hamma narsa joyida
+[ ] Sozlamalar -> zaxira nusxa olinadi
+
+-------------------------------------------------------------------------
+ALOHIDA E'TIBOR
+-------------------------------------------------------------------------
+[ ] Biror joyda SON NOTO'G'RI ko'rsatilayotgani
+[ ] Bir xil son ikki ekranda HAR XIL ko'rsatilayotgani
+[ ] Dastur o'zi yopilib qolgani (qachon va nimadan keyin)
+[ ] Kiritilgan ma'lumot yo'qolgani
+[ ] Tushunarsiz yoki noto'g'ri tarjima qilingan yozuv
+[ ] Juda sekin ishlaydigan joy

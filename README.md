@@ -11,6 +11,28 @@ smetani tekshirish, ijro hujjatlari va kundalik ishlar jurnali.
 паспорт объекта, ГПР с расчетом критического пути, ППР, межразделная проверка
 проекта, проверка смет, исполнительная документация и журнал работ.*
 
+## Mijozga beriladigan fayl
+
+Bitta fayl: `QURAi-1.1.0-ornatish.exe` (~25 MB). Ichida dastur, server va
+hujjatlar turadi. Ikki qadamda yig'iladi — o'rnatuvchi tayyor `exe` larni
+o'z ichiga oladi, shuning uchun ulardan **keyin** yig'ilishi kerak:
+
+```bash
+cargo build --release --workspace
+cargo build --release --manifest-path installer/Cargo.toml
+```
+
+Tayyor fayl: `installer/target/release/qurai-ornatish.exe`.
+
+O'rnatuvchi **administrator huquqini so'ramaydi**: dastur `Program Files`
+ga emas, `%LOCALAPPDATA%\Programs\QURAi` ga tushadi. U ish stolida va
+«Boshlash» menyusida yorliq qo'yadi, «Dasturlar va imkoniyatlar»
+ro'yxatiga qo'shiladi (`HKCU`) va `ochirish.cmd` yozadi. O'chirishda
+ma'lumot bazasi **so'ralmasdan o'chirilmaydi**.
+
+Fayl imzolanmagan, shuning uchun Windows «Noma'lum nashriyot» deb
+ogohlantiradi — buni mijozga oldindan aytish kerak.
+
 ## Ishga tushirish
 
 ```bash

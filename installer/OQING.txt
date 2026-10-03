@@ -1,0 +1,84 @@
+﻿QURAi — Qurilish intellektual platformasi
+Versiya 1.1.0 · Windows uchun
+
+=========================================================================
+O'RNATISH
+=========================================================================
+
+Faylni ikki marta bosing. Dastur o'z papkangizga tushadi va ish stolida
+yorliq paydo bo'ladi. Administrator huquqi kerak emas.
+
+Joyi:  C:\Users\<siz>\AppData\Local\Programs\QURAi
+
+Windows "Noma'lum nashriyot" deb ogohlantirishi mumkin — bu dastur
+imzolanmagani uchun, ichida zararli narsa borligidan emas. "Qo'shimcha
+ma'lumot" -> "Baribir ishga tushirish" ni bosing.
+
+=========================================================================
+NIMA KERAK
+=========================================================================
+
+- Windows 10 yoki 11
+- Internet KERAK EMAS. Dastur to'liq kompyuterda ishlaydi.
+- Hech qanday boshqa dastur, kutubxona yoki ro'yxatdan o'tish shart emas.
+
+=========================================================================
+BIRINCHI OCHILISH
+=========================================================================
+
+Dastur birinchi ochilganda namuna obyekti yaratiladi: "240 o'rinli
+bolalar bog'chasi" — 20 ta ish, 25 bog'lanish, smeta, jurnal yozuvlari,
+ijro hujjatlari, 72 kvartirali sotuv shaxmatkasi.
+
+Ya'ni hamma bo'limni darhol ochib ko'rishingiz mumkin, hech narsa
+kiritmasdan.
+
+Ma'lumotlaringiz shu yerda saqlanadi:
+  ...\Programs\QURAi\data\qurai.db
+
+Bitta fayl. Nusxa olsangiz — hammasi saqlanadi. Sozlamalar bo'limida
+"Zaxira nusxa" tugmasi ham bor.
+
+=========================================================================
+TIL
+=========================================================================
+
+O'zbekcha va ruscha. Sozlamalar bo'limidan almashtiriladi.
+Yorug' va qorong'i ko'rinish ham bor.
+
+=========================================================================
+SERVER (shart emas)
+=========================================================================
+
+qurai-server.exe — telefondan kirish, bir necha qurilma orasida almashish
+va masofadan imzolash uchun. Ishlatmasangiz ham dastur to'liq ishlaydi.
+
+Kerak bo'lsa buyruq satrida:
+  qurai-server.exe --add-user prorab "Ism Familiya" foreman
+  qurai-server.exe
+
+Keyin telefon brauzeridan kompyuter manziliga kirasiz.
+Internetga chiqarilsa HTTPS beruvchi proksi ortiga qo'yish SHART.
+
+=========================================================================
+O'CHIRISH
+=========================================================================
+
+Papkadagi ochirish.cmd ni ishga tushiring. Ma'lumot bazasi
+so'ralmasdan o'chirilmaydi.
+
+=========================================================================
+KAMCHILIK TOPSANGIZ
+=========================================================================
+
+TEKSHIRUV.txt faylida nimalarni ko'rib chiqish kerakligi ro'yxati bor.
+Topilgan kamchilikni shu ko'rinishda yozib bersangiz, tez tuzatiladi:
+
+  Qaysi bo'lim:
+  Nima qildim (qadamma-qadam):
+  Nima kutgandim:
+  Nima bo'ldi:
+  (bo'lsa) Ekran rasmi
+
+Dastur o'zi yopilib qolsa yoki qotib qolsa — buni ham yozing, qaysi
+amaldan keyin bo'lganini ko'rsating.

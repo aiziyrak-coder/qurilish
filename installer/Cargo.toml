@@ -1,0 +1,23 @@
+# O'rnatuvchi asosiy ish maydonidan tashqarida turadi: u tayyor
+# `qurai.exe` ni o'z ichiga oladi, ya'ni undan **keyin** yig'ilishi kerak.
+# Ish maydoni a'zosi bo'lganda `cargo build --workspace` birinchi marta
+# yiqilardi — fayl hali yo'q edi.
+[workspace]
+
+[package]
+name = "qurai-setup"
+version = "1.1.0"
+edition = "2021"
+description = "QURAi o'rnatuvchisi"
+
+[[bin]]
+name = "qurai-ornatish"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+opt-level = "z"
+lto = true
+strip = true
+panic = "abort"
