@@ -51,6 +51,13 @@ pub fn plus_days(days: i64) -> String {
         .to_string()
 }
 
+/// `minutes` daqiqa oldingi vaqt — urinishlar oynasining boshi.
+pub fn minus_minutes(minutes: i64) -> String {
+    (chrono::Utc::now() - chrono::Duration::minutes(minutes))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string()
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let config = Config::from_env();
@@ -139,6 +146,8 @@ Rollar: admin, director, pm, foreman, brigadier, supervisor, designer,
 Muhit o'zgaruvchilari:
   QURAI_BIND   tinglash manzili (sukut: 127.0.0.1:8080)
   QURAI_DB     baza fayli (sukut: qurai-server.db)
+  QURAI_HTTPS  1 — server HTTPS beruvchi proksi ortida: seans belgisiga
+               `Secure` qo'yiladi va u HTTP orqali ketmaydi
 
 Internetga chiqarishda HTTPS beruvchi teskari proksi ortiga qo'ying.";
 
@@ -219,6 +228,47 @@ const ROLES: [&str; 12] = [
     "accountant",
 ];
 
+/// Har javobga qo'yiladigan xavfsizlik sarlavhalari.
+///
+/// Bular brauzerga **nimaga ruxsat yo'q** ekanini aytadi:
+///
+/// - `nosniff` — brauzer fayl turini o'zi taxmin qilmaydi;
+/// - `frame-ancestors 'none'` va `X-Frame-Options` — sahifani boshqa
+///   saytning ichiga qo'yib bo'lmaydi, shu sababli bosishni o'g'irlash
+///   ishlamaydi;
+/// - `default-src 'self'` — rasm, uslub va skript faqat shu serverdan;
+/// - `form-action 'self'` — forma boshqa manzilga yuborilmaydi;
+/// - `no-referrer` — obyekt nomi boshqa saytga sarlavha bilan ketmaydi.
+///
+/// Chegara ochiq aytiladi: sahifalardagi kichik skriptlar HTML ichida
+/// turadi, shuning uchun `script-src` da `'unsafe-inline'` qolgan. Ya'ni
+/// CSP tashqi manbadan skript yuklanishini va sahifani ramkaga olishni
+/// to'sadi, lekin sahifaga qo'shib qo'yilgan skriptdan himoya qilmaydi —
+/// undan HTML ga tushadigan har bir matnni qochirish himoya qiladi (`esc`).
+const CSP: &str = concat!(
+    "default-src 'self'; img-src 'self' data:; ",
+    "style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; ",
+    "connect-src 'self'; form-action 'self'; ",
+    "frame-ancestors 'none'; base-uri 'none'"
+);
+
+async fn security_headers(
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use axum::http::HeaderValue;
+    let mut resp = next.run(req).await;
+    let h = resp.headers_mut();
+    h.insert(
+        "x-content-type-options",
+        HeaderValue::from_static("nosniff"),
+    );
+    h.insert("x-frame-options", HeaderValue::from_static("DENY"));
+    h.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
+    h.insert("content-security-policy", HeaderValue::from_static(CSP));
+    resp
+}
+
 /// Yo'llar jadvali. Bitta joyda turadi — nima ochiq ekani ko'rinib tursin.
 pub fn router(state: Arc<AppState>) -> Router {
     Router::new()
@@ -268,6 +318,9 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/o/{project}/timesheet", get(web::timesheet_form))
         .route("/o/{project}/timesheet", post(web::timesheet_submit))
         .route("/api/signatures", get(api::signatures))
+        // Sarlavhalar hamma javobga qo'yiladi — sinovlarda ham, chunki
+        // ular shu `router` ni ishlatadi.
+        .layer(axum::middleware::from_fn(security_headers))
         .with_state(state)
 }
 
@@ -293,15 +346,66 @@ fn serve(state: Arc<AppState>) {
             }
         };
         println!("QURAi server: http://{bind}");
-        if !bind.starts_with("127.0.0.1") && !bind.starts_with("localhost") {
+        let local = bind.starts_with("127.0.0.1") || bind.starts_with("localhost");
+        if !local {
             println!(
                 "Diqqat: server tarmoqqa ochiq. HTTPS beruvchi teskari proksi ortiga qo'ying."
             );
+            if !state.config.https {
+                println!("Diqqat: QURAI_HTTPS qo'yilmagan — seans belgisiga `Secure` qo'yilmaydi.");
+                println!("Proksi HTTPS bersa, `QURAI_HTTPS=1` ni ham qo'ying.");
+            }
         }
-        if let Err(e) = axum::serve(listener, router(state)).await {
+
+        // Muddati o'tgan seans va eski urinish yozuvlari fonda tozalanadi.
+        // Ishga tushishdagi bitta tozalash uzoq ishlab turgan serverda
+        // yetmaydi: jadvallar oylar davomida o'sib borardi.
+        let keeper = state.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+                keeper.store.purge_sessions(&now());
+                keeper
+                    .store
+                    .purge_login_tries(&minus_minutes(auth::TRY_WINDOW_MINUTES));
+            }
+        });
+
+        let served = run(listener, state, shutdown()).await;
+        if let Err(e) = served {
             eprintln!("server to'xtadi: {e}");
         }
+        println!("to'xtadi.");
     });
+}
+
+/// So'rovlarni qabul qiladi va `stop` tugaganda shafqatli to'xtaydi.
+///
+/// To'xtash belgisi **parametr** qilib olingan: shunda sinov uni o'zi
+/// berib, haqiqiy portda to'xtash xatti-harakatini tekshira oladi.
+/// `Ctrl+C` ni sinovda hosil qilib bo'lmaydi.
+pub async fn run(
+    listener: tokio::net::TcpListener,
+    state: Arc<AppState>,
+    stop: impl std::future::Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
+    axum::serve(listener, router(state))
+        .with_graceful_shutdown(stop)
+        .await
+}
+
+/// `Ctrl+C` ni kutadi.
+///
+/// Shuning uchun kerak: belgi kelganda server yangi so'rov qabul qilmaydi,
+/// lekin **ketayotgan** so'rovlar tugatiladi. Avval ulanish o'rtasida
+/// uzilardi — telefon yozuv yuborilmadi deb ko'rsatib, yozuv esa bazaga
+/// tushib qolishi mumkin edi.
+async fn shutdown() {
+    if tokio::signal::ctrl_c().await.is_err() {
+        // Belgini kuzatib bo'lmasa, to'xtatishni kutib o'tirmaymiz.
+        return;
+    }
+    println!("to'xtatilmoqda: ketayotgan so'rovlar tugatiladi...");
 }
 
 #[cfg(test)]
@@ -319,6 +423,66 @@ mod tests {
         assert_eq!(n.len(), 20, "{n}");
         assert!(n.ends_with('Z'));
         assert!(plus_days(1) > n);
+    }
+
+    /// Server belgi kelganda to'xtaydi va porti bo'shaydi.
+    ///
+    /// Shu tekshiriladi: to'xtashdan **oldin** yuborilgan so'rov to'liq
+    /// javob oladi, to'xtagandan keyin esa port yopiladi. Avval `serve`
+    /// umuman to'xtash belgisini kutmasdi — `Ctrl+C` da ketayotgan
+    /// so'rovlar uzilib qolardi.
+    #[test]
+    fn the_server_stops_when_it_is_told_to() {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        rt.block_on(async {
+            let store = store::Store::memory().expect("baza");
+            let state = Arc::new(AppState {
+                store,
+                config: Config::default(),
+            });
+            // 0 — tizim bo'sh portni o'zi tanlaydi: sinov band portga
+            // bog'liq bo'lmasligi kerak.
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("port");
+            let addr = listener.local_addr().expect("manzil");
+            let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+            let server = tokio::spawn(run(listener, state, async {
+                let _ = rx.await;
+            }));
+
+            // To'xtashdan oldin so'rov o'tadi.
+            let before = tcp_get(addr, "/api/health").await;
+            assert!(before.starts_with("HTTP/1.1 200"), "{before}");
+
+            // Belgi beriladi va server o'zi tugaydi.
+            tx.send(()).expect("belgi");
+            let done = tokio::time::timeout(std::time::Duration::from_secs(5), server)
+                .await
+                .expect("server to'xtamadi")
+                .expect("vazifa");
+            assert!(done.is_ok(), "{done:?}");
+
+            // Port bo'shadi: yangi ulanish o'rnatilmaydi.
+            assert!(
+                tokio::net::TcpStream::connect(addr).await.is_err(),
+                "port hali ham ochiq"
+            );
+        });
+    }
+
+    /// Oddiy HTTP so'rovi: javobning birinchi qatorini qaytaradi.
+    async fn tcp_get(addr: std::net::SocketAddr, path: &str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut sock = tokio::net::TcpStream::connect(addr).await.expect("ulanish");
+        let req = format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+        sock.write_all(req.as_bytes()).await.expect("yuborish");
+        let mut out = Vec::new();
+        sock.read_to_end(&mut out).await.expect("o'qish");
+        String::from_utf8_lossy(&out).to_string()
     }
 
     /// Rollar ro'yxati va huquqlar bir-biriga mos.

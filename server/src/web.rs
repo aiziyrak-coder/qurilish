@@ -111,6 +111,25 @@ fn nonce_field() -> String {
     )
 }
 
+/// Seans cookie si.
+///
+/// `HttpOnly` — belgini sahifa kodidan o'qib bo'lmaydi.
+/// `SameSite=Lax` — boshqa saytdan yuborilgan so'rovda ishlatilmaydi.
+/// `Secure` — faqat HTTPS ortida (`QURAI_HTTPS=1`): u yoqilganda brauzer
+/// belgini HTTP orqali umuman yubormaydi. Mahalliy HTTP serverda esa
+/// `Secure` qo'yilsa cookie butunlay ishlamay qolardi, shuning uchun u
+/// sozlamaga bog'langan.
+///
+/// Cookie ikki joyda kerak — kirish va chiqish — va ikkisi bir xil
+/// chegaralarga ega bo'lishi shart: aks holda brauzer chiqishdagi cookie ni
+/// boshqa cookie deb bilib, eski belgini o'chirmasdan qoldirardi.
+fn session_cookie(state: &AppState, token: &str, max_age: i64) -> String {
+    format!(
+        "{COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{}",
+        if state.config.https { "; Secure" } else { "" }
+    )
+}
+
 /// Cookie dan seans belgisini oladi.
 fn token_of(headers: &HeaderMap) -> Option<String> {
     let raw = headers.get(header::COOKIE)?.to_str().ok()?;
@@ -184,27 +203,39 @@ pub struct LoginForm {
 
 /// `POST /login`
 pub async fn login(State(state): State<Arc<AppState>>, Form(form): Form<LoginForm>) -> Response {
-    let Some((user, hash)) = state.store.user_by_login(&form.login) else {
-        return login_page("Login yoki parol noto'g'ri").into_response();
-    };
-    if !user.active || !auth::verify_password(&form.password, &hash) {
+    // Chegara parolni tekshirishdan **oldin**: to'silgan login uchun
+    // Argon2 hisobi ham bajarilmaydi.
+    if auth::too_many_tries(&state.store, &form.login) {
         state
             .store
-            .log(&user.login, "kirish-rad", "web", &crate::now());
-        return login_page("Login yoki parol noto'g'ri").into_response();
+            .log(&form.login, "kirish-to'sildi", "web", &crate::now());
+        return login_page(auth::TOO_MANY_MESSAGE).into_response();
     }
+
+    let found = state.store.user_by_login(&form.login);
+    // Parol har holatda tekshiriladi — login topilmaganda ham. Shu sababli
+    // javob vaqti mavjud loginni oshkor qilmaydi.
+    let ok =
+        auth::verify_password_or_dummy(&form.password, found.as_ref().map(|(_, h)| h.as_str()));
+    let user = match found {
+        Some((u, _)) if ok && u.active => u,
+        _ => {
+            state.store.note_login_fail(&form.login, &crate::now());
+            state
+                .store
+                .log(&form.login, "kirish-rad", "web", &crate::now());
+            return login_page("Login yoki parol noto'g'ri").into_response();
+        }
+    };
+
     let token = auth::new_token();
     state
         .store
         .open_session(user.id, &token, &crate::plus_days(auth::SESSION_DAYS));
+    state.store.clear_login_fails(&user.login);
     state.store.log(&user.login, "kirdi", "web", &crate::now());
 
-    // `HttpOnly` — belgini sahifa kodidan o'qib bo'lmaydi.
-    // `SameSite=Lax` — boshqa saytdan yuborilgan so'rovda ishlatilmaydi.
-    let cookie = format!(
-        "{COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={}",
-        auth::SESSION_DAYS * 24 * 3600
-    );
+    let cookie = session_cookie(&state, &token, auth::SESSION_DAYS * 24 * 3600);
     let mut resp = Redirect::to("/").into_response();
     if let Ok(v) = cookie.parse() {
         resp.headers_mut().insert(header::SET_COOKIE, v);
@@ -218,7 +249,7 @@ pub async fn logout(State(state): State<Arc<AppState>>, headers: HeaderMap) -> R
         state.store.close_session(&token);
     }
     let mut resp = Redirect::to("/").into_response();
-    if let Ok(v) = format!("{COOKIE}=; Path=/; HttpOnly; Max-Age=0").parse() {
+    if let Ok(v) = session_cookie(&state, "", 0).parse() {
         resp.headers_mut().insert(header::SET_COOKIE, v);
     }
     resp

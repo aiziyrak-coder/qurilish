@@ -37,6 +37,45 @@ fn app() -> (axum::Router, Arc<AppState>) {
     (crate::router(state.clone()), state)
 }
 
+/// Sinov uchun server: HTTPS beruvchi proksi ortida turgani belgilangan.
+fn app_behind_https() -> (axum::Router, Arc<AppState>) {
+    let store = Store::memory().expect("baza");
+    let hash = crate::auth::hash_password("prorab-parol-1").expect("xesh");
+    store
+        .add_user("prorab", "Alisher", "foreman", &hash)
+        .unwrap();
+    let state = Arc::new(AppState {
+        store,
+        config: Config {
+            https: true,
+            ..Config::default()
+        },
+    });
+    (crate::router(state.clone()), state)
+}
+
+/// So'rov yuborib, javobning sarlavhalarini va matnini qaytaradi.
+async fn send_raw(
+    app: &axum::Router,
+    req: Request<Body>,
+) -> (StatusCode, axum::http::HeaderMap, String) {
+    let resp = app.clone().oneshot(req).await.expect("javob");
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let bytes = resp.into_body().collect().await.expect("tana").to_bytes();
+    (status, headers, String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// Forma so'rovi (telefon sahifalari shunday yuboradi).
+fn form(path: &str, body: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+        .body(Body::from(body.to_string()))
+        .expect("so'rov")
+}
+
 /// So'rov yuboradi va javob kodini hamda tanasini qaytaradi.
 async fn send(app: &axum::Router, req: Request<Body>) -> (StatusCode, Value) {
     let resp = app.clone().oneshot(req).await.expect("javob");
@@ -1605,5 +1644,220 @@ fn a_newline_in_the_object_name_does_not_break_the_answer() {
                 "{uri}: {to}"
             );
         }
+    });
+}
+
+/// Parolni cheksiz taxmin qilib bo'lmaydi.
+///
+/// Oldin faqat Argon2 ning sekinligi to'sib turardi: hujumchi parallel
+/// so'rov bilan baribir minglab parol sinab ko'rishi mumkin edi. Endi
+/// urinish sanaladi va chegaradan keyin **to'g'ri parol ham** kiritmaydi —
+/// shu sababli chegara haqiqatan ishlayotgani ko'rinadi.
+#[test]
+fn passwords_cannot_be_guessed_without_limit() {
+    runtime().block_on(async {
+        let (app, state) = app();
+
+        for i in 0..crate::auth::MAX_TRIES {
+            let (code, _) = send(
+                &app,
+                post(
+                    "/api/login",
+                    None,
+                    json!({ "login": "prorab", "password": "noto-g-ri" }),
+                ),
+            )
+            .await;
+            assert_eq!(code, StatusCode::UNAUTHORIZED, "{i}-urinish");
+        }
+
+        // Chegaradan keyin to'g'ri parol ham o'tmaydi.
+        let (code, body) = send(
+            &app,
+            post(
+                "/api/login",
+                None,
+                json!({ "login": "prorab", "password": "prorab-parol-1" }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::TOO_MANY_REQUESTS, "{body}");
+
+        // Boshqa foydalanuvchi ta'sirlanmaydi: chegara login bo'yicha.
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/login",
+                None,
+                json!({ "login": "nazorat", "password": "nazorat-parol-1" }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+
+        // Urinishlar jurnalga ham tushadi.
+        let actions: Vec<String> = state
+            .store
+            .recent_log(100)
+            .into_iter()
+            .map(|(_, a, _, _)| a)
+            .collect();
+        assert!(
+            actions.iter().any(|a| a == "kirish-to'sildi"),
+            "{actions:?}"
+        );
+        // Parol jurnalga tushmaydi.
+        assert!(!format!("{:?}", state.store.recent_log(100)).contains("prorab-parol-1"));
+    });
+}
+
+/// Muvaffaqiyatli kirish urinish hisobini nolga tushiradi.
+///
+/// Aks holda parolini bir-ikki marta chalkashtirgan odam kun bo'yi
+/// chegaraga yaqin turib qolardi.
+#[test]
+fn a_successful_login_clears_the_count() {
+    runtime().block_on(async {
+        let (app, state) = app();
+
+        for _ in 0..3 {
+            let (code, _) = send(
+                &app,
+                post(
+                    "/api/login",
+                    None,
+                    json!({ "login": "prorab", "password": "xato" }),
+                ),
+            )
+            .await;
+            assert_eq!(code, StatusCode::UNAUTHORIZED);
+        }
+        assert_eq!(state.store.login_fails("prorab", "2000-01-01T00:00:00Z"), 3);
+
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/login",
+                None,
+                json!({ "login": "prorab", "password": "prorab-parol-1" }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::OK);
+        assert_eq!(
+            state.store.login_fails("prorab", "2000-01-01T00:00:00Z"),
+            0,
+            "hisob tozalanmadi"
+        );
+    });
+}
+
+/// Seans belgisi HTTPS ortida `Secure` bo'ladi, mahalliy HTTP da yo'q.
+///
+/// `Secure` bo'lmasa, HTTPS da ishlayotgan serverga bir marta HTTP orqali
+/// murojaat qilinsa ham brauzer belgini ochiq yuborardi.
+#[test]
+fn the_session_cookie_is_secure_only_behind_https() {
+    runtime().block_on(async {
+        // Mahalliy HTTP: `Secure` qo'yilmaydi, aks holda cookie umuman
+        // ishlamay qolardi.
+        let (app, _) = app();
+        let (code, headers, _) =
+            send_raw(&app, form("/login", "login=prorab&password=prorab-parol-1")).await;
+        assert_eq!(code, StatusCode::SEE_OTHER);
+        let cookie = headers
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(cookie.contains("HttpOnly"), "{cookie}");
+        assert!(cookie.contains("SameSite=Lax"), "{cookie}");
+        assert!(!cookie.contains("Secure"), "{cookie}");
+
+        // HTTPS ortida: `Secure` qo'yiladi.
+        let (app, _) = app_behind_https();
+        let (code, headers, _) =
+            send_raw(&app, form("/login", "login=prorab&password=prorab-parol-1")).await;
+        assert_eq!(code, StatusCode::SEE_OTHER);
+        let cookie = headers
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(cookie.contains("Secure"), "{cookie}");
+        assert!(cookie.contains("HttpOnly"), "{cookie}");
+
+        // Chiqishdagi cookie ham xuddi shu chegaralarga ega bo'lishi kerak,
+        // aks holda brauzer eski belgini o'chirmasdan qoldirardi.
+        let (_, headers, _) = send_raw(&app, form("/logout", "")).await;
+        let out = headers
+            .get(header::SET_COOKIE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(out.contains("Max-Age=0"), "{out}");
+        assert!(out.contains("Secure"), "{out}");
+        assert!(out.contains("SameSite=Lax"), "{out}");
+    });
+}
+
+/// Har bir javob xavfsizlik sarlavhalari bilan keladi.
+#[test]
+fn every_response_carries_the_security_headers() {
+    runtime().block_on(async {
+        let (app, _) = app();
+        // Kirish sahifasi, JSON xatosi va statik fayl — uchalasi ham.
+        for req in [
+            get("/", None),
+            get("/api/projects", None),
+            get("/sw.js", None),
+        ] {
+            let (_, headers, _) = send_raw(&app, req).await;
+            assert_eq!(
+                headers.get("x-content-type-options").map(|v| v.as_bytes()),
+                Some(&b"nosniff"[..])
+            );
+            assert_eq!(
+                headers.get("x-frame-options").map(|v| v.as_bytes()),
+                Some(&b"DENY"[..])
+            );
+            assert_eq!(
+                headers.get("referrer-policy").map(|v| v.as_bytes()),
+                Some(&b"no-referrer"[..])
+            );
+            let csp = headers
+                .get("content-security-policy")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default();
+            assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
+            assert!(csp.contains("form-action 'self'"), "{csp}");
+            assert!(csp.contains("default-src 'self'"), "{csp}");
+        }
+    });
+}
+
+/// Yo'q login ham, xato parol ham bir xil javob va bir xil hisobga tushadi.
+///
+/// Javob matni bir xil ekani avval ham tekshirilgan; bu yerda tekshirilgani
+/// shu: yo'q login uchun ham urinish **sanaladi**, ya'ni mavjud loginni
+/// chegaraga urilishiga qarab ajratib bo'lmaydi.
+#[test]
+fn an_unknown_login_is_counted_like_a_real_one() {
+    runtime().block_on(async {
+        let (app, state) = app();
+        let (code, _) = send(
+            &app,
+            post(
+                "/api/login",
+                None,
+                json!({ "login": "yo-q-odam", "password": "parol" }),
+            ),
+        )
+        .await;
+        assert_eq!(code, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            state.store.login_fails("yo-q-odam", "2000-01-01T00:00:00Z"),
+            1
+        );
     });
 }

@@ -579,8 +579,14 @@ kunlik yozuv kiritilsa yoki hujjat masofadan imzolansa.
 
 ```bash
 qurai-server --add-user prorab "Ism Familiya" foreman
-QURAI_BIND=0.0.0.0:8080 QURAI_DB=/var/qurai/server.db qurai-server
+QURAI_BIND=0.0.0.0:8080 QURAI_DB=/var/qurai/server.db QURAI_HTTPS=1 qurai-server
 ```
+
+`QURAI_HTTPS=1` — server HTTPS beruvchi proksi ortida turganini aytadi va seans
+belgisiga `Secure` qo'yiladi: shundan keyin brauzer belgini HTTP orqali umuman
+yubormaydi. Bu **sozlama**, taxmin emas — `X-Forwarded-Proto` sarlavhasini
+proksisiz serverga mijozning o'zi yuborib qo'yishi mumkin. Qo'yilmagan bo'lsa va
+server tarmoqqa ochiq bo'lsa, dastur ishga tushishda eslatadi.
 
 Ilovada: «Sozlamalar → Server bilan sinxronizatsiya» — manzil, login va parol.
 Parol saqlanmaydi, faqat seans belgisi.
@@ -591,11 +597,37 @@ buyurtmachi kabineti. Sahifa bosh ekranga o'rnatiladi (PWA): aloqasiz
 ochiladi va yuborilmagan forma navbatda turadi — takror yozuvdan har
 formaning bir martalik belgisi himoya qiladi.
 
+Serverda doimiy ishlash uchun qo'yilgan himoyalar:
+
+- **Parolni taxmin qilishga chek.** Bitta login uchun 15 daqiqada 10 ta xato
+  urinishdan keyin kirish to'siladi — to'g'ri parol bilan ham. Chegara parol
+  tekshiruvidan **oldin** ishlaydi, ya'ni to'silgan urinish hisob ham
+  bajarmaydi. Muvaffaqiyatli kirish hisobni nolga tushiradi, shuning uchun
+  parolini chalkashtirgan odam chegaraga yaqin turib qolmaydi.
+- **Mavjud loginni vaqt bo'yicha ajratib bo'lmaydi.** Login topilmaganda ham
+  xuddi shunday Argon2 hisobi bajariladi; avval yo'q login darhol javob
+  berib, mavjud loginlar ro'yxatini yig'ishga yo'l qo'yardi.
+- **Seans cookie si**: `HttpOnly`, `SameSite=Lax` va HTTPS ortida `Secure`.
+- **Xavfsizlik sarlavhalari** har javobda: `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer` va CSP (`default-src 'self'`,
+  `form-action 'self'`, `frame-ancestors 'none'`).
+- **Shafqatli to'xtash**: `Ctrl+C` da yangi so'rov qabul qilinmaydi, lekin
+  ketayotgani tugatiladi — yozuv yarim yo'lda uzilib qolmaydi.
+- **Jadvallar o'smaydi**: muddati o'tgan seans va eski urinish yozuvlari har
+  soatda tozalanadi, nafaqat ishga tushishda.
+
 **Xavfsizlik chegarasi ochiq aytiladi:**
 
 - Server **HTTP** beradi. Internetga chiqarilganda **HTTPS beruvchi teskari
   proksi ortida** turishi shart (nginx, Caddy) — aks holda parol va seans
   belgisi tarmoqda ochiq ketadi. Dastur buni ishga tushirishda ham eslatadi.
+- Urinish chegarasi **bitta login** bo'yicha ishlaydi. Bitta parolni ko'p
+  login ustida sinab ko'rish (spraying) bu yerda to'xtamaydi — uning uchun
+  so'rov manzili kerak va u teskari proksining ishi.
+- CSP da `script-src 'unsafe-inline'` qolgan: telefon sahifalaridagi kichik
+  skriptlar HTML ichida turadi. Ya'ni CSP tashqi skript yuklanishini va
+  sahifani ramkaga olishni to'sadi, sahifaga qo'shib qo'yilgan skriptdan esa
+  HTML ga tushadigan har matnni qochirish himoya qiladi.
 - Ilova ichidagi rol — **ish taqsimoti**, himoya emas: baza fayli ochiq va uni
   har kim o'qiy oladi. Haqiqiy kirish nazorati serverda: parol Argon2id bilan
   xeshlanadi, seans belgisi tasodifiy, huquq har so'rovda tekshiriladi.

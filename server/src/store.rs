@@ -163,6 +163,14 @@ pub struct SummaryRow {
     pub value: String,
 }
 
+/// Login matnini qiyoslash uchun bitta ko'rinishga keltiradi.
+///
+/// `user` jadvalidagi login ham shu qoida bilan saqlanadi, shuning uchun
+/// urinish hisobi va foydalanuvchi izlash bir xil kalitni ko'radi.
+fn login_key(login: &str) -> String {
+    login.trim().to_lowercase().chars().take(64).collect()
+}
+
 /// Baza. Bitta ulanish mutex ostida: server kichik va yozuvlar qisqa.
 pub struct Store {
     conn: Mutex<Connection>,
@@ -204,7 +212,7 @@ impl Store {
         let conn = self.lock();
         conn.execute(
             "INSERT INTO user (login,name,role,hash,active) VALUES (?1,?2,?3,?4,1)",
-            params![login.trim().to_lowercase(), name, role, hash],
+            params![login_key(login), name, role, hash],
         )
         .map_err(|e| e.to_string())?;
         Ok(conn.last_insert_rowid())
@@ -215,7 +223,7 @@ impl Store {
         let conn = self.lock();
         conn.query_row(
             "SELECT id,login,name,role,active,hash FROM user WHERE login=?1",
-            params![login.trim().to_lowercase()],
+            params![login_key(login)],
             |r| {
                 Ok((
                     User {
@@ -338,6 +346,53 @@ impl Store {
     pub fn purge_sessions(&self, now: &str) -> usize {
         self.lock()
             .execute("DELETE FROM session WHERE until <= ?1", params![now])
+            .unwrap_or(0)
+    }
+
+    // ------------------------------------------------- Kirish urinishlari
+
+    /// Muvaffaqiyatsiz urinishni qayd etadi.
+    ///
+    /// Parolning o'zi bu yerga tushmaydi — faqat login va vaqt. Login
+    /// uzunligi cheklanadi: aks holda uzun matn yuborib jadvalni
+    /// shishirish mumkin edi.
+    pub fn note_login_fail(&self, login: &str, at: &str) {
+        let key = login_key(login);
+        if key.is_empty() {
+            return;
+        }
+        let _ = self.lock().execute(
+            "INSERT INTO login_try (login,at) VALUES (?1,?2)",
+            params![key, at],
+        );
+    }
+
+    /// `since` dan keyingi muvaffaqiyatsiz urinishlar soni.
+    pub fn login_fails(&self, login: &str, since: &str) -> i64 {
+        self.lock()
+            .query_row(
+                "SELECT COUNT(*) FROM login_try WHERE login=?1 AND at > ?2",
+                params![login_key(login), since],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+    }
+
+    /// Muvaffaqiyatli kirgandan keyin urinishlarni tozalaydi.
+    ///
+    /// Shu sababli parolini ikki marta chalkashtirib, keyin to'g'ri kirgan
+    /// odam chegaraga yaqin turib qolmaydi.
+    pub fn clear_login_fails(&self, login: &str) {
+        let _ = self.lock().execute(
+            "DELETE FROM login_try WHERE login=?1",
+            params![login_key(login)],
+        );
+    }
+
+    /// Oynadan chiqib ketgan urinish yozuvlarini o'chiradi.
+    pub fn purge_login_tries(&self, before: &str) -> usize {
+        self.lock()
+            .execute("DELETE FROM login_try WHERE at <= ?1", params![before])
             .unwrap_or(0)
     }
 
@@ -1115,6 +1170,12 @@ CREATE TABLE IF NOT EXISTS notice_state (
     project TEXT PRIMARY KEY,
     at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS login_try (
+    id INTEGER PRIMARY KEY,
+    login TEXT NOT NULL,
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_try_login ON login_try(login, at);
 CREATE TABLE IF NOT EXISTS server_log (
     id INTEGER PRIMARY KEY,
     user TEXT NOT NULL,
@@ -1130,6 +1191,38 @@ mod tests {
 
     fn store() -> Store {
         Store::memory().expect("baza")
+    }
+
+    /// Urinishlar sanaladi, tozalanadi va oyna bo'yicha chiqib ketadi.
+    #[test]
+    fn failed_logins_are_counted_cleared_and_aged_out() {
+        let s = store();
+        assert_eq!(s.login_fails("prorab", "2026-01-01T00:00:00Z"), 0);
+
+        s.note_login_fail("Prorab", "2026-01-01T10:00:00Z");
+        s.note_login_fail("prorab", "2026-01-01T10:01:00Z");
+        // Katta-kichik harf farq qilmaydi: ikkisi ham bitta login.
+        assert_eq!(s.login_fails("PRORAB", "2026-01-01T09:00:00Z"), 2);
+        // Oynadan tashqaridagi urinish sanalmaydi.
+        assert_eq!(s.login_fails("prorab", "2026-01-01T10:00:30Z"), 1);
+        // Boshqa login ta'sirlanmaydi.
+        assert_eq!(s.login_fails("nazorat", "2026-01-01T09:00:00Z"), 0);
+
+        // Muvaffaqiyatli kirish hisobni nolga tushiradi.
+        s.clear_login_fails("prorab");
+        assert_eq!(s.login_fails("prorab", "2026-01-01T09:00:00Z"), 0);
+
+        // Eski yozuvlar o'chiriladi.
+        s.note_login_fail("prorab", "2026-01-01T10:00:00Z");
+        assert_eq!(s.purge_login_tries("2026-01-01T11:00:00Z"), 1);
+        assert_eq!(s.login_fails("prorab", "2026-01-01T09:00:00Z"), 0);
+
+        // Bo'sh login yozilmaydi va uzun matn qirqiladi.
+        s.note_login_fail("   ", "2026-01-01T10:00:00Z");
+        assert_eq!(s.login_fails("", "2026-01-01T09:00:00Z"), 0);
+        let long: String = "a".repeat(500);
+        s.note_login_fail(&long, "2026-01-01T10:00:00Z");
+        assert_eq!(s.login_fails(&long, "2026-01-01T09:00:00Z"), 1);
     }
 
     #[test]

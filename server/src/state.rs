@@ -16,6 +16,13 @@ pub struct Config {
     pub db: PathBuf,
     /// Birinchi ishga tushirishda yaratiladigan administrator logini.
     pub admin_login: String,
+    /// Server HTTPS beruvchi teskari proksi ortida turadimi.
+    ///
+    /// Bu **sozlama**, taxmin emas: `X-Forwarded-Proto` sarlavhasiga
+    /// ishonib bo'lmaydi — proksisiz ochilgan serverga uni mijozning o'zi
+    /// yuborib qo'yishi mumkin. Yoqilganda seans cookie siga `Secure`
+    /// qo'yiladi, ya'ni belgi HTTP orqali hech qachon ketmaydi.
+    pub https: bool,
 }
 
 impl Default for Config {
@@ -26,6 +33,9 @@ impl Default for Config {
             bind: "127.0.0.1:8080".into(),
             db: PathBuf::from("qurai-server.db"),
             admin_login: "admin".into(),
+            // Sukut bo'yicha o'chiq: mahalliy ishlatishda server HTTP
+            // beradi va `Secure` qo'yilsa cookie umuman ishlamay qolardi.
+            https: false,
         }
     }
 }
@@ -38,6 +48,10 @@ impl Config {
             bind: std::env::var("QURAI_BIND").unwrap_or(d.bind),
             db: std::env::var("QURAI_DB").map(PathBuf::from).unwrap_or(d.db),
             admin_login: std::env::var("QURAI_ADMIN").unwrap_or(d.admin_login),
+            https: matches!(
+                std::env::var("QURAI_HTTPS").unwrap_or_default().as_str(),
+                "1" | "true" | "yes" | "ha"
+            ),
         }
     }
 }
@@ -57,5 +71,7 @@ mod tests {
     fn default_binding_is_local_only() {
         let c = Config::default();
         assert!(c.bind.starts_with("127.0.0.1"), "{}", c.bind);
+        // HTTPS ham sukut bo'yicha o'chiq: mahalliy server HTTP beradi.
+        assert!(!c.https);
     }
 }

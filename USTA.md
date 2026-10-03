@@ -161,7 +161,7 @@ Tekshiruv:
 
 | Nima | Natija |
 |---|---|
-| `cargo test --workspace` | 474 desktop + 54 server + 3 xesh sinov o'tadi |
+| `cargo test --workspace` | 474 desktop + 63 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
 | `cargo test --no-default-features` | 457 sinov (tarmoq kodisiz yig'ilish) |

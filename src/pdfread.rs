@@ -132,7 +132,7 @@ fn page_fonts(doc: &Document, page_id: lopdf::ObjectId) -> Vec<(Vec<u8>, lopdf::
         let Ok(dict) = obj.as_dict() else { break };
         if let Some(res) = dict.get(b"Resources").ok().and_then(resolve) {
             if let Ok(res) = res.as_dict() {
-                if let Some(fonts) = res.get(b"Font").ok().and_then(&resolve) {
+                if let Some(fonts) = res.get(b"Font").ok().and_then(resolve) {
                     if let Ok(fonts) = fonts.as_dict() {
                         for (name, value) in fonts.iter() {
                             if let Some(f) = resolve(value).and_then(|o| o.as_dict().ok().cloned())

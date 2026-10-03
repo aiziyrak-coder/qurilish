@@ -240,23 +240,36 @@ pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(req): Json<LoginReq>,
 ) -> axum::response::Response {
-    let Some((user, hash)) = state.store.user_by_login(&req.login) else {
-        // Login topilmagani ham, parol xato ekani ham bir xil javob
-        // beradi: farqi hujumchiga mavjud loginni aytib qo'yardi.
-        return err(StatusCode::UNAUTHORIZED, "login yoki parol noto'g'ri");
-    };
-    if !user.active || !auth::verify_password(&req.password, &hash) {
+    // Chegara web sahifasi bilan bitta: ikki yo'ldan kirishga urinish
+    // bir xil hisobga tushadi, aks holda chegarani JSON orqali aylanib
+    // o'tish mumkin bo'lardi.
+    if auth::too_many_tries(&state.store, &req.login) {
         state
             .store
-            .log(&user.login, "kirish-rad", "", &crate::now());
-        return err(StatusCode::UNAUTHORIZED, "login yoki parol noto'g'ri");
+            .log(&req.login, "kirish-to'sildi", "", &crate::now());
+        return err(StatusCode::TOO_MANY_REQUESTS, auth::TOO_MANY_MESSAGE);
     }
+
+    let found = state.store.user_by_login(&req.login);
+    // Login topilmagani ham, parol xato ekani ham bir xil javob beradi —
+    // va bir xil vaqt oladi: farqi hujumchiga mavjud loginni aytib
+    // qo'yardi.
+    let ok = auth::verify_password_or_dummy(&req.password, found.as_ref().map(|(_, h)| h.as_str()));
+    let user = match found {
+        Some((u, _)) if ok && u.active => u,
+        _ => {
+            state.store.note_login_fail(&req.login, &crate::now());
+            state.store.log(&req.login, "kirish-rad", "", &crate::now());
+            return err(StatusCode::UNAUTHORIZED, "login yoki parol noto'g'ri");
+        }
+    };
 
     let token = auth::new_token();
     let until = crate::plus_days(auth::SESSION_DAYS);
     if !state.store.open_session(user.id, &token, &until) {
         return err(StatusCode::INTERNAL_SERVER_ERROR, "seans ochilmadi");
     }
+    state.store.clear_login_fails(&user.login);
     state.store.log(&user.login, "kirdi", "", &crate::now());
 
     Json(LoginResp {

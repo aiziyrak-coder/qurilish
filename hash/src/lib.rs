@@ -108,10 +108,16 @@ pub fn sha256(data: &[u8]) -> [u8; 32] {
     }
     msg.extend_from_slice(&bits.to_be_bytes());
 
-    for block in msg.chunks_exact(64) {
+    // `as_chunks` o'lchamni turda ko'rsatadi: blok uzunligi 64 ekani
+    // kompilyator tomonidan ta'minlanadi va indeks tekshiruvi tushib
+    // qoladi. To'ldirishdan keyin uzunlik 64 ga bo'linadi, shuning uchun
+    // qoldiq doim bo'sh.
+    let (blocks, rest) = msg.as_chunks::<64>();
+    debug_assert!(rest.is_empty());
+    for block in blocks {
         let mut w = [0u32; 64];
-        for (i, chunk) in block.chunks_exact(4).enumerate() {
-            w[i] = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        for (i, chunk) in block.as_chunks::<4>().0.iter().enumerate() {
+            w[i] = u32::from_be_bytes(*chunk);
         }
         for i in 16..64 {
             let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
