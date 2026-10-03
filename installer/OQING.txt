@@ -26,12 +26,14 @@ NIMA KERAK
 BIRINCHI OCHILISH
 =========================================================================
 
-Dastur birinchi ochilganda namuna obyekti yaratiladi: "240 o'rinli
-bolalar bog'chasi" — 20 ta ish, 25 bog'lanish, smeta, jurnal yozuvlari,
-ijro hujjatlari, 72 kvartirali sotuv shaxmatkasi.
+Dastur BO'SH ochiladi. Birinchi obyektni o'zingiz kiritasiz: chap
+pastdagi "+ Yangi obyekt" tugmasi.
 
-Ya'ni hamma bo'limni darhol ochib ko'rishingiz mumkin, hech narsa
-kiritmasdan.
+Ilovani tez ko'rib chiqmoqchi bo'lsangiz, Sozlamalar bo'limida "Namuna
+obyektini yaratish" tugmasi bor: to'liq obyekt paydo bo'ladi - ishlar
+grafigi, smeta, jurnal, ijro hujjatlari va 72 kvartirali sotuv
+shaxmatkasi bilan. Yonidagi tugma uni qoldiqsiz o'chiradi va faqat
+namunaga tegadi - sizning obyektingiz joyida qoladi.
 
 Ma'lumotlaringiz shu yerda saqlanadi:
   ...\Programs\QURAi\data\qurai.db

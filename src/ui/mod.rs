@@ -386,19 +386,12 @@ fn top_bar(ctx: &Context, app: &mut App) {
                     app.search_focus = true;
                 }
 
-                // Eksport joriy ekran jadvalini chiqaradi. Jadval yo'q ekranda
-                // tugma o'chiq turadi — bosib, keyin «hech narsa yo'q» degan
-                // xabar olishdan ko'ra shunisi tushunarli.
-                ui.add_space(6.0);
-                let has = export::table_of(app, app.screen).is_some();
-                if ui
-                    .add_enabled(
-                        has,
-                        egui::Button::new(RichText::new(t("export")).size(13.0)),
-                    )
-                    .on_hover_text(t("export_hint"))
-                    .on_disabled_hover_text(t("export_none"))
-                    .clicked()
+                // Eksport yuqori panelda emas: u ko'pincha o'chiq turardi
+                // (jadvali yo'q ekranda) va faqat joy egallardi. Joriy
+                // ekran jadvali `Ctrl+E` bilan chiqariladi, to'liq
+                // hisobotlar esa «Hisobotlar» bo'limida.
+                if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::E))
+                    && export::table_of(app, app.screen).is_some()
                 {
                     export_current(app);
                 }
@@ -452,100 +445,120 @@ fn ai_button(ui: &mut egui::Ui, app: &mut App) {
     };
 
     let mut go_copilot = false;
+    let mut go_settings = false;
     let mut save = false;
     let mut key = app.llm.api_key.clone();
 
     let resp = ui
         .button(RichText::new(format!("● {}", t("ai_short"))).color(dot))
         .on_hover_text(tip);
-    let popup = egui::Id::new("ai_popup");
     if resp.clicked() {
-        ui.memory_mut(|m| m.toggle_popup(popup));
+        app.ai_panel = !app.ai_panel;
+    }
+    if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        app.ai_panel = false;
+    }
+    if !app.ai_panel {
+        return;
     }
 
-    egui::popup::popup_below_widget(
-        ui,
-        popup,
-        &resp,
-        egui::PopupCloseBehavior::CloseOnClickOutside,
-        |ui| {
-            ui.set_min_width(330.0);
-            ui.label(RichText::new(t("ai_title")).strong());
-            ui.label(
-                RichText::new(t("ai_where"))
-                    .size(10.5)
-                    .color(theme::muted()),
-            );
-            ui.add_space(6.0);
-
-            ui.label(RichText::new(t("set_llm_key")).size(11.0));
-            // `password` — kalit yelka ustidan ham, ekran rasmida ham
-            // ko'rinmasin.
-            let edited = ui
-                .add_sized(
-                    [310.0, 22.0],
-                    egui::TextEdit::singleline(&mut key)
-                        .password(true)
-                        .hint_text("sk-..."),
-                )
-                .changed();
-            if edited {
-                save = true;
-            }
-            if !app.llm.api_key.trim().is_empty() {
+    let area = egui::Area::new(egui::Id::new("ai_panel"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(resp.rect.left_bottom())
+        .show(ui.ctx(), |ui| {
+            egui::Frame::popup(ui.style()).show(ui, |ui| {
+                ui.set_min_width(330.0);
+                ui.label(RichText::new(t("ai_title")).strong());
                 ui.label(
-                    RichText::new(app.llm.masked_key())
+                    RichText::new(t("ai_where"))
                         .size(10.5)
                         .color(theme::muted()),
                 );
-            }
+                ui.add_space(6.0);
 
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(t("set_llm_model")).size(11.0));
-                egui::ComboBox::from_id_salt("ai_model")
-                    .selected_text(app.llm.model.clone())
-                    .width(190.0)
-                    .show_ui(ui, |ui| {
-                        for m in crate::llm::MODELS {
-                            if ui.selectable_label(app.llm.model == *m, *m).clicked() {
-                                app.llm.model = (*m).to_string();
-                                save = true;
+                ui.label(RichText::new(t("set_llm_key")).size(11.0));
+                // `password` — kalit yelka ustidan ham, ekran rasmida ham
+                // ko'rinmasin.
+                let edited = ui
+                    .add_sized(
+                        [310.0, 22.0],
+                        egui::TextEdit::singleline(&mut key)
+                            .password(true)
+                            .hint_text("sk-..."),
+                    )
+                    .changed();
+                if edited {
+                    save = true;
+                }
+                if !app.llm.api_key.trim().is_empty() {
+                    ui.label(
+                        RichText::new(app.llm.masked_key())
+                            .size(10.5)
+                            .color(theme::muted()),
+                    );
+                }
+
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t("set_llm_model")).size(11.0));
+                    egui::ComboBox::from_id_salt("ai_model")
+                        .selected_text(app.llm.model.clone())
+                        .width(190.0)
+                        .show_ui(ui, |ui| {
+                            for m in crate::llm::MODELS {
+                                if ui.selectable_label(app.llm.model == *m, *m).clicked() {
+                                    app.llm.model = (*m).to_string();
+                                    save = true;
+                                }
                             }
-                        }
-                    });
-            });
+                        });
+                });
 
-            ui.add_space(8.0);
-            ui.separator();
-            ui.horizontal(|ui| {
-                if ui
-                    .add_enabled(ready, egui::Button::new(t("ai_ask")))
-                    .on_disabled_hover_text(t("ai_no_key"))
-                    .clicked()
-                {
-                    go_copilot = true;
-                }
-                if ui.button(t("screen_settings")).clicked() {
-                    app.screen = Screen::Settings;
-                    ui.memory_mut(|m| m.close_popup());
-                }
+                ui.add_space(8.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(ready, egui::Button::new(t("ai_ask")))
+                        .on_disabled_hover_text(t("ai_no_key"))
+                        .clicked()
+                    {
+                        go_copilot = true;
+                    }
+                    if ui.button(t("screen_settings")).clicked() {
+                        go_settings = true;
+                    }
+                });
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(t("ai_key_safety"))
+                        .size(10.0)
+                        .color(theme::muted()),
+                );
             });
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(t("ai_key_safety"))
-                    .size(10.0)
-                    .color(theme::muted()),
-            );
-        },
-    );
+        });
+
+    // Tashqariga bosilsa yopiladi — tugmaning o'ziga bosilgan holat
+    // bundan mustasno, aks holda bosish darhol bekor bo'lardi.
+    let outside = ui.input(|i| {
+        i.pointer.any_click()
+            && i.pointer
+                .interact_pos()
+                .is_some_and(|p| !area.response.rect.contains(p) && !resp.rect.contains(p))
+    });
+    if outside {
+        app.ai_panel = false;
+    }
 
     if save {
         app.set_llm_key(&key);
     }
     if go_copilot {
         app.screen = Screen::Copilot;
-        ui.memory_mut(|m| m.close_popup());
+        app.ai_panel = false;
+    }
+    if go_settings {
+        app.screen = Screen::Settings;
+        app.ai_panel = false;
     }
 }
 

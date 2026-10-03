@@ -41,10 +41,14 @@ cargo run --release
 
 Tayyor fayl: `target/release/qurai.exe` — ~20 MB, tashqi bog'liqliksiz —
 SQLite, Excel va PDF yozish, IFC/DXF/PDF o'qish hammasi ichida).
-Ma'lumotlar bazasi — exe yonidagi `data/qurai.db`; birinchi ishga tushirishda
-namoyish obyekti yaratiladi: «Navro'z» TJM, 20 ta ish, 25 ta bog'lanish,
-22 ta loyiha elementi, 10 pozitsiyali smeta, 4 ta PPR kartasi, jurnal yozuvlari
-va ijro hujjatlari.
+Ma'lumotlar bazasi — exe yonidagi `data/qurai.db`. Ilova **bo'sh ochiladi**:
+namuna ma'lumoti o'zi yaratilmaydi, birinchi obyektni foydalanuvchi kiritadi.
+
+Ilovani ko'rsatish kerak bo'lsa — «Sozlamalar → Namuna obyektini yaratish»:
+«Navro'z» TJM, 20 ta ish, 25 ta bog'lanish, 22 ta loyiha elementi,
+10 pozitsiyali smeta, 4 ta PPR kartasi, jurnal yozuvlari, ijro hujjatlari va
+72 kvartirali sotuv shaxmatkasi. Yonidagi tugma uni qoldiqsiz o'chiradi va
+faqat namuna kodlariga tegadi — sizning obyektingiz joyida qoladi.
 
 Testlar (CPM, tekshiruv qoidalari, import, ombor):
 

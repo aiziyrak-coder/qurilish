@@ -10,7 +10,8 @@ Kamchilik topsangiz quyidagicha yozing:
 1. OBYEKT VA REJA
 -------------------------------------------------------------------------
 [ ] Obyekt pasporti ochiladi, maydonlar to'ldiriladi va saqlanadi
-[ ] Yangi obyekt yaratiladi (chap pastdagi tugma)
+[ ] Yangi obyekt yaratiladi (chap pastdagi tugma) - dastur bo'sh ochiladi
+[ ] Sozlamalar -> "Namuna obyektini yaratish" ishlaydi va o'chiriladi
 [ ] GPR — Gantt diagrammasi ko'rinadi, kritik yo'l qizil
 [ ] Ishni sichqoncha bilan surish va cho'zish ishlaydi
 [ ] Bog'lanish qo'shiladi; sikl hosil qiluvchisi rad etiladi

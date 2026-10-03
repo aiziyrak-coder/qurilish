@@ -886,11 +886,20 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
 /// edi: odam birinchi tabda turib «yuklash joyi yo'q» degan xulosaga
 /// kelardi va tekshiruv tugmasi nega ishlamayotganini tushunmasdi.
 fn load_bar(ui: &mut egui::Ui, app: &mut App) {
+    let mut import_pdf = false;
     let mut import_ifc = false;
     let mut import_dxf = false;
     let mut attach = false;
 
     ui.horizontal_wrapped(|ui| {
+        // PDF birinchi turadi: loyiha ko'pincha shu ko'rinishda keladi.
+        if ui
+            .button(t("import_pdf"))
+            .on_hover_text(t("import_pdf_hint"))
+            .clicked()
+        {
+            import_pdf = true;
+        }
         // TZ II.1-2: chizmani qo'lda kiritish o'rniga IFC dan o'qish.
         if ui
             .button(t("import_ifc"))
@@ -916,6 +925,15 @@ fn load_bar(ui: &mut egui::Ui, app: &mut App) {
         }
     });
 
+    if import_pdf {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title(t("import_pdf"))
+            .add_filter("PDF", &["pdf", "PDF"])
+            .pick_file()
+        {
+            app.import_pdf(&path);
+        }
+    }
     if import_ifc {
         if let Some(path) = rfd::FileDialog::new()
             .set_title(t("import_ifc"))

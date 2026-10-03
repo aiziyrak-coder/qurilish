@@ -472,11 +472,6 @@ impl Db {
         Ok(())
     }
 
-    pub fn project_count(&self) -> SqlResult<i64> {
-        self.conn
-            .query_row("SELECT COUNT(*) FROM project", [], |r| r.get(0))
-    }
-
     /// Namunaviy obyektlarning shifrlari.
     ///
     /// Tozalash ularni shu ro'yxat bo'yicha topadi: foydalanuvchi o'zi
@@ -485,9 +480,11 @@ impl Db {
 
     /// Namunaviy obyektlarni o'chiradi va ularni qayta yaratishni to'xtatadi.
     ///
-    /// Qaytaradi: nechta obyekt o'chirildi. Ilova bo'sh bazada namunani
-    /// o'zi yaratadi, shuning uchun sozlamaga bayroq qo'yiladi — aks holda
-    /// tozalangan namuna keyingi ochilishda qaytib kelardi.
+    /// Qaytaradi: nechta obyekt o'chirildi.
+    ///
+    /// Faqat namuna kodlari o'chiriladi — foydalanuvchining o'z obyektiga
+    /// tegilmaydi. Bayroq qo'yilmaydi: namuna endi o'zi yaratilmaydi,
+    /// shuning uchun uni «qaytib kelmasin» deb belgilash kerak emas.
     pub fn clear_demo(&self) -> SqlResult<usize> {
         let mut n = 0;
         for p in self.projects()? {
@@ -496,13 +493,7 @@ impl Db {
                 n += 1;
             }
         }
-        let _ = self.set_setting("demo_cleared", "1");
         Ok(n)
-    }
-
-    /// Namuna tozalanganmi — bo'sh bazada uni qayta yaratmaslik uchun.
-    pub fn demo_cleared(&self) -> bool {
-        self.get_setting("demo_cleared").as_deref() == Some("1")
     }
 
     /// Namoyish obyekti: bog'lanishlari va kritik yo'li bor GPR ko'rsatadi.
@@ -1934,6 +1925,27 @@ mod tests {
         }
     }
 
+    /// Yangi baza **bo'sh** ochiladi: namuna ma'lumoti o'zi yaratilmaydi.
+    ///
+    /// Avval birinchi ochilishda namoyish obyekti yaratilardi. Haqiqiy
+    /// ishda bu chalkashtirardi: bazada o'ylab topilgan obyekt turar,
+    /// uning sonlari hisobotlarga tushar edi.
+    #[test]
+    fn a_new_database_starts_empty() {
+        let t = TempDb::new();
+        assert!(
+            t.db.projects().unwrap().is_empty(),
+            "yangi bazada obyekt topildi"
+        );
+        // Namuna faqat ataylab yaratiladi.
+        let pid = t.db.seed_demo().unwrap();
+        assert!(pid > 0);
+        assert!(!t.db.projects().unwrap().is_empty());
+        // Va bir bosishda qoldiqsiz ketadi.
+        assert!(t.db.clear_demo().unwrap() > 0);
+        assert!(t.db.projects().unwrap().is_empty());
+    }
+
     impl Drop for TempDb {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.path);
@@ -1949,7 +1961,7 @@ mod tests {
         let pid = t.db.seed_demo().expect("namoyish obyekti");
 
         // Namunada ikkita obyekt: asosiysi va portfel uchun ikkinchisi.
-        assert_eq!(t.db.project_count().unwrap(), 2);
+        assert_eq!(t.db.projects().unwrap().len(), 2);
         // Obyekt holati saqlanganidek qaytishi kerak.
         let project =
             t.db.projects()
@@ -2569,7 +2581,7 @@ mod tests {
 
         // Namunadagi ikkinchi obyekt joyida qoladi — o'chirish faqat bittasiga
         // tegishi kerak.
-        assert_eq!(t.db.project_count().unwrap(), 1);
+        assert_eq!(t.db.projects().unwrap().len(), 1);
         assert!(t.db.tasks(pid).unwrap().is_empty());
         assert!(t.db.elements(pid).is_empty());
         assert!(t.db.estimates(pid).is_empty());
@@ -6144,7 +6156,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
     fn demo_can_be_cleared_and_does_not_return() {
         let t = TempDb::new();
         let pid = t.db.seed_demo().unwrap();
-        assert_eq!(t.db.project_count().unwrap(), 2);
+        assert_eq!(t.db.projects().unwrap().len(), 2);
         assert!(!t.db.tasks(pid).unwrap().is_empty());
 
         // Foydalanuvchining o'z obyekti tegilmasligi kerak.
@@ -6179,8 +6191,9 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         assert!(t.db.contracts(pid).is_empty());
         assert!(t.db.journal(pid).is_empty());
 
-        // Bayroq qo'yilgan: bo'sh bazada ham namuna qayta yaratilmaydi.
-        assert!(t.db.demo_cleared());
+        // Namuna o'zi qaytib kelmaydi: ilova uni hech qachon o'zi
+        // yaratmaydi — faqat sozlamalardagi tugma bilan.
+        assert_eq!(t.db.clear_demo().unwrap(), 0, "o'chiradigan namuna qoldi");
     }
 
     /// TZ X.4-6: reja qoldiq, yo'ldagi buyurtma va normativ ehtiyojdan

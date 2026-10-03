@@ -757,10 +757,18 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Faqat ko'rish: hech narsani o'zgartirmaydi.",
             "Только просмотр: ничего не изменяет.",
         ),
+        "import_pdf" => ("PDF loyiha", "Проект в PDF"),
+        "import_pdf_hint" => (
+            "PDF ning matni o'qiladi: spetsifikatsiya jadvalidagi markalar elementga aylanadi. Chizmaning o'zi rasm bo'lib qoladi.",
+            "Читается текст PDF: марки из таблицы спецификации становятся элементами. Сам чертёж остаётся изображением.",
+        ),
+        "pdf_read" => ("PDF o'qildi, qator", "PDF прочитан, строк"),
+        "pdf_elements" => ("element qo'shildi", "элементов добавлено"),
+        "pdf_repeated" => ("takror", "повторов"),
         "project_not_loaded" => ("Loyiha hali yuklanmagan", "Проект ещё не загружен"),
         "project_not_loaded_hint" => (
-            "IFC va DXF o'qiladi: elementlar, bog'lanishlar va o'lchamlar chiqadi va tekshiruvga tushadi. PDF, DWG, RVT va rasm esa biriktiriladi — ro'yxatda turadi va ochiladi, lekin o'qilmaydi.",
-            "IFC и DXF читаются: элементы, связи и габариты попадают в проверку. PDF, DWG, RVT и изображения прикрепляются — они есть в списке и открываются, но не читаются.",
+            "PDF ning matni o'qiladi — spetsifikatsiyadagi markalar elementga aylanadi (skan qilingan PDF o'qilmaydi). IFC va DXF to'liq o'qiladi: elementlar, bog'lanishlar va o'lchamlar tekshiruvga tushadi. DWG, RVT va rasm esa faqat biriktiriladi.",
+            "Читается текст PDF — марки из спецификации становятся элементами (сканы не читаются). IFC и DXF читаются полностью: элементы, связи и габариты попадают в проверку. DWG, RVT и изображения только прикрепляются.",
         ),
         "add_drawing" => ("Chizma qo'shish", "Добавить чертёж"),
         "add_drawing_hint" => (

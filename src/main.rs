@@ -26,6 +26,7 @@ mod notify;
 mod ocr;
 mod package;
 mod pdf;
+mod pdfplan;
 mod pdfread;
 mod photocheck;
 mod portfolio;
@@ -59,12 +60,17 @@ fn main() -> eframe::Result<()> {
         }
     };
 
-    // Первый запуск: наполняем демонстрационным объектом, чтобы ГПР было на чем показать.
-    // Namuna faqat birinchi ochilishda yaratiladi. Foydalanuvchi uni
-    // tozalagan bo'lsa — qaytarib bermaymiz.
-    if database.project_count().unwrap_or(0) == 0 && !database.demo_cleared() {
-        let _ = database.seed_demo();
-    }
+    // Namuna ma'lumoti **o'zi yaratilmaydi**: ilova bo'sh ochiladi va
+    // birinchi obyektni foydalanuvchining o'zi kiritadi.
+    //
+    // Avval birinchi ochilishda namoyish obyekti yaratilardi. U ilovani
+    // ko'rsatish uchun qulay edi, lekin haqiqiy ishda chalkashtirardi:
+    // bazada o'ylab topilgan obyekt turar, uning sonlari hisobotlarga
+    // tushar va «bu qayerdan keldi?» degan savol tug'ilardi.
+    //
+    // Namuna kerak bo'lsa — «Sozlamalar → Namuna obyektini yaratish».
+    // Bu ataylab qilinadigan ish va uni bir bosishda qaytarib o'chirish
+    // ham mumkin.
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

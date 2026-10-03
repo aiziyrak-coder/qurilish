@@ -748,6 +748,12 @@ pub struct App {
     /// ko'rish mumkin bo'lishi kerak: ilova bitta odamda ham, o'n kishilik
     /// jamoada ham ishlaydi. Xodim tanlansa, uning roli ustun turadi.
     pub view_role: Option<crate::roles::Role>,
+    /// Tepadagi AI oynasi ochiqmi.
+    ///
+    /// Holat shu yerda turadi, egui ning umumiy «popup» xotirasida emas:
+    /// u bitta bo'lgani uchun boshqa ro'yxat bilan chalkashib, oyna
+    /// ishga tushishda o'zi ochilib turardi.
+    pub ai_panel: bool,
     pub sales_block: Option<i64>,
     pub selected_unit: Option<i64>,
     pub selected_deal: Option<i64>,
@@ -942,6 +948,7 @@ impl App {
             users: Vec::new(),
             current_user: None,
             view_role: None,
+            ai_panel: false,
             sales_block: None,
             selected_unit: None,
             selected_deal: None,
@@ -2095,6 +2102,67 @@ impl App {
     /// IFC bilan bir xil qoida: allaqachon bor marka takrorlanmaydi, yangi
     /// element esa varaq nomi bilan yoziladi. Bog'lanishlar chizmadan
     /// olinmaydi — chizmada ular yozilmagan bo'ladi.
+    /// PDF loyihani o'qiydi (TZ II.1).
+    ///
+    /// Haqiqiy ishda loyiha ko'pincha PDF bo'lib keladi, shuning uchun bu
+    /// chetdagi holat emas — asosiy yo'l. Fayl avval **biriktiriladi**
+    /// (ro'yxatda turadi va ochiladi), keyin matni o'qilib,
+    /// spetsifikatsiya qatorlaridan element chiqariladi.
+    ///
+    /// Nima topilgani ochiq aytiladi: nechta qator ko'rildi va nechtasida
+    /// marka bor edi. Markasi yo'q qator tashlanadi — element o'ylab
+    /// topilmaydi.
+    pub fn import_pdf(&mut self, path: &std::path::Path) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        let Some(pid) = self.current else { return };
+
+        // Fayl har holda ro'yxatga tushadi: o'qilmasa ham u loyiha hujjati
+        // va uni ochib ko'rish kerak bo'ladi.
+        self.attach_drawings(std::slice::from_ref(&path.to_path_buf()));
+
+        let rows = match crate::pdfread::table(path) {
+            Ok(r) => r,
+            Err(e) => {
+                // Skan qilingan PDF da matn yo'q. Taxmin qilmaymiz.
+                self.notify(format!("{}: {e}", t("pdf_no_text")));
+                return;
+            }
+        };
+        let sheet = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "PDF".to_string());
+        let found = crate::pdfplan::from_rows(&rows, pid, &sheet);
+
+        let mut added = 0usize;
+        let mut existing = 0usize;
+        for e in &found.elements {
+            let same = self
+                .elements
+                .iter()
+                .any(|x| x.sheet == e.sheet && x.mark == e.mark);
+            if same {
+                existing += 1;
+                continue;
+            }
+            self.db.insert_element(e);
+            added += 1;
+        }
+        self.reload_modules();
+        self.notify(format!(
+            "{}: {} · {} {} · {} {}",
+            t("pdf_read"),
+            found.rows,
+            added,
+            t("pdf_elements"),
+            existing,
+            t("pdf_repeated")
+        ));
+    }
+
     /// Chizma fayllarini obyektga biriktiradi (TZ II.1).
     ///
     /// Bu **o'qish emas, biriktirish**: PDF, DWG, RVT va rasm ro'yxatga
