@@ -742,6 +742,12 @@ pub struct App {
     pub llm_tokens: u32,
     pub users: Vec<crate::roles::User>,
     pub current_user: Option<i64>,
+    /// Xodimsiz tanlangan rol — «shu rol nimani ko'radi» ko'rinishi.
+    ///
+    /// Bazada xodim yaratmasdan ham har bir rolning ish o'rnini ochib
+    /// ko'rish mumkin bo'lishi kerak: ilova bitta odamda ham, o'n kishilik
+    /// jamoada ham ishlaydi. Xodim tanlansa, uning roli ustun turadi.
+    pub view_role: Option<crate::roles::Role>,
     pub sales_block: Option<i64>,
     pub selected_unit: Option<i64>,
     pub selected_deal: Option<i64>,
@@ -935,6 +941,7 @@ impl App {
             llm_tokens: 0,
             users: Vec::new(),
             current_user: None,
+            view_role: None,
             sales_block: None,
             selected_unit: None,
             selected_deal: None,
@@ -1024,6 +1031,11 @@ impl App {
 
         // Rollar: oxirgi tanlangan foydalanuvchi tiklanadi.
         app.reload_users();
+        app.view_role = app
+            .db
+            .get_setting("view_role")
+            .filter(|code| !code.trim().is_empty())
+            .map(|code| crate::roles::Role::parse(&code));
         app.current_user = app
             .db
             .get_setting("current_user")
@@ -1351,7 +1363,26 @@ impl App {
         self.current_user
             .and_then(|id| self.users.iter().find(|u| u.id == id))
             .map(|u| u.role)
+            .or(self.view_role)
             .unwrap_or(crate::roles::Role::Admin)
+    }
+
+    /// Xodimsiz rolni almashtiradi: rolning uy ekrani ochiladi.
+    ///
+    /// Xodim tanlangan bo'lsa, u bo'shatiladi — aks holda ekranda bir
+    /// odamning ismi, boshqa rolning ko'rinishi turib, kim nima qilayotgani
+    /// chalkashib ketardi.
+    pub fn set_view_role(&mut self, role: Option<crate::roles::Role>) {
+        self.view_role = role;
+        if role.is_some() && self.current_user.is_some() {
+            self.current_user = None;
+            let _ = self.db.set_setting("current_user", "");
+            self.sync_audit_user();
+        }
+        let _ = self
+            .db
+            .set_setting("view_role", role.map(|r| r.code()).unwrap_or_default());
+        self.screen = self.role().home();
     }
 
     /// Joriy foydalanuvchi ismi. Tanlanmagan bo'lsa — bo'sh satr:
@@ -1413,6 +1444,11 @@ impl App {
     /// Foydalanuvchini almashtirish: rolning uy ekrani ochiladi.
     pub fn set_user(&mut self, id: Option<i64>) {
         self.current_user = id;
+        // Xodim tanlandi — uning roli ustun turadi.
+        if id.is_some() {
+            self.view_role = None;
+            let _ = self.db.set_setting("view_role", "");
+        }
         let _ = self.db.set_setting(
             "current_user",
             &id.map(|v| v.to_string()).unwrap_or_default(),
@@ -2692,6 +2728,15 @@ impl App {
     ///
     /// Interfeys javob kutib qotib qolmaydi: so'rov alohida oqimda ketadi,
     /// natija esa keyingi kadrlarda [`App::poll_llm`] orqali olinadi.
+    /// AI kalitini qo'yadi va saqlaydi.
+    ///
+    /// Kalit bazadagi sozlamalarda turadi va **faqat** `Authorization`
+    /// sarlavhasida ketadi: so'rov tanasiga ham, jurnalga ham tushmaydi.
+    pub fn set_llm_key(&mut self, key: &str) {
+        self.llm.set_key(key);
+        self.save_llm();
+    }
+
     pub fn ask_llm(&mut self, question: String) {
         if self.llm_pending.is_some() {
             return;

@@ -757,6 +757,28 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Faqat ko'rish: hech narsani o'zgartirmaydi.",
             "Только просмотр: ничего не изменяет.",
         ),
+        "ai_short" => ("AI", "AI"),
+        "ai_title" => ("AI yordamchisi", "AI помощник"),
+        "ai_where" => (
+            "Kalitni shu yerga qo'ying — yordamchi har bo'limdan ochiladi.",
+            "Вставьте ключ здесь — помощник открывается из любого раздела.",
+        ),
+        "ai_ready" => ("AI yoqilgan", "AI включён"),
+        "ai_no_key" => ("Kalit qo'yilmagan", "Ключ не задан"),
+        "ai_off" => ("AI o'chirilgan", "AI выключен"),
+        "ai_ask" => ("So'rash", "Спросить"),
+        "ai_key_safety" => (
+            "Kalit faqat shu kompyuterda saqlanadi va faqat so'rov sarlavhasida ketadi.",
+            "Ключ хранится только на этом компьютере и уходит только в заголовке запроса.",
+        ),
+        "role_all_roles" => ("Rollar", "Роли"),
+        "role_people" => ("Xodimlar", "Сотрудники"),
+        "role_not_a_lock" => (
+            "Rol — ish taqsimoti, qulf emas: baza fayli ochiq turadi.",
+            "Роль — распределение работ, а не замок: файл базы открыт.",
+        ),
+        "nav_my_work" => ("Sizning ishingiz", "Ваша работа"),
+        "nav_other" => ("Boshqa bo'limlar", "Другие разделы"),
         "role_nobody" => ("Rol tanlanmagan", "Роль не выбрана"),
         "role_no_users" => (
             "Foydalanuvchilar sozlamalarda qo'shiladi.",

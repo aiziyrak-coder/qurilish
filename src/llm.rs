@@ -89,6 +89,22 @@ impl Config {
             && !self.api_key.trim().is_empty()
     }
 
+    /// Kalitni qo'yadi va integratsiyani **yoqadi**.
+    ///
+    /// Sababi: odam kalitni ataylab kiritadi, bu uning aniq qarori. Avval
+    /// kalit kiritilgandan keyin ham alohida tugmani topib yoqish kerak
+    /// edi va «kalit qo'ydim, lekin ishlamayapti» degan holat chiqardi.
+    ///
+    /// Kalit o'chirilsa integratsiya ham o'chadi: kalitsiz u baribir
+    /// ishlamaydi va «yoqilgan» deb turgani yolg'on bo'lardi.
+    ///
+    /// Sukut bo'yicha holat o'zgarmaydi: kalit kiritilmaguncha ilova
+    /// hech qayerga ulanmaydi.
+    pub fn set_key(&mut self, key: &str) {
+        self.api_key = key.trim().to_string();
+        self.enabled = !self.api_key.is_empty();
+    }
+
     /// Kalitning faqat oxirgi to'rt belgisi ko'rsatiladi.
     pub fn masked_key(&self) -> String {
         let k = self.api_key.trim();
@@ -459,6 +475,26 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Kalit qo'yilsa integratsiya o'zi yoqiladi, olinsa — o'chadi.
+    #[test]
+    fn a_key_switches_the_integration_on_and_off() {
+        let mut c = Config::default();
+        // Sukut bo'yicha ilova hech qayerga ulanmaydi.
+        assert!(!c.enabled);
+        assert!(!c.is_ready());
+
+        c.set_key("  sk-test-kalit-1234  ");
+        assert_eq!(c.api_key, "sk-test-kalit-1234", "bo'shliq olib tashlanmadi");
+        assert!(c.enabled, "kalit qo'yildi, lekin yoqilmadi");
+        assert!(c.is_ready());
+
+        // Kalit olindi — «yoqilgan» deb turish yolg'on bo'lardi.
+        c.set_key("   ");
+        assert!(c.api_key.is_empty());
+        assert!(!c.enabled);
+        assert!(!c.is_ready());
+    }
 
     fn cfg() -> Config {
         Config {

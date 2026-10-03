@@ -413,6 +413,8 @@ fn top_bar(ctx: &Context, app: &mut App) {
                         ui.separator();
                     }
                     role_picker(ui, app, medium);
+                    ui.separator();
+                    ai_button(ui, app);
                     if medium {
                         ui.separator();
                         if let Some(p) = app.project() {
@@ -428,6 +430,123 @@ fn top_bar(ctx: &Context, app: &mut App) {
                 });
             });
         });
+}
+
+/// Tepadagi AI tugmasi: kalit shu yerda qo'yiladi va holat ko'rinib turadi.
+///
+/// Sababi: kalit sozlamalarning ichida turganda uni topish qiyin edi va
+/// yordamchi faqat o'z ekranida ochilardi. Endi har ekrandan bir bosishda
+/// ochiladi — kalit qo'yilgan bo'lsa yordamchi hamma bo'lim bo'yicha
+/// javob beradi, chunki unga **barcha modullarning** sonlari beriladi.
+///
+/// Kalit ekranda ochiq ko'rsatilmaydi: maydon yashirin, ro'yxatda esa
+/// faqat oxirgi to'rt belgisi turadi.
+fn ai_button(ui: &mut egui::Ui, app: &mut App) {
+    let ready = app.llm.is_ready();
+    let (dot, tip) = if ready {
+        (theme::ok(), t("ai_ready"))
+    } else if app.llm.api_key.trim().is_empty() {
+        (theme::muted(), t("ai_no_key"))
+    } else {
+        (theme::warn(), t("ai_off"))
+    };
+
+    let mut go_copilot = false;
+    let mut save = false;
+    let mut key = app.llm.api_key.clone();
+
+    let resp = ui
+        .button(RichText::new(format!("● {}", t("ai_short"))).color(dot))
+        .on_hover_text(tip);
+    let popup = egui::Id::new("ai_popup");
+    if resp.clicked() {
+        ui.memory_mut(|m| m.toggle_popup(popup));
+    }
+
+    egui::popup::popup_below_widget(
+        ui,
+        popup,
+        &resp,
+        egui::PopupCloseBehavior::CloseOnClickOutside,
+        |ui| {
+            ui.set_min_width(330.0);
+            ui.label(RichText::new(t("ai_title")).strong());
+            ui.label(
+                RichText::new(t("ai_where"))
+                    .size(10.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+
+            ui.label(RichText::new(t("set_llm_key")).size(11.0));
+            // `password` — kalit yelka ustidan ham, ekran rasmida ham
+            // ko'rinmasin.
+            let edited = ui
+                .add_sized(
+                    [310.0, 22.0],
+                    egui::TextEdit::singleline(&mut key)
+                        .password(true)
+                        .hint_text("sk-..."),
+                )
+                .changed();
+            if edited {
+                save = true;
+            }
+            if !app.llm.api_key.trim().is_empty() {
+                ui.label(
+                    RichText::new(app.llm.masked_key())
+                        .size(10.5)
+                        .color(theme::muted()),
+                );
+            }
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(t("set_llm_model")).size(11.0));
+                egui::ComboBox::from_id_salt("ai_model")
+                    .selected_text(app.llm.model.clone())
+                    .width(190.0)
+                    .show_ui(ui, |ui| {
+                        for m in crate::llm::MODELS {
+                            if ui.selectable_label(app.llm.model == *m, *m).clicked() {
+                                app.llm.model = (*m).to_string();
+                                save = true;
+                            }
+                        }
+                    });
+            });
+
+            ui.add_space(8.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(ready, egui::Button::new(t("ai_ask")))
+                    .on_disabled_hover_text(t("ai_no_key"))
+                    .clicked()
+                {
+                    go_copilot = true;
+                }
+                if ui.button(t("screen_settings")).clicked() {
+                    app.screen = Screen::Settings;
+                    ui.memory_mut(|m| m.close_popup());
+                }
+            });
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("ai_key_safety"))
+                    .size(10.0)
+                    .color(theme::muted()),
+            );
+        },
+    );
+
+    if save {
+        app.set_llm_key(&key);
+    }
+    if go_copilot {
+        app.screen = Screen::Copilot;
+        ui.memory_mut(|m| m.close_popup());
+    }
 }
 
 /// Joriy foydalanuvchi va rol. Bosilsa — almashtirish ro'yxati.
@@ -446,6 +565,7 @@ fn role_picker(ui: &mut egui::Ui, app: &mut App, wide: bool) {
     };
 
     let mut pick: Option<Option<i64>> = None;
+    let mut pick_role: Option<Option<crate::roles::Role>> = None;
     // Tor oynada faqat rol nomi qoladi — ism kesilgandan ko'ra tushib qolgani yaxshi.
     let text = if wide {
         format!("{name} · {}", role.label())
@@ -463,33 +583,78 @@ fn role_picker(ui: &mut egui::Ui, app: &mut App, wide: bool) {
             );
             ui.separator();
             if ui
-                .selectable_label(app.current_user.is_none(), t("role_nobody"))
+                .selectable_label(
+                    app.current_user.is_none() && app.view_role.is_none(),
+                    t("role_nobody"),
+                )
                 .clicked()
             {
+                pick_role = Some(None);
                 pick = Some(None);
             }
-            for u in &app.users {
-                let label = format!("{} · {}", u.name, u.role.label());
+
+            // ---- Barcha rollar: xodim yaratmasdan ham har birining ish
+            // o'rnini ochib ko'rish mumkin.
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(t("role_all_roles"))
+                    .size(10.0)
+                    .color(theme::muted())
+                    .strong(),
+            );
+            for r in crate::roles::Role::ALL {
+                let chosen = app.current_user.is_none() && app.view_role == Some(*r);
+                let n = r.screens().len();
+                let label = if n > 0 {
+                    format!("{} · {n}", r.label())
+                } else {
+                    r.label().to_string()
+                };
                 if ui
-                    .selectable_label(app.current_user == Some(u.id), label)
+                    .selectable_label(chosen, label)
+                    .on_hover_text(r.hint())
                     .clicked()
                 {
-                    pick = Some(Some(u.id));
+                    pick_role = Some(Some(*r));
                 }
             }
-            if app.users.is_empty() {
+
+            // ---- Bazaga kiritilgan xodimlar.
+            if !app.users.is_empty() {
+                ui.add_space(6.0);
                 ui.label(
-                    RichText::new(t("role_no_users"))
-                        .size(11.0)
-                        .color(theme::muted()),
+                    RichText::new(t("role_people"))
+                        .size(10.0)
+                        .color(theme::muted())
+                        .strong(),
                 );
+                for u in &app.users {
+                    let label = format!("{} · {}", u.name, u.role.label());
+                    if ui
+                        .selectable_label(app.current_user == Some(u.id), label)
+                        .clicked()
+                    {
+                        pick = Some(Some(u.id));
+                    }
+                }
             }
+
+            ui.add_space(6.0);
+            ui.separator();
+            ui.label(
+                RichText::new(t("role_not_a_lock"))
+                    .size(10.0)
+                    .color(theme::muted()),
+            );
         })
         .response
         .on_hover_text(role.hint());
 
+    // Xodim tanlovi ustun: u rolni ham o'zi belgilaydi.
     if let Some(id) = pick {
         app.set_user(id);
+    } else if let Some(r) = pick_role {
+        app.set_view_role(r);
     }
 }
 
@@ -695,6 +860,83 @@ pub fn tab_row(ui: &mut egui::Ui, tab: &mut u8, daily: &[(u8, &str)], rare: &[(u
     });
 }
 
+/// Yon paneldagi guruh sarlavhasi.
+fn group_title(ui: &mut egui::Ui, text: &str) {
+    ui.add_space(10.0);
+    ui.horizontal(|ui| {
+        ui.add_space(2.0);
+        ui.label(
+            RichText::new(text)
+                .size(10.0)
+                .color(theme::muted())
+                .strong(),
+        );
+    });
+    ui.add_space(5.0);
+}
+
+/// Yon paneldagi bitta qator: belgi, maslahat va bosilishi.
+fn nav_row(
+    ui: &mut egui::Ui,
+    app: &mut App,
+    screen: Screen,
+    notice_count: usize,
+    notice_color: egui::Color32,
+    jumped: Option<Screen>,
+) {
+    let active = app.screen == screen;
+    // Bildirishnomalar ekrani yonida ochiq savollar soni.
+    let badge = (screen == Screen::Notices)
+        .then_some(())
+        .and_then(|_| (notice_count > 0).then_some((notice_count, notice_color)));
+    let resp = nav_item(ui, screen, active, badge);
+    // Ochiq modul ro'yxatdan tashqarida qolib ketmasin — lekin bu **faqat
+    // modul almashganda** qilinadi.
+    //
+    // Ilgari tekshiruv har kadrda ishlardi: foydalanuvchi ro'yxatni pastga
+    // surganda faol qator ko'rinishdan chiqar, keyingi kadrda ro'yxat o'zi
+    // tepaga qaytib ketardi va pastga tushib bo'lmasdi.
+    if active && jumped != Some(screen) && !ui.is_rect_visible(resp.rect) {
+        resp.scroll_to_me(Some(egui::Align::Center));
+    }
+    if resp.clicked() {
+        app.screen = screen;
+    }
+    // Sichqoncha ustida: TZ bo'limi va (bo'lsa) tayyorlik holati.
+    let numeral = screen.numeral();
+    let hint = match screen.readiness() {
+        Readiness::Ready => String::new(),
+        Readiness::Storage => t("readiness_storage").to_string(),
+        Readiness::Planned => t("readiness_planned").to_string(),
+    };
+    let tip = match (numeral.is_empty(), hint.is_empty()) {
+        (true, true) => String::new(),
+        (true, false) => hint,
+        (false, true) => format!("{} {numeral}", t("search_module")),
+        (false, false) => format!("{} {numeral} · {hint}", t("search_module")),
+    };
+    if !tip.is_empty() {
+        resp.on_hover_text(tip);
+    }
+    ui.add_space(1.0);
+}
+
+/// Barcha bo'limlar, TZ bosqichlari bo'yicha guruhlab.
+fn all_groups(
+    ui: &mut egui::Ui,
+    app: &mut App,
+    notice_count: usize,
+    notice_color: egui::Color32,
+    jumped: Option<Screen>,
+) {
+    for (title_key, screens) in NAV_GROUPS {
+        group_title(ui, t(title_key));
+        for &screen in *screens {
+            nav_row(ui, app, screen, notice_count, notice_color, jumped);
+        }
+    }
+}
+
 fn side_bar(ctx: &Context, app: &mut App) {
     egui::SidePanel::left("nav")
         .exact_width(266.0)
@@ -728,63 +970,31 @@ fn side_bar(ctx: &Context, app: &mut App) {
                         _ => theme::accent(),
                     };
 
-                    for (title_key, screens) in NAV_GROUPS {
-                        ui.add_space(10.0);
-                        ui.horizontal(|ui| {
-                            ui.add_space(2.0);
-                            ui.label(
-                                RichText::new(t(title_key))
-                                    .size(10.0)
-                                    .color(theme::muted())
-                                    .strong(),
-                            );
-                        });
-                        ui.add_space(5.0);
-
-                        for &screen in *screens {
-                            let active = app.screen == screen;
-                            // Bildirishnomalar ekrani yonida ochiq savollar soni.
-                            let badge = (screen == Screen::Notices).then_some(()).and_then(|_| {
-                                let n = notice_count;
-                                (n > 0).then_some((n, notice_color))
-                            });
-                            let resp = nav_item(ui, screen, active, badge);
-                            // Ochiq modul ro'yxatdan tashqarida qolib
-                            // ketmasin — lekin bu **faqat modul
-                            // almashganda** qilinadi.
-                            //
-                            // Ilgari tekshiruv har kadrda ishlardi:
-                            // foydalanuvchi ro'yxatni pastga surganda faol
-                            // qator ko'rinishdan chiqar, keyingi kadrda
-                            // ro'yxat o'zi tepaga qaytib ketardi va pastga
-                            // tushib bo'lmasdi.
-                            if active && jumped != Some(screen) && !ui.is_rect_visible(resp.rect) {
-                                resp.scroll_to_me(Some(egui::Align::Center));
-                            }
-                            if resp.clicked() {
-                                app.screen = screen;
-                            }
-                            // Sichqoncha ustida: TZ bo'limi va (bo'lsa)
-                            // tayyorlik holati.
-                            let numeral = screen.numeral();
-                            let hint = match screen.readiness() {
-                                Readiness::Ready => String::new(),
-                                Readiness::Storage => t("readiness_storage").to_string(),
-                                Readiness::Planned => t("readiness_planned").to_string(),
-                            };
-                            let tip = match (numeral.is_empty(), hint.is_empty()) {
-                                (true, true) => String::new(),
-                                (true, false) => hint,
-                                (false, true) => format!("{} {numeral}", t("search_module")),
-                                (false, false) => {
-                                    format!("{} {numeral} · {hint}", t("search_module"))
-                                }
-                            };
-                            if !tip.is_empty() {
-                                resp.on_hover_text(tip);
-                            }
-                            ui.add_space(1.0);
+                    // Rol tanlangan bo'lsa, uning o'z bo'limlari tepada
+                    // alohida turadi. Qolganlari **yashirilmaydi** —
+                    // yopiq sarlavha ostida qoladi va bir bosishda
+                    // ochiladi: yashirilgan ma'lumot ishonchni yo'qotadi
+                    // va odamlar baribir bir-biridan so'rab oladi.
+                    let own = app.role().screens();
+                    if own.is_empty() {
+                        all_groups(ui, app, notice_count, notice_color, jumped);
+                    } else {
+                        group_title(ui, t("nav_my_work"));
+                        for &screen in own {
+                            nav_row(ui, app, screen, notice_count, notice_color, jumped);
                         }
+                        ui.add_space(12.0);
+                        egui::CollapsingHeader::new(
+                            RichText::new(t("nav_other"))
+                                .size(10.0)
+                                .color(theme::muted())
+                                .strong(),
+                        )
+                        .id_salt("nav_other")
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            all_groups(ui, app, notice_count, notice_color, jumped);
+                        });
                     }
 
                     // Joriy modul belgilanadi: keyingi kadrlarda ro'yxat

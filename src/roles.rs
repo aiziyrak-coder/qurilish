@@ -208,6 +208,115 @@ impl Role {
         }
     }
 
+    /// Rol kundalik ishida ochadigan bo'limlar.
+    ///
+    /// Birinchisi — rolning uy ekrani (`home`). Ro'yxat ekranni
+    /// **yashirmaydi**: yon panelda u «Sizning ishingiz» bo'lib tepada
+    /// turadi, qolgan bo'limlar esa pastda yopiq sarlavha ostida qoladi
+    /// va bir bosishda ochiladi. Sababi roli hujjatining boshida yozilgan:
+    /// yashirilgan ma'lumot ishonchni yo'qotadi.
+    ///
+    /// Administrator uchun ro'yxat bo'sh: unda ajratadigan ish yo'q,
+    /// shuning uchun yon panel odatdagidek to'liq ko'rinadi.
+    ///
+    /// Qoida: rol o'zgartira oladigan har bir ekran shu ro'yxatda bo'lishi
+    /// shart — aks holda ruxsat berilgan ish ko'rinmay qolardi.
+    pub fn screens(self) -> &'static [Screen] {
+        use Screen as S;
+        match self {
+            Role::Admin => &[],
+            Role::Director => &[
+                S::Analytics,
+                S::Director,
+                S::Portfolio,
+                S::Passport,
+                S::Contracts,
+                S::Deals,
+                S::Estimate,
+                S::Purchases,
+                S::Reports,
+                S::Notices,
+            ],
+            Role::ProjectManager => &[
+                S::Gantt,
+                S::Ppr,
+                S::Passport,
+                S::Requests,
+                S::ExecDocs,
+                S::Analytics,
+                S::Journal,
+                S::Reports,
+                S::Notices,
+            ],
+            Role::Foreman => &[
+                S::Foreman,
+                S::Journal,
+                S::Timesheet,
+                S::Machines,
+                S::Gantt,
+                S::Requests,
+                S::Warehouse,
+                S::Safety,
+                S::Notices,
+            ],
+            // Brigadir prorabdan tor: faqat o'z brigadasi va kunlik yozuv.
+            Role::Brigadier => &[S::Foreman, S::Journal, S::Timesheet, S::Notices],
+            Role::Supervisor => &[
+                S::TechSupervision,
+                S::Inspections,
+                S::ExecDocs,
+                S::Quality,
+                S::Safety,
+                S::AiCheck,
+                S::Ppr,
+                S::Journal,
+                S::Notices,
+            ],
+            Role::Designer => &[S::AiCheck, S::Ppr, S::Passport, S::Journal, S::Notices],
+            Role::Estimator => &[
+                S::Estimate,
+                S::Purchases,
+                S::Materials,
+                S::Reports,
+                S::Notices,
+            ],
+            Role::Supply => &[
+                S::Requests,
+                S::Purchases,
+                S::Materials,
+                S::Warehouse,
+                S::Notices,
+            ],
+            Role::Storekeeper => &[S::Warehouse, S::Materials, S::Requests, S::Notices],
+            Role::Mechanic => &[S::Machines, S::Journal, S::Notices],
+            Role::QualityEngineer => &[
+                S::Quality,
+                S::Inspections,
+                S::ExecDocs,
+                S::Journal,
+                S::Notices,
+            ],
+            Role::SafetyEngineer => &[S::Safety, S::Journal, S::Timesheet, S::Notices],
+            Role::Hr => &[S::Timesheet, S::Journal, S::Notices],
+            Role::Accountant => &[
+                S::Deals,
+                S::Contracts,
+                S::Purchases,
+                S::Reports,
+                S::Analytics,
+                S::Notices,
+            ],
+            Role::SalesManager => &[S::Sales, S::Deals, S::Client, S::Reports, S::Notices],
+            Role::Client => &[
+                S::Client,
+                S::Dashboard,
+                S::Reports,
+                S::Analytics,
+                S::Notices,
+            ],
+        }
+    }
+
     /// Shu rol uchun ekranni **o'zgartirish** mumkinmi.
     /// Rolning kunlik jurnaldagi vazifasi (TZ V.2).
     ///
@@ -292,6 +401,65 @@ pub struct User {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Rolning uy ekrani uning o'z bo'limlari ichida bo'ladi.
+    ///
+    /// Aks holda rol tanlanganda ochilgan ekran yon paneldagi «Sizning
+    /// ishingiz» ro'yxatida ko'rinmay, odam qayerda turganini bilmasdi.
+    #[test]
+    fn the_home_screen_is_the_first_of_the_role_screens() {
+        for r in Role::ALL {
+            let own = r.screens();
+            if own.is_empty() {
+                // Administrator: ajratadigan ish yo'q.
+                assert_eq!(*r, Role::Admin, "{:?} uchun bo'lim ro'yxati bo'sh", r);
+                continue;
+            }
+            assert_eq!(
+                own[0],
+                r.home(),
+                "{:?}: uy ekrani ro'yxatning birinchisi emas",
+                r
+            );
+        }
+    }
+
+    /// Rol o'zgartira oladigan ekran uning ro'yxatida bo'lishi shart.
+    ///
+    /// Bo'lmasa, ruxsat berilgan ish yon panelda ko'rinmay qolardi: odam
+    /// uni qidirib topishi kerak bo'lardi.
+    #[test]
+    fn every_editable_screen_is_in_the_role_list() {
+        for r in Role::ALL {
+            if r.screens().is_empty() {
+                continue;
+            }
+            // Barcha ekranlar yon panel ro'yxatidan olinadi.
+            for (_, screens) in crate::app::NAV_GROUPS {
+                for screen in *screens {
+                    if r.can_edit(*screen) {
+                        assert!(
+                            r.screens().contains(screen),
+                            "{:?}: {:?} ni o'zgartira oladi, lekin ro'yxatida yo'q",
+                            r,
+                            screen
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Ro'yxatda bir ekran ikki marta turmaydi.
+    #[test]
+    fn the_role_list_has_no_repeats() {
+        for r in Role::ALL {
+            let own = r.screens();
+            for (i, a) in own.iter().enumerate() {
+                assert!(!own[i + 1..].contains(a), "{:?}: {:?} ikki marta", r, a);
+            }
+        }
+    }
 
     /// TZ V.2: jurnalga yozadigan rol uni o'zgartira ham oladi —
     /// ko'rinish huquqdan ajralib ketmasin.
