@@ -2095,6 +2095,57 @@ impl App {
     /// IFC bilan bir xil qoida: allaqachon bor marka takrorlanmaydi, yangi
     /// element esa varaq nomi bilan yoziladi. Bog'lanishlar chizmadan
     /// olinmaydi — chizmada ular yozilmagan bo'ladi.
+    /// Chizma fayllarini obyektga biriktiradi (TZ II.1).
+    ///
+    /// Bu **o'qish emas, biriktirish**: PDF, DWG, RVT va rasm ro'yxatga
+    /// tushadi va tizim ko'ruvchisida ochiladi, lekin ulardan element
+    /// chiqarilmaydi — DWG va RVT yopiq format, PDF da esa chizma rasm
+    /// bo'lib turadi. Tekshiruv uchun IFC yoki DXF kerak va buni ekran
+    /// ochiq aytadi.
+    ///
+    /// Fayl ko'chirilmaydi — yo'li saqlanadi, aks holda bitta chizmaning
+    /// ikkita nusxasi paydo bo'lardi va qaysi biri yangi ekani
+    /// bilinmasdi.
+    pub fn attach_drawings(&mut self, paths: &[std::path::PathBuf]) -> usize {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return 0;
+        }
+        let Some(pid) = self.current else { return 0 };
+        let mut added = 0usize;
+        for path in paths {
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
+            let format = path
+                .extension()
+                .map(|s| s.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            self.db.insert_document(&crate::domain::Document {
+                id: 0,
+                project_id: pid,
+                section: crate::model::Section::None,
+                name,
+                format,
+                path: path.to_string_lossy().to_string(),
+                sheets: 0,
+                added_at: String::new(),
+                revision: String::new(),
+                version: 1,
+                replaces: None,
+                change_note: String::new(),
+                issued: None,
+            });
+            added += 1;
+        }
+        if added > 0 {
+            self.reload_modules();
+            self.notify(format!("{} · {added}", t("drawings_added")));
+        }
+        added
+    }
+
     pub fn import_dxf(&mut self, path: &std::path::Path) {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());

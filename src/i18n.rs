@@ -757,6 +757,17 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Faqat ko'rish: hech narsani o'zgartirmaydi.",
             "Только просмотр: ничего не изменяет.",
         ),
+        "project_not_loaded" => ("Loyiha hali yuklanmagan", "Проект ещё не загружен"),
+        "project_not_loaded_hint" => (
+            "IFC va DXF o'qiladi: elementlar, bog'lanishlar va o'lchamlar chiqadi va tekshiruvga tushadi. PDF, DWG, RVT va rasm esa biriktiriladi — ro'yxatda turadi va ochiladi, lekin o'qilmaydi.",
+            "IFC и DXF читаются: элементы, связи и габариты попадают в проверку. PDF, DWG, RVT и изображения прикрепляются — они есть в списке и открываются, но не читаются.",
+        ),
+        "add_drawing" => ("Chizma qo'shish", "Добавить чертёж"),
+        "add_drawing_hint" => (
+            "PDF, DWG, RVT yoki rasm. Fayl ko'chirilmaydi — yo'li saqlanadi.",
+            "PDF, DWG, RVT или изображение. Файл не копируется — сохраняется путь.",
+        ),
+        "drawings_added" => ("Chizma qo'shildi", "Чертёж добавлен"),
         "ai_short" => ("AI", "AI"),
         "ai_title" => ("AI yordamchisi", "AI помощник"),
         "ai_where" => (

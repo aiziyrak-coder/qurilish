@@ -50,6 +50,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(8.0);
 
+    // Element yo'q — tekshiradigan narsa ham yo'q. Yuklash joyi shu
+    // sababli qaysi tabda turgandan qat'i nazar ko'rinib turadi.
+    if app.elements.is_empty() {
+        not_loaded_card(ui, app);
+    }
+
     match app.check_tab {
         CheckTab::Issues => issues_tab(ui, app),
         CheckTab::Clash => clash_tab(ui, app),
@@ -872,23 +878,26 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
 
 // ---------------------------------------------------------------- Elementlar
 
-fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
-    let mut add = false;
-    let mut import = false;
+/// Loyihani yuklash tugmalari.
+///
+/// Bitta joyda turadi va ikki yerdan chaqiriladi: «Loyiha elementlari»
+/// tabidan va element hali yo'q bo'lganda — ekranning tepasidan, qaysi
+/// tabda turgandan qat'i nazar. Avval tugmalar faqat o'sha tabning ichida
+/// edi: odam birinchi tabda turib «yuklash joyi yo'q» degan xulosaga
+/// kelardi va tekshiruv tugmasi nega ishlamayotganini tushunmasdi.
+fn load_bar(ui: &mut egui::Ui, app: &mut App) {
+    let mut import_ifc = false;
     let mut import_dxf = false;
-    let mut removed: Option<i64> = None;
+    let mut attach = false;
 
-    ui.horizontal(|ui| {
-        if ui.button(t("add_element")).clicked() {
-            add = true;
-        }
+    ui.horizontal_wrapped(|ui| {
         // TZ II.1-2: chizmani qo'lda kiritish o'rniga IFC dan o'qish.
         if ui
             .button(t("import_ifc"))
             .on_hover_text(t("import_ifc_hint"))
             .clicked()
         {
-            import = true;
+            import_ifc = true;
         }
         // DWG va RVT yopiq; DXF — o'sha CAD dasturlarining ochiq formati.
         if ui
@@ -898,15 +907,16 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
         {
             import_dxf = true;
         }
-        ui.label(
-            RichText::new(t("elements_hint"))
-                .size(11.0)
-                .color(theme::muted()),
-        );
+        if ui
+            .button(t("add_drawing"))
+            .on_hover_text(t("add_drawing_hint"))
+            .clicked()
+        {
+            attach = true;
+        }
     });
-    ui.add_space(6.0);
 
-    if import {
+    if import_ifc {
         if let Some(path) = rfd::FileDialog::new()
             .set_title(t("import_ifc"))
             .add_filter("IFC", &["ifc", "IFC"])
@@ -915,7 +925,6 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
             app.import_ifc(&path);
         }
     }
-
     if import_dxf {
         if let Some(path) = rfd::FileDialog::new()
             .set_title(t("dxf_import"))
@@ -925,6 +934,59 @@ fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
             app.import_dxf(&path);
         }
     }
+    if attach {
+        if let Some(files) = rfd::FileDialog::new()
+            .set_title(t("add_drawing"))
+            .add_filter(
+                t("add_drawing"),
+                &[
+                    "pdf", "PDF", "dwg", "DWG", "rvt", "RVT", "png", "jpg", "jpeg",
+                ],
+            )
+            .pick_files()
+        {
+            app.attach_drawings(&files);
+        }
+    }
+}
+
+/// Loyiha yuklanmaganda ekranning tepasida turadigan kartochka.
+fn not_loaded_card(ui: &mut egui::Ui, app: &mut App) {
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::accent()))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::same(12))
+        .show(ui, |ui| {
+            ui.label(RichText::new(t("project_not_loaded")).strong().size(14.0));
+            ui.add_space(2.0);
+            ui.label(
+                RichText::new(t("project_not_loaded_hint"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(8.0);
+            load_bar(ui, app);
+        });
+    ui.add_space(8.0);
+}
+
+fn elements_tab(ui: &mut egui::Ui, app: &mut App) {
+    let mut add = false;
+    let mut removed: Option<i64> = None;
+
+    ui.horizontal_wrapped(|ui| {
+        if ui.button(t("add_element")).clicked() {
+            add = true;
+        }
+        load_bar(ui, app);
+        ui.label(
+            RichText::new(t("elements_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    ui.add_space(6.0);
 
     if app.elements.is_empty() {
         empty(ui, t("no_elements"));
