@@ -6354,6 +6354,16 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Grafik bo'sh — «Grafikni qayta qurish» tugmasini bosing",
             "График пуст — нажмите «Пересобрать график»",
         ),
+        "units_same_place" => (
+            "Bir joyda turgan kvartiralar (shaxmatkada ko'rinmaydi)",
+            "Квартиры на одном месте (не видны в шахматке)",
+        ),
+        "units_off_block" => (
+            "Blokda yo'q qavatdagi kvartiralar",
+            "Квартиры на этаже, которого нет в блоке",
+        ),
+        "col_first_floor" => ("Birinchi qavat", "Первый этаж"),
+        "col_floors" => ("Qavatlar", "Этажей"),
         "schedule_rebuilt" => ("To'lov grafigi qayta qurildi", "График платежей пересобран"),
         "schedule_kept" => (
             "tushgan to'lov saqlandi",

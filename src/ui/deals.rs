@@ -88,11 +88,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 fn debts_row(ui: &mut egui::Ui, app: &App) {
     use crate::sales::Bucket;
 
-    let rows = crate::sales::aging(&app.deals, &app.payments, app.today);
+    // Qarz yoshi bir marta hisoblangan: bu yerda butun to'lov jadvali
+    // har kadrda ikki marta ko'rilardi.
+    let rows = &app.aging;
     if rows.is_empty() {
         return;
     }
-    let totals = crate::sales::aging_totals(&rows);
+    let totals = crate::sales::aging_totals(rows);
 
     egui::Frame::new()
         .fill(theme::card())
@@ -234,7 +236,6 @@ fn unit_label(app: &App, unit_id: i64) -> String {
 
 fn list(ui: &mut egui::Ui, app: &mut App) {
     let mut selected: Option<i64> = None;
-    let today = app.today;
 
     egui::ScrollArea::both()
         .auto_shrink([false, false])
@@ -258,7 +259,7 @@ fn list(ui: &mut egui::Ui, app: &mut App) {
                         ui.end_row();
 
                         for d in &app.deals {
-                            let st = sales::deal_state(d, &app.payments, today);
+                            let st = app.deal_state(d.id);
                             cell_l(ui, 80.0, RichText::new(&d.number).size(12.5).strong());
                             cell_l(
                                 ui,

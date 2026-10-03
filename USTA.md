@@ -161,7 +161,7 @@ Tekshiruv:
 
 | Nima | Natija |
 |---|---|
-| `cargo test --workspace` | 480 desktop + 67 server + 3 xesh sinov o'tadi |
+| `cargo test --workspace` | 484 desktop + 67 server + 3 xesh sinov o'tadi |
 | `cargo clippy --workspace --all-targets -- -D warnings` | toza |
 | `cargo fmt --check` | toza |
 | `cargo test --no-default-features` | 457 sinov (tarmoq kodisiz yig'ilish) |
@@ -187,6 +187,11 @@ Qo'riqchi sinovlar (regressiyani ushlaydi):
 - namunadagi «rigelni kesib o'tuvchi quvur» ikki mustaqil yo'l bilan
   topiladi: qoidalar bo'yicha va o'lcham bo'yicha — natijalar bir xil
 - yangi hisobotlar sonni qayta hisoblamaydi: ular o'z modulidan o'qiydi
+- sotuv hisobi (yig'indi, birlik holati, shartnoma to'lovi, qarz yoshi)
+  kolliziya kabi **bir marta** bajariladi; sinov keshdagi sonni mustaqil
+  hisob bilan solishtiradi
+- bitta (blok, qavat, o'rin) da ikkita kvartira paydo bo'lmaydi, paydo
+  bo'lgani esa yashirilmay ekranda aytiladi
 - narx indeksi bilan izlash indekssiz izlash bilan bir xil natija beradi
 - obyekt nomidagi qator ko'chirish belgisi javobni buzmaydi (xato
   qaytarib tekshirilgan: tuzatishsiz 500 qaytardi)

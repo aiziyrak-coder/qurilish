@@ -319,6 +319,50 @@ fn toolbar(ui: &mut egui::Ui, app: &mut App, pid: i64) {
         if ui.button(t("add_block")).clicked() {
             add_block = true;
         }
+        // Blok o'lchami tahrir qilinadi. Avval u 9 qavat, 1-qavatdan deb
+        // qotib qolgan edi: na baland bino, na yerto'la ko'rsatib bo'lardi,
+        // qavat chegarasi esa shu yerdan olinadi.
+        if let Some(mut b) = app
+            .sales_block
+            .and_then(|id| app.blocks.iter().find(|b| b.id == id))
+            .cloned()
+        {
+            let mut changed = false;
+            ui.separator();
+            changed |= ui
+                .add_sized([130.0, 22.0], egui::TextEdit::singleline(&mut b.name))
+                .changed();
+            ui.label(
+                RichText::new(t("col_first_floor"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut b.first_floor)
+                        .speed(1.0)
+                        .range(-5.0..=10.0),
+                )
+                .changed();
+            ui.label(
+                RichText::new(t("col_floors"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            changed |= ui
+                .add(
+                    egui::DragValue::new(&mut b.floors)
+                        .speed(1.0)
+                        .range(1.0..=80.0),
+                )
+                .changed();
+            if changed {
+                app.db.update_block(&b);
+                if let Some(slot) = app.blocks.iter_mut().find(|x| x.id == b.id) {
+                    *slot = b;
+                }
+            }
+        }
         if app.sales_block.is_some() && ui.button(t("generate_units")).clicked() {
             generate = true;
         }
@@ -428,7 +472,12 @@ fn fnum(
 
 /// Blokning har bir qavati uchun bir xil kvartiralar yaratadi.
 /// Mavjud raqamlar takrorlanmaydi — generator ikki marta bosilsa dubl bo'lmaydi.
-fn generate_units(app: &App, pid: i64, block: &Block, st: (i64, i64, f64, f64, i64)) -> usize {
+pub(crate) fn generate_units(
+    app: &App,
+    pid: i64,
+    block: &Block,
+    st: (i64, i64, f64, f64, i64),
+) -> usize {
     let (per_floor, first_number, area, price, rooms) = st;
     let mut n = 0;
     let mut number = first_number;
@@ -436,10 +485,14 @@ fn generate_units(app: &App, pid: i64, block: &Block, st: (i64, i64, f64, f64, i
         for position in 1..=per_floor.max(1) {
             let label = number.to_string();
             number += 1;
-            let taken = app
-                .units
-                .iter()
-                .any(|u| u.block_id == block.id && u.number == label);
+            // Raqam ham, **joy** ham band bo'lmasligi kerak. Avval faqat
+            // raqam tekshirilardi: generator boshqa son bilan ikkinchi
+            // marta bosilganda bitta joyga ikkita kvartira tushar va
+            // ulardan biri shaxmatkada ko'rinmay qolardi.
+            let taken = app.units.iter().any(|u| {
+                u.block_id == block.id
+                    && (u.number == label || (u.floor == floor && u.position == position))
+            });
             if taken {
                 continue;
             }
@@ -560,16 +613,56 @@ fn board_tab(ui: &mut egui::Ui, app: &mut App) {
     }
 
     let cols = units.iter().map(|u| u.position).max().unwrap_or(1).max(1);
+    // Oraliq blokdan olinadi, lekin undan tashqaridagi birlik ham
+    // ko'rinishi kerak: yashirib qo'yish uni yo'qotish bilan barobar.
+    let range = sales::block_floors(&block);
     let top = units
         .iter()
         .map(|u| u.floor)
         .max()
-        .unwrap_or(block.first_floor);
+        .unwrap_or(*range.end())
+        .max(*range.end());
     let bottom = units
         .iter()
         .map(|u| u.floor)
         .min()
-        .unwrap_or(block.first_floor);
+        .unwrap_or(*range.start())
+        .min(*range.start());
+
+    // Ikkita muammo ochiq aytiladi: bir joyda turgan kvartiralar va
+    // blokda yo'q qavatdagilar.
+    let crowded = sales::crowded(&units);
+    let off = sales::off_block(&units, &block);
+    if !crowded.is_empty() || !off.is_empty() {
+        let mut lines = Vec::new();
+        if !crowded.is_empty() {
+            lines.push(format!(
+                "{}: {}",
+                t("units_same_place"),
+                crowded
+                    .iter()
+                    .map(|u| u.number.clone())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        if !off.is_empty() {
+            lines.push(format!(
+                "{}: {}",
+                t("units_off_block"),
+                off.iter()
+                    .map(|u| format!("{} ({})", u.number, u.floor))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        ui.label(
+            RichText::new(lines.join(" · "))
+                .size(11.5)
+                .color(theme::warn()),
+        );
+        ui.add_space(4.0);
+    }
 
     let mut clicked: Option<i64> = None;
     // Tanlangan birlik kartochkasi — o'ng yon panel: kengligi aniq hurmat
@@ -656,8 +749,9 @@ fn board_tab(ui: &mut egui::Ui, app: &mut App) {
 fn cell(ui: &mut egui::Ui, app: &App, u: &Unit) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(CELL_W, CELL_H), Sense::click());
     // Rang shartnomadan kelib chiqadi — hisobot va yig'indi bilan bitta
-    // qoidadan, aks holda shaxmatka boshqa narsa ko'rsatardi.
-    let status = sales::unit_status(u, &app.deals);
+    // qoidadan, aks holda shaxmatka boshqa narsa ko'rsatardi. Hisob bir
+    // marta bajarilgan: taxta har kadrda qayta chiziladi.
+    let status = app.unit_state(u.id);
     let color = status_color(status);
     let selected = app.selected_unit == Some(u.id);
     let p = ui.painter();
@@ -703,9 +797,8 @@ fn cell(ui: &mut egui::Ui, app: &App, u: &Unit) -> bool {
     );
 
     // Muddati o'tgan to'lov bo'lsa — o'ng pastda qizil nuqta.
-    if let Some(d) = sales::active_deal(&app.deals, u.id) {
-        let st = sales::deal_state(d, &app.payments, app.today);
-        if st.overdue > 0.0 {
+    if let Some(d) = app.unit_deal(u.id) {
+        if app.deal_state(d.id).overdue > 0.0 {
             p.circle_filled(
                 rect.right_bottom() + vec2(-10.0, -10.0),
                 4.0,
@@ -733,12 +826,7 @@ fn legend(ui: &mut egui::Ui, app: &App) {
         .iter()
         .filter(|u| app.sales_block.is_none_or(|b| u.block_id == b))
         .collect();
-    let count = |s: UnitStatus| {
-        shown
-            .iter()
-            .filter(|u| sales::unit_status(u, &app.deals) == s)
-            .count()
-    };
+    let count = |s: UnitStatus| shown.iter().filter(|u| app.unit_state(u.id) == s).count();
     ui.horizontal_wrapped(|ui| {
         for s in UnitStatus::ALL {
             let (r, _) = ui.allocate_exact_size(vec2(12.0, 12.0), Sense::hover());
@@ -769,6 +857,13 @@ fn unit_card(ui: &mut egui::Ui, app: &mut App) {
     // bo'ladi, qoida esa bitta joydan o'qilishi kerak.
     let derived = sales::unit_status(&u, &app.deals);
     let has_deal = sales::active_deal(&app.deals, u.id).is_some();
+    // Qavat chegarasi blokdan: qoida bitta joyda turadi.
+    let floors = app
+        .blocks
+        .iter()
+        .find(|b| b.id == u.block_id)
+        .map(sales::block_floors)
+        .unwrap_or(1..=1);
     let mut changed = false;
     let mut make_deal = false;
     let mut go_deal: Option<i64> = None;
@@ -803,11 +898,14 @@ fn unit_card(ui: &mut egui::Ui, app: &mut App) {
                                 .changed();
                         });
                         fld(ui, t("col_floor"), |ui| {
+                            // Chegara blokdan olinadi: avval 200-qavatgacha
+                            // yozish mumkin edi va bitta xato raqam
+                            // shaxmatkani ikki yuz qatorga cho'zib yuborardi.
                             changed |= ui
                                 .add(
                                     egui::DragValue::new(&mut u.floor)
                                         .speed(1.0)
-                                        .range(-5.0..=200.0),
+                                        .range(floors.clone()),
                                 )
                                 .changed();
                         });
@@ -1105,8 +1203,8 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App) {
                             )
                             .changed();
                         cell_r(ui, 140.0, RichText::new(money(u.price())).size(12.5));
-                        let st = sales::unit_status(&u, &app.deals);
-                        if sales::active_deal(&app.deals, u.id).is_some() {
+                        let st = app.unit_state(u.id);
+                        if app.unit_deal(u.id).is_some() {
                             cell_l(ui, 130.0, RichText::new(st.label()).color(status_color(st)));
                         } else {
                             egui::ComboBox::from_id_salt(("ul_st", u.id))
@@ -1120,7 +1218,8 @@ fn list_tab(ui: &mut egui::Ui, app: &mut App) {
                                     }
                                 });
                         }
-                        let client = sales::active_deal(&app.deals, u.id)
+                        let client = app
+                            .unit_deal(u.id)
                             .map(|d| d.client.clone())
                             .unwrap_or_else(|| t("dash").to_string());
                         cell_l(

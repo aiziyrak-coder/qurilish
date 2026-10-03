@@ -1247,7 +1247,7 @@ fn analytics_card(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
     let stock = app.stock();
     let cost = app.cost_summary();
     let sales = app.sales();
-    let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+    let inp = app.analytics_input(&supply, &stock, &cost, sales);
     let found = crate::analytics::findings(&inp);
     let score = crate::analytics::health(&found);
 

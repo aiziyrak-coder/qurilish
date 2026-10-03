@@ -1193,7 +1193,7 @@ fn analytics(app: &App, name: String) -> Table {
     let stock = app.stock();
     let cost = app.cost_summary();
     let sales = app.sales();
-    let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+    let inp = app.analytics_input(&supply, &stock, &cost, sales);
     let rows = crate::analytics::findings(&inp)
         .iter()
         .map(|f| {

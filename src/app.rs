@@ -595,6 +595,16 @@ pub struct App {
     /// Elementlar o'qilganda bir marta hisoblanadi: ekran har kadrda
     /// qayta chiziladi va u yerda qayta hisoblash ortiqcha bo'lardi.
     pub clashes: Vec<crate::clash::Clash>,
+    /// Sotuv yig'indisi — bir marta hisoblanadi.
+    pub sales_summary: crate::sales::SalesSummary,
+    /// Qarz yoshi bo'yicha qatorlar — bir marta hisoblanadi.
+    pub aging: Vec<crate::sales::Aging>,
+    /// Birlik raqami -> uning holati.
+    pub unit_states: std::collections::BTreeMap<i64, crate::domain::UnitStatus>,
+    /// Birlik raqami -> amaldagi shartnoma raqami.
+    pub unit_deal: std::collections::BTreeMap<i64, i64>,
+    /// Shartnoma raqami -> uning to'lov holati.
+    pub deal_states: std::collections::BTreeMap<i64, crate::sales::DealState>,
     /// Narxlar bazasi (TZ III.15). Obyektga bog'liq emas.
     pub price_book: Vec<crate::prices::PriceRow>,
     /// Materiallarning bazaga nisbatan holati — bir marta hisoblanadi.
@@ -843,6 +853,11 @@ impl App {
             sign_log: Vec::new(),
             chain_marks: Vec::new(),
             clashes: Vec::new(),
+            sales_summary: Default::default(),
+            aging: Vec::new(),
+            unit_states: Default::default(),
+            unit_deal: Default::default(),
+            deal_states: Default::default(),
             price_book: Vec::new(),
             price_checks: Vec::new(),
             confirm_clear_prices: false,
@@ -1226,6 +1241,7 @@ impl App {
         // Kolliziya bir marta hisoblanadi: elementlar kamdan-kam
         // o'zgaradi, ekran esa soniyasiga o'nlab marta qayta chiziladi.
         self.clashes = crate::clash::find(&self.elements, &self.element_links);
+        self.recompute_sales();
         self.estimates = self.db.estimates(id);
         self.norms = self.db.norms();
 
@@ -2456,8 +2472,66 @@ impl App {
     }
 
     /// TZ XIX-XX: obyekt bo'yicha sotuv xulosasi.
-    pub fn sales(&self) -> crate::sales::SalesSummary {
-        crate::sales::sales_summary(&self.units, &self.deals, &self.payments, self.today)
+    pub fn sales(&self) -> &crate::sales::SalesSummary {
+        &self.sales_summary
+    }
+
+    /// Sotuv hisoblarini bir marta bajaradi.
+    ///
+    /// Sabab kolliziya hisobidagi bilan bir xil: ekran soniyasiga o'nlab
+    /// marta qayta chiziladi, har chizishda esa butun shartnoma va to'lov
+    /// jadvali ko'rilardi. Shaxmatkadagi har katak ham o'z shartnomasini
+    /// qidirardi — 500 kvartira va 400 shartnomada bu sichqonchani
+    /// surganda ham seziladigan sekinlashuv edi.
+    ///
+    /// Tahrir qilinayotgan bitta shartnoma yoki birlik kartochkasi
+    /// baribir jonli hisoblanadi: u bitta yozuv va arzon.
+    fn recompute_sales(&mut self) {
+        self.unit_states = self
+            .units
+            .iter()
+            .map(|u| (u.id, crate::sales::unit_status(u, &self.deals)))
+            .collect();
+        self.unit_deal = self
+            .units
+            .iter()
+            .filter_map(|u| crate::sales::active_deal(&self.deals, u.id).map(|d| (u.id, d.id)))
+            .collect();
+        self.deal_states = self
+            .deals
+            .iter()
+            .map(|d| {
+                (
+                    d.id,
+                    crate::sales::deal_state(d, &self.payments, self.today),
+                )
+            })
+            .collect();
+        self.sales_summary =
+            crate::sales::sales_summary(&self.units, &self.deals, &self.payments, self.today);
+        self.aging = crate::sales::aging(&self.deals, &self.payments, self.today);
+    }
+
+    /// Birlikning hisoblangan holati.
+    pub fn unit_state(&self, unit_id: i64) -> crate::domain::UnitStatus {
+        self.unit_states
+            .get(&unit_id)
+            .copied()
+            .unwrap_or(crate::domain::UnitStatus::Free)
+    }
+
+    /// Birlikning amaldagi shartnomasi.
+    pub fn unit_deal(&self, unit_id: i64) -> Option<&crate::domain::Deal> {
+        let id = self.unit_deal.get(&unit_id)?;
+        self.deals.iter().find(|d| d.id == *id)
+    }
+
+    /// Shartnomaning hisoblangan to'lov holati.
+    ///
+    /// Ro'yxatda hali yo'q shartnoma uchun bo'sh hisob qaytadi: o'ylab
+    /// topilgan son ko'rsatishdan ko'ra, nol ko'rsatish halolroq.
+    pub fn deal_state(&self, deal_id: i64) -> crate::sales::DealState {
+        self.deal_states.get(&deal_id).cloned().unwrap_or_default()
     }
 
     /// Kun almashgan bo'lsa «bugun» ni yangilaydi.
@@ -2492,6 +2566,8 @@ impl App {
         self.units[pos].status = want;
         let copy = self.units[pos].clone();
         self.db.update_unit(&copy);
+        // Hisob kesh da turadi — holat o'zgardi, demak u ham yangilanadi.
+        self.recompute_sales();
     }
 
     /// TZ IX-X: ariza va xaridlarni solishtirgan ta'minot holati.
@@ -2585,7 +2661,7 @@ impl App {
         let supply = self.supply();
         let stock = self.stock();
         let cost = self.cost_summary();
-        let sales = self.sales();
+        let sales = self.sales().clone();
         let inp = self.analytics_input(&supply, &stock, &cost, &sales);
 
         let mut out = String::new();

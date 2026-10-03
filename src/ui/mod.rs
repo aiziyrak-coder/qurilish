@@ -30,7 +30,7 @@ mod quality;
 mod reports;
 mod requests;
 mod safety;
-mod sales;
+pub(crate) mod sales;
 mod search;
 mod settings;
 mod supervision;

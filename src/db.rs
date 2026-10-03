@@ -1734,6 +1734,206 @@ mod tests {
         assert_eq!(app.today, same);
     }
 
+    /// Bir joyda turgan kvartiralar yashirilmaydi — aytiladi.
+    ///
+    /// Shaxmatka bitta (blok, qavat, o'rin) da faqat bittasini chizadi:
+    /// ikkinchisi taxtada yo'qolgandek bo'ladi, lekin yig'indida va
+    /// eksportda sanalaveradi.
+    #[test]
+    fn two_flats_in_one_place_are_reported() {
+        let unit = |id: i64, number: &str, floor: i64, position: i64| crate::domain::Unit {
+            id,
+            project_id: 1,
+            block_id: 1,
+            number: number.into(),
+            floor,
+            position,
+            kind: crate::domain::UnitKind::Flat,
+            rooms: 2,
+            area: 50.0,
+            area_living: 30.0,
+            price_per_m2: 10_000_000.0,
+            status: crate::domain::UnitStatus::Free,
+            layout: String::new(),
+            note: String::new(),
+        };
+
+        // Toza ro'yxatda hech kim bir-birini to'smaydi.
+        let clean = [unit(1, "1", 1, 1), unit(2, "2", 1, 2), unit(3, "3", 2, 1)];
+        assert!(crate::sales::crowded(&clean).is_empty());
+
+        // Uchinchisi ikkinchisining joyini egallagan.
+        let mut bad = clean.to_vec();
+        bad.push(unit(4, "4", 1, 2));
+        let found = crate::sales::crowded(&bad);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].number, "4", "ko'rinmay qolgan kvartira topilmadi");
+
+        // Boshqa blokda o'sha qavat-o'rin — bu ziddiyat emas.
+        let mut other = clean.to_vec();
+        let mut o = unit(5, "5", 1, 1);
+        o.block_id = 2;
+        other.push(o);
+        assert!(crate::sales::crowded(&other).is_empty());
+    }
+
+    /// Blokda yo'q qavatdagi kvartira topiladi.
+    #[test]
+    fn a_flat_outside_the_block_is_found() {
+        let block = crate::domain::Block {
+            id: 1,
+            project_id: 1,
+            name: "1-blok".into(),
+            floors: 9,
+            first_floor: 1,
+            note: String::new(),
+        };
+        assert_eq!(crate::sales::block_floors(&block), 1..=9);
+
+        let unit = |id: i64, floor: i64| crate::domain::Unit {
+            id,
+            project_id: 1,
+            block_id: 1,
+            number: id.to_string(),
+            floor,
+            position: 1,
+            kind: crate::domain::UnitKind::Flat,
+            rooms: 2,
+            area: 50.0,
+            area_living: 30.0,
+            price_per_m2: 10_000_000.0,
+            status: crate::domain::UnitStatus::Free,
+            layout: String::new(),
+            note: String::new(),
+        };
+        let list = [unit(1, 1), unit(2, 9), unit(3, 200), unit(4, 0)];
+        let off = crate::sales::off_block(&list, &block);
+        let numbers: Vec<&str> = off.iter().map(|u| u.number.as_str()).collect();
+        assert_eq!(numbers, ["3", "4"], "{numbers:?}");
+
+        // Yerto'lali blok: nol va manfiy qavat normal bo'ladi.
+        let mut basement = block.clone();
+        basement.first_floor = -1;
+        basement.floors = 11;
+        assert_eq!(crate::sales::block_floors(&basement), -1..=9);
+        let off = crate::sales::off_block(&list, &basement);
+        let numbers: Vec<&str> = off.iter().map(|u| u.number.as_str()).collect();
+        assert_eq!(numbers, ["3"], "{numbers:?}");
+    }
+
+    /// Sotuv hisoblari keshdan o'qiladi va hisob bilan bir xil bo'ladi.
+    ///
+    /// Avval har kadrda butun shartnoma va to'lov jadvali qayta ko'rilardi.
+    /// Kesh tezlik uchun, lekin **boshqa javob bermasligi** kerak.
+    #[test]
+    fn the_cached_sales_numbers_match_a_fresh_computation() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let fresh = crate::sales::sales_summary(&app.units, &app.deals, &app.payments, app.today);
+        let cached = app.sales();
+        assert_eq!(cached.units, fresh.units);
+        assert_eq!(cached.free, fresh.free);
+        assert_eq!(cached.sold, fresh.sold);
+        assert_eq!(cached.reserved, fresh.reserved);
+        assert_eq!(cached.received, fresh.received);
+        assert_eq!(cached.debt, fresh.debt);
+        assert_eq!(cached.overdue, fresh.overdue);
+
+        for u in &app.units {
+            assert_eq!(
+                app.unit_state(u.id),
+                crate::sales::unit_status(u, &app.deals),
+                "{} holati keshda boshqacha",
+                u.number
+            );
+        }
+        for d in &app.deals {
+            let fresh = crate::sales::deal_state(d, &app.payments, app.today);
+            let cached = app.deal_state(d.id);
+            assert_eq!(cached.paid, fresh.paid, "{}", d.number);
+            assert_eq!(cached.remaining, fresh.remaining, "{}", d.number);
+            assert_eq!(cached.overdue, fresh.overdue, "{}", d.number);
+        }
+        assert_eq!(
+            app.aging.len(),
+            crate::sales::aging(&app.deals, &app.payments, app.today).len()
+        );
+
+        // Shartnoma o'zgargandan keyin kesh ham o'zgaradi.
+        let mut deal = app
+            .deals
+            .iter()
+            .find(|d| d.status == crate::domain::DealStatus::Signed)
+            .cloned()
+            .expect("shartnoma");
+        let unit_id = deal.unit_id;
+        assert_eq!(app.unit_state(unit_id), crate::domain::UnitStatus::Contract);
+        deal.status = crate::domain::DealStatus::Cancelled;
+        app.db.update_deal(&deal);
+        app.reload_modules();
+        assert_eq!(
+            app.unit_state(unit_id),
+            crate::domain::UnitStatus::Free,
+            "kesh eski holatda qoldi"
+        );
+    }
+
+    /// Generator bir joyga ikkita kvartira qo'ymaydi.
+    ///
+    /// Avval faqat **raqam** takrorlanmasligi tekshirilardi. Generator
+    /// boshqa qator soni bilan ikkinchi marta bosilsa, yangi kvartiralar
+    /// band joylarga tushar va ulardan biri shaxmatkada ko'rinmay qolardi.
+    #[test]
+    fn the_generator_never_puts_two_flats_in_one_place() {
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+
+        let block = crate::domain::Block {
+            id: 0,
+            project_id: pid,
+            name: "Sinov blok".into(),
+            floors: 3,
+            first_floor: 1,
+            note: String::new(),
+        };
+        let bid = app.db.insert_block(&block);
+        let mut block = block;
+        block.id = bid;
+        app.reload_modules();
+
+        // Birinchi yurgizish: qavatiga 4 ta.
+        let n = crate::ui::sales::generate_units(&app, pid, &block, (4, 1, 50.0, 1e7, 2));
+        assert_eq!(n, 12);
+        app.reload_modules();
+
+        // Ikkinchi yurgizish: qavatiga 5 ta — raqamlar boshqa, joylar esa
+        // qisman band.
+        crate::ui::sales::generate_units(&app, pid, &block, (5, 100, 50.0, 1e7, 2));
+        app.reload_modules();
+
+        let mine: Vec<crate::domain::Unit> = app
+            .units
+            .iter()
+            .filter(|u| u.block_id == bid)
+            .cloned()
+            .collect();
+        let found = crate::sales::crowded(&mine);
+        let numbers: Vec<&str> = found.iter().map(|u| u.number.as_str()).collect();
+        assert!(found.is_empty(), "bir joyda ikkita kvartira: {numbers:?}");
+
+        // Har qavatda beshtadan: yangi o'rinlar qo'shilgan, eskisi emas.
+        assert_eq!(mine.len(), 15, "kvartiralar soni");
+        for floor in 1..=3 {
+            let row = mine.iter().filter(|u| u.floor == floor).count();
+            assert_eq!(row, 5, "{floor}-qavat");
+        }
+    }
+
     impl Drop for TempDb {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.path);
@@ -4674,7 +4874,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let stock = app.stock();
         let cost = app.cost_summary();
         let sales = app.sales();
-        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+        let inp = app.analytics_input(&supply, &stock, &cost, sales);
 
         let flow = crate::analytics::cash_flow(&inp, 3, 3);
         assert_eq!(flow.len(), 7, "3 o'tgan + joriy + 3 kelasi oy");
@@ -4765,7 +4965,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let stock = app.stock();
         let cost = app.cost_summary();
         let sales = app.sales();
-        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+        let inp = app.analytics_input(&supply, &stock, &cost, sales);
 
         let lines = crate::analytics::briefing(&inp);
         assert!(
@@ -8348,7 +8548,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let stock = app.stock();
         let cost = app.cost_summary();
         let sales = app.sales();
-        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+        let inp = app.analytics_input(&supply, &stock, &cost, sales);
         let overview = crate::copilot::answer(crate::copilot::Intent::Overview, &inp);
         for l in &overview.lines {
             assert!(
@@ -10475,7 +10675,7 @@ ENDSEC;\nEND-ISO-10303-21;\n";
         let stock = app.stock();
         let cost = app.cost_summary();
         let sales = app.sales();
-        let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+        let inp = app.analytics_input(&supply, &stock, &cost, sales);
         for i in Intent::ALL {
             assert!(!i.question().is_empty());
             let a = crate::copilot::answer(*i, &inp);

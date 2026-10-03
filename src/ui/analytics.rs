@@ -29,7 +29,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let stock = app.stock();
     let cost = app.cost_summary();
     let sales = app.sales();
-    let inp = app.analytics_input(&supply, &stock, &cost, &sales);
+    let inp = app.analytics_input(&supply, &stock, &cost, sales);
     let metrics = analytics::metrics(&inp);
     let found = analytics::findings(&inp);
     let score = analytics::health(&found);

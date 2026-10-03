@@ -4,7 +4,7 @@
 //! shunda shaxmatkadagi rang, ko'rsatkichlar va shartnoma kartochkasi
 //! bir-biriga zid chiqmaydi.
 
-use crate::domain::{Deal, DealStatus, PayKind, Payment, Unit, UnitStatus};
+use crate::domain::{Block, Deal, DealStatus, PayKind, Payment, Unit, UnitStatus};
 use chrono::{Datelike, NaiveDate};
 
 /// Bitta shartnomaning pul holati.
@@ -185,6 +185,48 @@ pub fn build_schedule(deal: &Deal) -> Vec<Payment> {
         rows.push(row(deal, add_months(deal.date, i), amount));
     }
     rows
+}
+
+/// Shaxmatkada bir joyni bo'lishib qolgan birliklar.
+///
+/// Bitta (blok, qavat, o'rin) da ikkita kvartira bo'lsa, taxtada faqat
+/// bittasi ko'rinadi — ikkinchisi yo'qolgandek bo'ladi, lekin yig'indida,
+/// hisobotda va eksportda sanalaveradi. Shu sababli ular yashirilmaydi:
+/// ro'yxat qaytariladi va ekranda ochiq aytiladi.
+///
+/// Birinchi uchragani «joyida» deb hisoblanadi — taxta ham shuni
+/// ko'rsatadi; qolganlari qaytariladi.
+pub fn crowded(units: &[Unit]) -> Vec<&Unit> {
+    let mut seen: std::collections::BTreeSet<(i64, i64, i64)> = Default::default();
+    let mut out = Vec::new();
+    for u in units {
+        if !seen.insert((u.block_id, u.floor, u.position)) {
+            out.push(u);
+        }
+    }
+    out
+}
+
+/// Blokda yo'q qavatga yozilgan birliklar.
+///
+/// Qavat raqami blok balandligidan tashqarida bo'lsa, shaxmatka o'sha
+/// raqamgacha cho'zilib ketardi: bitta xato kiritilgan 200 qavatdan
+/// ikki yuzdan ortiq bo'sh qator paydo bo'lardi.
+pub fn off_block<'a>(units: &'a [Unit], block: &Block) -> Vec<&'a Unit> {
+    let range = block_floors(block);
+    units
+        .iter()
+        .filter(|u| u.block_id == block.id && !range.contains(&u.floor))
+        .collect()
+}
+
+/// Blokning qavatlar oralig'i.
+///
+/// Qoida bitta joyda: generator ham, kartochkadagi chegara ham, shaxmatka
+/// ham shundan o'qiydi.
+pub fn block_floors(block: &Block) -> std::ops::RangeInclusive<i64> {
+    let first = block.first_floor;
+    first..=(first + block.floors.max(1) - 1)
 }
 
 /// Grafikni qayta qurish rejasi.
