@@ -6,6 +6,7 @@ mod analytics;
 mod app;
 mod attend;
 mod backup;
+mod calc;
 mod checks;
 mod clash;
 mod copilot;

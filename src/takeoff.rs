@@ -1350,6 +1350,33 @@ pub fn totals(lines: &[Line]) -> Vec<Total> {
 pub const ORIENTIR_CONCRETE: &str = "prom.uz e'lonlari, 2026-10";
 /// Metall narxlari manbasi. Prays eski — bu ochiq aytiladi.
 pub const ORIENTIR_METAL: &str = "uzmetallsavdo.uz praysi, 2023-09";
+/// Praysda yo'q ingichka armatura — eng yaqin diametr narxi bilan.
+pub const ORIENTIR_THIN: &str = "uzmetallsavdo.uz, Ø10–12 narxi bo'yicha (ingichkasi praysda yo'q)";
+pub const ORIENTIR_WIRE: &str = "prom.uz, Вр-1 sim e'loni, 2026-10";
+/// KMD dagi `зд-8` — qalinligi bo'yicha list deb olindi.
+pub const ORIENTIR_PLATE: &str = "uzmetallsavdo.uz, list narxi (зд — list deb olindi)";
+/// Tayyor metall buyum — faqat metallining narxi.
+pub const ORIENTIR_PARTS: &str = "uzmetallsavdo.uz, list narxi bo'yicha — tayyorlash haqisiz";
+pub const ORIENTIR_BRICK: &str = "e'lonlar: 1 000 so'm/dona × 400 dona/m³ terim";
+pub const ORIENTIR_PANEL: &str = "met-trans.uz, PIR 50 mm: 150 522 so'm/m² × panel yuzasi";
+pub const ORIENTIR_PIPE: &str = "uzmetallsavdo.uz: 10 500 so'm/kg × nazariy massa";
+pub const ORIENTIR_BEND: &str = "prom.uz, otvod DN108 e'loni";
+
+/// Sendvich panel yuzasi, m²: `Сп-1, L=11450x1000` → 11.45.
+fn panel_area(material: &str) -> Option<f64> {
+    let tail = material.split_once("L=")?.1;
+    let (a, b) = tail.split_once(['x', 'х'])?;
+    let (a, b) = (number(a)?, number(b)?);
+    (a > 0.0 && b > 0.0).then_some(a * b / 1e6)
+}
+
+/// Po'lat quvurning nazariy massasi, kg/m: `Ø159*4,5` → 17.15.
+fn pipe_mass(material: &str) -> Option<f64> {
+    let tail = material.split_once('Ø')?.1;
+    let (d, t) = tail.split_once(['*', 'x', 'х'])?;
+    let (d, t) = (number(d)?, number(t)?);
+    (d > t && t > 0.0).then_some((d - t) * t * 0.02466)
+}
 
 /// Orientir narx: `(so'm, manba)`.
 ///
@@ -1358,10 +1385,15 @@ pub const ORIENTIR_METAL: &str = "uzmetallsavdo.uz praysi, 2023-09";
 /// sotuvchi e'lonining o'rtachasi, metall — QQS bilan prays narxi. Narx
 /// bazasida yoki qo'lda kiritilgan narx bo'lsa, u ustun turadi.
 ///
-/// Manbada yo'q material uchun narx **berilmaydi**: Ø10 dan ingichka
-/// armatura va sim praysda yo'q, shuning uchun ular narxsiz qoladi —
-/// o'xshash narxni taxmin qilib qo'yish yolg'on jami bergan bo'lardi.
+/// Ba'zi narxlar manbadagi raqamdan **hisoblab** chiqariladi (quvur —
+/// kilogramm narxi × nazariy massa, panel — kvadrat metr narxi × yuza,
+/// g'isht — dona narxi × terimdagi soni) yoki eng yaqin o'xshash narx
+/// bilan olinadi. Har biri manba satrida shunday deb yozilgan — odam
+/// qaysi raqamga qancha ishonishni o'zi ko'radi.
+///
+/// Manbasi ham, hisoblash yo'li ham yo'q material narxsiz qoladi.
 pub fn orientir(kind: Kind, material: &str, unit: &str) -> Option<(f64, &'static str)> {
+    let low = material.to_lowercase();
     match kind {
         Kind::Concrete if unit == "m3" => {
             let price = match material {
@@ -1375,37 +1407,54 @@ pub fn orientir(kind: Kind, material: &str, unit: &str) -> Option<(f64, &'static
             Some((price, ORIENTIR_CONCRETE))
         }
         Kind::Rebar if unit == "kg" => {
+            // `Armatura Ø12 A-III`: sinf — uchinchi so'z.
+            let class = material.split_whitespace().nth(2).unwrap_or("");
+            if class.starts_with(['B', 'В']) {
+                return Some((10_400.0, ORIENTIR_WIRE));
+            }
             let at = material.find('Ø')?;
             let dia: String = material[at + 'Ø'.len_utf8()..]
                 .chars()
                 .take_while(|c| c.is_ascii_digit())
                 .collect();
-            let price = match dia.parse::<u32>().ok()? {
-                10..=12 => 8_350.0,
-                14..=32 => 8_200.0,
-                _ => return None,
-            };
-            Some((price, ORIENTIR_METAL))
+            match dia.parse::<u32>().ok()? {
+                1..=9 => Some((8_350.0, ORIENTIR_THIN)),
+                10..=12 => Some((8_350.0, ORIENTIR_METAL)),
+                14..=40 => Some((8_200.0, ORIENTIR_METAL)),
+                _ => None,
+            }
         }
-        Kind::Steel if unit == "kg" => {
-            let low = material.to_lowercase();
-            let price = if low.contains("kvadrat quvur") {
-                10_700.0
-            } else if low.contains("труба") {
-                10_500.0
-            } else if low.contains("shveller") {
-                13_500.0
-            } else if low.contains("burchak")
-                || material.contains('∠')
-                || low.contains("po'lat list")
-            {
-                // Praysda list va burchak narxi yaqin: 11,8–13,0 mln/t.
-                12_400.0
-            } else {
-                return None;
-            };
-            Some((price, ORIENTIR_METAL))
-        }
+        Kind::Steel if unit == "kg" => Some(if low.contains("kvadrat quvur") {
+            (10_700.0, ORIENTIR_METAL)
+        } else if low.contains("труба") {
+            (10_500.0, ORIENTIR_METAL)
+        } else if low.contains("shveller") {
+            (13_500.0, ORIENTIR_METAL)
+        } else if low.contains("burchak") || material.contains('∠') || low.contains("po'lat list")
+        {
+            // Praysda list va burchak narxi yaqin: 11,8–13,0 mln/t.
+            (12_400.0, ORIENTIR_METAL)
+        } else if low.starts_with("prokat зд-") {
+            (12_400.0, ORIENTIR_PLATE)
+        } else {
+            (12_400.0, ORIENTIR_PARTS)
+        }),
+        Kind::Other => match unit {
+            "m3" if low.contains("кирпич") => Some((400_000.0, ORIENTIR_BRICK)),
+            "dona" if low.starts_with("сп-") => {
+                panel_area(material).map(|a| ((150_522.0 * a).round(), ORIENTIR_PANEL))
+            }
+            "dona" if low.contains("отвод") && low.contains("ø100") => {
+                Some((95_700.0, ORIENTIR_BEND))
+            }
+            "m" if low.contains("труб") => {
+                pipe_mass(material).map(|m| ((10_500.0 * m).round(), ORIENTIR_PIPE))
+            }
+            "t" if low.contains("сталь") || low.contains("стальн") || low.contains("металл") => {
+                Some((12_400_000.0, ORIENTIR_PARTS))
+            }
+            _ => None,
+        },
         _ => None,
     }
 }
@@ -2282,16 +2331,48 @@ mod tests {
             orientir(Kind::Rebar, "Armatura Ø28 A-III", "kg").map(|p| p.0),
             Some(8_200.0)
         );
-        // Praysda Ø8 va sim yo'q — narx o'ylab topilmaydi.
-        assert_eq!(orientir(Kind::Rebar, "Armatura Ø8 A-I", "kg"), None);
-        assert_eq!(orientir(Kind::Rebar, "Armatura Ø5 B-I", "kg"), None);
+        // Praysda yo'q ingichka armatura — eng yaqin narx bilan, va bu
+        // manbada yozilgan.
+        assert_eq!(
+            orientir(Kind::Rebar, "Armatura Ø8 A-I", "kg"),
+            Some((8_350.0, ORIENTIR_THIN))
+        );
+        assert_eq!(
+            orientir(Kind::Rebar, "Armatura Ø5 B-I", "kg"),
+            Some((10_400.0, ORIENTIR_WIRE))
+        );
         assert_eq!(
             orientir(Kind::Steel, "Prokat Kvadrat quvur 80х80х4 С255", "kg").map(|p| p.0),
             Some(10_700.0)
         );
-        assert_eq!(orientir(Kind::Steel, "Изделие закладное УП2-8", "kg"), None);
-        // Dona bilan sanaladigan buyumga kg narxi qo'yilmaydi.
-        assert_eq!(orientir(Kind::Other, "Сп-1", "dona"), None);
+        assert_eq!(
+            orientir(Kind::Steel, "Изделие закладное УП2-8", "kg"),
+            Some((12_400.0, ORIENTIR_PARTS))
+        );
+        // Hisoblab chiqariladigan narxlar.
+        let (panel, _) = orientir(Kind::Other, "Сп-1,   L=11450x1000", "dona").unwrap();
+        assert_eq!(panel, (150_522.0_f64 * 11.45).round());
+        let (pipe, _) = orientir(
+            Kind::Other,
+            "Трубы стальные электросварные прямошовные Ø159*4,5",
+            "m",
+        )
+        .unwrap();
+        assert_eq!(pipe, (10_500.0_f64 * (159.0 - 4.5) * 4.5 * 0.02466).round());
+        assert_eq!(
+            orientir(Kind::Other, "Объем кирпича 380мм", "m3").map(|p| p.0),
+            Some(400_000.0)
+        );
+        // Manbasi ham, hisoblash yo'li ham yo'q — narx o'ylab topilmaydi.
+        assert_eq!(
+            orientir(Kind::Other, "Вертикальная связь ВС7", "dona"),
+            None
+        );
+        assert_eq!(orientir(Kind::Other, "Сп-2", "dona"), None);
+        assert_eq!(
+            orientir(Kind::Other, "Ревизия диаметром 100мм (на болтах)", "dona"),
+            None
+        );
     }
 
     #[test]

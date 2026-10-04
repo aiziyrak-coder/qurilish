@@ -90,15 +90,6 @@ fn amount(v: f64, unit: &str) -> String {
     }
 }
 
-fn kind_label(k: Kind) -> &'static str {
-    match k {
-        Kind::Concrete => t("tk_concrete"),
-        Kind::Rebar => t("tk_rebar"),
-        Kind::Steel => t("tk_steel"),
-        Kind::Other => t("tk_other"),
-    }
-}
-
 // ================================================================ 1. Loyiha
 
 fn project_tab(ui: &mut egui::Ui, app: &mut App) {
@@ -424,6 +415,9 @@ fn constructs_tab(ui: &mut egui::Ui, app: &mut App) {
 // ========================================================= 3. Kalkulyatsiya
 
 fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
+    use crate::calc::{Row, Sum};
+    use egui_extras::{Column, TableBuilder};
+
     if app.takeoff.is_none() {
         empty(ui, t("tk_not_loaded"));
         return;
@@ -433,24 +427,26 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
-    // ---- Yig'ma ko'rsatkichlar.
+    let rows = app.cost_rows.clone();
+    let sheet = crate::calc::sheet(&rows);
+    let grand = match sheet.last() {
+        Some(Row::Grand(g)) => g.clone(),
+        _ => Sum::default(),
+    };
     let sum_of = |k: Kind, unit: &str| -> f64 {
-        app.cost_rows
-            .iter()
+        rows.iter()
             .filter(|r| r.total.kind == k && r.total.unit == unit)
             .map(|r| r.total.amount)
             .sum()
     };
-    let priced: Vec<f64> = app.cost_rows.iter().filter_map(|r| r.sum()).collect();
-    let cost: f64 = priced.iter().sum();
-    let no_price = app.cost_rows.len() - priced.len();
-    let unsure: usize = app.cost_rows.iter().map(|r| r.total.unsure).sum();
-    let hinted = app
-        .cost_rows
-        .iter()
-        .filter(|r| r.orientir.is_some())
-        .count();
+    let cost_text = |v: Option<f64>| match v {
+        Some(v) => format!("{} {}", money(v), t("tk_sum_unit")),
+        None => t("dash").to_string(),
+    };
+    let unsure: usize = rows.iter().map(|r| r.total.unsure).sum();
+    let hinted = rows.iter().filter(|r| r.orientir.is_some()).count();
 
+    // ---- Yig'ma ko'rsatkichlar.
     ui.horizontal_wrapped(|ui| {
         kpi(
             ui,
@@ -470,19 +466,49 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
             &amount(sum_of(Kind::Steel, "kg"), "kg"),
             t("tk_steel_hint"),
         );
-        kpi(
-            ui,
-            t("tk_cost"),
-            &if priced.is_empty() {
-                t("dash").to_string()
-            } else {
-                format!("{} {}", money(cost), t("tk_sum_unit"))
-            },
-            &format!("{no_price} {}", t("tk_no_price")),
-        );
     });
+
+    // ---- Umumiy jami va yuklab olish — doim ko'z oldida.
+    ui.add_space(8.0);
+    let mut export: Option<bool> = None;
+    card(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.vertical(|ui| {
+                ui.label(
+                    RichText::new(t("tk_grand_total"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+                ui.label(
+                    RichText::new(cost_text(grand.cost))
+                        .size(24.0)
+                        .strong()
+                        .color(theme::accent()),
+                );
+                // Jami to'liq emasligi yashirilmaydi.
+                ui.label(if grand.missing > 0 {
+                    RichText::new(format!("{} {}", grand.missing, t("tk_total_partial")))
+                        .size(11.5)
+                        .color(theme::warn())
+                } else {
+                    RichText::new(t("tk_total_full"))
+                        .size(11.5)
+                        .color(theme::muted())
+                });
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(t("tk_export_pdf")).clicked() {
+                    export = Some(true);
+                }
+                if ui.button(t("tk_export_excel")).clicked() {
+                    export = Some(false);
+                }
+            });
+        });
+    });
+
+    ui.add_space(6.0);
     if hinted > 0 {
-        ui.add_space(6.0);
         ui.label(
             RichText::new(format!("{hinted} {}", t("tk_orientir_note")))
                 .size(11.5)
@@ -490,7 +516,6 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
         );
     }
     if unsure > 0 {
-        ui.add_space(4.0);
         ui.label(
             RichText::new(format!("{unsure} {}", t("tk_unsure_note")))
                 .size(11.5)
@@ -498,7 +523,6 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
         );
     }
     if !app.takeoff_repeats.is_empty() {
-        ui.add_space(4.0);
         let list = app
             .takeoff_repeats
             .iter()
@@ -511,184 +535,250 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
                 .color(theme::muted()),
         );
     }
-    ui.add_space(10.0);
+    ui.add_space(8.0);
 
+    // ---- Jadval.
     let mut edit: Option<(String, f64)> = None;
     let mut open: Option<String> = None;
-    let rows = app.cost_rows.clone();
     let shown = app.takeoff_open.clone();
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            egui::Grid::new("tk_calc")
-                .striped(true)
-                .spacing([16.0, 5.0])
-                .show(ui, |ui| {
-                    for h in [
-                        "tk_col_no",
-                        "tk_col_material",
-                        "tk_col_amount",
-                        "tk_col_price",
-                        "tk_col_sum",
-                        "tk_col_source",
-                    ] {
-                        ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
-                    }
-                    ui.end_row();
-
-                    // Har tur — alohida bo'lim, o'z jami bilan.
-                    let mut no = 0;
-                    for kind in [Kind::Concrete, Kind::Rebar, Kind::Steel, Kind::Other] {
-                        let part: Vec<&crate::app::CostRow> =
-                            rows.iter().filter(|r| r.total.kind == kind).collect();
-                        if part.is_empty() {
-                            continue;
-                        }
-                        ui.label("");
-                        ui.label(
-                            RichText::new(kind_label(kind).to_uppercase())
-                                .size(12.0)
-                                .strong()
-                                .color(theme::accent()),
-                        );
-                        for _ in 0..4 {
-                            ui.label("");
-                        }
-                        ui.end_row();
-
-                        for r in &part {
-                            no += 1;
-                            ui.label(
-                                RichText::new(no.to_string())
-                                    .size(11.0)
-                                    .color(theme::muted()),
-                            );
-                            let is_open = shown.as_deref() == Some(r.total.material.as_str());
-                            let mark = if is_open { "−" } else { "+" };
-                            let name = ui
-                                .add(
-                                    egui::Label::new(
-                                        RichText::new(format!("{mark} {}", r.total.material))
-                                            .size(12.5),
-                                    )
-                                    .sense(egui::Sense::click()),
-                                )
-                                .on_hover_text(t("tk_detail_open"));
-                            if name.clicked() {
-                                open = Some(r.total.material.clone());
-                            }
-                            ui.label(
-                                RichText::new(amount(r.total.amount, &r.total.unit))
-                                    .size(12.5)
-                                    .strong(),
-                            );
-                            let mut p = r.price.unwrap_or(0.0);
-                            let resp = ui
-                                .horizontal(|ui| {
-                                    let resp = ui.add(
-                                        egui::DragValue::new(&mut p)
-                                            .speed(1000.0)
-                                            .range(0.0..=1e12),
-                                    );
-                                    ui.label(
-                                        RichText::new(format!("/{}", r.total.unit))
-                                            .size(11.0)
-                                            .color(theme::muted()),
-                                    );
-                                    resp
-                                })
-                                .inner;
-                            if resp.changed() {
-                                edit = Some((r.total.material.clone(), p));
-                            }
-                            match r.sum() {
-                                Some(v) => ui.label(RichText::new(money(v)).size(12.5)),
-                                None => ui.label(RichText::new(t("dash")).color(theme::muted())),
-                            };
-                            // Narx qayerdan kelgani har qatorda ko'rinadi.
-                            let src = if r.manual {
-                                RichText::new(t("tk_src_manual")).color(theme::muted())
-                            } else if let Some(s) = r.orientir {
-                                RichText::new(format!("{} · {s}", t("tk_src_orientir")))
-                                    .color(theme::warn())
-                            } else if r.price.is_some() {
-                                RichText::new(t("tk_src_book")).color(theme::muted())
-                            } else {
-                                RichText::new(t("tk_src_none")).color(theme::warn())
-                            };
-                            ui.label(src.size(11.0));
-                            ui.end_row();
-
-                            if is_open {
-                                detail_rows(ui, app, &r.total.material, &r.total.unit);
-                            }
-                        }
-
-                        // Bo'lim jami: miqdor bir xil birlikda bo'lsagina
-                        // qo'shiladi.
-                        let unit = &part[0].total.unit;
-                        let same = part.iter().all(|r| &r.total.unit == unit);
-                        let qty: f64 = part.iter().map(|r| r.total.amount).sum();
-                        let sums: Vec<f64> = part.iter().filter_map(|r| r.sum()).collect();
-                        ui.label("");
-                        ui.label(
-                            RichText::new(format!("{} — {}", t("tk_subtotal"), kind_label(kind)))
-                                .size(12.0)
-                                .strong(),
-                        );
-                        ui.label(if same {
-                            RichText::new(amount(qty, unit)).size(12.5).strong()
-                        } else {
-                            RichText::new("")
-                        });
-                        ui.label("");
-                        ui.label(if sums.is_empty() {
-                            RichText::new(t("dash")).color(theme::muted())
-                        } else {
-                            RichText::new(money(sums.iter().sum())).size(12.5).strong()
-                        });
-                        let missing = part.len() - sums.len();
-                        ui.label(if missing > 0 {
-                            RichText::new(format!("{missing} {}", t("tk_no_price")))
-                                .size(11.0)
-                                .color(theme::warn())
-                        } else {
-                            RichText::new("")
-                        });
-                        ui.end_row();
-                    }
-                });
-
-            // ---- Umumiy jami.
-            ui.add_space(10.0);
-            card(ui, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(t("tk_grand_total")).size(13.0).strong());
-                    ui.add_space(12.0);
-                    ui.label(
-                        RichText::new(if priced.is_empty() {
-                            t("dash").to_string()
-                        } else {
-                            format!("{} {}", money(cost), t("tk_sum_unit"))
-                        })
-                        .size(20.0)
-                        .strong()
-                        .color(theme::accent()),
-                    );
-                });
-                // Jami to'liq emasligi yashirilmaydi.
-                ui.label(if no_price > 0 {
-                    RichText::new(format!("{no_price} {}", t("tk_total_partial")))
-                        .size(11.5)
-                        .color(theme::warn())
-                } else {
-                    RichText::new(t("tk_total_full"))
-                        .size(11.5)
-                        .color(theme::muted())
-                });
-            });
-            ui.add_space(8.0);
+    let section_fill = theme::accent().gamma_multiply(0.16);
+    let total_fill = theme::accent().gamma_multiply(0.07);
+    // Qator fonini katak ortiga chizadi: bo'lim va jami qatorlari jadvalda
+    // darrov ko'rinsin.
+    let band = |ui: &egui::Ui, fill: egui::Color32| {
+        // Kataklar orasidagi bo'shliq ham bo'yaladi — aks holda chiziq
+        // uzuq-uzuq ko'rinadi.
+        let rect = ui.max_rect().expand2(egui::vec2(10.0, 0.0));
+        ui.painter()
+            .with_clip_rect(rect)
+            .rect_filled(rect, 0.0, fill);
+    };
+    let right = |ui: &mut egui::Ui, text: RichText| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(text);
         });
+    };
+    let total_row = |row: &mut egui_extras::TableRow<'_, '_>,
+                     label: String,
+                     s: &Sum,
+                     fill: egui::Color32,
+                     size: f32| {
+        row.col(|ui| band(ui, fill));
+        row.col(|ui| {
+            band(ui, fill);
+            ui.label(RichText::new(label).size(size).strong());
+        });
+        row.col(|ui| {
+            band(ui, fill);
+            if let Some((q, u)) = &s.qty {
+                right(ui, RichText::new(amount(*q, u)).size(size).strong());
+            }
+        });
+        row.col(|ui| band(ui, fill));
+        row.col(|ui| {
+            band(ui, fill);
+            right(
+                ui,
+                match s.cost {
+                    Some(v) => RichText::new(money(v)).size(size).strong(),
+                    None => RichText::new(t("dash")).color(theme::muted()),
+                },
+            );
+        });
+        row.col(|ui| {
+            band(ui, fill);
+            if s.missing > 0 {
+                ui.label(
+                    RichText::new(format!("{} {}", s.missing, t("tk_no_price")))
+                        .size(11.0)
+                        .color(theme::warn()),
+                );
+            }
+        });
+    };
+
+    TableBuilder::new(ui)
+        .id_salt("tk_calc")
+        .striped(true)
+        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+        .column(Column::exact(34.0))
+        .column(Column::remainder().at_least(240.0).clip(true))
+        .column(Column::exact(110.0))
+        .column(Column::exact(150.0))
+        .column(Column::exact(130.0))
+        .column(Column::exact(300.0).clip(true))
+        .header(24.0, |mut header| {
+            for (i, h) in [
+                "tk_col_no",
+                "tk_col_material",
+                "tk_col_amount",
+                "tk_col_price",
+                "tk_col_sum",
+                "tk_col_source",
+            ]
+            .iter()
+            .enumerate()
+            {
+                header.col(|ui| {
+                    let text = RichText::new(t(h)).size(11.0).color(theme::muted());
+                    if i == 2 || i == 4 {
+                        right(ui, text);
+                    } else {
+                        ui.label(text);
+                    }
+                });
+            }
+        })
+        .body(|mut body| {
+            for item in &sheet {
+                match item {
+                    Row::Section(kind) => body.row(28.0, |mut row| {
+                        row.col(|ui| band(ui, section_fill));
+                        row.col(|ui| {
+                            band(ui, section_fill);
+                            ui.label(
+                                RichText::new(crate::calc::kind_name(*kind).to_uppercase())
+                                    .size(12.5)
+                                    .strong()
+                                    .color(theme::accent()),
+                            );
+                        });
+                        for _ in 0..4 {
+                            row.col(|ui| band(ui, section_fill));
+                        }
+                    }),
+                    Row::Class(class) => body.row(24.0, |mut row| {
+                        row.col(|_| {});
+                        row.col(|ui| {
+                            ui.label(RichText::new(t(class)).size(12.0).strong());
+                        });
+                        for _ in 0..4 {
+                            row.col(|_| {});
+                        }
+                    }),
+                    Row::Item(no, i) => {
+                        let r = &rows[*i];
+                        let is_open = shown.as_deref() == Some(r.total.material.as_str());
+                        body.row(24.0, |mut row| {
+                            row.col(|ui| {
+                                ui.label(
+                                    RichText::new(no.to_string())
+                                        .size(11.0)
+                                        .color(theme::muted()),
+                                );
+                            });
+                            row.col(|ui| {
+                                let mark = if is_open { "−" } else { "+" };
+                                let name = ui
+                                    .add(
+                                        egui::Label::new(
+                                            RichText::new(format!("{mark}  {}", r.total.material))
+                                                .size(12.5),
+                                        )
+                                        .truncate()
+                                        .sense(egui::Sense::click()),
+                                    )
+                                    .on_hover_text(format!(
+                                        "{}\n{}",
+                                        r.total.material,
+                                        t("tk_detail_open")
+                                    ));
+                                if name.clicked() {
+                                    open = Some(r.total.material.clone());
+                                }
+                            });
+                            row.col(|ui| {
+                                right(
+                                    ui,
+                                    RichText::new(amount(r.total.amount, &r.total.unit))
+                                        .size(12.5)
+                                        .strong(),
+                                );
+                            });
+                            row.col(|ui| {
+                                let mut p = r.price.unwrap_or(0.0);
+                                let resp = ui.add(
+                                    egui::DragValue::new(&mut p)
+                                        .speed(1000.0)
+                                        .range(0.0..=1e12)
+                                        .custom_formatter(|v, _| money(v))
+                                        .custom_parser(|s| {
+                                            s.replace([' ', '\u{a0}'], "")
+                                                .replace(',', ".")
+                                                .parse()
+                                                .ok()
+                                        }),
+                                );
+                                if resp.changed() {
+                                    edit = Some((r.total.material.clone(), p));
+                                }
+                                ui.label(
+                                    RichText::new(format!("/{}", r.total.unit))
+                                        .size(11.0)
+                                        .color(theme::muted()),
+                                );
+                            });
+                            row.col(|ui| {
+                                right(
+                                    ui,
+                                    match r.sum() {
+                                        Some(v) => RichText::new(money(v)).size(12.5),
+                                        None => RichText::new(t("dash")).color(theme::muted()),
+                                    },
+                                );
+                            });
+                            row.col(|ui| {
+                                // Narx qayerdan kelgani har qatorda ko'rinadi.
+                                let text = crate::calc::source(r);
+                                let sure = r.manual || (r.price.is_some() && r.orientir.is_none());
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(&text).size(11.0).color(if sure {
+                                            theme::muted()
+                                        } else {
+                                            theme::warn()
+                                        }),
+                                    )
+                                    .truncate(),
+                                )
+                                .on_hover_text(text);
+                            });
+                        });
+                        if is_open {
+                            detail_rows(&mut body, app, &r.total.material, &r.total.unit);
+                        }
+                    }
+                    Row::ClassTotal(class, s) => body.row(24.0, |mut row| {
+                        total_row(
+                            &mut row,
+                            format!("{}: {}", t("tk_subtotal"), t(class)),
+                            s,
+                            egui::Color32::TRANSPARENT,
+                            12.0,
+                        );
+                    }),
+                    Row::SectionTotal(kind, s) => body.row(26.0, |mut row| {
+                        total_row(
+                            &mut row,
+                            format!("{} — {}", t("tk_subtotal"), crate::calc::kind_name(*kind)),
+                            s,
+                            total_fill,
+                            12.5,
+                        );
+                    }),
+                    Row::Grand(s) => body.row(32.0, |mut row| {
+                        total_row(
+                            &mut row,
+                            t("tk_grand_total").to_string(),
+                            s,
+                            section_fill,
+                            13.5,
+                        );
+                    }),
+                }
+            }
+        });
+
     if let Some((material, price)) = edit {
         app.set_takeoff_price(&material, price);
     }
@@ -699,31 +789,73 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
             Some(material)
         };
     }
+    if let Some(pdf) = export {
+        export_calc(app, pdf);
+    }
+}
+
+/// Kalkulyatsiyani faylga saqlaydi: Excel — ishlash uchun, PDF —
+/// topshirish uchun. Ikkalasi ham ekrandagi varaqning o'zidan chiqadi.
+fn export_calc(app: &mut App, pdf: bool) {
+    let table = crate::calc::table(&app.cost_rows, t("screen_ai_check"));
+    let ext = if pdf { "pdf" } else { "xlsx" };
+    let name = format!(
+        "{}_{}.{ext}",
+        t("tk_export_name"),
+        app.today.format("%Y-%m-%d")
+    );
+    let Some(path) = rfd::FileDialog::new()
+        .set_title(t(if pdf {
+            "tk_export_pdf"
+        } else {
+            "tk_export_excel"
+        }))
+        .set_file_name(&name)
+        .add_filter(if pdf { "PDF" } else { "Excel" }, &[ext])
+        .save_file()
+    else {
+        return;
+    };
+    let result = if pdf {
+        let subtitle = [
+            app.project().map(|p| p.name.clone()).unwrap_or_default(),
+            app.takeoff
+                .as_ref()
+                .map(|t| t.file.clone())
+                .unwrap_or_default(),
+            app.today.format("%d.%m.%Y").to_string(),
+        ]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
+        crate::pdf::write_table(&path, &table, &subtitle)
+    } else {
+        crate::docgen::write_table(&path, &table).map_err(|e| format!("{e}"))
+    };
+    match result {
+        Ok(()) => app.notify(format!(
+            "{} {} · {}",
+            t("export_done"),
+            table.rows.len(),
+            path.display()
+        )),
+        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
+    }
 }
 
 /// Material qayerdan yig'ilgani: har konstruksiya uchun hisob formulasi.
-fn detail_rows(ui: &mut egui::Ui, app: &App, material: &str, unit: &str) {
+fn detail_rows(body: &mut egui_extras::TableBody<'_>, app: &App, material: &str, unit: &str) {
     for l in app
         .takeoff_lines
         .iter()
         .filter(|l| l.item.material == material && l.item.unit == unit)
     {
-        ui.label("");
         let group = if l.group.trim().is_empty() {
             t("dash").to_string()
         } else {
-            super::issues::truncate(l.group.trim(), 48)
+            l.group.trim().to_string()
         };
-        ui.label(
-            RichText::new(format!("      {} {} · {group}", t("pdf_page"), l.page))
-                .size(11.0)
-                .color(theme::muted()),
-        );
-        ui.label(
-            RichText::new(amount(l.total(), unit))
-                .size(11.0)
-                .color(theme::muted()),
-        );
         // Formula: bir donaga × yig'ma birlik × konstruksiya soni.
         let formula = match l.count {
             Some(c) => {
@@ -735,17 +867,37 @@ fn detail_rows(ui: &mut egui::Ui, app: &App, material: &str, unit: &str) {
             }
             None => t("tk_detail_as_written").to_string(),
         };
-        ui.label(
-            RichText::new(formula)
-                .size(11.0)
-                .color(if l.count.is_some() {
-                    theme::muted()
-                } else {
-                    theme::warn()
-                }),
-        );
-        ui.label("");
-        ui.label("");
-        ui.end_row();
+        let color = if l.count.is_some() {
+            theme::muted()
+        } else {
+            theme::warn()
+        };
+        body.row(20.0, |mut row| {
+            row.col(|_| {});
+            row.col(|ui| {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(format!("        {} {} · {group}", t("pdf_page"), l.page))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    )
+                    .truncate(),
+                );
+            });
+            row.col(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(
+                        RichText::new(amount(l.total(), unit))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                });
+            });
+            row.col(|ui| {
+                ui.label(RichText::new(&formula).size(11.0).color(color));
+            });
+            row.col(|_| {});
+            row.col(|_| {});
+        });
     }
 }
