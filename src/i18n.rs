@@ -1338,6 +1338,33 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
 
         // ---------- II-III. Tekshiruv ekranlari / Экраны проверки ----------
+        "ai_explain" => ("AI izohi", "Пояснение AI"),
+        "ai_explain_hint" => (
+            "Topilmalarni qoida chiqaradi; AI ularni tushuntiradi va qaysi biridan boshlash kerakligini aytadi. Yangi topilma yaratmaydi.",
+            "Находки даёт движок правил; AI поясняет их и говорит, с чего начать. Новых находок не создаёт.",
+        ),
+        "ai_thinking" => ("AI o'ylamoqda...", "AI думает..."),
+        "ai_busy" => ("Oldingi savol hali tugamadi", "Предыдущий вопрос ещё не завершён"),
+        "ai_check_prompt_head" => (
+            "Quyida qurilish loyihasini tekshirishda qoidalar dvigateli topgan nomuvofiqliklar ro'yxati. Ularni o'zgartirma va yangisini qo'shma.",
+            "Ниже список несоответствий, найденных движком правил при проверке строительного проекта. Не изменяй их и не добавляй новых.",
+        ),
+        "ai_check_prompt_tail" => (
+            "Qisqa javob ber: 1) eng muhim uchtasi qaysi va nega; 2) ular bir-biriga bog'liqmi; 3) qaysi tartibda hal qilish kerak. Normativ raqamini o'zingdan yozma.",
+            "Ответь кратко: 1) какие три самые важные и почему; 2) связаны ли они между собой; 3) в каком порядке их решать. Номера нормативов от себя не пиши.",
+        ),
+        "step_project_empty" => ("Loyiha hali yuklanmagan", "Проект ещё не загружен"),
+        "step_project_done" => ("element yuklangan", "элементов загружено"),
+        "step_check_hint" => ("Tahlil hali bajarilmadi", "Анализ ещё не выполнялся"),
+        "step_clash_hint" => ("Elementlar kesishuvi", "Пересечения элементов"),
+        "step_action_hint" => ("Topilmadan vazifa yaratish", "Создание задач из находок"),
+        "pr_elements" => ("Loyiha elementlari", "Элементы проекта"),
+        "pr_links" => ("Bog'lanishlar", "Связи"),
+        "pr_plan" => ("Joylashuv rejasi", "План расположения"),
+        "pr_graph" => ("Bilimlar grafi", "Граф знаний"),
+        "pr_norms" => ("Normativ reyestri", "Реестр нормативов"),
+        "tab_project" => ("PROYEKT", "ПРОЕКТ"),
+        "tab_ai_check" => ("AI CHECK", "AI CHECK"),
         "tab_issues" => ("Nomuvofiqliklar", "Несоответствия"),
         "tab_elements" => ("Loyiha elementlari", "Элементы проекта"),
         "tab_relations" => ("Bog'lanishlar", "Связи"),
@@ -1998,7 +2025,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "unpinned_msg" => ("ta ish bo'shatildi", "работ откреплено"),
 
         // ---------- II. ACTION va graf ----------
-        "tab_action" => ("Bajarish rejasi", "План устранения"),
+        "tab_action" => ("ACTION", "ACTION"),
         "tab_graph" => ("Bilimlar grafi", "Граф знаний"),
         "act_open" => ("Bajarilishi kerak", "К устранению"),
         "act_open_hint" => ("ochiq va ishlanmoqda", "открыто и в работе"),
@@ -6908,7 +6935,11 @@ mod tests {
         const SAME_ON_PURPOSE: &[&str] = &[
             "col_email",
             "screen_copilot",
+            // TZ II.19 ning o'z atamalari: ular hujjatda ham lotincha
+            // yozilgan va tarjima qilinmaydi.
             "tab_clash",
+            "tab_ai_check",
+            "tab_action",
             "kpi_score_near_miss",
         ];
 

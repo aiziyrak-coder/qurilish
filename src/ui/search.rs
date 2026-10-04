@@ -651,7 +651,7 @@ fn apply(app: &mut App, action: Action) {
         }
         Action::Element(id) => {
             app.screen = Screen::AiCheck;
-            app.check_tab = crate::app::CheckTab::Elements;
+            app.check_tab = crate::app::CheckTab::Project;
             app.selected_element = Some(id);
         }
         Action::Issue(id, module) => {
@@ -661,7 +661,7 @@ fn apply(app: &mut App, action: Action) {
                 _ => Screen::AiCheck,
             };
             if app.screen == Screen::AiCheck {
-                app.check_tab = crate::app::CheckTab::Issues;
+                app.check_tab = crate::app::CheckTab::Check;
             }
             app.selected_issue = Some(id);
             // Natija filtrlar ostida yashirinib qolmasin.

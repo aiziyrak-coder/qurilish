@@ -291,39 +291,35 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
 /// AI tekshiruv ekranidagi ochiq bo'lim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckTab {
-    Issues,
+    /// Loyihaning o'zi: hujjat, element, bog'lanish, me'yor.
+    Project,
+    /// Tahlil va uning topilmalari.
+    Check,
+    /// Kolliziyalar.
     Clash,
+    /// Topilmadan ishga: vazifa, tasdiq, natija.
     Action,
-    /// Elementlarning joylashuv rejasi (TZ VI.13, VIII.6).
-    Plan,
-    Graph,
-    Elements,
-    Relations,
-    Norms,
 }
 
 impl CheckTab {
-    pub const ALL: [CheckTab; 8] = [
-        CheckTab::Issues,
+    /// Tartib TZ II.19 dagidek: PROYEKT -> AI CHECK -> CLASH -> ACTION.
+    ///
+    /// Bu shunchaki tab ro'yxati emas, **ish tartibi**: avval loyiha
+    /// yuklanadi, keyin tahlil qilinadi, topilgan kesishuvlar ko'riladi va
+    /// oxirida ularning har biri ishga aylanadi.
+    pub const ALL: [CheckTab; 4] = [
+        CheckTab::Project,
+        CheckTab::Check,
         CheckTab::Clash,
         CheckTab::Action,
-        CheckTab::Plan,
-        CheckTab::Graph,
-        CheckTab::Elements,
-        CheckTab::Relations,
-        CheckTab::Norms,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
-            CheckTab::Issues => t("tab_issues"),
+            CheckTab::Project => t("tab_project"),
+            CheckTab::Check => t("tab_ai_check"),
             CheckTab::Clash => t("tab_clash"),
             CheckTab::Action => t("tab_action"),
-            CheckTab::Plan => t("plan_title"),
-            CheckTab::Graph => t("tab_graph"),
-            CheckTab::Elements => t("tab_elements"),
-            CheckTab::Relations => t("tab_relations"),
-            CheckTab::Norms => t("tab_norms"),
         }
     }
 }
@@ -1009,7 +1005,7 @@ impl App {
             auto_check_project: false,
             auto_check_estimate: false,
             auto_check_ppr: false,
-            check_tab: CheckTab::Issues,
+            check_tab: CheckTab::Project,
             issue_sev: None,
             issue_status: None,
             issue_search: String::new(),
@@ -2941,6 +2937,48 @@ impl App {
     pub fn set_llm_key(&mut self, key: &str) {
         self.llm.set_key(key);
         self.save_llm();
+    }
+
+    /// Topilmalarni AI ga tushuntirtirish uchun savol tuzadi.
+    ///
+    /// Model **yangi topilma yaratmaydi**: savolda unga qoida topgan
+    /// ro'yxat beriladi va undan faqat tushuntirish, ustuvorlik va
+    /// tavsiya so'raladi. Shuning uchun TZ II.17 buzilmaydi — me'yor
+    /// reyestrdan keladi, model uni o'ylab topmaydi.
+    pub fn ask_ai_about_check(&mut self) {
+        let mut found: Vec<String> = Vec::new();
+        for i in self
+            .issues
+            .iter()
+            .filter(|i| i.module == IssueModule::Project)
+            .take(40)
+        {
+            found.push(format!(
+                "- [{}] {} · {} · {} · {}",
+                i.code,
+                i.severity.label(),
+                i.section.label(),
+                i.title,
+                i.description
+            ));
+        }
+        if found.is_empty() {
+            return;
+        }
+        let question = format!(
+            "{}
+
+{}
+
+{}",
+            t("ai_check_prompt_head"),
+            found.join(
+                "
+"
+            ),
+            t("ai_check_prompt_tail")
+        );
+        self.ask_llm(question);
     }
 
     pub fn ask_llm(&mut self, question: String) {

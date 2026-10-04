@@ -1849,10 +1849,14 @@ mod screen_tests {
             src.contains("for tab in CheckTab::ALL"),
             "bo'limlar to'liq ro'yxatdan olinmayapti"
         );
-        assert!(
-            src.contains("!DAILY.contains(&tab)"),
-            "kunlik bo'limlar qolganidan ajratilmayapti"
-        );
+        // Har bo'lim uchun chizish yo'li bor: `match` da hammasi
+        // qamralgan bo'lishi kerak.
+        for tab in crate::app::CheckTab::ALL {
+            assert!(
+                src.contains(&format!("CheckTab::{tab:?} =>")),
+                "{tab:?} uchun chizish yo'li yo'q"
+            );
+        }
         // Ro'yxat bo'sh emas va takrorlanmaydi.
         let all = crate::app::CheckTab::ALL;
         for (i, a) in all.iter().enumerate() {

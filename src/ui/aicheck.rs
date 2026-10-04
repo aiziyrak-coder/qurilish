@@ -18,69 +18,237 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
-    app.auto_check(IssueModule::Project);
+    // Fon ipida o'qilayotgan fayl tugagan bo'lsa natijani olamiz.
+    app.poll_pdf();
 
-    /// Har kuni ochiladigan bo'limlar.
-    const DAILY: [CheckTab; 3] = [CheckTab::Issues, CheckTab::Clash, CheckTab::Action];
-
-    // Kunlik: topilmalar, kolliziyalar va nima qilish kerakligi.
-    // Qolganlari — ma'lumot kiritish va sozlash uchun, ajratgichdan keyin.
+    // TZ II.19: sahifa to'rt qismdan iborat va ular **ish tartibi** —
+    // avval loyiha yuklanadi, keyin tahlil qilinadi, kesishuvlar ko'riladi
+    // va oxirida har topilma ishga aylanadi. Avval sakkizta teng tab bor
+    // edi va qaysi biridan boshlash kerakligi ko'rinmasdi.
     ui.horizontal_wrapped(|ui| {
-        let mut pick = |ui: &mut egui::Ui, tab: CheckTab, dim: bool| {
-            let text = if dim && app.check_tab != tab {
-                RichText::new(tab.label()).color(theme::muted())
-            } else {
+        for tab in CheckTab::ALL {
+            let done = step_done(app, tab);
+            let text = if app.check_tab == tab {
+                RichText::new(tab.label()).strong()
+            } else if done {
                 RichText::new(tab.label())
+            } else {
+                // Hali tayyor emas — ko'rinadi, lekin so'nik.
+                RichText::new(tab.label()).color(theme::muted())
             };
-            if ui.selectable_label(app.check_tab == tab, text).clicked() {
+            if ui
+                .selectable_label(app.check_tab == tab, text)
+                .on_hover_text(step_hint(app, tab))
+                .clicked()
+            {
                 app.check_tab = tab;
             }
-        };
-        for tab in DAILY {
-            pick(ui, tab, false);
-        }
-        ui.separator();
-        // Qolganlari ro'yxatdan **hisoblab** olinadi: yangi bo'lim
-        // qo'shilsa, u qo'lda yozilmagani uchun ko'rinmay qolmaydi.
-        for tab in CheckTab::ALL {
-            if !DAILY.contains(&tab) {
-                pick(ui, tab, true);
+            if tab != CheckTab::Action {
+                ui.label(RichText::new("→").size(11.0).color(theme::muted()));
             }
         }
     });
     ui.add_space(8.0);
 
-    // Fon o'qishi tugagan bo'lsa natijani olamiz.
-    app.poll_pdf();
-
-    // Qadamlar kartochkasi birinchi tabda doim turadi: fayl yuklash,
-    // o'qish holati va tahlil bir joyda ko'rinib tursin. Boshqa tablarda
-    // u faqat hali hech narsa yuklanmagan bo'lsa chiqadi.
-    if app.check_tab == CheckTab::Issues || app.elements.is_empty() {
-        steps_card(ui, app);
-    }
-
     match app.check_tab {
-        CheckTab::Issues => issues_tab(ui, app),
+        CheckTab::Project => project_tab(ui, app),
+        CheckTab::Check => check_tab(ui, app),
         CheckTab::Clash => clash_tab(ui, app),
         CheckTab::Action => action_tab(ui, app),
-        CheckTab::Plan => plan_tab(ui, app),
-        CheckTab::Graph => graph_tab(ui, app),
-        CheckTab::Elements => elements_tab(ui, app),
-        CheckTab::Relations => relations_tab(ui, app),
-        CheckTab::Norms => norms_tab(ui, app),
     }
 }
 
-/// Geometriya bo'yicha kolliziyalar (TZ II, VII.31).
+/// Qadam bajarilganmi — tab nomining rangi shunga qarab turadi.
+fn step_done(app: &App, tab: CheckTab) -> bool {
+    match tab {
+        CheckTab::Project => !app.elements.is_empty(),
+        CheckTab::Check => app.check_report.is_some(),
+        CheckTab::Clash => !app.clashes.is_empty() || app.check_report.is_some(),
+        // Topilmaning birortasi ishga olingan bo'lsa — qadam bajarilgan.
+        CheckTab::Action => app.issues.iter().any(|i| {
+            i.module == IssueModule::Project && i.status != crate::domain::IssueStatus::Open
+        }),
+    }
+}
+
+/// Qadam nima qilishini bir gapda aytadi.
+fn step_hint(app: &App, tab: CheckTab) -> String {
+    match tab {
+        CheckTab::Project => {
+            if app.elements.is_empty() {
+                t("step_project_empty").to_string()
+            } else {
+                format!("{} {}", app.elements.len(), t("step_project_done"))
+            }
+        }
+        CheckTab::Check => match app.check_report {
+            Some((secs, n)) => format!("{n} · {secs:.1} s"),
+            None => t("step_check_hint").to_string(),
+        },
+        CheckTab::Clash => t("step_clash_hint").to_string(),
+        CheckTab::Action => t("step_action_hint").to_string(),
+    }
+}
+
+/// PROYEKT: loyihaning o'zi — hujjat, element, bog'lanish, me'yor.
 ///
-/// Qoidalar bo'yicha topilmalardan **alohida** ko'rsatiladi va shu
-/// sababli aralashib ketmaydi: bu yerdagi xulosa o'lchamga tayanadi,
-/// yuqoridagilar esa bog'lanishlarga.
+/// Bitta ekranda, yig'iladigan bo'limlar bilan: avval ular alohida
+/// tablarda edi va loyihani yuklash uchun qaysi tabga borish kerakligi
+/// ko'rinmasdi.
+fn project_tab(ui: &mut egui::Ui, app: &mut App) {
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            steps_card(ui, app);
+
+            let elements = app.elements.len();
+            let links = app.element_links.len();
+            let norms = app.norms.len();
+
+            section(ui, "pr_elements", elements, elements_tab, app, elements > 0);
+            section(ui, "pr_links", links, relations_tab, app, false);
+            section(ui, "pr_plan", elements, plan_tab, app, false);
+            section(ui, "pr_graph", links, graph_tab, app, false);
+            section(ui, "pr_norms", norms, norms_tab, app, false);
+        });
+}
+
+/// PROYEKT ichidagi yig'iladigan bo'lim.
+fn section(
+    ui: &mut egui::Ui,
+    key: &str,
+    count: usize,
+    body: impl FnOnce(&mut egui::Ui, &mut App),
+    app: &mut App,
+    open: bool,
+) {
+    ui.add_space(10.0);
+    let title = format!("{} · {count}", t(key));
+    egui::CollapsingHeader::new(RichText::new(title).strong())
+        .id_salt(key)
+        .default_open(open)
+        .show(ui, |ui| {
+            ui.add_space(4.0);
+            body(ui, app);
+        });
+}
+
+/// AI CHECK: tahlil va uning topilmalari.
 ///
-/// Qamrov ochiq yoziladi: hamma element o'lchamli emas va «kolliziya
-/// topilmadi» degan xulosa nechta element tekshirilganini bilmasdan
-/// ma'nosiz bo'lardi.
+/// Topilma TZ II.16 talab qilgan maydonlar bilan ko'rsatiladi: kod,
+/// bo'lim, element, joy, varaq, me'yor, tavsiya, mas'ul. Me'yor
+/// **reyestrdan** olinadi — qoida uni o'ylab topmaydi (TZ II.17).
+fn check_tab(ui: &mut egui::Ui, app: &mut App) {
+    if app.elements.is_empty() {
+        steps_card(ui, app);
+        return;
+    }
+
+    // ---- Ishga tushirish va ketgan vaqt.
+    check_state(ui, app, app.pdf_job.is_some());
+    ui.add_space(8.0);
+
+    let list = app.filtered_issues(IssueModule::Project);
+    issues::issue_kpis(
+        ui,
+        &list,
+        Some((
+            t("kpi_elements"),
+            app.elements.len().to_string(),
+            &format!("{} {}", app.element_links.len(), t("kpi_links_graph")),
+        )),
+    );
+    ui.add_space(6.0);
+    issues::section_report(ui, &list);
+    drop(list);
+    ui.add_space(8.0);
+
+    // ---- AI izohi: sonlarni qoida chiqaradi, tushuntirishni model beradi.
+    ai_summary(ui, app);
+    ui.add_space(8.0);
+
+    ui.horizontal(|ui| {
+        issues::filter_bar(ui, app, t("run_project_check"));
+    });
+    ui.add_space(6.0);
+
+    let h = (ui.available_height() - 12.0).max(180.0);
+    let detail_w = (ui.available_width() * 0.34).clamp(300.0, 440.0);
+    ui.horizontal_top(|ui| {
+        ui.vertical(|ui| {
+            ui.set_width((ui.available_width() - detail_w - 16.0).max(260.0));
+            if let Some(id) = issues::issue_table(ui, app, IssueModule::Project, h) {
+                app.selected_issue = Some(id);
+            }
+        });
+        ui.vertical(|ui| {
+            ui.set_width(detail_w);
+            issues::issue_detail(ui, app, h - 24.0);
+        });
+    });
+}
+
+/// Topilmalarni AI ga tushuntirtirish.
+///
+/// Qoida nima topganini **o'zgartirmaydi**: model faqat o'sha topilmalarni
+/// odam tilida tushuntiradi va qaysi biridan boshlash kerakligini aytadi.
+/// Shuning uchun model o'chiq bo'lsa ham sahifa to'liq ishlaydi.
+fn ai_summary(ui: &mut egui::Ui, app: &mut App) {
+    let count = app
+        .issues
+        .iter()
+        .filter(|i| i.module == IssueModule::Project)
+        .count();
+    if count == 0 {
+        return;
+    }
+    let ready = app.llm.is_ready();
+    let mut ask = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .add_enabled(
+                ready && app.llm_pending.is_none(),
+                egui::Button::new(t("ai_explain")),
+            )
+            .on_disabled_hover_text(if ready { t("ai_busy") } else { t("ai_no_key") })
+            .clicked()
+        {
+            ask = true;
+        }
+        ui.label(
+            RichText::new(t("ai_explain_hint"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+    });
+    if app.llm_pending.is_some() {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(RichText::new(t("ai_thinking")).size(11.5));
+        });
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(250));
+    }
+    if let Some(answer) = app.llm_chat.iter().rev().find(|t| !t.from_user) {
+        egui::Frame::new()
+            .fill(theme::panel())
+            .stroke(Stroke::new(1.0_f32, theme::line()))
+            .corner_radius(8)
+            .inner_margin(egui::Margin::same(10))
+            .show(ui, |ui| {
+                ui.label(
+                    RichText::new(t("ai_explain"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                ui.label(RichText::new(&answer.text).size(12.0));
+            });
+    }
+    if ask {
+        app.ask_ai_about_check();
+    }
+}
+
 fn geometry_clash_block(ui: &mut egui::Ui, app: &App) {
     let measured = crate::clash::measured(&app.elements);
     ui.separator();
@@ -842,53 +1010,6 @@ fn clash_tab(ui: &mut egui::Ui, app: &mut App) {
         });
 }
 
-fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
-    if issues::filter_bar(ui, app, t("run_project_check")) {
-        app.run_project_check();
-    }
-    ui.add_space(6.0);
-
-    let list = app.filtered_issues(IssueModule::Project);
-    issues::issue_kpis(
-        ui,
-        &list,
-        Some((
-            t("kpi_elements"),
-            app.elements.len().to_string(),
-            &format!("{} {}", app.element_links.len(), t("kpi_links_graph")),
-        )),
-    );
-    ui.add_space(6.0);
-    issues::section_report(ui, &list);
-    drop(list);
-    ui.add_space(8.0);
-
-    let h = (ui.available_height() - 12.0).max(180.0);
-    let detail_w = (ui.available_width() * 0.34).clamp(300.0, 440.0);
-
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width((ui.available_width() - detail_w - 16.0).max(260.0));
-            if let Some(id) = issues::issue_table(ui, app, IssueModule::Project, h) {
-                app.selected_issue = Some(id);
-            }
-        });
-        ui.vertical(|ui| {
-            ui.set_width(detail_w);
-            issues::issue_detail(ui, app, h - 24.0);
-        });
-    });
-}
-
-// ---------------------------------------------------------------- Elementlar
-
-/// Loyihani yuklash tugmalari.
-///
-/// Bitta joyda turadi va ikki yerdan chaqiriladi: «Loyiha elementlari»
-/// tabidan va element hali yo'q bo'lganda — ekranning tepasidan, qaysi
-/// tabda turgandan qat'i nazar. Avval tugmalar faqat o'sha tabning ichida
-/// edi: odam birinchi tabda turib «yuklash joyi yo'q» degan xulosaga
-/// kelardi va tekshiruv tugmasi nega ishlamayotganini tushunmasdi.
 fn load_bar(ui: &mut egui::Ui, app: &mut App) {
     let mut import_pdf = false;
     let mut import_ifc = false;
@@ -1004,14 +1125,6 @@ fn steps_card(ui: &mut egui::Ui, app: &mut App) {
             ui.label(RichText::new(t("pdf_step_read")).strong().size(13.0));
             ui.add_space(2.0);
             read_state(ui, app);
-
-            // ---- 3-qadam: tahlil
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(6.0);
-            ui.label(RichText::new(t("pdf_step_check")).strong().size(13.0));
-            ui.add_space(4.0);
-            check_state(ui, app, busy);
         });
     ui.add_space(8.0);
 }
