@@ -2014,6 +2014,27 @@ mod screen_tests {
         app.smeta_open = Some(0);
         app.check_tab = crate::app::CheckTab::Smeta;
         frame(&ctx, &mut app);
+        // Prays va xolst ko'rinishlari.
+        app.catalog_open = true;
+        frame(&ctx, &mut app);
+        app.catalog_open = false;
+        app.sketch_open = true;
+        app.sketch_draft.points = vec![(0.0, 0.0), (10.0, 0.0), (10.0, 6.0), (0.0, 6.0)];
+        frame(&ctx, &mut app);
+        let sk = app.sketch_draft.clone();
+        app.apply_sketch(sk);
+        assert!(!app.sketch_open);
+        assert!(app.smeta.as_ref().unwrap().sketch.is_some());
+        assert!(app
+            .smeta
+            .as_ref()
+            .unwrap()
+            .facts
+            .iter()
+            .any(|f| f.name.starts_with("Площадь застройки")));
+        app.check_tab = crate::app::CheckTab::Offer;
+        frame(&ctx, &mut app);
+        app.check_tab = crate::app::CheckTab::Smeta;
 
         // Jadval hisobdan chiqarilsa uning materiali yig'indidan ketadi,
         // qaytarilsa — qaytadi.

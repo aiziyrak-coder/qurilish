@@ -267,6 +267,36 @@ impl Page {
         });
     }
 
+    /// Rangli to'ldirilgan to'rtburchak (hujjat urg'usi uchun).
+    pub fn bar(&self, x: f32, y: f32, w: f32, h: f32, rgb: [u8; 3]) {
+        if w <= 0.0 || h <= 0.0 {
+            return;
+        }
+        let points = vec![
+            (Point::new(Mm(x), Mm(y)), false),
+            (Point::new(Mm(x + w), Mm(y)), false),
+            (Point::new(Mm(x + w), Mm(y + h)), false),
+            (Point::new(Mm(x), Mm(y + h)), false),
+        ];
+        self.layer
+            .set_fill_color(printpdf::Color::Rgb(printpdf::Rgb::new(
+                rgb[0] as f32 / 255.0,
+                rgb[1] as f32 / 255.0,
+                rgb[2] as f32 / 255.0,
+                None,
+            )));
+        self.layer.add_polygon(printpdf::Polygon {
+            rings: vec![points],
+            mode: printpdf::path::PaintMode::Fill,
+            winding_order: printpdf::path::WindingOrder::NonZero,
+        });
+        // Keyingi matn yana qora bo'lsin.
+        self.layer
+            .set_fill_color(printpdf::Color::Greyscale(printpdf::Greyscale::new(
+                0.0, None,
+            )));
+    }
+
     /// Ramka — yorliqni qirqish chizig'i.
     pub fn frame(&self, x: f32, y: f32, w: f32, h: f32) {
         self.layer.set_outline_thickness(0.2);

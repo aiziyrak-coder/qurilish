@@ -157,6 +157,15 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 
 ### AI loyiha tekshiruvi (TZ II)
 
+> **Videodagi qo'shimcha funksiyalar (2026-10-04):** **Prays** — kompaniya
+> katalogi ekrani (qidiruv, ish/material, Excel import, qo'lda qo'shish,
+> «shu smetadagi narxlarni katalogga», har pozitsiyada o'zgarish tarixi);
+> **Xolst** — loyiha bo'lmasa reja chiziladi (kontur, qavat, balandlik,
+> deraza/eshik, tom/poydevor/devor turi → maydon, perimetr, devor yuzasi
+> «hisob» manbasi bilan smetaga tushadi, keyin savollar); **KP muharriri**
+> — hujjat rangi, «Obyekt raqamlarda» bo'limi, to'lov jadvali (avans +
+> bosqichlar bo'yicha), «narxga kirmaydi» bo'limi; PDF da rangli chiziq.
+
 > **Sahifa qayta qurildi — «Smeta» (olti bosqich).** Mijoz ko'rsatgan
 > namuna («Смета ИИ-Эксперт») bo'yicha: **Yuklash → Savollar → Obyekt
 > ma'lumoti → Spetsifikatsiya → Smeta → Taklif (KP)**.

@@ -154,11 +154,40 @@ pub struct Offer {
     pub customer: String,
     /// Taklif necha kun amal qiladi.
     pub valid_days: u32,
-    /// Shartlar va narxga kirmaydigan narsalar.
+    /// Shartlar.
     pub terms: String,
+    /// Narxga kirmaydigan ishlar — alohida bo'lim.
+    #[serde(default)]
+    pub excluded: String,
     /// Mijozga bosqichlar ichidagi ishlar ham ko'rsatilsinmi.
     pub detailed: bool,
+    /// Hujjat rangi (urg'u): `ACCENTS` dagi o'rin.
+    #[serde(default)]
+    pub accent: usize,
+    /// Bo'limlar: «obyekt raqamlarda», to'lov jadvali.
+    #[serde(default = "yes")]
+    pub show_numbers: bool,
+    #[serde(default = "yes")]
+    pub show_schedule: bool,
+    /// Avans, foizda; qolgani bosqichlar bo'yicha to'lanadi.
+    #[serde(default = "advance")]
+    pub advance_pct: f64,
 }
+
+fn yes() -> bool {
+    true
+}
+fn advance() -> f64 {
+    30.0
+}
+
+/// Hujjat uchun ranglar: nom va RGB.
+pub const ACCENTS: [(&str, [u8; 3]); 4] = [
+    ("Ko'k", [31, 78, 160]),
+    ("Yashil", [34, 120, 80]),
+    ("Terrakot", [176, 86, 48]),
+    ("Grafit", [60, 64, 72]),
+];
 
 impl Default for Offer {
     fn default() -> Self {
@@ -169,8 +198,175 @@ impl Default for Offer {
             customer: String::new(),
             valid_days: 14,
             terms: String::new(),
+            excluded: String::new(),
             detailed: true,
+            accent: 0,
+            show_numbers: true,
+            show_schedule: true,
+            advance_pct: 30.0,
         }
+    }
+}
+
+/// To'lov jadvalining qatori.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Payment {
+    pub title: String,
+    pub amount: f64,
+    pub pct: f64,
+}
+
+/// To'lov jadvali: avans, keyin har bosqich o'z qiymatiga mutanosib.
+///
+/// Jami noldan katta bo'lmasa jadval bo'sh — foizlarni bo'sh summaga
+/// yozish ma'nosiz.
+pub fn schedule(offer: &Offer, stages: &[(String, f64)], total: f64) -> Vec<Payment> {
+    if total <= 0.0 {
+        return Vec::new();
+    }
+    let adv = offer.advance_pct.clamp(0.0, 100.0);
+    let mut out = vec![Payment {
+        title: crate::i18n::t("sm_pay_advance").to_string(),
+        amount: total * adv / 100.0,
+        pct: adv,
+    }];
+    let rest = 100.0 - adv;
+    let sum: f64 = stages.iter().map(|s| s.1).sum();
+    if sum > 0.0 && rest > 0.0 {
+        for (name, v) in stages.iter().filter(|s| s.1 > 0.0) {
+            let pct = rest * v / sum;
+            out.push(Payment {
+                title: name.clone(),
+                amount: total * pct / 100.0,
+                pct,
+            });
+        }
+    }
+    out
+}
+
+// ================================================================= Xolst
+
+/// Loyihasiz obyekt: reja xolstda chiziladi.
+///
+/// Namunadagidek — mijoz rejani yuborgan bo'lsa, u xolstda takrorlanadi
+/// va shundan maydon, perimetr, devor yuzasi chiqadi. Bu **hisob**:
+/// nuqtalar metrda, maydon Gauss formulasi bilan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Sketch {
+    /// Tashqi devor konturi, metrda (soat strelkasi bo'yicha yoki teskari).
+    pub points: Vec<(f32, f32)>,
+    pub floors: u32,
+    /// Qavat balandligi, m.
+    pub height: f32,
+    /// Ichki devorlar uzunligi, m (bir qavatga).
+    pub inner_walls: f32,
+    pub windows: u32,
+    pub doors: u32,
+    pub roof: String,
+    pub foundation: String,
+    pub walls: String,
+}
+
+impl Default for Sketch {
+    fn default() -> Self {
+        Sketch {
+            points: Vec::new(),
+            floors: 1,
+            height: 3.0,
+            inner_walls: 0.0,
+            windows: 0,
+            doors: 1,
+            roof: String::new(),
+            foundation: String::new(),
+            walls: String::new(),
+        }
+    }
+}
+
+impl Sketch {
+    /// Kontur maydoni, m².
+    pub fn area(&self) -> f64 {
+        let n = self.points.len();
+        if n < 3 {
+            return 0.0;
+        }
+        let mut s = 0.0;
+        for i in 0..n {
+            let (x1, y1) = self.points[i];
+            let (x2, y2) = self.points[(i + 1) % n];
+            s += (x1 as f64) * (y2 as f64) - (x2 as f64) * (y1 as f64);
+        }
+        (s / 2.0).abs()
+    }
+
+    /// Perimetr, m.
+    pub fn perimeter(&self) -> f64 {
+        let n = self.points.len();
+        if n < 2 {
+            return 0.0;
+        }
+        (0..n)
+            .map(|i| {
+                let (x1, y1) = self.points[i];
+                let (x2, y2) = self.points[(i + 1) % n];
+                (((x2 - x1) as f64).powi(2) + ((y2 - y1) as f64).powi(2)).sqrt()
+            })
+            .sum()
+    }
+
+    /// Xolstdan chiqadigan ko'rsatkichlar — AI uchun ham, ekran uchun ham.
+    pub fn facts(&self) -> Vec<Fact> {
+        let f = |name: &str, value: String, unit: &str| Fact {
+            name: name.to_string(),
+            value,
+            unit: unit.to_string(),
+            page: None,
+        };
+        let area = self.area();
+        let per = self.perimeter();
+        let floors = self.floors.max(1) as f64;
+        let h = self.height as f64;
+        let mut out = vec![
+            f("Площадь застройки (по контуру)", format!("{area:.1}"), "м2"),
+            f(
+                "Общая площадь (контур × этажи)",
+                format!("{:.1}", area * floors),
+                "м2",
+            ),
+            f("Периметр наружных стен", format!("{per:.1}"), "м"),
+            f("Этажность", self.floors.to_string(), "эт."),
+            f("Высота этажа", format!("{h:.2}"), "м"),
+            f(
+                "Площадь наружных стен (периметр × высота × этажи)",
+                format!("{:.1}", per * h * floors),
+                "м2",
+            ),
+            f(
+                "Строительный объём",
+                format!("{:.1}", area * h * floors),
+                "м3",
+            ),
+            f("Окна", self.windows.to_string(), "шт"),
+            f("Двери", self.doors.to_string(), "шт"),
+        ];
+        if self.inner_walls > 0.0 {
+            out.push(f(
+                "Внутренние стены (длина, все этажи)",
+                format!("{:.1}", self.inner_walls as f64 * floors),
+                "м",
+            ));
+        }
+        for (name, v) in [
+            ("Тип кровли", &self.roof),
+            ("Тип фундамента", &self.foundation),
+            ("Материал стен", &self.walls),
+        ] {
+            if !v.trim().is_empty() {
+                out.push(f(name, v.clone(), ""));
+            }
+        }
+        out
     }
 }
 
@@ -193,6 +389,9 @@ pub struct Smeta {
     pub markup: f64,
     #[serde(default)]
     pub offer: Offer,
+    /// Loyiha o'rniga xolstda chizilgan reja.
+    #[serde(default)]
+    pub sketch: Option<Sketch>,
     #[serde(default)]
     pub model: String,
     #[serde(default)]
@@ -278,6 +477,48 @@ pub struct Catalog {
     pub works: BTreeMap<String, f64>,
     #[serde(default)]
     pub materials: BTreeMap<String, f64>,
+    /// O'zgarishlar tarixi: `(kun, ish?, kalit, narx)` — narx qachon va
+    /// nimaga o'zgargani pozitsiya bo'yicha ko'rinib tursin.
+    #[serde(default)]
+    pub log: Vec<(String, bool, String, f64)>,
+}
+
+impl Catalog {
+    /// Narxni yozadi va tarixga qo'shadi; nol — o'chiradi.
+    pub fn set(&mut self, work: bool, key: &str, price: f64, day: &str) {
+        let map = if work {
+            &mut self.works
+        } else {
+            &mut self.materials
+        };
+        if price > 0.0 {
+            map.insert(key.to_string(), price);
+        } else {
+            map.remove(key);
+        }
+        self.log
+            .push((day.to_string(), work, key.to_string(), price));
+        // Tarix cheksiz o'smasin.
+        if self.log.len() > 5000 {
+            let extra = self.log.len() - 5000;
+            self.log.drain(..extra);
+        }
+    }
+
+    /// Pozitsiya tarixi, yangisidan eskisiga.
+    pub fn history(&self, work: bool, key: &str) -> Vec<(String, f64)> {
+        self.log
+            .iter()
+            .rev()
+            .filter(|l| l.1 == work && l.2 == key)
+            .map(|l| (l.0.clone(), l.3))
+            .collect()
+    }
+}
+
+/// Katalog kalitidan nom va birlik.
+pub fn split_key(key: &str) -> (&str, &str) {
+    key.rsplit_once('|').unwrap_or((key, ""))
 }
 
 /// Katalog kaliti: nom kichik harfda, ortiqcha bo'shliqsiz, birlik bilan.
@@ -634,6 +875,64 @@ mod tests {
         assert_eq!(smeta.stages[1].works.len(), 0);
         assert_eq!(smeta.stages[2].works.len(), 2);
         assert_eq!(smeta.stages[2].works[0].materials.len(), 2);
+    }
+
+    #[test]
+    fn a_sketch_gives_area_perimeter_and_facts() {
+        let sk = Sketch {
+            points: vec![(0.0, 0.0), (12.0, 0.0), (12.0, 8.0), (0.0, 8.0)],
+            floors: 2,
+            height: 3.0,
+            windows: 6,
+            ..Default::default()
+        };
+        assert!((sk.area() - 96.0).abs() < 1e-9);
+        assert!((sk.perimeter() - 40.0).abs() < 1e-9);
+        let facts = sk.facts();
+        let get = |n: &str| {
+            facts
+                .iter()
+                .find(|f| f.name.starts_with(n))
+                .unwrap()
+                .value
+                .clone()
+        };
+        assert_eq!(get("Общая площадь"), "192.0");
+        assert_eq!(get("Площадь наружных стен"), "240.0");
+        assert_eq!(Sketch::default().area(), 0.0);
+    }
+
+    #[test]
+    fn the_payment_schedule_sums_to_the_total() {
+        let offer = Offer {
+            advance_pct: 30.0,
+            ..Default::default()
+        };
+        let stages = vec![
+            ("A".to_string(), 600.0),
+            ("B".to_string(), 400.0),
+            ("C".to_string(), 0.0),
+        ];
+        let plan = schedule(&offer, &stages, 1000.0);
+        assert_eq!(plan.len(), 3, "nol bosqich jadvalga kirmaydi");
+        assert!((plan.iter().map(|p| p.amount).sum::<f64>() - 1000.0).abs() < 1e-9);
+        assert!((plan[1].amount - 420.0).abs() < 1e-9);
+        assert!(schedule(&offer, &stages, 0.0).is_empty());
+    }
+
+    #[test]
+    fn the_catalog_keeps_a_history() {
+        let mut c = Catalog::default();
+        c.set(false, &key("Beton B20", "m3"), 650_000.0, "2026-10-01");
+        c.set(false, &key("Beton B20", "m3"), 700_000.0, "2026-10-04");
+        assert_eq!(c.materials.len(), 1);
+        assert_eq!(
+            c.history(false, &key("Beton B20", "m3"))[0],
+            ("2026-10-04".to_string(), 700_000.0)
+        );
+        c.set(false, &key("Beton B20", "m3"), 0.0, "2026-10-05");
+        assert!(c.materials.is_empty());
+        assert_eq!(split_key("beton b20|m3"), ("beton b20", "m3"));
     }
 
     #[test]

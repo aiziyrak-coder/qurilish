@@ -853,6 +853,16 @@ pub struct App {
     pub takeoff_path: Option<std::path::PathBuf>,
     /// Spetsifikatsiyada ochiq bosqich.
     pub smeta_open: Option<usize>,
+    /// Prays (katalog) ko'rinishi ochiqmi — bosqichlar o'rnida.
+    pub catalog_open: bool,
+    /// Katalogdagi qidiruv.
+    pub catalog_query: String,
+    /// Xolst rejimi: loyihasiz obyekt rejasi chizilyapti.
+    pub sketch_open: bool,
+    /// Chizilayotgan reja (qo'llangunicha saqlanmaydi).
+    pub sketch_draft: crate::smeta::Sketch,
+    /// Katalogga qo'shilayotgan yangi pozitsiya: nom, birlik, narx, ishmi.
+    pub catalog_new: (String, String, f64, bool),
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
     pub pdf_note: String,
     /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
@@ -1080,6 +1090,11 @@ impl App {
             smeta_note: String::new(),
             takeoff_path: None,
             smeta_open: None,
+            catalog_open: false,
+            catalog_query: String::new(),
+            sketch_open: false,
+            sketch_draft: Default::default(),
+            catalog_new: (String::new(), String::new(), 0.0, false),
             pdf_note: String::new(),
             takeoff: None,
             takeoff_prices: Default::default(),
@@ -1262,6 +1277,18 @@ impl App {
         };
         // Sinov va ekran suratlari uchun bosqichni tashqaridan tanlash.
         if let Ok(tab) = std::env::var("QURAI_TAB") {
+            self.catalog_open = tab.eq_ignore_ascii_case("catalog");
+            self.sketch_open = tab.eq_ignore_ascii_case("sketch");
+            if self.sketch_open {
+                self.sketch_draft.points = vec![
+                    (2.0, 2.0),
+                    (14.0, 2.0),
+                    (14.0, 8.0),
+                    (8.0, 8.0),
+                    (8.0, 12.0),
+                    (2.0, 12.0),
+                ];
+            }
             if let Some(found) = CheckTab::ALL
                 .into_iter()
                 .find(|c| format!("{c:?}").eq_ignore_ascii_case(tab.trim()))
@@ -2585,23 +2612,125 @@ impl App {
             // aks holda tahrir ko'rinmasdi.
             *own = None;
             let key = crate::smeta::key(&name, &unit);
-            let map = if material.is_some() {
-                &mut self.catalog.materials
-            } else {
-                &mut self.catalog.works
-            };
-            if price > 0.0 {
-                map.insert(key, price);
-            } else {
-                map.remove(&key);
-            }
-            let body = serde_json::to_string(&self.catalog).unwrap_or_default();
-            let _ = self.db.set_setting("smeta_catalog", &body);
+            let day = self.today.format("%Y-%m-%d").to_string();
+            self.catalog.set(material.is_none(), &key, price, &day);
+            self.save_catalog();
         } else {
             *own = (price > 0.0).then_some(price);
         }
         self.save_takeoff();
         self.recompute_smeta();
+    }
+
+    fn save_catalog(&self) {
+        let body = serde_json::to_string(&self.catalog).unwrap_or_default();
+        let _ = self.db.set_setting("smeta_catalog", &body);
+    }
+
+    /// Katalogdagi narxni to'g'ridan-to'g'ri o'zgartiradi (Prays ekrani).
+    pub fn set_catalog_price(&mut self, work: bool, key: &str, price: f64) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        let day = self.today.format("%Y-%m-%d").to_string();
+        self.catalog.set(work, key, price, &day);
+        self.save_catalog();
+        self.recompute_smeta();
+    }
+
+    /// Katalogga yangi pozitsiya.
+    pub fn add_catalog_item(&mut self, work: bool, name: &str, unit: &str, price: f64) {
+        if name.trim().is_empty() || price <= 0.0 {
+            return;
+        }
+        let key = crate::smeta::key(name, unit);
+        self.set_catalog_price(work, &key, price);
+    }
+
+    /// Prays faylini (Excel/CSV: nom, birlik, narx) katalogga yuklaydi.
+    ///
+    /// Qaytaradi: nechta qo'shildi. Nol narxli qatorlar o'tkazib
+    /// yuboriladi — ular katalogni buzmasin.
+    pub fn import_catalog(&mut self, path: &std::path::Path, work: bool) -> Result<usize, String> {
+        if !self.can_edit(Screen::AiCheck) {
+            return Err(t("role_readonly").to_string());
+        }
+        let rows = crate::import::prices_from_file(path)?;
+        let day = self.today.format("%Y-%m-%d").to_string();
+        let mut n = 0;
+        for r in rows
+            .iter()
+            .filter(|r| r.price > 0.0 && !r.name.trim().is_empty())
+        {
+            self.catalog
+                .set(work, &crate::smeta::key(&r.name, &r.unit), r.price, &day);
+            n += 1;
+        }
+        self.save_catalog();
+        self.recompute_smeta();
+        Ok(n)
+    }
+
+    /// Shu smetadagi barcha narxlangan qatorlarni katalogga ko'chiradi:
+    /// bir marta kiritilgan narx keyingi obyektlarga qoladi.
+    pub fn smeta_to_catalog(&mut self) -> usize {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return 0;
+        }
+        let day = self.today.format("%Y-%m-%d").to_string();
+        let mut n = 0;
+        if let Some(m) = &mut self.smeta {
+            for w in m.stages.iter_mut().flat_map(|s| &mut s.works) {
+                if let Some(p) = w.price.take() {
+                    self.catalog
+                        .set(true, &crate::smeta::key(&w.name, &w.unit), p, &day);
+                    n += 1;
+                }
+                for mat in &mut w.materials {
+                    if let Some(p) = mat.price.take() {
+                        self.catalog
+                            .set(false, &crate::smeta::key(&mat.name, &mat.unit), p, &day);
+                        n += 1;
+                    }
+                }
+            }
+        }
+        self.save_catalog();
+        self.save_takeoff();
+        self.recompute_smeta();
+        n
+    }
+
+    /// Xolstdagi rejani obyekt ma'lumotiga aylantiradi: ko'rsatkichlar
+    /// «hisob» manbasi bilan smetaga tushadi, keyin savollar so'raladi.
+    pub fn apply_sketch(&mut self, sketch: crate::smeta::Sketch) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        let facts = sketch.facts();
+        let m = self.smeta.get_or_insert_with(Default::default);
+        m.digest.retain(|d| d.page != 0);
+        m.digest.insert(
+            0,
+            crate::smeta::PageDigest {
+                page: 0,
+                sheet: t("sm_sketch").to_string(),
+                kind: t("sm_sketch").to_string(),
+                facts: facts.clone(),
+                lists: Vec::new(),
+            },
+        );
+        m.facts.retain(|f| f.page.is_some());
+        m.facts.splice(0..0, facts);
+        m.sketch = Some(sketch);
+        self.sketch_open = false;
+        self.save_takeoff();
+        self.recompute_smeta();
+        self.start_questions();
+        self.check_tab = CheckTab::Questions;
     }
 
     /// Narx tahriri qayerga yozilishini tanlaydi.

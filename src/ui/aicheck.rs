@@ -39,8 +39,29 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             .request_repaint_after(std::time::Duration::from_millis(300));
     }
 
-    stepper(ui, app);
+    ui.horizontal(|ui| {
+        stepper(ui, app);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            let n = app.catalog.works.len() + app.catalog.materials.len();
+            if ui
+                .selectable_label(app.catalog_open, format!("{} · {n}", t("sm_catalog")))
+                .on_hover_text(t("sm_catalog_hint"))
+                .clicked()
+            {
+                app.catalog_open = !app.catalog_open;
+            }
+        });
+    });
     ui.add_space(10.0);
+
+    if app.catalog_open {
+        catalog_view(ui, app);
+        return;
+    }
+    if app.sketch_open {
+        sketch_view(ui, app);
+        return;
+    }
 
     match app.check_tab {
         CheckTab::Upload => upload_tab(ui, app),
@@ -200,6 +221,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut clear = false;
     let mut start_ai = false;
     let mut cancel = false;
+    let mut sketch = false;
     let mut model: Option<String> = None;
 
     card(ui, |ui| {
@@ -225,6 +247,13 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                     .clicked()
             {
                 clear = true;
+            }
+            if ui
+                .add_enabled(!busy, egui::Button::new(t("sm_sketch_button")))
+                .on_hover_text(t("sm_sketch_hint"))
+                .clicked()
+            {
+                sketch = true;
             }
             ui.label(
                 RichText::new(t("tk_ai_model"))
@@ -352,6 +381,13 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
 
     if let Some(m) = model {
         app.set_ai_model(&m);
+    }
+    if sketch {
+        if let Some(sk) = app.smeta.as_ref().and_then(|m| m.sketch.clone()) {
+            app.sketch_draft = sk;
+        }
+        app.sketch_open = true;
+        return;
     }
     if pick {
         if let Some(path) = rfd::FileDialog::new()
@@ -1497,6 +1533,76 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
             {
                 changed = true;
             }
+            ui.label(
+                RichText::new(t("sm_offer_excluded"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            if ui
+                .add(
+                    egui::TextEdit::multiline(&mut offer.excluded)
+                        .desired_rows(3)
+                        .desired_width(f32::INFINITY),
+                )
+                .changed()
+            {
+                changed = true;
+            }
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(t("sm_offer_accent"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                for (i, (name, rgb)) in crate::smeta::ACCENTS.iter().enumerate() {
+                    let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                    let (rect, resp) =
+                        ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
+                    ui.painter().rect_filled(rect, 4.0, color);
+                    if offer.accent == i {
+                        ui.painter().rect_stroke(
+                            rect,
+                            4.0,
+                            Stroke::new(2.0_f32, theme::text()),
+                            egui::StrokeKind::Outside,
+                        );
+                    }
+                    if resp.on_hover_text(*name).clicked() {
+                        offer.accent = i;
+                        changed = true;
+                    }
+                }
+            });
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .checkbox(&mut offer.show_numbers, t("sm_offer_numbers"))
+                    .changed()
+                {
+                    changed = true;
+                }
+                if ui
+                    .checkbox(&mut offer.show_schedule, t("sm_offer_schedule"))
+                    .changed()
+                {
+                    changed = true;
+                }
+                ui.label(
+                    RichText::new(t("sm_offer_advance"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut offer.advance_pct)
+                            .range(0.0..=100.0)
+                            .suffix(" %"),
+                    )
+                    .changed()
+                {
+                    changed = true;
+                }
+            });
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(t("sm_offer_valid"))
@@ -1534,14 +1640,25 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                     .stroke(Stroke::new(1.0_f32, theme::line()))
                     .inner_margin(egui::Margin::same(18))
                     .show(ui, |ui| {
+                        let rgb = crate::smeta::ACCENTS
+                            .get(m.offer.accent)
+                            .map(|a| a.1)
+                            .unwrap_or([31, 78, 160]);
+                        let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                        let (bar, _) = ui.allocate_exact_size(
+                            egui::vec2(ui.available_width(), 6.0),
+                            egui::Sense::hover(),
+                        );
+                        ui.painter().rect_filled(bar, 2.0, accent);
+                        ui.add_space(6.0);
                         for line in offer_lines(app, &m, &view) {
                             match line {
                                 DocLine::Title(s) => {
-                                    ui.label(RichText::new(s).size(18.0).strong());
+                                    ui.label(RichText::new(s).size(18.0).strong().color(accent));
                                 }
                                 DocLine::Head(s) => {
                                     ui.add_space(6.0);
-                                    ui.label(RichText::new(s).size(13.0).strong());
+                                    ui.label(RichText::new(s).size(13.0).strong().color(accent));
                                 }
                                 DocLine::Text(s) => {
                                     ui.label(RichText::new(s).size(11.5));
@@ -1622,6 +1739,18 @@ fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) ->
         out.push(DocLine::Gap);
         out.push(DocLine::Text(m.summary.clone()));
     }
+    // Obyekt raqamlarda: varaqlardan yoki xolstdan olingan asosiy
+    // ko'rsatkichlar.
+    if o.show_numbers && !m.facts.is_empty() {
+        out.push(DocLine::Gap);
+        out.push(DocLine::Head(t("sm_offer_numbers_title").to_string()));
+        for f in m.facts.iter().take(10) {
+            out.push(DocLine::Row(
+                f.name.clone(),
+                format!("{} {}", f.value, f.unit).trim().to_string(),
+            ));
+        }
+    }
     out.push(DocLine::Gap);
     out.push(DocLine::Head(t("sm_offer_price_title").to_string()));
     out.push(DocLine::Row(
@@ -1665,6 +1794,37 @@ fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) ->
                     w.unit
                 )));
             }
+        }
+    }
+    if o.show_schedule {
+        let stages: Vec<(String, f64)> = m
+            .stages
+            .iter()
+            .enumerate()
+            .map(|(i, st)| {
+                (
+                    st.name.clone(),
+                    view.stages.get(i).map(|v| v.total).unwrap_or(0.0),
+                )
+            })
+            .collect();
+        let plan = crate::smeta::schedule(&m.offer, &stages, view.total);
+        if !plan.is_empty() {
+            out.push(DocLine::Gap);
+            out.push(DocLine::Head(t("sm_offer_schedule_title").to_string()));
+            for (i, p) in plan.iter().enumerate() {
+                out.push(DocLine::Row(
+                    format!("{}. {} ({:.0}%)", i + 1, p.title, p.pct),
+                    money(p.amount),
+                ));
+            }
+        }
+    }
+    if !o.excluded.is_empty() {
+        out.push(DocLine::Gap);
+        out.push(DocLine::Head(t("sm_offer_excluded").to_string()));
+        for l in o.excluded.lines() {
+            out.push(DocLine::Text(l.to_string()));
         }
     }
     if !o.terms.is_empty() {
@@ -1721,7 +1881,12 @@ fn export_offer(app: &mut App) {
         }
     }
     let total = pages.len();
+    let rgb = crate::smeta::ACCENTS
+        .get(m.offer.accent)
+        .map(|a| a.1)
+        .unwrap_or([31, 78, 160]);
     let result = crate::pdf::write_pages(&path, t("sm_offer_file"), total, |page, index| {
+        page.bar(margin, h - margin + 3.0, w - 2.0 * margin, 2.0, rgb);
         let mut y = h - margin;
         for l in &pages[index] {
             y -= step(l);
@@ -1749,5 +1914,423 @@ fn export_offer(app: &mut App) {
     match result {
         Ok(()) => app.notify(format!("{} · {}", t("export_done"), path.display())),
         Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
+    }
+}
+
+// ================================================================= Prays
+
+/// Kompaniya katalogi: barcha obyektlarga umumiy narxlar.
+fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
+    let mut edit: Option<(bool, String, f64)> = None;
+    let mut remove: Option<(bool, String)> = None;
+    let mut import: Option<bool> = None;
+    let mut add = false;
+    let mut from_smeta = false;
+
+    card(ui, |ui| {
+        ui.label(RichText::new(t("sm_catalog_title")).strong().size(14.0));
+        ui.label(
+            RichText::new(t("sm_catalog_hint"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        ui.add_space(8.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut app.catalog_query)
+                    .hint_text(t("sm_search"))
+                    .desired_width(240.0),
+            );
+            if ui.button(t("sm_catalog_import_m")).clicked() {
+                import = Some(false);
+            }
+            if ui.button(t("sm_catalog_import_w")).clicked() {
+                import = Some(true);
+            }
+            if app.smeta.as_ref().is_some_and(|m| !m.stages.is_empty())
+                && ui
+                    .button(t("sm_catalog_from_smeta"))
+                    .on_hover_text(t("sm_catalog_from_smeta_hint"))
+                    .clicked()
+            {
+                from_smeta = true;
+            }
+        });
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(t("sm_catalog_add"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            let (name, unit, price, work) = &mut app.catalog_new;
+            ui.add(
+                egui::TextEdit::singleline(name)
+                    .hint_text(t("tk_col_material"))
+                    .desired_width(260.0),
+            );
+            ui.add(
+                egui::TextEdit::singleline(unit)
+                    .hint_text(t("tk_col_unit"))
+                    .desired_width(60.0),
+            );
+            ui.add(
+                egui::DragValue::new(price)
+                    .speed(500.0)
+                    .range(0.0..=1e12)
+                    .custom_formatter(|v, _| money(v)),
+            );
+            ui.checkbox(work, t("sm_catalog_is_work"));
+            if ui.button("+").clicked() {
+                add = true;
+            }
+        });
+    });
+
+    ui.add_space(8.0);
+    let q = app.catalog_query.to_lowercase();
+    let rows: Vec<(bool, String, f64)> = app
+        .catalog
+        .works
+        .iter()
+        .map(|(k, v)| (true, k.clone(), *v))
+        .chain(
+            app.catalog
+                .materials
+                .iter()
+                .map(|(k, v)| (false, k.clone(), *v)),
+        )
+        .filter(|r| q.is_empty() || r.1.contains(&q))
+        .collect();
+    if rows.is_empty() {
+        empty(ui, t("sm_catalog_empty"));
+    }
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Grid::new("sm_catalog")
+                .striped(true)
+                .spacing([14.0, 4.0])
+                .show(ui, |ui| {
+                    for h in [
+                        "sm_col_kind",
+                        "tk_col_material",
+                        "tk_col_unit",
+                        "tk_col_price",
+                        "sm_col_changed",
+                        "",
+                    ] {
+                        let text = if h.is_empty() { "" } else { t(h) };
+                        ui.label(RichText::new(text).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+                    for (work, key, price) in &rows {
+                        let (name, unit) = crate::smeta::split_key(key);
+                        ui.label(
+                            RichText::new(t(if *work { "sm_works" } else { "sm_materials" }))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        ui.label(RichText::new(name).size(12.0));
+                        ui.label(RichText::new(unit).color(theme::muted()));
+                        let mut v = *price;
+                        let hist = app.catalog.history(*work, key);
+                        let tip = hist
+                            .iter()
+                            .take(6)
+                            .map(|(d, p)| format!("{d}: {}", money(*p)))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if ui
+                            .add(
+                                egui::DragValue::new(&mut v)
+                                    .speed(500.0)
+                                    .range(0.0..=1e12)
+                                    .custom_formatter(|v, _| money(v))
+                                    .custom_parser(|s| {
+                                        s.replace([' ', '\u{a0}'], "")
+                                            .replace(',', ".")
+                                            .parse::<f64>()
+                                            .ok()
+                                    }),
+                            )
+                            .on_hover_text(format!("{}\n{tip}", t("sm_col_changed")))
+                            .changed()
+                        {
+                            edit = Some((*work, key.clone(), v));
+                        }
+                        ui.label(
+                            RichText::new(hist.first().map(|h| h.0.clone()).unwrap_or_default())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                        if ui
+                            .small_button("×")
+                            .on_hover_text(t("sm_catalog_remove"))
+                            .clicked()
+                        {
+                            remove = Some((*work, key.clone()));
+                        }
+                        ui.end_row();
+                    }
+                });
+        });
+
+    if let Some((work, key, v)) = edit {
+        app.set_catalog_price(work, &key, v);
+    }
+    if let Some((work, key)) = remove {
+        app.set_catalog_price(work, &key, 0.0);
+    }
+    if add {
+        let (name, unit, price, work) = app.catalog_new.clone();
+        app.add_catalog_item(work, &name, &unit, price);
+        app.catalog_new = (String::new(), String::new(), 0.0, work);
+    }
+    if from_smeta {
+        let n = app.smeta_to_catalog();
+        app.notify(format!("{} {n}", t("sm_catalog_saved")));
+    }
+    if let Some(work) = import {
+        if let Some(path) = rfd::FileDialog::new()
+            .set_title(t("pb_import"))
+            .add_filter(
+                t("import_file_filter"),
+                &["xlsx", "xlsm", "xls", "ods", "csv"],
+            )
+            .pick_file()
+        {
+            match app.import_catalog(&path, work) {
+                Ok(n) => app.notify(format!("{} {n}", t("pb_imported"))),
+                Err(e) => app.notify(format!("{}: {e}", t("import_failed"))),
+            }
+        }
+    }
+}
+
+// ================================================================= Xolst
+
+/// Loyihasiz obyekt: reja xolstda chiziladi.
+///
+/// Sichqoncha bilan nuqta qo'yiladi (0,5 m qadam), o'ng tugma oxirgisini
+/// o'chiradi. Maydon va perimetr darhol hisoblanadi.
+fn sketch_view(ui: &mut egui::Ui, app: &mut App) {
+    const SCALE: f32 = 18.0; // piksel / metr
+    const STEP: f32 = 0.5; // metr
+    let mut apply = false;
+    let mut close = false;
+
+    ui.columns(2, |cols| {
+        let ui = &mut cols[0];
+        card(ui, |ui| {
+            ui.label(RichText::new(t("sm_sketch_title")).strong().size(14.0));
+            ui.label(
+                RichText::new(t("sm_sketch_how"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            let size = egui::vec2(ui.available_width().max(300.0), 420.0);
+            let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+            let painter = ui.painter_at(rect);
+            painter.rect_filled(rect, 4.0, theme::canvas());
+            // To'r: har metr.
+            let mut x = rect.left();
+            let mut i = 0;
+            while x <= rect.right() {
+                let w = if i % 5 == 0 { 1.0_f32 } else { 0.5_f32 };
+                painter.line_segment(
+                    [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+                    Stroke::new(w, theme::line()),
+                );
+                x += SCALE;
+                i += 1;
+            }
+            let mut y = rect.top();
+            i = 0;
+            while y <= rect.bottom() {
+                let w = if i % 5 == 0 { 1.0_f32 } else { 0.5_f32 };
+                painter.line_segment(
+                    [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
+                    Stroke::new(w, theme::line()),
+                );
+                y += SCALE;
+                i += 1;
+            }
+            let to_screen =
+                |p: (f32, f32)| egui::pos2(rect.left() + p.0 * SCALE, rect.bottom() - p.1 * SCALE);
+            let sk = &mut app.sketch_draft;
+            let pts: Vec<egui::Pos2> = sk.points.iter().map(|p| to_screen(*p)).collect();
+            // Bo'yoq yo'q: kontur noqavariq (G shaklida) bo'lishi mumkin,
+            // qavariq bo'yoq esa uni buzib ko'rsatardi.
+            for w in pts.windows(2) {
+                painter.line_segment([w[0], w[1]], Stroke::new(3.0_f32, theme::accent()));
+            }
+            if pts.len() >= 3 {
+                painter.line_segment(
+                    [pts[pts.len() - 1], pts[0]],
+                    Stroke::new(1.5_f32, theme::accent().gamma_multiply(0.6)),
+                );
+            }
+            for (i, p) in pts.iter().enumerate() {
+                painter.circle_filled(*p, 4.0, theme::accent());
+                if i + 1 < pts.len() {
+                    let a = sk.points[i];
+                    let b = sk.points[i + 1];
+                    let len = ((b.0 - a.0).powi(2) + (b.1 - a.1).powi(2)).sqrt();
+                    let mid = egui::pos2((p.x + pts[i + 1].x) / 2.0, (p.y + pts[i + 1].y) / 2.0);
+                    painter.text(
+                        mid,
+                        egui::Align2::CENTER_BOTTOM,
+                        format!("{len:.1} m"),
+                        egui::FontId::proportional(11.0),
+                        theme::text(),
+                    );
+                }
+            }
+            if resp.clicked() {
+                if let Some(pos) = resp.interact_pointer_pos() {
+                    let mx = ((pos.x - rect.left()) / SCALE / STEP).round() * STEP;
+                    let my = ((rect.bottom() - pos.y) / SCALE / STEP).round() * STEP;
+                    sk.points.push((mx.max(0.0), my.max(0.0)));
+                }
+            }
+            if resp.secondary_clicked() {
+                sk.points.pop();
+            }
+            ui.horizontal(|ui| {
+                if ui.button(t("sm_sketch_undo")).clicked() {
+                    sk.points.pop();
+                }
+                if ui.button(t("sm_sketch_clear")).clicked() {
+                    sk.points.clear();
+                }
+                ui.label(
+                    RichText::new(format!(
+                        "{}: {:.1} m² · {}: {:.1} m · {} {}",
+                        t("sm_sketch_area"),
+                        sk.area(),
+                        t("sm_sketch_perimeter"),
+                        sk.perimeter(),
+                        sk.points.len(),
+                        t("sm_sketch_points")
+                    ))
+                    .size(11.5),
+                );
+            });
+        });
+
+        let ui = &mut cols[1];
+        card(ui, |ui| {
+            ui.label(RichText::new(t("sm_sketch_params")).strong().size(14.0));
+            ui.add_space(6.0);
+            let sk = &mut app.sketch_draft;
+            egui::Grid::new("sm_sketch_params")
+                .spacing([12.0, 6.0])
+                .show(ui, |ui| {
+                    ui.label(t("sm_sketch_floors"));
+                    ui.add(egui::DragValue::new(&mut sk.floors).range(1..=30));
+                    ui.end_row();
+                    ui.label(t("sm_sketch_height"));
+                    ui.add(
+                        egui::DragValue::new(&mut sk.height)
+                            .speed(0.1)
+                            .range(2.0..=12.0)
+                            .suffix(" m"),
+                    );
+                    ui.end_row();
+                    ui.label(t("sm_sketch_inner"));
+                    ui.add(
+                        egui::DragValue::new(&mut sk.inner_walls)
+                            .speed(0.5)
+                            .range(0.0..=5000.0)
+                            .suffix(" m"),
+                    );
+                    ui.end_row();
+                    ui.label(t("sm_sketch_windows"));
+                    ui.add(egui::DragValue::new(&mut sk.windows).range(0..=1000));
+                    ui.end_row();
+                    ui.label(t("sm_sketch_doors"));
+                    ui.add(egui::DragValue::new(&mut sk.doors).range(0..=1000));
+                    ui.end_row();
+                    for (label, value, options) in [
+                        (
+                            "sm_sketch_roof",
+                            &mut sk.roof,
+                            [
+                                "Скатная металлочерепица",
+                                "Плоская рулонная",
+                                "Сэндвич-панели",
+                                "Профнастил",
+                            ],
+                        ),
+                        (
+                            "sm_sketch_foundation",
+                            &mut sk.foundation,
+                            [
+                                "Монолитная лента",
+                                "Монолитная плита",
+                                "Сваи с ростверком",
+                                "Столбчатый",
+                            ],
+                        ),
+                        (
+                            "sm_sketch_walls",
+                            &mut sk.walls,
+                            ["Кирпич", "Газобетон", "Каркас", "Сэндвич-панели"],
+                        ),
+                    ] {
+                        ui.label(t(label));
+                        ui.horizontal_wrapped(|ui| {
+                            egui::ComboBox::from_id_salt(label)
+                                .selected_text(if value.is_empty() {
+                                    t("dash")
+                                } else {
+                                    value.as_str()
+                                })
+                                .show_ui(ui, |ui| {
+                                    for o in options {
+                                        ui.selectable_value(value, o.to_string(), o);
+                                    }
+                                });
+                            ui.add(
+                                egui::TextEdit::singleline(value)
+                                    .desired_width(140.0)
+                                    .hint_text(t("sm_answer_other")),
+                            );
+                        });
+                        ui.end_row();
+                    }
+                });
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(t("sm_sketch_note"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(
+                        app.sketch_draft.points.len() >= 3,
+                        egui::Button::new(t("sm_sketch_apply")),
+                    )
+                    .clicked()
+                {
+                    apply = true;
+                }
+                if ui.button(t("cancel")).clicked() {
+                    close = true;
+                }
+            });
+        });
+    });
+
+    if apply {
+        let sk = app.sketch_draft.clone();
+        app.apply_sketch(sk);
+    }
+    if close {
+        app.sketch_open = false;
     }
 }
