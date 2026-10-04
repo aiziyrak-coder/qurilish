@@ -36,6 +36,13 @@ pub const DEFAULT_MODEL: &str = "gpt-4o-mini";
 /// Tanlash uchun tayyor modellar. Ro'yxat yopiq emas — sozlamada istalgan
 /// nom yozilishi mumkin, chunki xizmat modellari vaqt o'tishi bilan
 /// yangilanadi va dastur ularning ro'yxatini bilishi shart emas.
+/// Varaq o'qish uchun sukut bo'yicha model.
+///
+/// Haqiqiy loyihada sinalgan: kichik model (`gpt-4o-mini`) sonlarni
+/// adashtirdi va qatorlarni tashlab ketdi, `gpt-4.1` esa varaqni to'liq
+/// o'qidi. Shuning uchun o'qish suhbat modelidan alohida sozlanadi.
+pub const EXTRACT_MODEL: &str = "gpt-4.1";
+
 pub const MODELS: &[&str] = &[
     "gpt-4o-mini",
     "gpt-4o",
@@ -451,6 +458,120 @@ pub fn ask(
     Err(Error::NotConfigured)
 }
 
+// ============================================================ Hujjat o'qish
+
+/// Hujjat o'qish so'rovining qismi.
+pub enum Part {
+    Text(String),
+    /// PDF fayl — model varaqni **ko'rib** o'qiydi.
+    Pdf {
+        name: String,
+        data: Vec<u8>,
+    },
+}
+
+/// Varaq o'qish uzoqroq davom etadi: model chizmani ko'rib chiqadi.
+pub const EXTRACT_TIMEOUT: u64 = 300;
+
+/// Baytlarni base64 ga o'giradi (PDF so'rov tanasida shunday ketadi).
+pub fn base64(data: &[u8]) -> String {
+    const ABC: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        out.push(ABC[(n >> 18) as usize & 63] as char);
+        out.push(ABC[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 {
+            ABC[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            ABC[n as usize & 63] as char
+        } else {
+            '='
+        });
+    }
+    out
+}
+
+/// Hujjat o'qish so'rovining tanasi: javob faqat JSON bo'lishi so'raladi.
+///
+/// Kalit bu yerga **kirmaydi** — u faqat `Authorization` sarlavhasida
+/// ketadi.
+pub fn build_extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<String, Error> {
+    if !cfg.is_ready() {
+        return Err(Error::NotConfigured);
+    }
+    let content: Vec<serde_json::Value> = parts
+        .iter()
+        .map(|p| match p {
+            Part::Text(text) => serde_json::json!({"type": "text", "text": text}),
+            Part::Pdf { name, data } => serde_json::json!({
+                "type": "file",
+                "file": {
+                    "filename": name,
+                    "file_data": format!("data:application/pdf;base64,{}", base64(data)),
+                }
+            }),
+        })
+        .collect();
+    let model = cfg.model.trim();
+    let mut body = serde_json::json!({
+        "model": model,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": content},
+        ],
+    });
+    // Harorat faqat uni qabul qiladigan modellarga yuboriladi: mulohaza
+    // modellari (`o4-mini`, `gpt-5`) noldan boshqa qiymatni ham, nolni ham
+    // rad etadi va butun so'rov xato bilan qaytadi.
+    if model.starts_with("gpt-4") || model.starts_with("gpt-3") {
+        body["temperature"] = serde_json::json!(0);
+    }
+    Ok(body.to_string())
+}
+
+/// Hujjat qismlarini modelga jo'natadi va JSON javobni qaytaradi.
+#[cfg(feature = "llm")]
+pub fn extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<Answer, Error> {
+    let body = build_extract(cfg, system, parts)?;
+    let timeout = cfg
+        .timeout()
+        .max(std::time::Duration::from_secs(EXTRACT_TIMEOUT));
+    let agent = ureq::AgentBuilder::new().timeout(timeout).build();
+    let result = agent
+        .post(cfg.endpoint.trim())
+        .set("Authorization", &format!("Bearer {}", cfg.api_key.trim()))
+        .set("Content-Type", "application/json")
+        .send_string(&body);
+    match result {
+        Ok(resp) => {
+            let text = resp
+                .into_string()
+                .map_err(|e| Error::Transport(e.to_string()))?;
+            parse_reply(&text)
+        }
+        Err(ureq::Error::Status(code, resp)) => {
+            let body = resp.into_string().unwrap_or_default();
+            Err(error_for_status(code, &body))
+        }
+        Err(e) => Err(Error::Transport(e.to_string())),
+    }
+}
+
+#[cfg(not(feature = "llm"))]
+pub fn extract(_cfg: &Config, _system: &str, _parts: &[Part]) -> Result<Answer, Error> {
+    Err(Error::NotConfigured)
+}
+
 /// So'rovni alohida oqimda bajaradi va natijani kanal orqali qaytaradi.
 ///
 /// Interfeys javob kutib qotib qolmasligi kerak: egui har kadrda qayta
@@ -504,6 +625,43 @@ mod tests {
             api_key: "sk-1234567890abcd".into(),
             timeout_secs: DEFAULT_TIMEOUT,
         }
+    }
+
+    #[test]
+    fn base64_matches_the_standard() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    /// Varaq PDF holida ketadi, javob JSON so'raladi, kalit tanada yo'q.
+    #[test]
+    fn an_extract_request_carries_the_sheet_but_not_the_key() {
+        let mut c = cfg();
+        c.api_key = "sk-maxfiy-kalit".into();
+        let parts = [
+            Part::Text("varaq matni".into()),
+            Part::Pdf {
+                name: "p13.pdf".into(),
+                data: b"%PDF-1.4".to_vec(),
+            },
+        ];
+        let body = build_extract(&c, "qoida", &parts).unwrap();
+        assert!(body.contains("json_object"));
+        assert!(body.contains("data:application/pdf;base64,JVBERi0xLjQ="));
+        assert!(body.contains("varaq matni"));
+        assert!(!body.contains("sk-maxfiy-kalit"));
+        // `test-model` haroratni qabul qilishi noma'lum — yuborilmaydi.
+        assert!(!body.contains("temperature"));
+        c.model = "gpt-4.1".into();
+        assert!(build_extract(&c, "q", &parts)
+            .unwrap()
+            .contains("\"temperature\":0"));
+        // O'chiq sozlamada so'rov tuzilmaydi.
+        c.enabled = false;
+        assert_eq!(build_extract(&c, "q", &parts), Err(Error::NotConfigured));
     }
 
     #[test]

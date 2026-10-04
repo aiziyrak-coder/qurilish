@@ -58,6 +58,9 @@ pub struct SpecTable {
     /// aniqlanmagan.
     #[serde(default)]
     pub owner: String,
+    /// Jadvalni AI o'qiganmi (aks holda — joylashuv qoidasi bo'yicha).
+    #[serde(default)]
+    pub ai: bool,
 }
 
 // ============================================================ 1. Jadval
@@ -409,6 +412,7 @@ fn tables_in(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
                 rows,
                 off: false,
                 owner: String::new(),
+                ai: false,
             });
         }
     }
@@ -573,6 +577,7 @@ fn steel_tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
                 rows,
                 off: false,
                 owner: String::new(),
+                ai: false,
             });
         }
     }
@@ -1466,6 +1471,63 @@ pub struct Takeoff {
     pub pages: usize,
     pub tables: Vec<SpecTable>,
     pub constructs: Vec<Construct>,
+    /// AI o'qigan varaqlarning **qoida bo'yicha** o'qilgan nusxasi.
+    ///
+    /// Hisobga kirmaydi. Ikki mustaqil o'qishni solishtirish va AI
+    /// o'qishidan voz kechish uchun saqlanadi.
+    #[serde(default)]
+    pub rule_tables: Vec<SpecTable>,
+    /// AI o'qishi haqida ma'lumot; `None` — AI ishlatilmagan.
+    #[serde(default)]
+    pub ai: Option<AiInfo>,
+}
+
+/// AI o'qishining qaydi: nima o'qildi, nima o'qilmadi.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct AiInfo {
+    pub model: String,
+    /// AI o'qigan varaqlar.
+    pub pages: Vec<usize>,
+    /// O'qilmagan varaqlar va sababi — ular qoida bo'yicha qolgan.
+    pub failed: Vec<(usize, String)>,
+    /// Sarflangan tokenlar.
+    pub tokens: u32,
+}
+
+/// Bitta varaqda ikki o'qishning farqi: metall (kg) va beton (m³).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Diff {
+    pub page: usize,
+    pub rule_kg: f64,
+    pub ai_kg: f64,
+    pub rule_m3: f64,
+    pub ai_m3: f64,
+}
+
+impl Diff {
+    /// Ikki o'qish mos keldimi: farq 1 % dan oshmasa.
+    pub fn agrees(&self) -> bool {
+        let near = |a: f64, b: f64| (a - b).abs() <= 0.01 * a.abs().max(b.abs()).max(1e-9);
+        near(self.rule_kg, self.ai_kg) && near(self.rule_m3, self.ai_m3)
+    }
+}
+
+/// Jadvallardagi xom miqdor: ko'paytirilmagan metall va beton.
+fn raw_sums(tables: &[&SpecTable]) -> (f64, f64) {
+    let (mut kg, mut m3) = (0.0, 0.0);
+    for r in tables.iter().flat_map(|t| &t.rows) {
+        // Yig'ma birlikka havola (`С1 — 123.4 kg`) tarkibi bilan birga
+        // ikki marta sanalmasin.
+        if is_reference(r) {
+            continue;
+        }
+        match item(r) {
+            Some(i) if i.kind == Kind::Concrete => m3 += i.amount,
+            Some(i) if i.unit == "kg" => kg += i.amount,
+            _ => {}
+        }
+    }
+    (kg, m3)
 }
 
 impl Takeoff {
@@ -1492,7 +1554,129 @@ impl Takeoff {
             pages: pages.len(),
             tables: all,
             constructs: list,
+            ..Default::default()
         }
+    }
+
+    /// AI o'qigan varaqlarni hisobga kiritadi.
+    ///
+    /// Har varaqning qoida bo'yicha o'qilgan jadvallari `rule_tables` ga
+    /// ko'chadi, o'rniga AI jadvallari qo'yiladi. AI hech narsa topmagan
+    /// varaq o'zgarmaydi — bo'sh javob jadvalni o'chirib yubormaydi.
+    /// Konstruksiyalar ro'yxati yangi jadvallardan qayta yig'iladi.
+    pub fn apply_ai(&mut self, pages: Vec<(usize, String, Vec<SpecTable>)>, info: AiInfo) {
+        let mut read = Vec::new();
+        for (page, owner, mut tables) in pages {
+            tables.retain(|t| !t.rows.is_empty());
+            if tables.is_empty() {
+                continue;
+            }
+            // Qayta o'qishda eski AI jadvallari tashlanadi, qoida nusxasi
+            // esa birinchi o'qishdagidek qoladi.
+            let (old_ai, old_rule): (Vec<SpecTable>, Vec<SpecTable>) = self
+                .tables
+                .iter()
+                .filter(|t| t.page == page)
+                .cloned()
+                .partition(|t| t.ai);
+            let _ = old_ai;
+            if !old_rule.is_empty() {
+                self.rule_tables.retain(|t| t.page != page);
+                self.rule_tables.extend(old_rule);
+            }
+            // Shtampdan topilgan ega saqlanadi, AI aytgani — zaxira.
+            let known = self
+                .rule_tables
+                .iter()
+                .find(|t| t.page == page && !t.owner.is_empty())
+                .map(|t| t.owner.clone());
+            self.tables.retain(|t| t.page != page);
+            for mut t in tables {
+                t.page = page;
+                t.ai = true;
+                t.off = false;
+                let kmd = t.rows.iter().any(|r| r.designation == KMD);
+                t.owner = if kmd {
+                    String::new()
+                } else {
+                    known.clone().unwrap_or_else(|| owner.clone())
+                };
+                self.tables.push(t);
+            }
+            read.push(page);
+        }
+        self.tables.sort_by_key(|t| t.page);
+        self.constructs = constructs(&self.tables);
+        // AI aytgan ega ro'yxatdagi konstruksiya bo'lmasa — ega emas.
+        let list = self.constructs.clone();
+        for t in self.tables.iter_mut().filter(|t| t.ai) {
+            let key = mark_key(&t.owner);
+            if !list.iter().any(|c| c.register && mark_key(&c.mark) == key) {
+                t.owner.clear();
+            }
+        }
+        let mut all = self.ai.take().map(|a| a.pages).unwrap_or_default();
+        all.extend(read);
+        all.sort_unstable();
+        all.dedup();
+        self.ai = Some(AiInfo { pages: all, ..info });
+    }
+
+    /// AI o'qishidan voz kechadi: qoida bo'yicha o'qilgan jadvallar
+    /// qaytariladi.
+    pub fn revert_ai(&mut self) {
+        let pages: Vec<usize> = self
+            .tables
+            .iter()
+            .filter(|t| t.ai)
+            .map(|t| t.page)
+            .collect();
+        self.tables.retain(|t| !t.ai);
+        let back: Vec<SpecTable> = self
+            .rule_tables
+            .drain(..)
+            .filter(|t| pages.contains(&t.page))
+            .collect();
+        self.tables.extend(back);
+        self.tables.sort_by_key(|t| t.page);
+        self.constructs = constructs(&self.tables);
+        self.ai = None;
+    }
+
+    /// Ikki mustaqil o'qishni varaqma-varaq solishtiradi.
+    ///
+    /// Bu — aniqlikning o'lchovi: qoida ham, AI ham bir xil kilogramm va
+    /// kub chiqargan varaqqa ishonish mumkin; farq qilganini odam ko'rishi
+    /// kerak. Qaysi biri to'g'ri ekanini dastur hal qilmaydi.
+    pub fn diffs(&self) -> Vec<Diff> {
+        let mut pages: Vec<usize> = self
+            .tables
+            .iter()
+            .filter(|t| t.ai)
+            .map(|t| t.page)
+            .collect();
+        pages.dedup();
+        pages
+            .into_iter()
+            .map(|page| {
+                let rule: Vec<&SpecTable> =
+                    self.rule_tables.iter().filter(|t| t.page == page).collect();
+                let ai: Vec<&SpecTable> = self
+                    .tables
+                    .iter()
+                    .filter(|t| t.page == page && t.ai)
+                    .collect();
+                let (rule_kg, rule_m3) = raw_sums(&rule);
+                let (ai_kg, ai_m3) = raw_sums(&ai);
+                Diff {
+                    page,
+                    rule_kg,
+                    ai_kg,
+                    rule_m3,
+                    ai_m3,
+                }
+            })
+            .collect()
     }
 
     pub fn repeats(&self) -> Vec<(String, usize)> {
@@ -1654,6 +1838,7 @@ mod tests {
             }],
             off: false,
             owner: String::new(),
+            ai: false,
         });
         let list = constructs(&all);
         assert_eq!(list.len(), 1);
@@ -1711,6 +1896,7 @@ mod tests {
                 rows: vec![row("Фм1", "Фундамент монолитный Фм1", "20", "", "шт.")],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             // To'rning tarkibi — alohida jadval.
             SpecTable {
@@ -1721,6 +1907,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             // Konstruksiya jadvali: to'rga havola.
             SpecTable {
@@ -1732,6 +1919,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
         ];
         let list = constructs(&all);
@@ -1795,6 +1983,7 @@ mod tests {
             ],
             off: false,
             owner: String::new(),
+            ai: false,
         }];
         let ls = lines(&all, &[]);
         assert_eq!(ls.len(), 2, "{ls:#?}");
@@ -1821,6 +2010,7 @@ mod tests {
                 }],
                 off: false,
                 owner: String::new(),
+                ai: false,
             }],
             constructs: vec![Construct {
                 mark: "К3".into(),
@@ -1830,6 +2020,7 @@ mod tests {
                 page: 16,
                 register: true,
             }],
+            ..Default::default()
         };
         let ls = tk.lines();
         assert_eq!(ls.len(), 1);
@@ -1858,6 +2049,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             SpecTable {
                 page: 15,
@@ -1867,6 +2059,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             // O'sha konstruksiya, endi 64 metrga yozilgan.
             SpecTable {
@@ -1877,6 +2070,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
         ];
         let list = constructs(&all);
@@ -1910,6 +2104,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             SpecTable {
                 page: 13,
@@ -1921,6 +2116,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             // Boshqa varaqda `Ан-1` o'zi konstruksiya sifatida yozilgan.
             SpecTable {
@@ -1931,6 +2127,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
         ];
         let list = constructs(&all);
@@ -1969,6 +2166,7 @@ mod tests {
             ],
             off: false,
             owner: String::new(),
+            ai: false,
         }];
         let list = constructs(&all);
         assert_eq!(list.len(), 2, "{list:?}");
@@ -2039,8 +2237,10 @@ mod tests {
                 }],
                 off: false,
                 owner: String::new(),
+                ai: false,
             }],
             constructs: Vec::new(),
+            ..Default::default()
         };
         assert_eq!(tk.lines().len(), 1);
         tk.tables[0].off = true;
@@ -2229,6 +2429,7 @@ mod tests {
             }],
             off: false,
             owner: "К3".into(),
+            ai: false,
         };
         let ls = lines(&[table], &list);
         assert_eq!(ls.len(), 1);
@@ -2266,6 +2467,7 @@ mod tests {
             ],
             off: false,
             owner: "К3".into(),
+            ai: false,
         };
         let parts = SpecTable {
             page: 19,
@@ -2275,6 +2477,7 @@ mod tests {
             ],
             off: false,
             owner: "К3".into(),
+            ai: false,
         };
         let ls = lines(&[main, parts], &list);
         assert_eq!(ls.len(), 2, "{ls:#?}");
@@ -2307,6 +2510,7 @@ mod tests {
             }],
             off: false,
             owner: owner.into(),
+            ai: false,
         };
         let both = [table(34, ""), table(76, "")];
         assert_eq!(lines(&both, &[]).len(), 1);
@@ -2373,6 +2577,62 @@ mod tests {
             orientir(Kind::Other, "Ревизия диаметром 100мм (на болтах)", "dona"),
             None
         );
+    }
+
+    /// AI o'qishi qo'llanadi, qoida nusxasi saqlanadi, farq ko'rinadi va
+    /// voz kechilsa hammasi joyiga qaytadi.
+    #[test]
+    fn an_ai_reading_replaces_the_page_and_can_be_reverted() {
+        let rebar = |total: &str| SpecRow {
+            pos: "1".into(),
+            name: "Ø14 A-III L=2550".into(),
+            qty: "22".into(),
+            mass: "3.09".into(),
+            note: total.into(),
+            ..Default::default()
+        };
+        let table = |page: usize, total: &str| SpecTable {
+            page,
+            rows: vec![rebar(total)],
+            ..Default::default()
+        };
+        let mut tk = Takeoff {
+            file: "x.pdf".into(),
+            pages: 20,
+            tables: vec![table(13, "68.0"), table(14, "68.0")],
+            ..Default::default()
+        };
+        let before = tk.clone();
+        tk.apply_ai(
+            vec![
+                // 13-varaq: AI boshqa son o'qidi.
+                (13, String::new(), vec![table(0, "70.0")]),
+                // 14-varaq: AI hech narsa topmadi — varaq o'zgarmaydi.
+                (14, String::new(), vec![]),
+            ],
+            AiInfo {
+                model: "m".into(),
+                tokens: 10,
+                ..Default::default()
+            },
+        );
+        assert_eq!(tk.tables.len(), 2);
+        assert!(tk.tables[0].ai && tk.tables[0].page == 13);
+        assert!(!tk.tables[1].ai);
+        assert_eq!(tk.rule_tables.len(), 1);
+        assert_eq!(tk.ai.as_ref().unwrap().pages, vec![13]);
+        let d = tk.diffs();
+        assert_eq!(d.len(), 1);
+        assert_eq!((d[0].rule_kg, d[0].ai_kg), (68.0, 70.0));
+        assert!(!d[0].agrees());
+        // Hisob AI o'qiganidan chiqadi.
+        assert_eq!(tk.lines()[0].item.amount, 70.0);
+
+        tk.revert_ai();
+        assert_eq!(tk.tables.len(), before.tables.len());
+        assert!(tk.tables.iter().all(|t| !t.ai));
+        assert!(tk.rule_tables.is_empty() && tk.ai.is_none());
+        assert_eq!(tk.lines()[0].item.amount, 68.0);
     }
 
     #[test]

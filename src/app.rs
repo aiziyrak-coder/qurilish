@@ -523,6 +523,22 @@ pub struct PdfJob {
     rx: std::sync::mpsc::Receiver<Result<crate::takeoff::Takeoff, String>>,
 }
 
+/// Varaqlarni AI bilan o'qish — fon ishi.
+///
+/// So'rovlar bir necha ipda ketadi; natijalar shu yerda yig'iladi va ish
+/// tugagach bir yo'la hisobga qo'llanadi. O'rtada to'xtatilsa — o'qib
+/// ulgurilgan varaqlar qo'llanadi.
+pub struct AiJob {
+    pub started: std::time::Instant,
+    /// O'qiladigan varaqlar; bo'sh — reja hali kelmagan.
+    pub plan: Vec<usize>,
+    pub done: Vec<(usize, crate::aitake::PageResult)>,
+    pub failed: Vec<(usize, String)>,
+    pub model: String,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    rx: std::sync::mpsc::Receiver<crate::aitake::Msg>,
+}
+
 /// Kalkulyatsiyaning narx qo'yilgan qatori.
 #[derive(Debug, Clone)]
 pub struct CostRow {
@@ -767,6 +783,18 @@ pub struct App {
     pub view_role: Option<crate::roles::Role>,
     /// Fon ipida o'qilayotgan fayl.
     pub pdf_job: Option<PdfJob>,
+    /// Varaqlarni AI bilan o'qish ketyaptimi.
+    pub ai_job: Option<AiJob>,
+    /// Varaq o'qish modeli — suhbat modelidan alohida (`llm::EXTRACT_MODEL`).
+    pub ai_model: String,
+    /// AI o'qishining oxirgi xabari (xato yoki «to'xtatildi»).
+    pub ai_note: String,
+    /// Loyiha faylining yo'li — AI varaqlarni shu fayldan oladi.
+    pub takeoff_path: Option<std::path::PathBuf>,
+    /// Kalkulyatsiya bo'yicha AI xulosasi va uning fon so'rovi.
+    pub takeoff_review: String,
+    pub takeoff_review_rx:
+        Option<std::sync::mpsc::Receiver<Result<crate::llm::Answer, crate::llm::Error>>>,
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
     pub pdf_note: String,
     /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
@@ -982,6 +1010,12 @@ impl App {
             current_user: None,
             view_role: None,
             pdf_job: None,
+            ai_job: None,
+            ai_model: crate::llm::EXTRACT_MODEL.to_string(),
+            ai_note: String::new(),
+            takeoff_path: None,
+            takeoff_review: String::new(),
+            takeoff_review_rx: None,
             pdf_note: String::new(),
             takeoff: None,
             takeoff_prices: Default::default(),
@@ -1055,6 +1089,14 @@ impl App {
                 .and_then(|v| v.parse::<u64>().ok())
                 .unwrap_or(crate::llm::DEFAULT_TIMEOUT),
         };
+
+        if let Some(m) = app
+            .db
+            .get_setting("takeoff_ai_model")
+            .filter(|m| !m.trim().is_empty())
+        {
+            app.ai_model = m;
+        }
 
         // Sinxronizatsiya sozlamasi. Parol saqlanmaydi — faqat seans belgisi.
         app.sync = crate::sync::Config {
@@ -2189,6 +2231,7 @@ impl App {
             let _ = tx.send(result);
         });
         self.pdf_note.clear();
+        self.takeoff_path = Some(path.to_path_buf());
         self.pdf_job = Some(PdfJob {
             file,
             started: std::time::Instant::now(),
@@ -2239,6 +2282,15 @@ impl App {
             .and_then(|t| serde_json::to_string(t).ok())
             .unwrap_or_default();
         let _ = self.db.set_setting(&format!("takeoff.{pid}"), &body);
+        let path = self
+            .takeoff_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let _ = self.db.set_setting(&format!("takeoff_path.{pid}"), &path);
+        let _ = self
+            .db
+            .set_setting(&format!("takeoff_review.{pid}"), &self.takeoff_review);
         let prices = serde_json::to_string(&self.takeoff_prices).unwrap_or_default();
         let _ = self
             .db
@@ -2249,7 +2301,22 @@ impl App {
     pub fn load_takeoff(&mut self) {
         self.takeoff = None;
         self.takeoff_prices.clear();
+        self.takeoff_path = None;
+        self.takeoff_review.clear();
+        self.takeoff_review_rx = None;
+        // Boshqa obyektga o'tilsa, fon o'qishi to'xtatiladi: natija
+        // noto'g'ri obyektga yozilmasin.
+        self.drop_ai_job();
         if let Some(pid) = self.current {
+            self.takeoff_path = self
+                .db
+                .get_setting(&format!("takeoff_path.{pid}"))
+                .filter(|p| !p.is_empty())
+                .map(std::path::PathBuf::from);
+            self.takeoff_review = self
+                .db
+                .get_setting(&format!("takeoff_review.{pid}"))
+                .unwrap_or_default();
             self.takeoff = self
                 .db
                 .get_setting(&format!("takeoff.{pid}"))
@@ -2338,6 +2405,261 @@ impl App {
         self.recompute_takeoff();
     }
 
+    /// Fon o'qishini natijasiz tashlaydi.
+    fn drop_ai_job(&mut self) {
+        if let Some(job) = self.ai_job.take() {
+            job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Varaqlarni AI bilan o'qishni boshlaydi.
+    ///
+    /// Bu amal loyiha varaqlarini **tashqi xizmatga yuboradi** — faqat
+    /// foydalanuvchi tugmani bosganda va kalit kiritilgan bo'lsa ishlaydi.
+    /// `limit` — sinov uchun faqat birinchi N ta jadvalli varaq.
+    pub fn start_ai(&mut self, limit: Option<usize>) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if self.ai_job.is_some() || self.pdf_job.is_some() || self.takeoff.is_none() {
+            return;
+        }
+        if !self.llm.is_ready() {
+            self.ai_note = t("tk_ai_no_key").to_string();
+            return;
+        }
+        let Some(path) = self.takeoff_path.clone().filter(|p| p.exists()) else {
+            self.ai_note = t("tk_ai_no_file").to_string();
+            return;
+        };
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let mut cfg = self.llm.clone();
+        if !self.ai_model.trim().is_empty() {
+            cfg.model = self.ai_model.trim().to_string();
+        }
+        self.ai_note.clear();
+        self.ai_job = Some(AiJob {
+            started: std::time::Instant::now(),
+            plan: Vec::new(),
+            done: Vec::new(),
+            failed: Vec::new(),
+            model: cfg.model.clone(),
+            rx: crate::aitake::spawn(cfg, path, limit, cancel.clone()),
+            cancel,
+        });
+    }
+
+    /// Varaq o'qish modelini tanlaydi va eslab qoladi.
+    pub fn set_ai_model(&mut self, model: &str) {
+        self.ai_model = model.trim().to_string();
+        let _ = self.db.set_setting("takeoff_ai_model", &self.ai_model);
+    }
+
+    /// O'qishni to'xtatadi: boshlangan so'rovlar tugaydi, yangilari
+    /// boshlanmaydi; o'qib ulgurilgan varaqlar qo'llanadi.
+    pub fn cancel_ai(&mut self) {
+        if let Some(job) = &self.ai_job {
+            job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    /// Fon o'qishidan kelgan xabarlarni oladi. Har kadrda chaqiriladi va
+    /// bloklanmaydi.
+    pub fn poll_ai(&mut self) -> bool {
+        use crate::aitake::Msg;
+        use std::sync::mpsc::TryRecvError;
+        let Some(job) = &mut self.ai_job else {
+            return false;
+        };
+        let mut finished = false;
+        let mut changed = false;
+        loop {
+            match job.rx.try_recv() {
+                Ok(Msg::Plan(plan)) => job.plan = plan,
+                Ok(Msg::Page(page, Ok(found))) => job.done.push((page, found)),
+                Ok(Msg::Page(page, Err(e))) => job.failed.push((page, e)),
+                Ok(Msg::Failed(e)) => {
+                    self.ai_note = e;
+                    self.ai_job = None;
+                    return true;
+                }
+                Ok(Msg::Done) | Err(TryRecvError::Disconnected) => {
+                    finished = true;
+                    break;
+                }
+                Err(TryRecvError::Empty) => break,
+            }
+            changed = true;
+        }
+        if !finished {
+            return changed;
+        }
+        let Some(job) = self.ai_job.take() else {
+            return true;
+        };
+        let tokens: u32 = job.done.iter().map(|d| d.1.tokens).sum();
+        self.llm_tokens += tokens;
+        let mut failed = job.failed;
+        failed.sort();
+        let read = job.done.len();
+        if let Some(tk) = &mut self.takeoff {
+            let pages = job
+                .done
+                .into_iter()
+                .map(|(page, r)| (page, r.owner, r.tables))
+                .collect();
+            tk.apply_ai(
+                pages,
+                crate::takeoff::AiInfo {
+                    model: job.model,
+                    pages: Vec::new(),
+                    failed,
+                    tokens,
+                },
+            );
+        }
+        self.ai_note = format!(
+            "{} {read} · {:.0} s",
+            t("tk_ai_done"),
+            job.started.elapsed().as_secs_f64()
+        );
+        self.save_takeoff();
+        self.recompute_takeoff();
+        true
+    }
+
+    /// AI o'qishidan voz kechadi — qoida bo'yicha o'qilgan jadvallar
+    /// qaytadi.
+    pub fn revert_ai(&mut self) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if let Some(tk) = &mut self.takeoff {
+            tk.revert_ai();
+        }
+        self.ai_note.clear();
+        self.save_takeoff();
+        self.recompute_takeoff();
+    }
+
+    /// Kalkulyatsiya haqida AI ga beriladigan ma'lumot.
+    ///
+    /// Faqat dastur hisoblagan sonlar: model ulardan tashqariga chiqmasligi
+    /// kerak (umumiy ko'rsatma shuni talab qiladi).
+    pub fn takeoff_context(&self) -> String {
+        let Some(tk) = &self.takeoff else {
+            return String::new();
+        };
+        let mut out = format!(
+            "Loyiha fayli: {} ({} varaq). O'qilgan jadvallar: {}.\n",
+            tk.file,
+            tk.pages,
+            tk.tables.len()
+        );
+        out.push_str("\nKonstruksiyalar (belgi, nomi, soni, varaq):\n");
+        for c in &tk.constructs {
+            out.push_str(&format!(
+                "- {} | {} | {} {} | {}\n",
+                c.mark, c.name, c.count, c.unit, c.page
+            ));
+        }
+        out.push_str(
+            "\nMaterial yig'masi (material, miqdor, nechta qatordan, ko'paytirilmagan qatorlar):\n",
+        );
+        for r in &self.cost_rows {
+            out.push_str(&format!(
+                "- {} | {:.2} {} | {} | {}\n",
+                r.total.material, r.total.amount, r.total.unit, r.total.lines, r.total.unsure
+            ));
+        }
+        let sum = |k: crate::takeoff::Kind, unit: &str| -> f64 {
+            self.cost_rows
+                .iter()
+                .filter(|r| r.total.kind == k && r.total.unit == unit)
+                .map(|r| r.total.amount)
+                .sum()
+        };
+        let beton = sum(crate::takeoff::Kind::Concrete, "m3");
+        let rebar = sum(crate::takeoff::Kind::Rebar, "kg");
+        if beton > 0.0 {
+            out.push_str(&format!(
+                "\nNisbat: 1 m3 betonga {:.1} kg armatura (jami beton {:.1} m3, armatura {:.0} kg).\n",
+                rebar / beton,
+                beton,
+                rebar
+            ));
+        }
+        if !self.takeoff_repeats.is_empty() {
+            out.push_str("\nTakror deb sanalmagan spetsifikatsiyalar:\n");
+            for (name, page) in &self.takeoff_repeats {
+                out.push_str(&format!("- {} (varaq {page})\n", name.trim()));
+            }
+        }
+        let diffs = tk.diffs();
+        if !diffs.is_empty() {
+            out.push_str("\nIkki mustaqil o'qish (qoida va AI) farq qilgan varaqlar:\n");
+            for d in diffs.iter().filter(|d| !d.agrees()) {
+                out.push_str(&format!(
+                    "- varaq {}: metall {:.1} / {:.1} kg, beton {:.2} / {:.2} m3\n",
+                    d.page, d.rule_kg, d.ai_kg, d.rule_m3, d.ai_m3
+                ));
+            }
+        }
+        out
+    }
+
+    /// Kalkulyatsiyani AI ga tekshirtiradi.
+    ///
+    /// Model **yangi son chiqarmaydi**: unga dastur hisobi beriladi va
+    /// undan shubhali joylarni, yetishmayotgan bo'lishi mumkin bo'lgan
+    /// narsalarni va odam qayta ko'rishi kerak bo'lgan varaqlarni
+    /// ko'rsatish so'raladi.
+    pub fn start_takeoff_review(&mut self) {
+        if self.takeoff_review_rx.is_some() || self.takeoff.is_none() {
+            return;
+        }
+        if !self.llm.is_ready() {
+            self.ai_note = t("tk_ai_no_key").to_string();
+            return;
+        }
+        self.takeoff_review_rx = Some(crate::llm::spawn(
+            self.llm.clone(),
+            Vec::new(),
+            t("tk_review_question").to_string(),
+            self.takeoff_context(),
+        ));
+    }
+
+    /// AI xulosasi kelgan bo'lsa oladi.
+    pub fn poll_takeoff_review(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.takeoff_review_rx else {
+            return false;
+        };
+        match rx.try_recv() {
+            Ok(Ok(answer)) => {
+                self.llm_tokens += answer.usage.total;
+                self.takeoff_review = answer.text;
+                self.takeoff_review_rx = None;
+                self.save_takeoff();
+                true
+            }
+            Ok(Err(e)) => {
+                self.ai_note = format!("{}: {e}", t("tk_review_failed"));
+                self.takeoff_review_rx = None;
+                true
+            }
+            Err(TryRecvError::Empty) => false,
+            Err(TryRecvError::Disconnected) => {
+                self.ai_note = t("tk_review_failed").to_string();
+                self.takeoff_review_rx = None;
+                true
+            }
+        }
+    }
+
     /// Jadvalni hisobga qo'shadi yoki hisobdan chiqaradi.
     ///
     /// Jadvalning o'zi o'chirilmaydi — faqat sanalmaydi, istalgan payt
@@ -2360,7 +2682,10 @@ impl App {
             self.notify(t("role_readonly").to_string());
             return;
         }
+        self.drop_ai_job();
         self.takeoff = None;
+        self.takeoff_review.clear();
+        self.ai_note.clear();
         self.save_takeoff();
         self.recompute_takeoff();
     }

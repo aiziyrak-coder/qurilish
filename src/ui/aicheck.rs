@@ -26,6 +26,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     // Fon ipida o'qilayotgan fayl tugagan bo'lsa natijani olamiz.
     app.poll_pdf();
+    app.poll_ai();
+    app.poll_takeoff_review();
+    if app.ai_job.is_some() || app.takeoff_review_rx.is_some() {
+        // Fon ipi kadr so'ramaydi — natija kelganini ko'rish uchun.
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(300));
+    }
 
     ui.horizontal_wrapped(|ui| {
         for tab in CheckTab::ALL {
@@ -162,6 +169,12 @@ fn project_tab(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
+    if app.takeoff.is_none() {
+        return;
+    }
+    ui.add_space(10.0);
+    ai_card(ui, app);
+
     let Some(tk) = &app.takeoff else {
         return;
     };
@@ -231,6 +244,9 @@ fn project_tab(ui: &mut egui::Ui, app: &mut App) {
                 {
                     title.push_str(&format!(" · {} ×{}", c.mark, num(c.count)));
                 }
+                if tb.ai {
+                    title.push_str(" · AI");
+                }
                 if tb.off {
                     title.push_str(&format!(" · {}", t("tk_table_off")));
                 }
@@ -287,6 +303,200 @@ fn project_tab(ui: &mut egui::Ui, app: &mut App) {
         });
     if let Some((i, off)) = toggle {
         app.set_table_off(i, off);
+    }
+}
+
+/// «AI bilan o'qish» kartasi: nima yuborilishi, jarayon va natija.
+fn ai_card(ui: &mut egui::Ui, app: &mut App) {
+    let mut start: Option<Option<usize>> = None;
+    let mut model: Option<String> = None;
+    let mut cancel = false;
+    let mut revert = false;
+    card(ui, |ui| {
+        ui.label(RichText::new(t("tk_ai_title")).strong().size(14.0));
+        ui.add_space(2.0);
+        // Varaqlar tashqi xizmatga ketishi yashirilmaydi.
+        ui.label(
+            RichText::new(t("tk_ai_hint"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        ui.add_space(8.0);
+
+        if let Some(job) = &app.ai_job {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                let total = job.plan.len();
+                let ready = job.done.len() + job.failed.len();
+                ui.label(if total == 0 {
+                    format!(
+                        "{} · {} s",
+                        t("tk_ai_preparing"),
+                        job.started.elapsed().as_secs()
+                    )
+                } else {
+                    format!(
+                        "{} {ready} / {total} · {} s · {}",
+                        t("tk_ai_reading"),
+                        job.started.elapsed().as_secs(),
+                        job.model
+                    )
+                });
+                if ui.button(t("tk_ai_stop")).clicked() {
+                    cancel = true;
+                }
+            });
+            if !job.failed.is_empty() {
+                ui.label(
+                    RichText::new(format!("{} {}", job.failed.len(), t("tk_ai_failed")))
+                        .size(11.5)
+                        .color(theme::warn()),
+                );
+            }
+            return;
+        }
+
+        let ready = app.llm.is_ready();
+        let busy = app.pdf_job.is_some();
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .add_enabled(ready && !busy, egui::Button::new(t("tk_ai_try")))
+                .on_hover_text(t("tk_ai_try_hint"))
+                .clicked()
+            {
+                start = Some(Some(3));
+            }
+            if ui
+                .add_enabled(ready && !busy, egui::Button::new(t("tk_ai_all")))
+                .clicked()
+            {
+                start = Some(None);
+            }
+            if app.takeoff.as_ref().is_some_and(|t| t.ai.is_some())
+                && ui
+                    .button(t("tk_ai_revert"))
+                    .on_hover_text(t("tk_ai_revert_hint"))
+                    .clicked()
+            {
+                revert = true;
+            }
+            ui.label(
+                RichText::new(t("tk_ai_model"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            egui::ComboBox::from_id_salt("tk_ai_model")
+                .selected_text(app.ai_model.clone())
+                .show_ui(ui, |ui| {
+                    for m in crate::llm::MODELS {
+                        if ui.selectable_label(app.ai_model == *m, *m).clicked() {
+                            model = Some(m.to_string());
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(t("tk_ai_model_hint"));
+        });
+        if !ready {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("tk_ai_no_key"))
+                    .size(11.5)
+                    .color(theme::warn()),
+            );
+        }
+        if !app.ai_note.is_empty() {
+            ui.add_space(4.0);
+            ui.label(RichText::new(&app.ai_note).size(11.5));
+        }
+
+        // ---- Natija: nima o'qildi, nima o'qilmadi, ikki o'qish mosmi.
+        let Some(tk) = &app.takeoff else { return };
+        let Some(info) = &tk.ai else { return };
+        ui.add_space(6.0);
+        ui.label(
+            RichText::new(format!(
+                "{} {} · {} · {} {}",
+                t("tk_ai_pages"),
+                info.pages.len(),
+                info.model,
+                info.tokens,
+                t("tk_ai_tokens")
+            ))
+            .size(12.0),
+        );
+        if !info.failed.is_empty() {
+            let list = info
+                .failed
+                .iter()
+                .map(|(page, why)| format!("{page} ({})", super::issues::truncate(why, 60)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            ui.label(
+                RichText::new(format!("{}: {list}", t("tk_ai_failed_pages")))
+                    .size(11.5)
+                    .color(theme::warn()),
+            );
+        }
+        let diffs = tk.diffs();
+        let differ: Vec<&crate::takeoff::Diff> = diffs.iter().filter(|d| !d.agrees()).collect();
+        ui.label(
+            RichText::new(format!(
+                "{}: {} · {}: {}",
+                t("tk_ai_agree"),
+                diffs.len() - differ.len(),
+                t("tk_ai_differ"),
+                differ.len()
+            ))
+            .size(12.0)
+            .color(if differ.is_empty() {
+                theme::ok()
+            } else {
+                theme::warn()
+            }),
+        );
+        if !differ.is_empty() {
+            ui.label(
+                RichText::new(t("tk_ai_differ_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            egui::Grid::new("tk_ai_diff")
+                .striped(true)
+                .spacing([14.0, 3.0])
+                .show(ui, |ui| {
+                    for h in [
+                        "pdf_page",
+                        "tk_ai_rule_kg",
+                        "tk_ai_ai_kg",
+                        "tk_ai_rule_m3",
+                        "tk_ai_ai_m3",
+                    ] {
+                        ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
+                    }
+                    ui.end_row();
+                    for d in differ {
+                        ui.label(d.page.to_string());
+                        ui.label(num(d.rule_kg));
+                        ui.label(RichText::new(num(d.ai_kg)).strong());
+                        ui.label(num(d.rule_m3));
+                        ui.label(RichText::new(num(d.ai_m3)).strong());
+                        ui.end_row();
+                    }
+                });
+        }
+    });
+    if let Some(m) = model {
+        app.set_ai_model(&m);
+    }
+    if let Some(limit) = start {
+        app.start_ai(limit);
+    }
+    if cancel {
+        app.cancel_ai();
+    }
+    if revert {
+        app.revert_ai();
     }
 }
 
@@ -506,6 +716,45 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
             });
         });
     });
+
+    // ---- AI xulosasi: dastur hisobini model ko'zdan kechiradi.
+    ui.add_space(6.0);
+    let mut review = false;
+    card(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(t("tk_review_title")).strong());
+            if app.takeoff_review_rx.is_some() {
+                ui.spinner();
+                ui.label(RichText::new(t("ai_thinking")).color(theme::muted()));
+            } else if ui
+                .add_enabled(app.llm.is_ready(), egui::Button::new(t("tk_review_button")))
+                .on_hover_text(t("tk_review_hint"))
+                .clicked()
+            {
+                review = true;
+            }
+        });
+        if app.takeoff_review.is_empty() {
+            ui.label(
+                RichText::new(t("tk_review_hint"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+        } else {
+            egui::ScrollArea::vertical()
+                .id_salt("tk_review")
+                .max_height(150.0)
+                .show(ui, |ui| {
+                    ui.label(RichText::new(&app.takeoff_review).size(12.0));
+                });
+        }
+        if !app.ai_note.is_empty() && app.takeoff_review_rx.is_none() {
+            ui.label(RichText::new(&app.ai_note).size(11.0).color(theme::muted()));
+        }
+    });
+    if review {
+        app.start_takeoff_review();
+    }
 
     ui.add_space(6.0);
     if hinted > 0 {

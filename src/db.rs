@@ -1973,6 +1973,7 @@ mod tests {
                 rows: vec![row("Фм3", "Фундамент монолитный Фм3", "4", "", "шт.")],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             SpecTable {
                 page: 13,
@@ -1983,6 +1984,7 @@ mod tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
         ];
         let constructs = crate::takeoff::constructs(&tables);
@@ -1991,6 +1993,7 @@ mod tests {
             pages: 77,
             tables,
             constructs,
+            ..Default::default()
         });
         app.save_takeoff();
         app.recompute_takeoff();

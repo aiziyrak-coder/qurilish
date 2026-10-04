@@ -1902,6 +1902,7 @@ mod screen_tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             SpecTable {
                 page: 13,
@@ -1912,6 +1913,7 @@ mod screen_tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
             // Takror: sanalmaydi, lekin ekranda aytiladi.
             SpecTable {
@@ -1922,6 +1924,7 @@ mod screen_tests {
                 ],
                 off: false,
                 owner: String::new(),
+                ai: false,
             },
         ];
         let constructs = crate::takeoff::constructs(&tables);
@@ -1930,6 +1933,7 @@ mod screen_tests {
             pages: 77,
             tables,
             constructs,
+            ..Default::default()
         });
         app.recompute_takeoff();
         app.set_takeoff_price("Beton B20", 650_000.0);
