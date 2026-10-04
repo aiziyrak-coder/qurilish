@@ -2746,7 +2746,7 @@ impl App {
         if self.review_rx.is_some() || !self.llm.is_ready() || self.smeta.is_none() {
             return;
         }
-        let ctx = self.smeta_context();
+        let ctx = format!("{}{}", self.smeta_context(), self.ai_lang_note());
         self.review_rx = Some(crate::smeta_ai::spawn_review(self.extract_cfg(), ctx));
     }
 
@@ -3038,6 +3038,23 @@ impl App {
     pub fn set_ai_model(&mut self, model: &str) {
         self.ai_model = model.trim().to_string();
         let _ = self.db.set_setting("takeoff_ai_model", &self.ai_model);
+    }
+
+    /// AI matnli javoblari qaysi tilda bo'lishi — interfeys tilida.
+    ///
+    /// Spetsifikatsiya, narx va konsolidatsiya rus tilida qoladi: ish va
+    /// material nomlari katalog va prayslar bilan solishtiriladi. Savol,
+    /// xulosa va hisobot matni esa odam o'qiydi — u interfeys tilida.
+    fn ai_lang_note(&self) -> String {
+        match crate::i18n::lang() {
+            crate::i18n::Lang::Uz => {
+                "\n\nЯЗЫК ОТВЕТА: узбекский (латиница). Все тексты для человека \
+(summary, text, title, body, answer, why, options) пиши по-узбекски; марки, ГОСТ, обозначения и \
+единицы оставляй как в данных."
+                    .to_string()
+            }
+            crate::i18n::Lang::Ru => String::new(),
+        }
     }
 
     /// Varaq o'qish sozlamasi: tanlangan model bilan.
@@ -3469,7 +3486,7 @@ impl App {
         }
         self.questions_rx = Some(crate::smeta_ai::spawn_questions(
             self.extract_cfg(),
-            self.questions_context(),
+            format!("{}{}", self.questions_context(), self.ai_lang_note()),
         ));
     }
 
@@ -3542,6 +3559,7 @@ impl App {
                 q.options.join(" / ")
             ));
         }
+        let ctx = format!("{ctx}{}", self.ai_lang_note());
         self.answers_rx = Some(crate::smeta_ai::spawn_answers(self.extract_cfg(), ctx));
     }
 
@@ -3615,6 +3633,7 @@ impl App {
                 ));
             }
         }
+        let ctx = format!("{ctx}{}", self.ai_lang_note());
         self.report_rx = Some(crate::smeta_ai::spawn_report(self.extract_cfg(), ctx));
     }
 
