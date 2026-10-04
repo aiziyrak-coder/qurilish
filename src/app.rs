@@ -3362,7 +3362,9 @@ impl App {
         }
         let smeta = self.smeta.get_or_insert_with(Default::default);
         smeta.digest = digest;
-        smeta.facts = smeta.digest.iter().flat_map(|d| d.facts.clone()).collect();
+        let all: Vec<crate::smeta::Fact> =
+            smeta.digest.iter().flat_map(|d| d.facts.clone()).collect();
+        smeta.facts = crate::smeta::tidy_facts(&all);
         smeta.model = job.model;
         smeta.tokens += tokens;
         self.smeta_note = format!(

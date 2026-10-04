@@ -725,6 +725,18 @@ pub fn item(row: &SpecRow) -> Option<Item> {
     if name.is_empty() {
         return None;
     }
+    // Jami qatori va yolg'iz po'lat sinfi («С245») — material emas: biri
+    // yig'indi, ikkinchisi KMD jadvalining ustun sarlavhasi qoldig'i.
+    let low = name.to_lowercase();
+    if low.starts_with("итого") || low.starts_with("всего") {
+        return None;
+    }
+    let grade_only = name
+        .strip_prefix(['С', 'C'])
+        .is_some_and(|rest| !rest.is_empty() && rest.chars().all(|c| c.is_ascii_digit()));
+    if grade_only {
+        return None;
+    }
     let qty = number(&row.qty);
     let mass = number(&row.mass);
     let note = number(&row.note);
@@ -2253,6 +2265,22 @@ mod tests {
         assert_eq!(tk.lines().len(), 1);
         tk.tables[0].off = true;
         assert!(tk.lines().is_empty());
+    }
+
+    /// «Итого» va yolg'iz po'lat sinfi material emas.
+    #[test]
+    fn totals_and_bare_grades_are_not_items() {
+        for name in ["Итого", "Всего по листу", "С245", "C255"] {
+            let r = SpecRow {
+                name: name.into(),
+                qty: "5".into(),
+                mass: "10".into(),
+                note: "50".into(),
+                unit: "кг".into(),
+                ..Default::default()
+            };
+            assert!(item(&r).is_none(), "{name}");
+        }
     }
 
     /// Quvur diametri armatura emas.

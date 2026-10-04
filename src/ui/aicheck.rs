@@ -2064,8 +2064,11 @@ enum DocLine {
     Sub(String),
     Text(String),
     Row(String, String),
-    /// Jadval qatori: birinchi ustun keng, qolganlari teng.
-    Cols(Vec<String>),
+    /// Jadval: sarlavhalar va qatorlar. Birinchi ustun matn (keng),
+    /// qolganlari o'ngga tekis.
+    Table(Vec<String>, Vec<Vec<String>>),
+    /// Ko'rsatkich plitkalari: `(nom, qiymat, izoh)`.
+    Tiles(Vec<(String, String, String)>),
     Muted(String),
     Gap,
 }
@@ -2076,14 +2079,30 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
         ui.allocate_exact_size(egui::vec2(ui.available_width(), 6.0), egui::Sense::hover());
     ui.painter().rect_filled(bar, 2.0, accent);
     ui.add_space(6.0);
+    let mut table_no = 0usize;
     for line in lines {
         match line {
             DocLine::Title(s) => {
-                ui.label(RichText::new(s).size(18.0).strong().color(accent));
+                ui.label(RichText::new(s).size(19.0).strong().color(accent));
             }
             DocLine::Head(s) => {
-                ui.add_space(8.0);
-                ui.label(RichText::new(s).size(13.5).strong().color(accent));
+                ui.add_space(10.0);
+                // Bo'lim sarlavhasi: chap rangli chiziq va fon — ko'z
+                // bo'limlarni darrov ajratadi.
+                egui::Frame::new()
+                    .fill(accent.gamma_multiply(0.10))
+                    .corner_radius(4)
+                    .inner_margin(egui::Margin::symmetric(10, 5))
+                    .show(ui, |ui| {
+                        ui.set_min_width(ui.available_width());
+                        ui.horizontal(|ui| {
+                            let (r, _) =
+                                ui.allocate_exact_size(egui::vec2(4.0, 16.0), egui::Sense::hover());
+                            ui.painter().rect_filled(r, 2.0, accent);
+                            ui.label(RichText::new(s).size(13.5).strong().color(accent));
+                        });
+                    });
+                ui.add_space(4.0);
             }
             DocLine::Sub(s) => {
                 ui.add_space(4.0);
@@ -2100,29 +2119,96 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                     });
                 });
             }
-            DocLine::Cols(cols) => {
-                let n = cols.len().max(1);
-                let w = ui.available_width();
-                let first = if n > 1 { w * 0.44 } else { w };
-                let rest = if n > 1 {
-                    (w - first) / (n - 1) as f32
+            DocLine::Table(headers, rows) => {
+                table_no += 1;
+                let n = headers.len().max(1);
+                let total_w = ui.available_width() - 8.0;
+                let first_w = if n > 1 { total_w * 0.46 } else { total_w };
+                let rest_w = if n > 1 {
+                    (total_w - first_w) / (n - 1) as f32
                 } else {
                     0.0
                 };
-                ui.horizontal(|ui| {
-                    for (i, c) in cols.iter().enumerate() {
-                        let cw = if i == 0 { first } else { rest };
-                        ui.allocate_ui_with_layout(
-                            egui::vec2(cw, 16.0),
-                            if i == 0 {
-                                egui::Layout::left_to_right(egui::Align::Center)
-                            } else {
-                                egui::Layout::right_to_left(egui::Align::Center)
-                            },
-                            |ui| {
-                                ui.add(egui::Label::new(RichText::new(c).size(11.0)).truncate());
-                            },
-                        );
+                egui::Frame::new()
+                    .stroke(Stroke::new(1.0_f32, theme::line()))
+                    .corner_radius(6)
+                    .inner_margin(egui::Margin::same(4))
+                    .show(ui, |ui| {
+                        egui::Grid::new(("doc_table", table_no))
+                            .striped(true)
+                            .spacing([0.0, 2.0])
+                            .show(ui, |ui| {
+                                for (i, h) in headers.iter().enumerate() {
+                                    let w = if i == 0 { first_w } else { rest_w };
+                                    let layout = if i == 0 {
+                                        egui::Layout::left_to_right(egui::Align::Center)
+                                    } else {
+                                        egui::Layout::right_to_left(egui::Align::Center)
+                                    };
+                                    ui.allocate_ui_with_layout(egui::vec2(w, 20.0), layout, |ui| {
+                                        let r = ui.max_rect();
+                                        ui.painter().rect_filled(
+                                            r.expand2(egui::vec2(0.0, 2.0)),
+                                            0.0,
+                                            accent.gamma_multiply(0.14),
+                                        );
+                                        ui.add_space(6.0);
+                                        ui.label(
+                                            RichText::new(h).size(11.0).strong().color(accent),
+                                        );
+                                        ui.add_space(6.0);
+                                    });
+                                }
+                                ui.end_row();
+                                for row in rows {
+                                    for i in 0..n {
+                                        let c = row.get(i).map(String::as_str).unwrap_or("");
+                                        let w = if i == 0 { first_w } else { rest_w };
+                                        let layout = if i == 0 {
+                                            egui::Layout::left_to_right(egui::Align::Center)
+                                        } else {
+                                            egui::Layout::right_to_left(egui::Align::Center)
+                                        };
+                                        ui.allocate_ui_with_layout(
+                                            egui::vec2(w, 18.0),
+                                            layout,
+                                            |ui| {
+                                                ui.add_space(6.0);
+                                                let text = RichText::new(c).size(11.0);
+                                                let text =
+                                                    if i == 0 { text } else { text.strong() };
+                                                ui.add(egui::Label::new(text).truncate());
+                                                ui.add_space(6.0);
+                                            },
+                                        );
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                    });
+            }
+            DocLine::Tiles(tiles) => {
+                ui.horizontal_wrapped(|ui| {
+                    for (name, value, hint) in tiles {
+                        egui::Frame::new()
+                            .fill(accent.gamma_multiply(0.08))
+                            .stroke(Stroke::new(1.0_f32, accent.gamma_multiply(0.35)))
+                            .corner_radius(8)
+                            .inner_margin(egui::Margin::same(10))
+                            .show(ui, |ui| {
+                                ui.vertical(|ui| {
+                                    ui.set_min_width(150.0);
+                                    ui.label(RichText::new(name).size(10.5).color(theme::muted()));
+                                    ui.label(
+                                        RichText::new(value).size(17.0).strong().color(accent),
+                                    );
+                                    if !hint.is_empty() {
+                                        ui.label(
+                                            RichText::new(hint).size(10.0).color(theme::muted()),
+                                        );
+                                    }
+                                });
+                            });
                     }
                 });
             }
@@ -2136,7 +2222,7 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
     }
 }
 
-/// Hujjatni PDF ga yozadi: tik A4, ustunli qatorlar bilan.
+/// Hujjatni PDF ga yozadi: tik A4, jadvallar va plitkalar bilan.
 fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u8; 3]) {
     let name = format!("{file}_{}.pdf", app.today.format("%Y-%m-%d"));
     let Some(path) = rfd::FileDialog::new()
@@ -2151,17 +2237,32 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
         crate::pdf::PAGE_H_PORTRAIT,
         18.0_f32,
     );
-    let step = |l: &DocLine| -> f32 {
-        match l {
-            DocLine::Title(_) => 10.0,
-            DocLine::Head(_) => 8.5,
-            DocLine::Sub(_) => 6.5,
-            DocLine::Gap => 4.0,
-            DocLine::Cols(_) => 5.0,
-            _ => 5.5,
+    let width = w - 2.0 * margin;
+    // Chizish birligi: oddiy qator yoki jadval qatori (sarlavha bayrog'i
+    // bilan). Jadval sahifa chegarasida bo'linsa sarlavha qaytariladi.
+    enum Unit<'a> {
+        Line(&'a DocLine),
+        Wrapped(f32, String),
+        Tab {
+            cols: Vec<String>,
+            n: usize,
+            head: bool,
+        },
+        Tiles(&'a [(String, String, String)]),
+    }
+    let step = |u: &Unit| -> f32 {
+        match u {
+            Unit::Line(DocLine::Title(_)) => 10.0,
+            Unit::Line(DocLine::Head(_)) => 9.5,
+            Unit::Line(DocLine::Sub(_)) => 6.5,
+            Unit::Line(DocLine::Gap) => 4.0,
+            Unit::Line(_) => 5.5,
+            Unit::Wrapped(_, _) => 5.0,
+            Unit::Tab { head: true, .. } => 6.5,
+            Unit::Tab { .. } => 5.4,
+            Unit::Tiles(_) => 16.0,
         }
     };
-    // Uzun matn satrlarga bo'linadi: taxminan 105 belgi bir satr.
     let wrap = |s: &str, per: usize| -> Vec<String> {
         let mut out = Vec::new();
         for para in s.split('\n') {
@@ -2179,29 +2280,58 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
         }
         out
     };
-    let mut flat: Vec<DocLine> = Vec::new();
+    let mut units: Vec<Unit> = Vec::new();
     for l in lines {
         match l {
-            DocLine::Text(s) => flat.extend(wrap(s, 105).into_iter().map(DocLine::Text)),
-            DocLine::Muted(s) => flat.extend(wrap(s, 120).into_iter().map(DocLine::Muted)),
-            DocLine::Title(s) => flat.push(DocLine::Title(s.clone())),
-            DocLine::Head(s) => flat.push(DocLine::Head(s.clone())),
-            DocLine::Sub(s) => flat.push(DocLine::Sub(s.clone())),
-            DocLine::Row(a, b) => flat.push(DocLine::Row(a.clone(), b.clone())),
-            DocLine::Cols(c) => flat.push(DocLine::Cols(c.clone())),
-            DocLine::Gap => flat.push(DocLine::Gap),
+            DocLine::Text(s) => {
+                units.extend(wrap(s, 105).into_iter().map(|t| Unit::Wrapped(9.5, t)))
+            }
+            DocLine::Muted(s) => {
+                units.extend(wrap(s, 125).into_iter().map(|t| Unit::Wrapped(8.0, t)))
+            }
+            DocLine::Table(headers, rows) => {
+                let n = headers.len().max(1);
+                units.push(Unit::Tab {
+                    cols: headers.clone(),
+                    n,
+                    head: true,
+                });
+                for r in rows {
+                    units.push(Unit::Tab {
+                        cols: r.clone(),
+                        n,
+                        head: false,
+                    });
+                }
+            }
+            DocLine::Tiles(t) => units.push(Unit::Tiles(t)),
+            other => units.push(Unit::Line(other)),
         }
     }
-    let mut pages: Vec<Vec<&DocLine>> = vec![Vec::new()];
+    let mut pages: Vec<Vec<&Unit>> = vec![Vec::new()];
     let mut y = h - margin;
-    for l in &flat {
-        if y - step(l) < margin + 8.0 {
+    let mut last_head: Option<&Unit> = None;
+    for u in &units {
+        if let Unit::Tab { head: true, .. } = u {
+            last_head = Some(u);
+        }
+        if y - step(u) < margin + 8.0 {
             pages.push(Vec::new());
             y = h - margin;
+            // Yangi sahifada jadval davom etsa — sarlavha qaytadi.
+            if let (Unit::Tab { head: false, .. }, Some(hd)) = (u, last_head) {
+                y -= step(hd);
+                if let Some(last) = pages.last_mut() {
+                    last.push(hd);
+                }
+            }
         }
-        y -= step(l);
+        y -= step(u);
         if let Some(last) = pages.last_mut() {
-            last.push(l);
+            last.push(u);
+        }
+        if !matches!(u, Unit::Tab { .. }) {
+            last_head = None;
         }
     }
     let total = pages.len();
@@ -2215,45 +2345,73 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
             format!("{cut}…")
         }
     };
+    let light = [
+        (255 - (255 - rgb[0] as u16) * 15 / 100) as u8,
+        (255 - (255 - rgb[1] as u16) * 15 / 100) as u8,
+        (255 - (255 - rgb[2] as u16) * 15 / 100) as u8,
+    ];
     let result = crate::pdf::write_pages(&path, title, total, |page, index| {
-        page.bar(margin, h - margin + 3.0, w - 2.0 * margin, 2.0, rgb);
+        page.bar(margin, h - margin + 3.0, width, 2.0, rgb);
         let mut y = h - margin;
-        let width = w - 2.0 * margin;
-        for l in &pages[index] {
-            y -= step(l);
-            match l {
-                DocLine::Title(s) => page.text(s, 15.0, margin, y),
-                DocLine::Head(s) => page.text(s, 11.5, margin, y),
-                DocLine::Sub(s) => page.text(s, 10.0, margin, y),
-                DocLine::Text(s) => page.text(s, 9.5, margin, y),
-                DocLine::Muted(s) => page.text(s, 8.5, margin, y),
-                DocLine::Row(a, b) => {
+        for u in &pages[index] {
+            y -= step(u);
+            match u {
+                Unit::Line(DocLine::Title(s)) => page.text(s, 15.0, margin, y),
+                Unit::Line(DocLine::Head(s)) => {
+                    page.bar(margin, y - 2.0, width, 8.0, light);
+                    page.bar(margin, y - 2.0, 1.2, 8.0, rgb);
+                    page.text(s, 11.5, margin + 3.0, y);
+                }
+                Unit::Line(DocLine::Sub(s)) => page.text(s, 10.0, margin, y),
+                Unit::Line(DocLine::Text(s)) => page.text(s, 9.5, margin, y),
+                Unit::Line(DocLine::Muted(s)) => page.text(s, 8.0, margin, y),
+                Unit::Line(DocLine::Row(a, b)) => {
                     page.text(&fit(a, 9.5, width * 0.7), 9.5, margin, y);
                     let bw = b.chars().count() as f32 * 9.5 * 0.19;
                     page.text(b, 9.5, w - margin - bw, y);
                 }
-                DocLine::Cols(cols) => {
-                    let n = cols.len().max(1);
-                    let first = if n > 1 { width * 0.44 } else { width };
-                    let rest = if n > 1 {
-                        (width - first) / (n - 1) as f32
+                Unit::Line(_) => {}
+                Unit::Wrapped(size, s) => page.text(s, *size, margin, y),
+                Unit::Tab { cols, n, head } => {
+                    let first = if *n > 1 { width * 0.46 } else { width };
+                    let rest = if *n > 1 {
+                        (width - first) / (*n - 1) as f32
                     } else {
                         0.0
                     };
+                    if *head {
+                        page.bar(margin, y - 1.8, width, 6.2, light);
+                    }
                     let mut x = margin;
-                    for (i, c) in cols.iter().enumerate() {
+                    for i in 0..*n {
+                        let c = cols.get(i).map(String::as_str).unwrap_or("");
                         let cw = if i == 0 { first } else { rest };
-                        let text = fit(c, 8.5, cw - 2.0);
+                        let size = 8.5_f32;
+                        let text = fit(c, size, cw - 3.0);
                         if i == 0 {
-                            page.text(&text, 8.5, x, y);
+                            page.text(&text, size, x + 1.5, y);
                         } else {
-                            let tw = text.chars().count() as f32 * 8.5 * 0.19;
-                            page.text(&text, 8.5, x + cw - tw - 1.0, y);
+                            let tw = text.chars().count() as f32 * size * 0.19;
+                            page.text(&text, size, x + cw - tw - 1.5, y);
                         }
                         x += cw;
                     }
+                    // Qatorlar orasidagi ingichka chiziq.
+                    page.bar(margin, y - 1.9, width, 0.15, [210, 214, 220]);
                 }
-                DocLine::Gap => {}
+                Unit::Tiles(tiles) => {
+                    let n = tiles.len().max(1) as f32;
+                    let tw = (width - 3.0 * (n - 1.0)) / n;
+                    let mut x = margin;
+                    for (name, value, hint) in tiles.iter() {
+                        page.bar(x, y - 3.0, tw, 15.0, light);
+                        page.bar(x, y - 3.0, tw, 0.6, rgb);
+                        page.text(&fit(name, 7.5, tw - 4.0), 7.5, x + 2.0, y + 7.5);
+                        page.text(&fit(value, 11.0, tw - 4.0), 11.0, x + 2.0, y + 2.0);
+                        page.text(&fit(hint, 7.0, tw - 4.0), 7.0, x + 2.0, y - 1.8);
+                        x += tw + 3.0;
+                    }
+                }
             }
         }
         page.text(
@@ -2888,15 +3046,21 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
         .unwrap_or([31, 78, 160]);
     let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
     let lines = report_lines(app, &m, &view);
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            egui::Frame::new()
-                .fill(theme::canvas())
-                .stroke(Stroke::new(1.0_f32, theme::line()))
-                .inner_margin(egui::Margin::same(18))
-                .show(ui, |ui| draw_doc(ui, &lines, accent));
-        });
+    let mut area = egui::ScrollArea::vertical().auto_shrink([false, false]);
+    // Ekran suratlari uchun: tashqaridan berilgan siljish.
+    if let Some(off) = std::env::var("QURAI_SCROLL")
+        .ok()
+        .and_then(|v| v.parse::<f32>().ok())
+    {
+        area = area.vertical_scroll_offset(off);
+    }
+    area.show(ui, |ui| {
+        egui::Frame::new()
+            .fill(theme::canvas())
+            .stroke(Stroke::new(1.0_f32, theme::line()))
+            .inner_margin(egui::Margin::same(18))
+            .show(ui, |ui| draw_doc(ui, &lines, accent));
+    });
     if write {
         app.start_report();
     }
@@ -2908,6 +3072,7 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
 /// Hisobot qatorlari: hammasi dastur ma'lumotidan, AI bo'limlari esa
 /// alohida belgilangan.
 fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -> Vec<DocLine> {
+    use crate::takeoff::Kind;
     use DocLine::*;
     let project = app.project().map(|p| p.name.clone()).unwrap_or_default();
     let mut out = vec![
@@ -2937,16 +3102,80 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
         )));
     }
 
+    // ---- Asosiy ko'rsatkichlar plitkalarda.
+    let sum_of = |k: Kind, unit: &str| -> f64 {
+        app.cost_rows
+            .iter()
+            .filter(|r| r.total.kind == k && r.total.unit == unit)
+            .map(|r| r.total.amount)
+            .sum()
+    };
+    let kg = |v: f64| {
+        if v >= 1000.0 {
+            format!("{:.1} t", v / 1000.0)
+        } else {
+            format!("{} kg", num(v))
+        }
+    };
+    let mut tiles = Vec::new();
+    if !m.stages.is_empty() {
+        tiles.push((
+            t("sm_total").to_string(),
+            format!("{} {}", money(view.total), t("tk_sum_unit")),
+            if view.missing > 0 {
+                format!("{} {}", view.missing, t("tk_no_price"))
+            } else if view.hinted > 0 {
+                format!("{} {}", view.hinted, t("sm_price_hint"))
+            } else {
+                t("tk_total_full").to_string()
+            },
+        ));
+    }
+    let beton = sum_of(Kind::Concrete, "m3");
+    if beton > 0.0 {
+        tiles.push((
+            t("tk_concrete").to_string(),
+            format!("{} m³", num(beton)),
+            t("tk_all_classes").to_string(),
+        ));
+    }
+    let rebar = sum_of(Kind::Rebar, "kg");
+    if rebar > 0.0 {
+        tiles.push((
+            t("tk_rebar").to_string(),
+            kg(rebar),
+            t("tk_all_diameters").to_string(),
+        ));
+    }
+    let steel = sum_of(Kind::Steel, "kg");
+    if steel > 0.0 {
+        tiles.push((
+            t("tk_steel").to_string(),
+            kg(steel),
+            t("tk_steel_hint").to_string(),
+        ));
+    }
+    if !m.stages.is_empty() {
+        let works: usize = m.stages.iter().map(|s| s.works.len()).sum();
+        tiles.push((
+            t("sm_tab_spec").to_string(),
+            format!("{} / {works}", m.stages.len()),
+            format!("{} / {}", t("sm_stages"), t("sm_works")),
+        ));
+    }
+    if !tiles.is_empty() {
+        out.push(Gap);
+        out.push(Tiles(tiles));
+    }
+
     // ---- AI matnli bo'limlari (bo'lsa) — birinchi, resume sifatida.
     if m.report.is_empty() {
         if !m.summary.is_empty() {
-            out.push(Gap);
             out.push(Head(t("sm_summary").to_string()));
             out.push(Text(m.summary.clone()));
         }
     } else {
         for (title, body) in &m.report {
-            out.push(Gap);
             out.push(Head(title.clone()));
             out.push(Text(body.clone()));
         }
@@ -2955,21 +3184,33 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
 
     // ---- Obyekt raqamlarda.
     if !m.facts.is_empty() {
-        out.push(Gap);
         out.push(Head(t("sm_offer_numbers_title").to_string()));
-        for f in m.facts.iter().take(24) {
-            out.push(Cols(vec![
-                f.name.clone(),
-                format!("{} {}", f.value, f.unit).trim().to_string(),
-                f.page
-                    .map(|p| format!("{} {p}", t("pdf_page")))
-                    .unwrap_or_default(),
-            ]));
-        }
-        if m.facts.len() > 24 {
+        let rows: Vec<Vec<String>> = m
+            .facts
+            .iter()
+            .take(30)
+            .map(|f| {
+                vec![
+                    f.name.clone(),
+                    format!("{} {}", f.value, f.unit).trim().to_string(),
+                    f.page
+                        .map(|p| format!("{} {p}", t("pdf_page")))
+                        .unwrap_or_else(|| t("sm_sketch").to_string()),
+                ]
+            })
+            .collect();
+        out.push(Table(
+            vec![
+                t("sm_col_fact").into(),
+                t("sm_col_value").into(),
+                t("sm_col_source").into(),
+            ],
+            rows,
+        ));
+        if m.facts.len() > 30 {
             out.push(Muted(format!(
                 "… {} {}",
-                m.facts.len() - 24,
+                m.facts.len() - 30,
                 t("sm_report_more")
             )));
         }
@@ -2978,90 +3219,150 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
     // ---- Konstruksiyalar.
     if let Some(tk) = &app.takeoff {
         if !tk.constructs.is_empty() {
-            out.push(Gap);
             out.push(Head(t("tab_constructs").to_string()));
-            for c in &tk.constructs {
-                out.push(Cols(vec![
-                    format!("{} {}", c.mark, c.name).trim().to_string(),
-                    format!("{} {}", num(c.count), c.unit),
-                    format!("{} {}", t("pdf_page"), c.page),
-                ]));
-            }
+            let rows: Vec<Vec<String>> = tk
+                .constructs
+                .iter()
+                .map(|c| {
+                    vec![
+                        format!("{} {}", c.mark, c.name).trim().to_string(),
+                        format!("{} {}", num(c.count), c.unit),
+                        format!("{} {}", t("pdf_page"), c.page),
+                    ]
+                })
+                .collect();
+            out.push(Table(
+                vec![
+                    t("sm_col_construct").into(),
+                    t("tk_col_amount").into(),
+                    t("sm_col_source").into(),
+                ],
+                rows,
+            ));
         }
     }
 
-    // ---- Loyihadan olingan materiallar.
+    // ---- Loyihadan olingan materiallar — tur bo'yicha.
     if !app.cost_rows.is_empty() {
-        out.push(Gap);
         out.push(Head(t("sm_from_project").to_string()));
         out.push(Muted(t("sm_from_project_note").to_string()));
-        for r in &app.cost_rows {
-            out.push(Cols(vec![
-                r.total.material.clone(),
-                format!("{} {}", num(r.total.amount), r.total.unit),
-                format!("{} {}", r.total.lines, t("tk_col_lines")),
-            ]));
+        for kind in [Kind::Concrete, Kind::Rebar, Kind::Steel, Kind::Other] {
+            let rows: Vec<Vec<String>> = app
+                .cost_rows
+                .iter()
+                .filter(|r| r.total.kind == kind)
+                .map(|r| {
+                    vec![
+                        r.total.material.clone(),
+                        if r.total.unit == "kg" {
+                            kg(r.total.amount)
+                        } else {
+                            format!("{} {}", num(r.total.amount), r.total.unit)
+                        },
+                        r.total.lines.to_string(),
+                    ]
+                })
+                .collect();
+            if rows.is_empty() {
+                continue;
+            }
+            let title = match kind {
+                Kind::Concrete => t("tk_concrete"),
+                Kind::Rebar => t("tk_rebar"),
+                Kind::Steel => t("tk_steel"),
+                Kind::Other => t("tk_other"),
+            };
+            out.push(Sub(title.to_string()));
+            out.push(Table(
+                vec![
+                    t("tk_col_material").into(),
+                    t("tk_col_amount").into(),
+                    t("tk_col_lines").into(),
+                ],
+                rows,
+            ));
         }
     }
 
     // ---- Savollar va javoblar.
     if !m.questions.is_empty() {
-        out.push(Gap);
         out.push(Head(t("sm_tab_questions").to_string()));
-        for q in &m.questions {
-            out.push(Row(
-                q.text.clone(),
-                if q.answer.is_empty() {
-                    t("sm_report_no_answer").to_string()
-                } else {
-                    q.answer.clone()
-                },
-            ));
-        }
+        let rows: Vec<Vec<String>> = m
+            .questions
+            .iter()
+            .map(|q| {
+                vec![
+                    q.text.clone(),
+                    if q.answer.is_empty() {
+                        t("sm_report_no_answer").to_string()
+                    } else {
+                        q.answer.clone()
+                    },
+                ]
+            })
+            .collect();
+        out.push(Table(
+            vec![t("sm_col_question").into(), t("sm_col_answer").into()],
+            rows,
+        ));
     }
 
     // ---- Spetsifikatsiya va smeta yig'masi.
     if !m.stages.is_empty() {
-        out.push(Gap);
         out.push(Head(t("sm_tab_spec").to_string()));
-        out.push(Cols(vec![
-            t("sm_stages").to_string(),
-            t("sm_works").to_string(),
-            t("sm_materials").to_string(),
-            t("sm_src_assumption").to_string(),
-            t("tk_col_sum").to_string(),
-        ]));
         let is_assume = |s: &Source| matches!(s, Source::Assumption { .. });
-        for (i, st) in m.stages.iter().enumerate() {
-            let mats: usize = st.works.iter().map(|w| w.materials.len()).sum();
-            let assume = st
-                .works
-                .iter()
-                .map(|w| {
-                    is_assume(&w.source) as usize
-                        + w.materials.iter().filter(|x| is_assume(&x.source)).count()
-                })
-                .sum::<usize>();
-            out.push(Cols(vec![
-                format!("{}. {}", i + 1, st.name),
-                st.works.len().to_string(),
-                mats.to_string(),
-                assume.to_string(),
-                view.stages
-                    .get(i)
-                    .map(|v| money(v.total))
-                    .unwrap_or_default(),
-            ]));
-        }
-        out.push(Gap);
-        out.push(Head(t("sm_tab_smeta").to_string()));
-        out.push(Row(t("sm_works").to_string(), money(view.work_sum)));
-        out.push(Row(t("sm_materials").to_string(), money(view.material_sum)));
-        out.push(Row(
-            t("sm_total").to_string(),
-            format!("{} {}", money(view.total), t("tk_sum_unit")),
+        let rows: Vec<Vec<String>> = m
+            .stages
+            .iter()
+            .enumerate()
+            .map(|(i, st)| {
+                let mats: usize = st.works.iter().map(|w| w.materials.len()).sum();
+                let assume = st
+                    .works
+                    .iter()
+                    .map(|w| {
+                        is_assume(&w.source) as usize
+                            + w.materials.iter().filter(|x| is_assume(&x.source)).count()
+                    })
+                    .sum::<usize>();
+                vec![
+                    format!("{}. {}", i + 1, st.name),
+                    st.works.len().to_string(),
+                    mats.to_string(),
+                    assume.to_string(),
+                    view.stages
+                        .get(i)
+                        .map(|v| money(v.total))
+                        .unwrap_or_default(),
+                ]
+            })
+            .collect();
+        out.push(Table(
+            vec![
+                t("sm_stages").into(),
+                t("sm_works").into(),
+                t("sm_materials").into(),
+                t("sm_src_assumption").into(),
+                t("tk_col_sum").into(),
+            ],
+            rows,
         ));
-        // Narx manbalari — qancha qator qaysi manbadan.
+        out.push(Head(t("sm_tab_smeta").to_string()));
+        out.push(Table(
+            vec![String::new(), t("tk_col_sum").into()],
+            vec![
+                vec![t("sm_works").into(), money(view.work_sum)],
+                vec![t("sm_materials").into(), money(view.material_sum)],
+                vec![
+                    format!("{} ({}%)", t("sm_markup_all"), num(m.markup)),
+                    String::new(),
+                ],
+                vec![
+                    t("sm_total").into(),
+                    format!("{} {}", money(view.total), t("tk_sum_unit")),
+                ],
+            ],
+        ));
         let mut by: std::collections::BTreeMap<&'static str, usize> = Default::default();
         for sv in &view.stages {
             for (wp, mps) in &sv.works {
@@ -3072,9 +3373,12 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
             }
         }
         out.push(Sub(t("sm_report_price_sources").to_string()));
-        for (k, n) in by {
-            out.push(Row(t(k).to_string(), n.to_string()));
-        }
+        out.push(Table(
+            vec![t("sm_col_source").into(), t("tk_col_lines").into()],
+            by.into_iter()
+                .map(|(k, n)| vec![t(k).to_string(), n.to_string()])
+                .collect(),
+        ));
         if view.missing > 0 {
             out.push(Muted(format!("{} {}", view.missing, t("tk_total_partial"))));
         }
@@ -3086,25 +3390,32 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
     // ---- AI topilmalari.
     let open: Vec<&crate::smeta::Finding> = m.review.iter().filter(|f| !f.done).collect();
     if !m.review_summary.is_empty() || !open.is_empty() {
-        out.push(Gap);
         out.push(Head(t("sm_review_title").to_string()));
         if !m.review_summary.is_empty() {
             out.push(Text(m.review_summary.clone()));
         }
-        for f in open {
-            let kind = match f.kind.as_str() {
-                "qty" => t("sm_f_qty"),
-                "missing" => t("sm_f_missing"),
-                "dup" => t("sm_f_dup"),
-                "price" => t("sm_f_price"),
-                _ => t("sm_f_ask"),
-            };
-            out.push(Text(format!("• [{kind}] {}", f.text)));
+        if !open.is_empty() {
+            let rows: Vec<Vec<String>> = open
+                .iter()
+                .map(|f| {
+                    let kind = match f.kind.as_str() {
+                        "qty" => t("sm_f_qty"),
+                        "missing" => t("sm_f_missing"),
+                        "dup" => t("sm_f_dup"),
+                        "price" => t("sm_f_price"),
+                        _ => t("sm_f_ask"),
+                    };
+                    vec![f.text.clone(), kind.to_string()]
+                })
+                .collect();
+            out.push(Table(
+                vec![t("sm_col_finding").into(), t("sm_col_kind").into()],
+                rows,
+            ));
         }
     }
 
     // ---- Chegaralar — doim.
-    out.push(Gap);
     out.push(Head(t("sm_report_limits").to_string()));
     for l in t("sm_report_limits_text").lines() {
         out.push(Text(l.to_string()));

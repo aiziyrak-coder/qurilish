@@ -395,6 +395,49 @@ pub struct Finding {
     pub done: bool,
 }
 
+/// Ko'rsatkichlarni tozalaydi va muhimini oldinga chiqaradi.
+///
+/// Varaqlardan masshtab, format kabi texnik yozuvlar ham keladi — ular
+/// hisobot uchun ma'nosiz. Bir xil nom va qiymat bir marta qoladi
+/// (birinchi varaq bilan). Tartib: maydon, hajm, qavat, balandlik kabi
+/// asosiy ko'rsatkichlar birinchi, qolgani varaq tartibida.
+pub fn tidy_facts(facts: &[Fact]) -> Vec<Fact> {
+    const NOISE: [&str; 6] = ["масштаб", "формат", "лист ", "стадия", "изм.", "дата"];
+    const KEY: [&str; 9] = [
+        "площад",
+        "объем",
+        "объём",
+        "этаж",
+        "высот",
+        "размер",
+        "длин",
+        "ширин",
+        "периметр",
+    ];
+    let mut seen: Vec<String> = Vec::new();
+    let mut main = Vec::new();
+    let mut rest = Vec::new();
+    for f in facts {
+        let name = f.name.trim().to_lowercase();
+        if name.is_empty() || f.value.trim().is_empty() || NOISE.iter().any(|n| name.starts_with(n))
+        {
+            continue;
+        }
+        let k = format!("{name}|{}", f.value.trim().to_lowercase());
+        if seen.contains(&k) {
+            continue;
+        }
+        seen.push(k);
+        if KEY.iter().any(|w| name.contains(w)) {
+            main.push(f.clone());
+        } else {
+            rest.push(f.clone());
+        }
+    }
+    main.extend(rest);
+    main
+}
+
 /// Qator manzilini o'qiydi: `s3.w2.m1` → `(3, Some(2), Some(1))`.
 pub fn locate(id: &str) -> Option<(usize, Option<usize>, Option<usize>)> {
     let mut si = None;
@@ -1100,6 +1143,32 @@ mod tests {
         c.set(false, &key("Beton B20", "m3"), 0.0, "2026-10-05");
         assert!(c.materials.is_empty());
         assert_eq!(split_key("beton b20|m3"), ("beton b20", "m3"));
+    }
+
+    #[test]
+    fn facts_are_tidied_and_ordered() {
+        let f = |name: &str, value: &str, page: usize| Fact {
+            name: name.into(),
+            value: value.into(),
+            unit: String::new(),
+            page: Some(page),
+        };
+        let facts = vec![
+            f("Масштаб", "1:500", 1),
+            f("Отметка земли", "416.75", 2),
+            f("Площадь застройки", "2", 1),
+            f("Площадь застройки", "2", 3),
+            f("Площадь застройки", "2.5", 3),
+            f("", "x", 1),
+        ];
+        let out = tidy_facts(&facts);
+        let names: Vec<&str> = out.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Площадь застройки", "Площадь застройки", "Отметка земли"]
+        );
+        assert_eq!(out[0].page, Some(1));
+        assert_eq!(out[1].value, "2.5");
     }
 
     #[test]
