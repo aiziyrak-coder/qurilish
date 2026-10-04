@@ -1260,6 +1260,15 @@ impl App {
         } else {
             CheckTab::Upload
         };
+        // Sinov va ekran suratlari uchun bosqichni tashqaridan tanlash.
+        if let Ok(tab) = std::env::var("QURAI_TAB") {
+            if let Some(found) = CheckTab::ALL
+                .into_iter()
+                .find(|c| format!("{c:?}").eq_ignore_ascii_case(tab.trim()))
+            {
+                self.check_tab = found;
+            }
+        }
         // Butun grafikni ko'rsatamiz: obyekt ochilganda bajarilgan ishlar ham,
         // oldindagilari ham bir qarashda ko'rinishi kerak.
         self.fit_timeline = true;
@@ -3041,11 +3050,13 @@ impl App {
                 })
                 .collect();
         }
+        let removed = self.smeta.as_mut().map(crate::smeta::dedupe).unwrap_or(0);
         self.smeta_note = if failed.is_empty() {
             format!(
-                "{} · {:.0} s",
+                "{} · {:.0} s · {} {removed}",
                 t("sm_spec_done"),
-                job.started.elapsed().as_secs_f64()
+                job.started.elapsed().as_secs_f64(),
+                t("sm_dedupe")
             )
         } else {
             format!("{}: {}", t("sm_spec_failed"), failed.join(", "))
@@ -5722,5 +5733,141 @@ impl App {
 
     pub fn notify(&mut self, msg: String) {
         self.toast = Some((msg, 4.0));
+    }
+}
+
+/// Jonli tekshiruv: haqiqiy loyiha va haqiqiy xizmat bilan butun yo'l.
+///
+/// Odatdagi sinovlarda ishlamaydi (`#[ignore]`) — tarmoqqa chiqadi va
+/// pullik. `QURAI_LIVE_DB` (kalit olinadigan baza), `QURAI_LIVE_PDF`,
+/// ixtiyoriy `QURAI_LIVE_OUT` (natija yoziladigan baza va loyiha id,
+/// `yo'l|id`).
+#[cfg(test)]
+mod live {
+    use super::*;
+
+    #[test]
+    #[ignore]
+    fn the_whole_route_on_a_real_project() {
+        let (Ok(src), Ok(pdf)) = (
+            std::env::var("QURAI_LIVE_DB"),
+            std::env::var("QURAI_LIVE_PDF"),
+        ) else {
+            return;
+        };
+        let keydb = crate::db::Db::open(&std::path::PathBuf::from(&src)).expect("baza");
+        let key = keydb.get_setting("llm_key").unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("qurai_live_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let db = crate::db::Db::open(&path).expect("baza");
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(crate::db::Db::open(&path).expect("baza"));
+        app.set_llm_key(&key);
+        app.select_project(pid);
+        let t0 = std::time::Instant::now();
+        let mut log = String::new();
+
+        app.start_pdf(std::path::Path::new(&pdf));
+        while app.pdf_job.is_some() {
+            app.poll_pdf();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        log.push_str(&format!(
+            "fayl o'qildi: {} · {:.0} s\n",
+            app.pdf_note,
+            t0.elapsed().as_secs_f64()
+        ));
+
+        app.start_pages();
+        assert!(app.pages_job.is_some(), "{}", app.smeta_note);
+        while app.pages_job.is_some() {
+            app.poll_pages();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        log.push_str(&format!(
+            "varaqlar: {} · {:.0} s\n",
+            app.smeta_note,
+            t0.elapsed().as_secs_f64()
+        ));
+        while app.questions_rx.is_some() {
+            app.poll_questions();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        {
+            let m = app.smeta.as_ref().expect("smeta");
+            log.push_str(&format!(
+                "digest {} · ko'rsatkich {} · savol {} (javobli {}) · {:.0} s\nXULOSA: {}\n",
+                m.digest.len(),
+                m.facts.len(),
+                m.questions.len(),
+                m.answered(),
+                t0.elapsed().as_secs_f64(),
+                m.summary
+            ));
+            for q in &m.questions {
+                log.push_str(&format!(
+                    "  ? [{}] {} → {} | {}\n",
+                    q.topic,
+                    q.text,
+                    q.answer,
+                    q.options.join(" / ")
+                ));
+            }
+        }
+
+        app.start_spec();
+        assert!(app.spec_job.is_some(), "{}", app.smeta_note);
+        while app.spec_job.is_some() {
+            app.poll_spec();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        let m = app.smeta.clone().expect("smeta");
+        log.push_str(&format!(
+            "\nspetsifikatsiya: {} · bosqich {} · taxmin {} · token {} · {:.0} s\n",
+            app.smeta_note,
+            m.stages.len(),
+            m.assumptions(),
+            m.tokens,
+            t0.elapsed().as_secs_f64()
+        ));
+        for st in &m.stages {
+            log.push_str(&format!("\n## {}\n", st.name));
+            for w in &st.works {
+                log.push_str(&format!(
+                    "  - {} | {} {} | {:?}\n",
+                    w.name, w.qty, w.unit, w.source
+                ));
+                for mat in &w.materials {
+                    log.push_str(&format!(
+                        "      · {} | {} {} | {:?}\n",
+                        mat.name, mat.qty, mat.unit, mat.source
+                    ));
+                }
+            }
+        }
+        let v = &app.smeta_view;
+        log.push_str(&format!(
+            "\nNARX: jami {} · ishlar {} · materiallar {} · narxsiz {}\n",
+            v.total, v.work_sum, v.material_sum, v.missing
+        ));
+        std::fs::write(std::env::temp_dir().join("qurai_route.txt"), &log).unwrap();
+        std::fs::write(
+            std::env::temp_dir().join("qurai_smeta.json"),
+            serde_json::to_string(&m).unwrap(),
+        )
+        .unwrap();
+        if let Ok(out) = std::env::var("QURAI_LIVE_OUT") {
+            if let Some((p, id)) = out.split_once('|') {
+                let target = crate::db::Db::open(&std::path::PathBuf::from(p)).expect("baza");
+                let tk = serde_json::to_string(app.takeoff.as_ref().unwrap()).unwrap();
+                target.set_setting(&format!("takeoff.{id}"), &tk).unwrap();
+                target
+                    .set_setting(&format!("smeta.{id}"), &serde_json::to_string(&m).unwrap())
+                    .unwrap();
+                target
+                    .set_setting(&format!("takeoff_path.{id}"), &pdf)
+                    .unwrap();
+            }
+        }
     }
 }

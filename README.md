@@ -157,53 +157,34 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 
 ### AI loyiha tekshiruvi (TZ II)
 
-> **Sahifa qayta qurildi — «Loyiha kalkulyatsiyasi».** Mijoz talabi bilan
-> eski «muvofiq / nomuvofiq» ko'rinishi olib tashlandi. Hozir sahifa bitta
-> ishni qiladi: loyiha PDF'i yuklanadi → spetsifikatsiya jadvallari
-> o'qiladi → konstruksiyalar soni bilan → **nimadan qancha ketadi** (beton,
-> armatura, prokat, boshqa buyumlar) va narx bazasidan qiymat.
+> **Sahifa qayta qurildi — «Smeta» (olti bosqich).** Mijoz ko'rsatgan
+> namuna («Смета ИИ-Эксперт») bo'yicha: **Yuklash → Savollar → Obyekt
+> ma'lumoti → Spetsifikatsiya → Smeta → Taklif (KP)**.
 >
-> Nimalar o'qiladi (haqiqiy 77 varaqli loyihada tekshirilgan):
-> spetsifikatsiya jadvallari (KJ), uskunalar spetsifikatsiyasi (VK),
-> KMD «выборка металла», tom panellari; burilgan matn; shtampida bitta
-> konstruksiya yozilgan varaq (`К3`) uning soniga ko'paytiriladi; boshqa
-> varaqda aynan takrorlangan jadval bir marta sanaladi; har jadvalni
-> belgisini olib hisobdan chiqarish mumkin.
+> Ish taqsimoti qat'iy: AI **tuzilmani to'ldiradi** (varaqlarni ko'rib
+> ko'rsatkich, vedomost va spetsifikatsiyalarni ko'chiradi; savol tuzadi;
+> bosqichlarni ish va materialga yoyadi), **sonni dastur hisoblaydi**
+> (formula `smeta::eval` bilan; AI yozgan son formulaga mos kelmasa formula
+> ustun), **narxni katalog beradi** (shu smeta → kompaniya katalogi → narx
+> bazasi; hech birida bo'lmasa — «narx yo'q», jamiga kirmaydi va sanaladi).
+> Har qatorda miqdor manbasi: *loyihadan* (varaq), *hisob* (formula),
+> *me'yor*, *taxmin*, *qo'lda*.
 >
-> Ochiq chegaralar: (1) skanerlangan (rasm) PDF o'qilmaydi — matn qatlami
-> kerak; (2) hech bir konstruksiyaga bog'lanmagan qator loyihada
-> yozilganicha olinadi va «ko'paytirilmagan» deb belgilanadi; (3) bir xil
-> belgi bir necha varaqda turli son bilan kelsa (masalan `Сп-1`), birinchi
-> ro'yxatdagi son olinadi — «Konstruksiyalar» bo'limida qo'lda tuzatiladi;
-> (4) loyihada bir necha blok bo'lsa, qaysi jadval qaysi blokka tegishli
-> ekanini dastur o'zi hal qilmaydi — ortiqchasini odam o'chiradi.
+> Haqiqiy loyihada tekshirildi (AL QUDRA, 77 varaq, gpt-4.1): 77 varaq
+> o'qildi, 945 ko'rsatkich, 68 jadval, 20 savol (3 tasi loyihadan
+> to'ldirildi), 15 bosqich / 111 ish / 259 material; 98 qator «taxmin»
+> deb belgilangan; ≈484 ming token, ≈4 daqiqa.
 >
-> Pastda yozilgan IFC/DXF o'qish, bilimlar grafi qoidalari va kolliziya
-> dvigatellari kodda saqlangan (`src/ifc.rs`, `src/dxf.rs`, `src/clash.rs`,
-> sinovlari bilan), lekin **hozir ekranga ulanmagan**.
-- **Loyiha bilimlar grafi**: element (xona, deraza, teshik, quvur, rigel, kabel…)
-  va ular orasidagi bog'lanish (`tarkibida`, `xizmat qiladi`, `kesib o'tadi`,
-  `tayanadi`, `quvvat oladi`). Elementlar va bog'lanishlar ekrandan tahrirlanadi.
-- **Bo'limlararo tekshiruv (II.11)**: teshigi ko'zda tutilmagan deraza yoki eshik
-  (AR ↔ KJ), muhandislik ta'minotisiz xona (AR ↔ VK / OV / EOM), konstruksiyani
-  teshiksiz kesib o'tuvchi tarmoq, kanalizatsiya ukloni, takrorlangan markalar,
-  varaqsiz va o'lchamsiz elementlar, grafda yolg'iz qolgan elementlar.
-- **O'zgarish ta'siri (II.18)**: element o'zgarganda qaysi bo'limlar va nechta
-  element ta'sirlanishi grafni aylanib chiqib ko'rsatiladi.
-- **Normativ reyestri (II.17)**: dastur normativni **o'ylab topmaydi**. Har bir
-  qoidaning me'yoriy asosi (hujjat, tahriri, band, matn, chegara qiymati, manba)
-  reyestrga qo'lda kiritiladi. Kiritilmagan bo'lsa, nomuvofiqlikda me'yoriy asos
-  maydoni bo'sh qoladi va «muhandis tekshiruvi talab qilinadi» deb yoziladi.
-  Chegara qiymati tasdiqlanmagan bo'lsa, qoida vaqtinchalik qiymatdan foydalanadi
-  va buni xatoning o'zida ochiq aytadi.
-- **Bilimlar grafi ko'rinishi (II.18)**: elementlar bo'limlar bo'yicha ustunlarga
-  joylashtiriladi, bog'lanishlar chiziq bilan chiziladi. Tugun tanlansa, uning
-  aloqalari ajratiladi va qolganlari xiralashadi — bo'limlararo bog'lanishlar
-  shu ko'rinishda bir qarashda o'qiladi.
-- **Bajarish rejasi (II.19 ACTION)**: ochiq nomuvofiqliklar mas'ullar bo'yicha
-  guruhlanadi — kim nima qilishi va qachongacha. Har bir yozuvga bartaraf etish
-  muddati qo'yiladi, muddati o'tgani qizil bilan belgilanadi, holat shu yerdan
-  o'zgartiriladi. Muddat qayta tekshiruvda saqlanib qoladi.
+> Ochiq chegaralar: (1) kalit bo'lmasa faqat jadvallar o'qiladi — savol va
+> spetsifikatsiya tuzilmaydi; (2) narx katalogi bo'sh boshlanadi — mijoz
+> o'z praysini kiritadi (Excel import orqali narx bazasiga yoki smetada
+> qo'lda, «katalogga» rejimida u keyingi obyektlarga saqlanadi); (3) taxmin
+> bilan olingan qatorlar odam ko'zdan kechirishi kerak — ular alohida
+> belgilangan va sanalgan; (4) skanerlangan PDF o'qilmaydi; (5) varaqlar
+> tashqi AI xizmatiga yuboriladi — ekranda shunday deb yozilgan.
+>
+> Eski material kalkulyatsiyasi (`src/calc.rs`), IFC/DXF o'qish va
+> kolliziya dvigatellari kodda saqlangan, lekin ekranga ulanmagan.
 
 ### AI smeta tekshiruvi (TZ III)
 **Import (TZ III.2)**: XLSX, XLS, XLSB, ODS va CSV. Sarlavha qatori faylning
@@ -523,7 +504,9 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/passport.rs` | Obyekt pasporti ekrani |
 | `src/ui/dashboard.rs` | Umumiy ko'rinish ekrani |
 | `src/ui/ppr.rs` | PPR va texnologik kartalar, resurs yetarliligi |
-| `src/ui/aicheck.rs` | Loyiha kalkulyatsiyasi: PDF yuklash, jadvallar, konstruksiyalar, material va qiymat |
+| `src/ui/aicheck.rs` | Smeta: olti bosqich — yuklash, savollar, ma'lumot, spetsifikatsiya, smeta, KP |
+| `src/smeta.rs` | Smeta tuzilmasi, miqdor manbasi, formula hisobi, narx tartibi, jamilar |
+| `src/smeta_ai.rs` | AI so'rovlari: varaq, savollar, bosqichlar — javobni tuzilmaga o'qish |
 | `src/takeoff.rs` | Spetsifikatsiya jadvallarini o'qish va material hisobi |
 | `src/ui/estimate.rs` | AI smeta tekshiruvi: import, pozitsiyalar va natijalar |
 | `src/ui/execdocs.rs` | Ijro hujjatlari va rasmiylashtirilmagan ishlar |

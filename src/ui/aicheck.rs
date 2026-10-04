@@ -71,7 +71,7 @@ fn stepper(ui: &mut egui::Ui, app: &mut App) {
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         let mark = if ready && !active && i < 5 {
-                            "✓".to_string()
+                            "●".to_string()
                         } else {
                             (i + 1).to_string()
                         };
@@ -178,13 +178,17 @@ fn badge(ui: &mut egui::Ui, source: &Source) {
 }
 
 fn next_button(ui: &mut egui::Ui, app: &mut App, to: CheckTab, label: &str) {
-    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-        if ui
-            .add_enabled(app.smeta_ready(to), egui::Button::new(format!("{label} →")))
-            .clicked()
-        {
-            app.check_tab = to;
-        }
+    // Bitta qator: aks holda o'ngga tekislash qolgan butun balandlikni
+    // egallab, pastdagi ro'yxat ko'rinmay qolardi.
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .add_enabled(app.smeta_ready(to), egui::Button::new(format!("{label} →")))
+                .clicked()
+            {
+                app.check_tab = to;
+            }
+        });
     });
 }
 
@@ -269,7 +273,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                     ui.spinner();
                 } else {
                     ui.label(
-                        RichText::new(if *done { "✓" } else { "○" })
+                        RichText::new(if *done { "●" } else { "○" })
                             .color(if *done { theme::ok() } else { theme::muted() })
                             .strong(),
                     );
@@ -548,7 +552,7 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                 card(ui, |ui| {
                     ui.horizontal(|ui| {
                         let answered = !q.answer.trim().is_empty();
-                        ui.label(RichText::new(if answered { "✓" } else { "○" }).color(
+                        ui.label(RichText::new(if answered { "●" } else { "○" }).color(
                             if answered {
                                 theme::ok()
                             } else {
@@ -875,7 +879,7 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                     egui::Label::new(
                         RichText::new(format!(
                             "{}  {}   ·   {} {} · {} {}",
-                            if is_open { "▾" } else { "▸" },
+                            if is_open { "-" } else { "+" },
                             st.name,
                             st.works.len(),
                             t("sm_works_short"),

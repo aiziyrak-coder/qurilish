@@ -66,30 +66,34 @@ bu ro'yxatning asosiy vazifasi shu.
 
 ## II. AI loyiha tekshiruvi
 
-> **Sahifa qayta qurildi — «Loyiha kalkulyatsiyasi».** Mijoz talabi bilan
-> eski «muvofiq / nomuvofiq» ko'rinishi olib tashlandi. Hozir sahifa bitta
-> ishni qiladi: loyiha PDF'i yuklanadi → spetsifikatsiya jadvallari
-> o'qiladi → konstruksiyalar soni bilan → **nimadan qancha ketadi** (beton,
-> armatura, prokat, boshqa buyumlar) va narx bazasidan qiymat.
+> **Sahifa qayta qurildi — «Smeta» (olti bosqich).** Mijoz ko'rsatgan
+> namuna («Смета ИИ-Эксперт») bo'yicha: **Yuklash → Savollar → Obyekt
+> ma'lumoti → Spetsifikatsiya → Smeta → Taklif (KP)**.
 >
-> Nimalar o'qiladi (haqiqiy 77 varaqli loyihada tekshirilgan):
-> spetsifikatsiya jadvallari (KJ), uskunalar spetsifikatsiyasi (VK),
-> KMD «выборка металла», tom panellari; burilgan matn; shtampida bitta
-> konstruksiya yozilgan varaq (`К3`) uning soniga ko'paytiriladi; boshqa
-> varaqda aynan takrorlangan jadval bir marta sanaladi; har jadvalni
-> belgisini olib hisobdan chiqarish mumkin.
+> Ish taqsimoti qat'iy: AI **tuzilmani to'ldiradi** (varaqlarni ko'rib
+> ko'rsatkich, vedomost va spetsifikatsiyalarni ko'chiradi; savol tuzadi;
+> bosqichlarni ish va materialga yoyadi), **sonni dastur hisoblaydi**
+> (formula `smeta::eval` bilan; AI yozgan son formulaga mos kelmasa formula
+> ustun), **narxni katalog beradi** (shu smeta → kompaniya katalogi → narx
+> bazasi; hech birida bo'lmasa — «narx yo'q», jamiga kirmaydi va sanaladi).
+> Har qatorda miqdor manbasi: *loyihadan* (varaq), *hisob* (formula),
+> *me'yor*, *taxmin*, *qo'lda*.
 >
-> Ochiq chegaralar: (1) skanerlangan (rasm) PDF o'qilmaydi — matn qatlami
-> kerak; (2) hech bir konstruksiyaga bog'lanmagan qator loyihada
-> yozilganicha olinadi va «ko'paytirilmagan» deb belgilanadi; (3) bir xil
-> belgi bir necha varaqda turli son bilan kelsa (masalan `Сп-1`), birinchi
-> ro'yxatdagi son olinadi — «Konstruksiyalar» bo'limida qo'lda tuzatiladi;
-> (4) loyihada bir necha blok bo'lsa, qaysi jadval qaysi blokka tegishli
-> ekanini dastur o'zi hal qilmaydi — ortiqchasini odam o'chiradi.
+> Haqiqiy loyihada tekshirildi (AL QUDRA, 77 varaq, gpt-4.1): 77 varaq
+> o'qildi, 945 ko'rsatkich, 68 jadval, 20 savol (3 tasi loyihadan
+> to'ldirildi), 15 bosqich / 111 ish / 259 material; 98 qator «taxmin»
+> deb belgilangan; ≈484 ming token, ≈4 daqiqa.
 >
-> Pastda yozilgan IFC/DXF o'qish, bilimlar grafi qoidalari va kolliziya
-> dvigatellari kodda saqlangan (`src/ifc.rs`, `src/dxf.rs`, `src/clash.rs`,
-> sinovlari bilan), lekin **hozir ekranga ulanmagan**.
+> Ochiq chegaralar: (1) kalit bo'lmasa faqat jadvallar o'qiladi — savol va
+> spetsifikatsiya tuzilmaydi; (2) narx katalogi bo'sh boshlanadi — mijoz
+> o'z praysini kiritadi (Excel import orqali narx bazasiga yoki smetada
+> qo'lda, «katalogga» rejimida u keyingi obyektlarga saqlanadi); (3) taxmin
+> bilan olingan qatorlar odam ko'zdan kechirishi kerak — ular alohida
+> belgilangan va sanalgan; (4) skanerlangan PDF o'qilmaydi; (5) varaqlar
+> tashqi AI xizmatiga yuboriladi — ekranda shunday deb yozilgan.
+>
+> Eski material kalkulyatsiyasi (`src/calc.rs`), IFC/DXF o'qish va
+> kolliziya dvigatellari kodda saqlangan, lekin ekranga ulanmagan.
 
 - [x] 1. Umumiy vazifa — *bilimlar grafi va qoidalar dvigateli*
 - [x] 2. Ishlash tamoyili — *fakt/hisob/xulosa ajratilgan (III.32)*

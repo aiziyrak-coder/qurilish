@@ -443,6 +443,54 @@ impl Smeta {
     }
 }
 
+/// Bosqichlar orasidagi takrorlarni olib tashlaydi.
+///
+/// Bosqichlar parallel tuziladi va bir-birini ko'rmaydi, shuning uchun
+/// bitta loyiha soni («Снятие растительного слоя — 3427,6 м³», «Арматура
+/// Ø12 — 147 т») ikki-uch bosqichga tushib qolishi mumkin. Qoida: nomi,
+/// birligi va miqdori **aynan bir xil** qator ikkinchi marta uchrasa —
+/// takror, birinchisi qoladi. Miqdori boshqa qator takror emas: bir xil
+/// material haqiqatan ikki bosqichda ketishi mumkin.
+pub fn dedupe(smeta: &mut Smeta) -> usize {
+    let mut seen_work: Vec<(String, f64)> = Vec::new();
+    let mut seen_mat: Vec<(String, f64)> = Vec::new();
+    let mut removed = 0;
+    for stage in &mut smeta.stages {
+        stage.works.retain(|w| {
+            let k = (key(&w.name, &w.unit), w.qty);
+            if seen_work
+                .iter()
+                .any(|s| s.0 == k.0 && (s.1 - k.1).abs() < 1e-9)
+            {
+                removed += 1 + w.materials.len();
+                return false;
+            }
+            seen_work.push(k);
+            true
+        });
+        for w in &mut stage.works {
+            w.materials.retain(|m| {
+                // Faqat loyihadan olingan son takror bo'la oladi: me'yor
+                // bo'yicha hisoblangan material har ishda o'ziniki.
+                if !matches!(m.source, Source::Project { .. }) {
+                    return true;
+                }
+                let k = (key(&m.name, &m.unit), m.qty);
+                if seen_mat
+                    .iter()
+                    .any(|s| s.0 == k.0 && (s.1 - k.1).abs() < 1e-9)
+                {
+                    removed += 1;
+                    return false;
+                }
+                seen_mat.push(k);
+                true
+            });
+        }
+    }
+    removed
+}
+
 /// Xarid ro'yxati: bir xil material bosqichlar bo'ylab qo'shiladi.
 ///
 /// Ombor va ta'minot ekraniga hali ulanmagan.
@@ -563,6 +611,29 @@ mod tests {
         assert!((v.total - 10_640.0 * 1.1 * 1.05).abs() < 1e-6);
         assert_eq!(smeta.lines(), 4);
         assert_eq!(smeta.assumptions(), 1);
+    }
+
+    /// Bir xil loyiha soni ikki bosqichda — ikkinchisi tashlanadi; boshqa
+    /// miqdor yoki me'yor bo'yicha material qoladi.
+    #[test]
+    fn identical_project_lines_are_counted_once_across_stages() {
+        let mut smeta = sample();
+        let mut second = smeta.stages[0].clone();
+        second.name = "Karkas".into();
+        // Ish nomi va miqdori bir xil — takror; materiallari bilan ketadi.
+        smeta.stages.push(second.clone());
+        // Boshqa miqdorli ish qoladi, uning loyihadan olingan materiali
+        // ham qoladi.
+        second.works[0].qty = 5.0;
+        second.works[0].materials[0].source = Source::Project { page: Some(3) };
+        second.works[0].materials[0].qty = 99.0;
+        second.works[1].qty = 7.0;
+        smeta.stages.push(second);
+        let removed = dedupe(&mut smeta);
+        assert_eq!(removed, 4);
+        assert_eq!(smeta.stages[1].works.len(), 0);
+        assert_eq!(smeta.stages[2].works.len(), 2);
+        assert_eq!(smeta.stages[2].works[0].materials.len(), 2);
     }
 
     #[test]

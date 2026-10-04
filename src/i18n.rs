@@ -306,8 +306,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Основные данные объекта: адрес, сроки, сумма договора, участники и проектная документация.",
         ),
         "purpose_ai_check" => (
-            "Loyihaga nimadan qancha ketadi: konstruksiyalar soni, material bo'yicha yig'ma va qiymat.",
-            "Сколько чего нужно по проекту: количество конструкций, свод по материалам и стоимость.",
+            "Loyihadan smeta va mijozga taklif: PDF → AI varaqlarni o'qiydi → savollar → spetsifikatsiya → narxlar → KP. Har qatorda manbasi ko'rinadi.",
+            "Смета и КП по проекту: PDF → AI читает листы → вопросы → спецификация → цены → КП. У каждой строки виден источник.",
         ),
         "purpose_estimate" => (
             "Smeta: hajm, narx va uning loyiha bilan mosligi. Tushib qolgan ish ham shu yerda ko'rinadi.",
@@ -416,6 +416,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "screen_gantt" => ("Ishlar grafigi (GPR)", "График работ (ГПР)"),
         "screen_ppr" => ("PPR — ish bajarish loyihasi", "ППР — проект производства работ"),
         "screen_ai_check" => ("Smeta", "Смета"),
+        "sm_dedupe" => ("takror qator olib tashlandi:", "повторов убрано:"),
         "sm_tab_upload" => ("Yuklash", "Загрузка"),
         "sm_tab_upload_hint" => ("PDF loyiha", "PDF проекта"),
         "sm_tab_questions" => ("Savollar", "Вопросы"),
