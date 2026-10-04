@@ -1881,154 +1881,153 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
     egui::CollapsingHeader::new(t("sm_offer_settings"))
         .default_open(m.offer.company.is_empty())
         .show(ui, |ui| {
-        card(ui, |ui| {
-            ui.label(RichText::new(t("sm_offer_settings")).strong().size(14.0));
-            ui.add_space(6.0);
-            let field = |ui: &mut egui::Ui, label: &str, v: &mut String, changed: &mut bool| {
-                ui.label(RichText::new(label).size(11.0).color(theme::muted()));
-                if ui
-                    .add(egui::TextEdit::singleline(v).desired_width(f32::INFINITY))
-                    .changed()
-                {
-                    *changed = true;
-                }
-            };
-            field(ui, t("sm_offer_title"), &mut offer.title, &mut changed);
-            field(ui, t("sm_offer_company"), &mut offer.company, &mut changed);
-            field(
-                ui,
-                t("sm_offer_contacts"),
-                &mut offer.contacts,
-                &mut changed,
-            );
-            field(
-                ui,
-                t("sm_offer_customer"),
-                &mut offer.customer,
-                &mut changed,
-            );
-            ui.label(
-                RichText::new(t("sm_offer_terms"))
-                    .size(11.0)
-                    .color(theme::muted()),
-            );
-            if ui
-                .add(
-                    egui::TextEdit::multiline(&mut offer.terms)
-                        .desired_rows(4)
-                        .desired_width(f32::INFINITY),
-                )
-                .changed()
-            {
-                changed = true;
-            }
-            ui.label(
-                RichText::new(t("sm_offer_excluded"))
-                    .size(11.0)
-                    .color(theme::muted()),
-            );
-            if ui
-                .add(
-                    egui::TextEdit::multiline(&mut offer.excluded)
-                        .desired_rows(3)
-                        .desired_width(f32::INFINITY),
-                )
-                .changed()
-            {
-                changed = true;
-            }
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                ui.label(
-                    RichText::new(t("sm_offer_accent"))
-                        .size(11.0)
-                        .color(theme::muted()),
+            card(ui, |ui| {
+                ui.label(RichText::new(t("sm_offer_settings")).strong().size(14.0));
+                ui.add_space(6.0);
+                let field = |ui: &mut egui::Ui, label: &str, v: &mut String, changed: &mut bool| {
+                    ui.label(RichText::new(label).size(11.0).color(theme::muted()));
+                    if ui
+                        .add(egui::TextEdit::singleline(v).desired_width(f32::INFINITY))
+                        .changed()
+                    {
+                        *changed = true;
+                    }
+                };
+                field(ui, t("sm_offer_title"), &mut offer.title, &mut changed);
+                field(ui, t("sm_offer_company"), &mut offer.company, &mut changed);
+                field(
+                    ui,
+                    t("sm_offer_contacts"),
+                    &mut offer.contacts,
+                    &mut changed,
                 );
-                for (i, (name, rgb)) in crate::smeta::ACCENTS.iter().enumerate() {
-                    let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-                    let (rect, resp) =
-                        ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
-                    ui.painter().rect_filled(rect, 4.0, color);
-                    if offer.accent == i {
-                        ui.painter().rect_stroke(
-                            rect,
-                            4.0,
-                            Stroke::new(2.0_f32, theme::text()),
-                            egui::StrokeKind::Outside,
-                        );
-                    }
-                    if resp.on_hover_text(*name).clicked() {
-                        offer.accent = i;
-                        changed = true;
-                    }
-                }
-            });
-            ui.horizontal_wrapped(|ui| {
-                if ui
-                    .checkbox(&mut offer.show_numbers, t("sm_offer_numbers"))
-                    .changed()
-                {
-                    changed = true;
-                }
-                if ui
-                    .checkbox(&mut offer.show_schedule, t("sm_offer_schedule"))
-                    .changed()
-                {
-                    changed = true;
-                }
+                field(
+                    ui,
+                    t("sm_offer_customer"),
+                    &mut offer.customer,
+                    &mut changed,
+                );
                 ui.label(
-                    RichText::new(t("sm_offer_advance"))
+                    RichText::new(t("sm_offer_terms"))
                         .size(11.0)
                         .color(theme::muted()),
                 );
                 if ui
                     .add(
-                        egui::DragValue::new(&mut offer.advance_pct)
-                            .range(0.0..=100.0)
-                            .suffix(" %"),
+                        egui::TextEdit::multiline(&mut offer.terms)
+                            .desired_rows(4)
+                            .desired_width(f32::INFINITY),
                     )
                     .changed()
                 {
                     changed = true;
                 }
-            });
-            ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(t("sm_offer_valid"))
+                    RichText::new(t("sm_offer_excluded"))
                         .size(11.0)
                         .color(theme::muted()),
                 );
-                let mut d = offer.valid_days as i64;
                 if ui
-                    .add(egui::DragValue::new(&mut d).range(1..=365))
-                    .changed()
-                {
-                    offer.valid_days = d as u32;
-                    changed = true;
-                }
-                if ui
-                    .checkbox(&mut offer.detailed, t("sm_offer_detailed"))
+                    .add(
+                        egui::TextEdit::multiline(&mut offer.excluded)
+                            .desired_rows(3)
+                            .desired_width(f32::INFINITY),
+                    )
                     .changed()
                 {
                     changed = true;
                 }
-            });
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if ui.button(t("sm_offer_pdf")).clicked() {
-                    export = true;
-                }
-                if ui
-                    .button(t("sm_offer_remember"))
-                    .on_hover_text(t("sm_offer_remember_hint"))
-                    .clicked()
-                {
-                    remember = true;
-                }
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(t("sm_offer_accent"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                    for (i, (name, rgb)) in crate::smeta::ACCENTS.iter().enumerate() {
+                        let color = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+                        let (rect, resp) =
+                            ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::click());
+                        ui.painter().rect_filled(rect, 4.0, color);
+                        if offer.accent == i {
+                            ui.painter().rect_stroke(
+                                rect,
+                                4.0,
+                                Stroke::new(2.0_f32, theme::text()),
+                                egui::StrokeKind::Outside,
+                            );
+                        }
+                        if resp.on_hover_text(*name).clicked() {
+                            offer.accent = i;
+                            changed = true;
+                        }
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .checkbox(&mut offer.show_numbers, t("sm_offer_numbers"))
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                    if ui
+                        .checkbox(&mut offer.show_schedule, t("sm_offer_schedule"))
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                    ui.label(
+                        RichText::new(t("sm_offer_advance"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut offer.advance_pct)
+                                .range(0.0..=100.0)
+                                .suffix(" %"),
+                        )
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(t("sm_offer_valid"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                    let mut d = offer.valid_days as i64;
+                    if ui
+                        .add(egui::DragValue::new(&mut d).range(1..=365))
+                        .changed()
+                    {
+                        offer.valid_days = d as u32;
+                        changed = true;
+                    }
+                    if ui
+                        .checkbox(&mut offer.detailed, t("sm_offer_detailed"))
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button(t("sm_offer_pdf")).clicked() {
+                        export = true;
+                    }
+                    if ui
+                        .button(t("sm_offer_remember"))
+                        .on_hover_text(t("sm_offer_remember_hint"))
+                        .clicked()
+                    {
+                        remember = true;
+                    }
+                });
             });
         });
-
-    });
     ui.add_space(6.0);
     let rgb = crate::smeta::ACCENTS
         .get(m.offer.accent)
@@ -2045,7 +2044,6 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 .inner_margin(egui::Margin::same(18))
                 .show(ui, |ui| draw_doc(ui, &lines, accent));
         });
-    });
 
     if changed {
         app.edit_smeta(|m| m.offer = offer.clone());
