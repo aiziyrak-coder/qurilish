@@ -157,6 +157,12 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 
 ### AI loyiha tekshiruvi (TZ II)
 
+> **Hisobot va KP ko'rinishi (2026-10-05):** plitkalar, rangli bo'lim
+> lentalari, sarlavhali jadvallar (ekran, PDF va **Word .docx** — o'z
+> yozuvchimiz, kutubxonasiz). KP: bosqichlar jadvali (ishlar/materiallar/
+> jami), to'lov jadvali, «narxga kirmaydi». Hisobot: ko'rsatkichlar
+> tozalangan va tartiblangan.
+
 > **AI loyiha hisoboti (7-bosqich, 2026-10-05):** mijoz va rahbar uchun
 > to'liq hujjat — AI yozgan 7 bo'lim (rezyume, obyekt va konstruktiv,
 > asosiy hajmlar, taxminlar, risklar, tavsiyalar, chegaralar) + dastur
