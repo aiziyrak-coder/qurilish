@@ -17,7 +17,9 @@
 //! `Authorization` sarlavhasida.
 
 use crate::llm::{self, Config, Part};
-use crate::smeta::{eval, Fact, List, PageDigest, Question, Resource, Source, Stage, Work};
+use crate::smeta::{
+    eval, Fact, Finding, List, PageDigest, Question, Resource, Source, Stage, Work,
+};
 use crate::takeoff::SpecTable;
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -275,6 +277,44 @@ pub fn spawn_questions(cfg: Config, context: String) -> crate::app::QuestionsRx 
         let out = llm::extract(&cfg, QUESTIONS_SYSTEM, &[Part::Text(context)])
             .map_err(|e| e.to_string())
             .and_then(|a| parse_questions(&a.text).map(|(s, q)| (s, q, a.usage.total)));
+        let _ = tx.send(out);
+    });
+    rx
+}
+
+// ===================================================== 2a. AI javoblari
+
+const ANSWERS_SYSTEM: &str = "Ты — опытный подрядчик. Даны описание объекта и список вопросов без ответа, у каждого \
+варианты. Для каждого вопроса выбери НАИБОЛЕЕ типичный для такого объекта вариант (из предложенных, кроме \
+«уточнить у заказчика») и в одной фразе объясни почему. Это допущения — человек их проверит; не выбирай крайние \
+дорогие варианты без оснований.\n\
+Ответ — только JSON: {\"answers\":[{\"i\":0,\"answer\":\"текст варианта\",\"why\":\"\"}]} — i совпадает с номером вопроса.";
+
+/// AI javoblari: `(o'rin, javob, sabab)`.
+pub fn parse_answers(body: &str) -> Result<Vec<(usize, String, String)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    Ok(v.get("answers")
+        .and_then(|a| a.as_array())
+        .ok_or_else(|| "JSON: answers yo'q".to_string())?
+        .iter()
+        .filter_map(|a| {
+            let i = a.get("i")?.as_u64()? as usize;
+            let answer = cell(a.get("answer"));
+            (!answer.is_empty()).then(|| (i, answer, cell(a.get("why"))))
+        })
+        .collect())
+}
+
+pub type AnswersRx = Receiver<Result<(Vec<(usize, String, String)>, u32), String>>;
+
+/// Javobsiz savollarga AI eng tipik variantni tanlaydi.
+pub fn spawn_answers(cfg: Config, context: String) -> AnswersRx {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let out = llm::extract(&cfg, ANSWERS_SYSTEM, &[Part::Text(context)])
+            .map_err(|e| e.to_string())
+            .and_then(|a| parse_answers(&a.text).map(|r| (r, a.usage.total)));
         let _ = tx.send(out);
     });
     rx
@@ -589,22 +629,95 @@ pub fn spawn_prices(
 // ============================================================ 5. Tekshiruv
 
 const REVIEW_SYSTEM: &str = "Ты — главный сметчик, проверяющий смету, собранную помощником. Дана структура: \
-этапы, работы, материалы, количества, источник каждого количества (из проекта / расчёт / стандарт / допущение) и цены. \
-Напиши короткое заключение по-русски, по пунктам, без воды:\n\
-1. Сомнительные количества — где число выглядит неправдоподобным для такого объекта и почему (сравни с показателями объекта).\n\
-2. Пропуски — работы и материалы, которые обычно есть в таком объекте, но в смете их нет.\n\
-3. Дубли — одно и то же, посчитанное в двух этапах.\n\
-4. Цены — какие выглядят заниженными или завышенными для рынка Узбекистана.\n\
-5. Что уточнить у заказчика в первую очередь.\n\
-Опирайся только на данные; новых чисел не выдумывай. Не больше 25 строк.";
+этапы, работы, материалы с адресами (s<этап>.w<работа>.m<материал>), количества, источник каждого количества \
+(из проекта / расчёт / стандарт / допущение) и цены. Найди проблемы и верни JSON:\n\
+{\"summary\":\"2–3 предложения общего вывода\",\"findings\":[{\"kind\":\"qty|missing|dup|price|ask\",\
+\"id\":\"s3.w2\",\"text\":\"что не так и почему\",\"qty\":0,\"unit\":\"\",\"name\":\"\"}]}\n\
+Правила:\n\
+qty — количество неправдоподобно для такого объекта (сравни с показателями); id — адрес строки; qty — твоё \
+исправленное значение, если его можно вывести из показателей объекта (иначе 0), unit — единица.\n\
+missing — работа, которая обычно есть в таком объекте, но её нет; id — адрес этапа (s3), name — название работы, \
+unit — единица, qty — количество, если выводится из показателей (иначе 0).\n\
+dup — одно и то же посчитано в двух местах; id — адрес строки, которую надо УБРАТЬ (оставь ту, где источник надёжнее).\n\
+price — цена заметно выше или ниже рынка Узбекистана; id — адрес строки.\n\
+ask — что уточнить у заказчика в первую очередь; id пустой.\n\
+Не больше 25 находок, самые важные первыми. Опирайся только на данные.";
 
-/// Smetani AI ga tekshirtiradi; javob — matn.
-pub fn spawn_review(cfg: Config, context: String) -> Receiver<Result<(String, u32), String>> {
+/// Tekshiruv javobini o'qiydi: `(xulosa, topilmalar)`.
+pub fn parse_review(body: &str) -> Result<(String, Vec<Finding>), String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    let list = v
+        .get("findings")
+        .and_then(|f| f.as_array())
+        .ok_or_else(|| "JSON: findings yo'q".to_string())?
+        .iter()
+        .map(|f| {
+            let qty = number(f.get("qty"));
+            Finding {
+                kind: cell(f.get("kind")),
+                text: cell(f.get("text")),
+                id: cell(f.get("id")),
+                qty: (qty > 0.0).then_some(qty),
+                unit: cell(f.get("unit")),
+                name: cell(f.get("name")),
+                done: false,
+            }
+        })
+        .filter(|f| {
+            !f.text.is_empty()
+                && ["qty", "missing", "dup", "price", "ask"].contains(&f.kind.as_str())
+        })
+        .collect();
+    Ok((cell(v.get("summary")), list))
+}
+
+/// Tekshiruv natijasi: xulosa, topilmalar, tokenlar.
+pub type ReviewRx = Receiver<Result<(String, Vec<Finding>, u32), String>>;
+
+/// Smetani AI ga tekshirtiradi.
+pub fn spawn_review(cfg: Config, context: String) -> ReviewRx {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
-        let out = llm::extract_text(&cfg, REVIEW_SYSTEM, &[Part::Text(context)])
-            .map(|a| (a.text, a.usage.total))
-            .map_err(|e| e.to_string());
+        let out = llm::extract(&cfg, REVIEW_SYSTEM, &[Part::Text(context)])
+            .map_err(|e| e.to_string())
+            .and_then(|a| parse_review(&a.text).map(|(s, f)| (s, f, a.usage.total)));
+        let _ = tx.send(out);
+    });
+    rx
+}
+
+// ========================================================= 6. Konsolidatsiya
+
+const CONSOLIDATE_SYSTEM: &str = "Ты — сметчик. Этапы сметы собирались параллельно и не видели друг друга, поэтому \
+одна и та же работа или материал могли попасть в несколько этапов. Дан полный список с адресами (s<этап>.w<работа>, \
+s<этап>.w<работа>.m<материал>). Найди строки, которые считают ОДИН И ТОТ ЖЕ физический объём повторно (одинаковое или \
+почти одинаковое название и количество в разных этапах; материал из проекта, отнесённый к двум работам). Оставь строку \
+в наиболее подходящем этапе, остальные верни на удаление. Не удаляй строки, которые лишь похожи по названию, но \
+относятся к разным объёмам (разные количества, разные здания).\n\
+Ответ — только JSON: {\"remove\":[{\"id\":\"s3.w2\",\"reason\":\"коротко\"}]}";
+
+/// Konsolidatsiya javobi: olib tashlanadigan manzillar va sabab.
+pub fn parse_consolidate(body: &str) -> Result<Vec<(String, String)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    Ok(v.get("remove")
+        .and_then(|r| r.as_array())
+        .ok_or_else(|| "JSON: remove yo'q".to_string())?
+        .iter()
+        .map(|r| (cell(r.get("id")), cell(r.get("reason"))))
+        .filter(|r| crate::smeta::locate(&r.0).is_some_and(|l| l.1.is_some()))
+        .collect())
+}
+
+pub type ConsolidateRx = Receiver<Result<(Vec<(String, String)>, u32), String>>;
+
+pub fn spawn_consolidate(cfg: Config, context: String) -> ConsolidateRx {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let out = llm::extract(&cfg, CONSOLIDATE_SYSTEM, &[Part::Text(context)])
+            .map_err(|e| e.to_string())
+            .and_then(|a| parse_consolidate(&a.text).map(|r| (r, a.usage.total)));
         let _ = tx.send(out);
     });
     rx
@@ -613,6 +726,39 @@ pub fn spawn_review(cfg: Config, context: String) -> Receiver<Result<(String, u3
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn review_and_consolidation_replies_are_structured() {
+        let body = r#"{"summary":"В целом полно.","findings":[
+          {"kind":"qty","id":"s7.w0","text":"Кровля 132300 м2 завышена","qty":25000,"unit":"м2"},
+          {"kind":"missing","id":"s10","text":"Нет лестниц","name":"Лестничные марши","unit":"шт","qty":4},
+          {"kind":"dup","id":"s11.w3","text":"Водостоки повторно"},
+          {"kind":"weird","id":"","text":"x"},
+          {"kind":"ask","id":"","text":"Уточнить площадь кровли"}]}"#;
+        let (summary, f) = parse_review(body).unwrap();
+        assert_eq!(summary, "В целом полно.");
+        assert_eq!(f.len(), 4);
+        assert_eq!(f[0].qty, Some(25000.0));
+        assert_eq!(f[1].name, "Лестничные марши");
+        let rem = parse_consolidate(
+            r#"{"remove":[{"id":"s2.w1","reason":"дубль"},{"id":"s3","reason":"x"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(rem, vec![("s2.w1".to_string(), "дубль".to_string())]);
+    }
+
+    #[test]
+    fn answer_replies_keep_index_and_reason() {
+        let list = parse_answers(r#"{"answers":[{"i":2,"answer":"Кирпичные перегородки","why":"типично"},{"i":3,"answer":""}]}"#).unwrap();
+        assert_eq!(
+            list,
+            vec![(
+                2,
+                "Кирпичные перегородки".to_string(),
+                "типично".to_string()
+            )]
+        );
+    }
 
     #[test]
     fn price_replies_are_keyed_and_zero_is_dropped() {

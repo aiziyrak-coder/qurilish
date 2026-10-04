@@ -875,13 +875,22 @@ pub struct App {
     pub sketch_draft: crate::smeta::Sketch,
     /// Katalogga qo'shilayotgan yangi pozitsiya: nom, birlik, narx, ishmi.
     pub catalog_new: (String, String, f64, bool),
+    /// Kompaniya rekvizitlari (nom, aloqa, standart shartlar) — bir marta
+    /// kiritiladi, yangi obyekt taklifiga o'zi tushadi.
+    pub company: (String, String, String),
+    /// Spetsifikatsiya va smeta ro'yxatidagi filtr matni.
+    pub smeta_filter: String,
+    /// Smetada faqat narxsiz/taxminiy qatorlar ko'rsatilsin.
+    pub smeta_only_open: bool,
     /// AI taklif qilgan narxlar: kalit → (narx, izoh). Qabul qilingunicha
     /// katalogga yozilmaydi; obyekt bilan birga saqlanadi.
     pub price_hints: std::collections::BTreeMap<String, (f64, String)>,
     pub price_job: Option<PriceJob>,
-    /// AI smeta tekshiruvi: xulosa matni va fon so'rovi.
-    pub smeta_review: String,
-    pub review_rx: Option<std::sync::mpsc::Receiver<Result<(String, u32), String>>>,
+    /// AI smeta tekshiruvi va konsolidatsiya — fon so'rovlari.
+    pub review_rx: Option<crate::smeta_ai::ReviewRx>,
+    pub consolidate_rx: Option<crate::smeta_ai::ConsolidateRx>,
+    /// Javobsiz savollarga AI taklifi.
+    pub answers_rx: Option<crate::smeta_ai::AnswersRx>,
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
     pub pdf_note: String,
     /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
@@ -1114,10 +1123,14 @@ impl App {
             sketch_open: false,
             sketch_draft: Default::default(),
             catalog_new: (String::new(), String::new(), 0.0, false),
+            company: (String::new(), String::new(), String::new()),
+            smeta_filter: String::new(),
+            smeta_only_open: false,
             price_hints: Default::default(),
             price_job: None,
-            smeta_review: String::new(),
             review_rx: None,
+            consolidate_rx: None,
+            answers_rx: None,
             pdf_note: String::new(),
             takeoff: None,
             takeoff_prices: Default::default(),
@@ -1206,6 +1219,11 @@ impl App {
             .unwrap_or_default();
         app.price_to_catalog =
             app.db.get_setting("smeta_price_scope").as_deref() == Some("catalog");
+        app.company = (
+            app.db.get_setting("smeta_company").unwrap_or_default(),
+            app.db.get_setting("smeta_contacts").unwrap_or_default(),
+            app.db.get_setting("smeta_terms").unwrap_or_default(),
+        );
 
         // Sinxronizatsiya sozlamasi. Parol saqlanmaydi — faqat seans belgisi.
         app.sync = crate::sync::Config {
@@ -2428,9 +2446,6 @@ impl App {
         let _ = self.db.set_setting(&format!("smeta.{pid}"), &smeta);
         let hints = serde_json::to_string(&self.price_hints).unwrap_or_default();
         let _ = self.db.set_setting(&format!("smeta_hints.{pid}"), &hints);
-        let _ = self
-            .db
-            .set_setting(&format!("smeta_review.{pid}"), &self.smeta_review);
         let prices = serde_json::to_string(&self.takeoff_prices).unwrap_or_default();
         let _ = self
             .db
@@ -2447,8 +2462,9 @@ impl App {
         self.smeta_note.clear();
         self.questions_rx = None;
         self.price_hints.clear();
-        self.smeta_review.clear();
         self.review_rx = None;
+        self.consolidate_rx = None;
+        self.answers_rx = None;
         // Boshqa obyektga o'tilsa, fon ishlari to'xtatiladi: natija
         // noto'g'ri obyektga yozilmasin.
         self.drop_jobs();
@@ -2466,10 +2482,6 @@ impl App {
                 .db
                 .get_setting(&format!("smeta_hints.{pid}"))
                 .and_then(|m| serde_json::from_str(&m).ok())
-                .unwrap_or_default();
-            self.smeta_review = self
-                .db
-                .get_setting(&format!("smeta_review.{pid}"))
                 .unwrap_or_default();
             self.takeoff = self
                 .db
@@ -2722,10 +2734,19 @@ impl App {
 
     /// Smetani AI ga tekshirtiradi.
     pub fn start_review(&mut self) {
-        if self.review_rx.is_some() || !self.llm.is_ready() {
+        if self.review_rx.is_some() || !self.llm.is_ready() || self.smeta.is_none() {
             return;
         }
-        let Some(m) = &self.smeta else { return };
+        let ctx = self.smeta_context();
+        self.review_rx = Some(crate::smeta_ai::spawn_review(self.extract_cfg(), ctx));
+    }
+
+    /// Smetaning to'liq matni manzillar bilan — tekshiruv va
+    /// konsolidatsiya uchun.
+    pub fn smeta_context(&self) -> String {
+        let Some(m) = &self.smeta else {
+            return String::new();
+        };
         let v = &self.smeta_view;
         let mut ctx = format!("ОБЪЕКТ: {}\n\nПОКАЗАТЕЛИ:\n", m.summary);
         for f in m.facts.iter().take(60) {
@@ -2744,14 +2765,14 @@ impl App {
         };
         for (si, st) in m.stages.iter().enumerate() {
             ctx.push_str(&format!(
-                "\n## {} (итог {:.0})\n",
+                "\n## s{si} {} (итог {:.0})\n",
                 st.name,
                 v.stages.get(si).map(|s| s.total).unwrap_or(0.0)
             ));
             for (wi, w) in st.works.iter().enumerate() {
                 let wp = v.stages.get(si).and_then(|s| s.works.get(wi));
                 ctx.push_str(&format!(
-                    "- {} | {} {} | цена {} | {}\n",
+                    "- s{si}.w{wi} {} | {} {} | цена {} | {}\n",
                     w.name,
                     w.qty,
                     w.unit,
@@ -2763,7 +2784,7 @@ impl App {
                 for (mi, mat) in w.materials.iter().enumerate() {
                     let mp = wp.and_then(|p| p.1.get(mi));
                     ctx.push_str(&format!(
-                        "    · {} | {} {} | цена {} | {}\n",
+                        "    · s{si}.w{wi}.m{mi} {} | {} {} | цена {} | {}\n",
                         mat.name,
                         mat.qty,
                         mat.unit,
@@ -2775,7 +2796,7 @@ impl App {
                 }
             }
         }
-        self.review_rx = Some(crate::smeta_ai::spawn_review(self.extract_cfg(), ctx));
+        ctx
     }
 
     pub fn poll_review(&mut self) -> bool {
@@ -2790,12 +2811,170 @@ impl App {
         };
         self.review_rx = None;
         match result {
-            Ok((text, tokens)) => {
+            Ok((summary, findings, tokens)) => {
                 self.llm_tokens += tokens;
-                self.smeta_review = text;
+                if let Some(m) = &mut self.smeta {
+                    m.review_summary = summary;
+                    m.review = findings;
+                    m.tokens += tokens;
+                }
                 self.save_takeoff();
             }
             Err(e) => self.smeta_note = format!("{}: {e}", t("tk_review_failed")),
+        }
+        true
+    }
+
+    /// Topilmani qo'llaydi: miqdorni tuzatadi, yetishmagan ishni qo'shadi
+    /// yoki takrorni olib tashlaydi. `price` va `ask` faqat yopiladi.
+    pub fn apply_finding(&mut self, index: usize) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        let Some(m) = &mut self.smeta else { return };
+        let Some(f) = m.review.get(index).cloned() else {
+            return;
+        };
+        let loc = crate::smeta::locate(&f.id);
+        match (f.kind.as_str(), loc) {
+            ("qty", Some((si, Some(wi), mi))) => {
+                if let Some(q) = f.qty {
+                    if let Some(w) = m.stages.get_mut(si).and_then(|s| s.works.get_mut(wi)) {
+                        match mi.and_then(|i| w.materials.get_mut(i)) {
+                            Some(mat) => {
+                                mat.qty = q;
+                                mat.source = crate::smeta::Source::Manual;
+                            }
+                            None if mi.is_none() => {
+                                w.qty = q;
+                                w.source = crate::smeta::Source::Manual;
+                            }
+                            None => {}
+                        }
+                    }
+                }
+            }
+            ("missing", Some((si, _, _))) => {
+                if let Some(st) = m.stages.get_mut(si) {
+                    st.works.push(crate::smeta::Work {
+                        name: if f.name.is_empty() {
+                            f.text.clone()
+                        } else {
+                            f.name.clone()
+                        },
+                        qty: f.qty.unwrap_or(1.0),
+                        unit: if f.unit.is_empty() {
+                            "компл.".into()
+                        } else {
+                            f.unit.clone()
+                        },
+                        source: crate::smeta::Source::Assumption {
+                            note: f.text.clone(),
+                        },
+                        price: None,
+                        materials: Vec::new(),
+                    });
+                }
+            }
+            ("dup", Some((si, Some(wi), mi))) => {
+                if let Some(st) = m.stages.get_mut(si) {
+                    match mi {
+                        Some(i) => {
+                            if let Some(w) = st.works.get_mut(wi) {
+                                if i < w.materials.len() {
+                                    w.materials.remove(i);
+                                }
+                            }
+                        }
+                        None => {
+                            if wi < st.works.len() {
+                                st.works.remove(wi);
+                                crate::smeta::shift_ids(&mut m.review, si, wi);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        if let Some(f) = m.review.get_mut(index) {
+            f.done = true;
+        }
+        self.save_takeoff();
+        self.recompute_smeta();
+    }
+
+    /// Topilmani yopadi (qo'llamasdan).
+    pub fn dismiss_finding(&mut self, index: usize) {
+        if let Some(f) = self.smeta.as_mut().and_then(|m| m.review.get_mut(index)) {
+            f.done = true;
+        }
+        self.save_takeoff();
+    }
+
+    /// Bosqichlar orasidagi takrorlarni AI ga topdiradi (tuzilgandan keyin
+    /// o'zi ishga tushadi).
+    pub fn start_consolidate(&mut self) {
+        if self.consolidate_rx.is_some() || !self.llm.is_ready() || self.smeta.is_none() {
+            return;
+        }
+        let ctx = self.smeta_context();
+        self.consolidate_rx = Some(crate::smeta_ai::spawn_consolidate(self.extract_cfg(), ctx));
+    }
+
+    pub fn poll_consolidate(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.consolidate_rx else {
+            return false;
+        };
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => Err(t("sm_consolidate_failed").to_string()),
+        };
+        self.consolidate_rx = None;
+        match result {
+            Ok((list, tokens)) => {
+                self.llm_tokens += tokens;
+                let mut removed = 0;
+                if let Some(m) = &mut self.smeta {
+                    m.tokens += tokens;
+                    // Oxiridan boshiga: o'chirish indekslarni surmasin.
+                    let mut locs: Vec<(usize, usize, Option<usize>)> = list
+                        .iter()
+                        .filter_map(|(id, _)| crate::smeta::locate(id))
+                        .filter_map(|(s, w, mi)| w.map(|w| (s, w, mi)))
+                        .collect();
+                    locs.sort_unstable_by(|a, b| b.cmp(a));
+                    locs.dedup();
+                    for (si, wi, mi) in locs {
+                        let Some(st) = m.stages.get_mut(si) else {
+                            continue;
+                        };
+                        match mi {
+                            Some(i) => {
+                                if let Some(w) = st.works.get_mut(wi) {
+                                    if i < w.materials.len() {
+                                        w.materials.remove(i);
+                                        removed += 1;
+                                    }
+                                }
+                            }
+                            None => {
+                                if wi < st.works.len() {
+                                    st.works.remove(wi);
+                                    removed += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+                self.smeta_note = format!("{} {removed}", t("sm_consolidated"));
+                self.save_takeoff();
+                self.recompute_smeta();
+            }
+            Err(e) => self.smeta_note = format!("{}: {e}", t("sm_consolidate_failed")),
         }
         true
     }
@@ -3032,6 +3211,30 @@ impl App {
         self.recompute_smeta();
         self.start_questions();
         self.check_tab = CheckTab::Questions;
+    }
+
+    /// Kompaniya rekvizitlarini saqlaydi va bo'sh taklifga qo'yadi.
+    pub fn set_company(&mut self, name: &str, contacts: &str, terms: &str) {
+        self.company = (name.to_string(), contacts.to_string(), terms.to_string());
+        let _ = self.db.set_setting("smeta_company", name);
+        let _ = self.db.set_setting("smeta_contacts", contacts);
+        let _ = self.db.set_setting("smeta_terms", terms);
+    }
+
+    /// Taklifning bo'sh maydonlariga kompaniya rekvizitlari.
+    pub fn offer_defaults(&mut self) {
+        let (name, contacts, terms) = self.company.clone();
+        if let Some(m) = &mut self.smeta {
+            if m.offer.company.is_empty() {
+                m.offer.company = name;
+            }
+            if m.offer.contacts.is_empty() {
+                m.offer.contacts = contacts;
+            }
+            if m.offer.terms.is_empty() {
+                m.offer.terms = terms;
+            }
+        }
     }
 
     /// Narx tahriri qayerga yozilishini tanlaydi.
@@ -3295,6 +3498,74 @@ impl App {
         true
     }
 
+    /// Javobsiz savollarga AI eng tipik variantni qo'yadi.
+    ///
+    /// Javob «(AI taxmini)» belgisi bilan yoziladi — odam uni ko'radi va
+    /// o'zgartira oladi; spetsifikatsiyada bu taxmin sifatida hisobga
+    /// olinadi.
+    pub fn start_answers(&mut self) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if self.answers_rx.is_some() || !self.llm.is_ready() {
+            return;
+        }
+        let Some(m) = &self.smeta else { return };
+        let open: Vec<(usize, &crate::smeta::Question)> = m
+            .questions
+            .iter()
+            .enumerate()
+            .filter(|(_, q)| q.answer.trim().is_empty() && !q.options.is_empty())
+            .collect();
+        if open.is_empty() {
+            return;
+        }
+        let mut ctx = format!("ОБЪЕКТ: {}\n\nВОПРОСЫ:\n", m.summary);
+        for (i, q) in open {
+            ctx.push_str(&format!(
+                "{i} | {} | варианты: {}\n",
+                q.text,
+                q.options.join(" / ")
+            ));
+        }
+        self.answers_rx = Some(crate::smeta_ai::spawn_answers(self.extract_cfg(), ctx));
+    }
+
+    pub fn poll_answers(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.answers_rx else {
+            return false;
+        };
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => Err(t("sm_answers_failed").to_string()),
+        };
+        self.answers_rx = None;
+        match result {
+            Ok((list, tokens)) => {
+                self.llm_tokens += tokens;
+                let mut n = 0;
+                if let Some(m) = &mut self.smeta {
+                    m.tokens += tokens;
+                    for (i, answer, why) in list {
+                        if let Some(q) = m.questions.get_mut(i) {
+                            if q.answer.trim().is_empty() {
+                                q.answer = format!("{answer} ({}: {why})", t("sm_ai_assumed"));
+                                n += 1;
+                            }
+                        }
+                    }
+                }
+                self.smeta_note = format!("{} {n}", t("sm_answers_done"));
+                self.save_takeoff();
+            }
+            Err(e) => self.smeta_note = format!("{}: {e}", t("sm_answers_failed")),
+        }
+        true
+    }
+
     // ------------------------------------------ 4-bosqich: spetsifikatsiya
 
     /// Spetsifikatsiya uchun ma'lumot: xulosa, javoblar va loyihadan
@@ -3497,6 +3768,9 @@ impl App {
         if matches!(self.check_tab, CheckTab::Questions | CheckTab::Data) {
             self.check_tab = CheckTab::Spec;
         }
+        // Bosqichlar bir-birini ko'rmagan — takrorlarni AI bir qarashda
+        // topadi; aniq takrorlar yuqorida allaqachon olib tashlangan.
+        self.start_consolidate();
         true
     }
 
@@ -6218,7 +6492,14 @@ mod live {
             app.poll_review();
             std::thread::sleep(std::time::Duration::from_millis(300));
         }
-        log.push_str(&format!("\nXULOSA:\n{}\n", app.smeta_review));
+        let m = app.smeta.clone().unwrap_or_default();
+        log.push_str(&format!("\nXULOSA: {}\n", m.review_summary));
+        for f in &m.review {
+            log.push_str(&format!(
+                "  [{}] {} {} qty={:?} {} {}\n",
+                f.kind, f.id, f.text, f.qty, f.unit, f.name
+            ));
+        }
         std::fs::write(std::env::temp_dir().join("qurai_hints.txt"), log).unwrap();
     }
 
@@ -6297,7 +6578,18 @@ mod live {
             app.poll_spec();
             std::thread::sleep(std::time::Duration::from_millis(300));
         }
+        let before: usize = app.smeta.as_ref().map(|m| m.lines()).unwrap_or(0);
+        while app.consolidate_rx.is_some() {
+            app.poll_consolidate();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
         let m = app.smeta.clone().expect("smeta");
+        log.push_str(&format!(
+            "konsolidatsiya: {} · qatorlar {} → {}\n",
+            app.smeta_note,
+            before,
+            m.lines()
+        ));
         log.push_str(&format!(
             "\nspetsifikatsiya: {} · bosqich {} · taxmin {} · token {} · {:.0} s\n",
             app.smeta_note,

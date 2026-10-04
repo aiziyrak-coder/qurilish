@@ -545,17 +545,6 @@ pub fn extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<Answer, Err
     send_extract(cfg, system, parts, true)
 }
 
-/// Xuddi shu, lekin javob erkin matn (JSON talab qilinmaydi).
-#[cfg(feature = "llm")]
-pub fn extract_text(cfg: &Config, system: &str, parts: &[Part]) -> Result<Answer, Error> {
-    send_extract(cfg, system, parts, false)
-}
-
-#[cfg(not(feature = "llm"))]
-pub fn extract_text(_cfg: &Config, _system: &str, _parts: &[Part]) -> Result<Answer, Error> {
-    Err(Error::NotConfigured)
-}
-
 #[cfg(feature = "llm")]
 fn send_extract(cfg: &Config, system: &str, parts: &[Part], json: bool) -> Result<Answer, Error> {
     let mut body = build_extract(cfg, system, parts)?;

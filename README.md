@@ -157,6 +157,16 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 
 ### AI loyiha tekshiruvi (TZ II)
 
+> **Tungi kuchaytirish (2026-10-04/05):** spetsifikatsiya tuzilgach AI
+> bosqichlar orasidagi takrorlarni o'zi topib olib tashlaydi; AI xulosasi
+> endi **tuzilmali topilmalar** — miqdor (yangi qiymat bilan), yetishmagan
+> ish, takror, narx, mijozdan so'rash — har biri bir tugma bilan
+> qo'llanadi yoki yopiladi; savollarga «AI tipik javob» («AI taxmini»
+> belgisi bilan); Excel endi uch varaq (smeta, xarid ro'yxati, yig'ma);
+> kompaniya rekvizitlari bir marta eslab qolinadi; spetsifikatsiyada
+> qidiruv, ish nomini tahrirlash va qo'lda ish qo'shish; smetada «faqat
+> narxsiz va taxminiy» filtri.
+
 > **Videodagi qo'shimcha funksiyalar (2026-10-04):** **Prays** — kompaniya
 > katalogi ekrani (qidiruv, ish/material, Excel import, qo'lda qo'shish,
 > «shu smetadagi narxlarni katalogga», har pozitsiyada o'zgarish tarixi);

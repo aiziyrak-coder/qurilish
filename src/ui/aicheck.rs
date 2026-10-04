@@ -31,12 +31,16 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     app.poll_spec();
     app.poll_prices();
     app.poll_review();
+    app.poll_consolidate();
+    app.poll_answers();
     if app.pdf_job.is_some()
         || app.pages_job.is_some()
         || app.questions_rx.is_some()
         || app.spec_job.is_some()
         || app.price_job.is_some()
         || app.review_rx.is_some()
+        || app.consolidate_rx.is_some()
+        || app.answers_rx.is_some()
     {
         // Fon ipi kadr so'ramaydi — jarayon ko'rinib tursin.
         ui.ctx()
@@ -504,6 +508,7 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut answer: Option<(usize, String)> = None;
     let mut refresh = false;
     let mut build = false;
+    let mut auto = false;
 
     card(ui, |ui| {
         ui.label(RichText::new(t("sm_questions_title")).strong().size(14.0));
@@ -523,6 +528,19 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.label(format!("{} {done} / {total}", t("sm_answered")));
                 if ui.button(t("sm_questions_refresh")).clicked() {
                     refresh = true;
+                }
+                if app.answers_rx.is_some() {
+                    ui.spinner();
+                } else if done < total
+                    && ui
+                        .add_enabled(
+                            app.llm.is_ready(),
+                            egui::Button::new(t("sm_answers_button")),
+                        )
+                        .on_hover_text(t("sm_answers_hint"))
+                        .clicked()
+                {
+                    auto = true;
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -645,6 +663,9 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
     }
     if refresh {
         app.start_questions();
+    }
+    if auto {
+        app.start_answers();
     }
     if build {
         app.start_spec();
@@ -908,7 +929,28 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
 
     let mut qty_edit: Option<(usize, usize, Option<usize>, f64)> = None;
     let mut remove: Option<(usize, usize)> = None;
+    let mut add_work: Option<usize> = None;
+    let mut rename: Option<(usize, usize, String)> = None;
     let mut open = app.smeta_open;
+    ui.horizontal(|ui| {
+        ui.add(
+            egui::TextEdit::singleline(&mut app.smeta_filter)
+                .hint_text(t("sm_filter_hint"))
+                .desired_width(260.0),
+        );
+        if !app.smeta_filter.is_empty() && ui.small_button("×").clicked() {
+            app.smeta_filter.clear();
+        }
+    });
+    let filter = app.smeta_filter.to_lowercase();
+    let hit = |w: &crate::smeta::Work| {
+        filter.is_empty()
+            || w.name.to_lowercase().contains(&filter)
+            || w.materials
+                .iter()
+                .any(|m| m.name.to_lowercase().contains(&filter))
+    };
+    ui.add_space(4.0);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -934,6 +976,8 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                 if head.clicked() {
                     open = if is_open { None } else { Some(si) };
                 }
+                // Filtr bo'lsa — mos ish bor bosqichlar ochiq turadi.
+                let is_open = is_open || (!filter.is_empty() && st.works.iter().any(hit));
                 if !is_open {
                     ui.add_space(4.0);
                     continue;
@@ -959,10 +1003,21 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                         }
                         ui.end_row();
                         for (wi, w) in st.works.iter().enumerate() {
+                            if !hit(w) {
+                                continue;
+                            }
                             let rows = w.materials.len().max(1);
                             for mi in 0..rows {
                                 if mi == 0 {
-                                    ui.label(RichText::new(&w.name).size(12.0));
+                                    let mut name = w.name.clone();
+                                    let resp = ui.add(
+                                        egui::TextEdit::singleline(&mut name)
+                                            .desired_width(260.0)
+                                            .font(egui::TextStyle::Body),
+                                    );
+                                    if resp.lost_focus() && name.trim() != w.name {
+                                        rename = Some((si, wi, name.trim().to_string()));
+                                    }
                                     let mut v = w.qty;
                                     if ui
                                         .add(
@@ -1015,10 +1070,27 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                             }
                         }
                     });
+                if ui.small_button(t("sm_add_work")).clicked() {
+                    add_work = Some(si);
+                }
                 ui.add_space(8.0);
             }
         });
     app.smeta_open = open;
+    if let Some(si) = add_work {
+        app.edit_smeta(|m| {
+            if let Some(st) = m.stages.get_mut(si) {
+                st.works.push(crate::smeta::Work {
+                    name: t("sm_new_work").to_string(),
+                    qty: 1.0,
+                    unit: "компл.".into(),
+                    source: Source::Manual,
+                    price: None,
+                    materials: Vec::new(),
+                });
+            }
+        });
+    }
 
     if let Some((si, wi, mi, v)) = qty_edit {
         app.edit_smeta(|m| {
@@ -1046,6 +1118,15 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                 }
             }
         });
+    }
+    if let Some((si, wi, name)) = rename {
+        if !name.is_empty() {
+            app.edit_smeta(|m| {
+                if let Some(w) = m.stages.get_mut(si).and_then(|s| s.works.get_mut(wi)) {
+                    w.name = name;
+                }
+            });
+        }
     }
 }
 
@@ -1128,6 +1209,8 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut hints_start = false;
     let mut hints_accept = false;
     let mut review = false;
+    let mut finding_apply: Option<usize> = None;
+    let mut finding_dismiss: Option<usize> = None;
     card(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
             ui.label(RichText::new(t("sm_ai_prices_title")).strong());
@@ -1191,16 +1274,76 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                     .color(theme::muted()),
             );
         }
-        if !app.smeta_review.is_empty() {
+        if app.consolidate_rx.is_some() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(
+                    RichText::new(t("sm_consolidating"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+            });
+        }
+        if !m.review_summary.is_empty() || !m.review.is_empty() {
             ui.add_space(4.0);
-            egui::CollapsingHeader::new(t("sm_review_title"))
+            let open = m.review.iter().filter(|f| !f.done).count();
+            egui::CollapsingHeader::new(format!("{} ({open})", t("sm_review_title")))
                 .default_open(true)
                 .show(ui, |ui| {
+                    if !m.review_summary.is_empty() {
+                        ui.label(RichText::new(&m.review_summary).size(12.0));
+                        ui.add_space(4.0);
+                    }
                     egui::ScrollArea::vertical()
                         .id_salt("sm_review")
-                        .max_height(220.0)
+                        .max_height(260.0)
                         .show(ui, |ui| {
-                            ui.label(RichText::new(&app.smeta_review).size(12.0));
+                            for (i, f) in m.review.iter().enumerate() {
+                                if f.done {
+                                    continue;
+                                }
+                                ui.horizontal_wrapped(|ui| {
+                                    let (label, color) = match f.kind.as_str() {
+                                        "qty" => (t("sm_f_qty"), theme::warn()),
+                                        "missing" => (t("sm_f_missing"), theme::accent()),
+                                        "dup" => (t("sm_f_dup"), theme::danger()),
+                                        "price" => (t("sm_f_price"), theme::warn()),
+                                        _ => (t("sm_f_ask"), theme::muted()),
+                                    };
+                                    egui::Frame::new()
+                                        .fill(color.gamma_multiply(0.16))
+                                        .corner_radius(8)
+                                        .inner_margin(egui::Margin::symmetric(6, 1))
+                                        .show(ui, |ui| {
+                                            ui.label(RichText::new(label).size(10.5).color(color));
+                                        });
+                                    if !f.id.is_empty() {
+                                        ui.label(
+                                            RichText::new(&f.id).size(10.5).color(theme::muted()),
+                                        );
+                                    }
+                                    ui.label(RichText::new(&f.text).size(12.0));
+                                    let action = match f.kind.as_str() {
+                                        "qty" if f.qty.is_some() => Some(format!(
+                                            "{} {} {}",
+                                            t("sm_f_apply"),
+                                            num(f.qty.unwrap_or(0.0)),
+                                            f.unit
+                                        )),
+                                        "missing" => Some(t("sm_f_add").to_string()),
+                                        "dup" => Some(t("sm_f_remove").to_string()),
+                                        _ => None,
+                                    };
+                                    if let Some(a) = action {
+                                        if ui.small_button(a).clicked() {
+                                            finding_apply = Some(i);
+                                        }
+                                    }
+                                    if ui.small_button(t("sm_f_dismiss")).clicked() {
+                                        finding_dismiss = Some(i);
+                                    }
+                                });
+                            }
                         });
                 });
         }
@@ -1214,6 +1357,12 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
     }
     if review {
         app.start_review();
+    }
+    if let Some(i) = finding_apply {
+        app.apply_finding(i);
+    }
+    if let Some(i) = finding_dismiss {
+        app.dismiss_finding(i);
     }
     ui.add_space(6.0);
 
@@ -1267,7 +1416,11 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
             .size(11.0)
             .color(theme::muted()),
         );
+        ui.add_space(12.0);
+        ui.checkbox(&mut app.smeta_only_open, t("sm_only_open"))
+            .on_hover_text(t("sm_only_open_hint"));
     });
+    let only_open = app.smeta_only_open;
     if let Some(s) = scope {
         app.set_price_scope(s);
     }
@@ -1372,6 +1525,12 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                             let Some((wp, mps)) = sv.works.get(wi) else {
                                 continue;
                             };
+                            if only_open
+                                && wp.origin.trusted()
+                                && mps.iter().all(|p| p.origin.trusted())
+                            {
+                                continue;
+                            }
                             let rows = w.materials.len().max(1);
                             for mi in 0..rows {
                                 if mi == 0 {
@@ -1600,6 +1759,68 @@ fn export_smeta(app: &mut App, pdf: bool) {
         .collect(),
         rows,
     };
+    // Excel: yana ikki varaq — xarid ro'yxati (ta'minot uchun) va KP
+    // yig'masi; hammasi bitta hisobdan.
+    let purchase = Table {
+        name: t("sm_sheet_purchase").to_string(),
+        headers: [
+            "tk_col_material",
+            "tk_col_unit",
+            "tk_col_amount",
+            "sm_stages",
+        ]
+        .iter()
+        .map(|k| t(k).to_string())
+        .collect(),
+        rows: crate::smeta::purchase(m)
+            .into_iter()
+            .map(|(name, unit, qty, stages)| {
+                vec![
+                    Cell::Text(name),
+                    Cell::Text(unit),
+                    Cell::Num(qty),
+                    Cell::Text(stages.join(", ")),
+                ]
+            })
+            .collect(),
+    };
+    let mut summary_rows: Vec<Vec<Cell>> = m
+        .stages
+        .iter()
+        .enumerate()
+        .map(|(i, st)| {
+            let sv = view.stages.get(i);
+            vec![
+                Cell::Text(st.name.clone()),
+                Cell::Money(sv.map(|v| v.work_sum).unwrap_or(0.0)),
+                Cell::Money(sv.map(|v| v.material_sum).unwrap_or(0.0)),
+                Cell::Num(st.markup),
+                Cell::Money(sv.map(|v| v.total).unwrap_or(0.0)),
+            ]
+        })
+        .collect();
+    summary_rows.push(vec![
+        Cell::Text(t("sm_total").to_string()),
+        Cell::Money(view.work_sum),
+        Cell::Money(view.material_sum),
+        Cell::Num(m.markup),
+        Cell::Money(view.total),
+    ]);
+    let summary = Table {
+        name: t("sm_sheet_summary").to_string(),
+        headers: [
+            "sm_stages",
+            "sm_works",
+            "sm_materials",
+            "sm_markup_short",
+            "tk_col_sum",
+        ]
+        .iter()
+        .map(|k| t(k).to_string())
+        .collect(),
+        rows: summary_rows,
+    };
+    let row_count = table.rows.len();
     let ext = if pdf { "pdf" } else { "xlsx" };
     let name = format!(
         "{}_{}.{ext}",
@@ -1621,13 +1842,12 @@ fn export_smeta(app: &mut App, pdf: bool) {
         );
         crate::pdf::write_table(&path, &table, &subtitle)
     } else {
-        crate::docgen::write_table(&path, &table).map_err(|e| format!("{e}"))
+        crate::docgen::write_book(&path, &[table, purchase, summary]).map_err(|e| format!("{e}"))
     };
     match result {
         Ok(()) => app.notify(format!(
-            "{} {} · {}",
+            "{} {row_count} · {}",
             t("export_done"),
-            table.rows.len(),
             path.display()
         )),
         Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
@@ -1637,6 +1857,8 @@ fn export_smeta(app: &mut App, pdf: bool) {
 // ================================================================= 6. Taklif
 
 fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
+    // Bo'sh taklifga kompaniya rekvizitlari o'zi tushadi.
+    app.offer_defaults();
     let Some(m) = app.smeta.clone() else {
         empty(ui, t("tk_not_loaded"));
         return;
@@ -1649,6 +1871,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut offer = m.offer.clone();
     let mut changed = false;
     let mut export = false;
+    let mut remember = false;
 
     ui.columns(2, |cols| {
         // ---- Chapda sozlamalar.
@@ -1785,9 +2008,18 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 }
             });
             ui.add_space(8.0);
-            if ui.button(t("sm_offer_pdf")).clicked() {
-                export = true;
-            }
+            ui.horizontal(|ui| {
+                if ui.button(t("sm_offer_pdf")).clicked() {
+                    export = true;
+                }
+                if ui
+                    .button(t("sm_offer_remember"))
+                    .on_hover_text(t("sm_offer_remember_hint"))
+                    .clicked()
+                {
+                    remember = true;
+                }
+            });
         });
 
         // ---- O'ngda hujjat ko'rinishi.
@@ -1848,6 +2080,10 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
 
     if changed {
         app.edit_smeta(|m| m.offer = offer.clone());
+    }
+    if remember {
+        app.set_company(&offer.company, &offer.contacts, &offer.terms);
+        app.notify(t("sm_offer_remembered").to_string());
     }
     if export {
         export_offer(app);

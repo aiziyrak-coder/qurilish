@@ -2027,6 +2027,48 @@ mod screen_tests {
             app.recompute_smeta();
             assert_eq!((app.smeta_view.missing, app.smeta_view.hinted), (0, 1));
             frame(&ctx, &mut app);
+            // Topilmalar: miqdor tuzatish, ish qo'shish, takror olib tashlash.
+            app.edit_smeta(|m| {
+                m.review = vec![
+                    crate::smeta::Finding {
+                        kind: "qty".into(),
+                        id: "s0.w0".into(),
+                        text: "x".into(),
+                        qty: Some(20.0),
+                        unit: "m3".into(),
+                        ..Default::default()
+                    },
+                    crate::smeta::Finding {
+                        kind: "missing".into(),
+                        id: "s0".into(),
+                        text: "lestnitsa".into(),
+                        name: "Zina".into(),
+                        qty: Some(2.0),
+                        unit: "dona".into(),
+                        ..Default::default()
+                    },
+                    crate::smeta::Finding {
+                        kind: "dup".into(),
+                        id: "s0.w1".into(),
+                        text: "dup".into(),
+                        ..Default::default()
+                    },
+                    crate::smeta::Finding {
+                        kind: "ask".into(),
+                        text: "?".into(),
+                        ..Default::default()
+                    },
+                ];
+            });
+            frame(&ctx, &mut app);
+            app.apply_finding(0);
+            assert_eq!(app.smeta.as_ref().unwrap().stages[0].works[0].qty, 20.0);
+            app.apply_finding(1);
+            assert_eq!(app.smeta.as_ref().unwrap().stages[0].works.len(), 2);
+            app.apply_finding(2);
+            assert_eq!(app.smeta.as_ref().unwrap().stages[0].works.len(), 1);
+            app.dismiss_finding(3);
+            assert!(app.smeta.as_ref().unwrap().review.iter().all(|f| f.done));
             assert_eq!(app.accept_hints(), 1);
             assert_eq!(app.smeta_view.hinted, 0);
             assert_eq!(app.catalog.works.len(), 1);

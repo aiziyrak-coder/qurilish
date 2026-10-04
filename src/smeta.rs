@@ -370,6 +370,69 @@ impl Sketch {
     }
 }
 
+/// AI tekshiruvining topilmasi.
+///
+/// `kind`: `qty` — miqdor shubhali (yangi qiymat taklifi bilan), `missing`
+/// — yetishmayotgan ish, `dup` — takror, `price` — narx, `ask` — mijozdan
+/// so'rash. Dastur topilmani **o'zi qo'llamaydi**: har biri odam tugmasi
+/// bilan qo'llanadi yoki yopiladi.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Finding {
+    pub kind: String,
+    pub text: String,
+    /// Qator manzili: `s3.w2` (ish) yoki `s3.w2.m1` (material), `s3` (bosqich).
+    #[serde(default)]
+    pub id: String,
+    /// Taklif qilingan miqdor (qty) yoki yangi ish miqdori (missing).
+    #[serde(default)]
+    pub qty: Option<f64>,
+    #[serde(default)]
+    pub unit: String,
+    /// Yangi ish nomi (missing).
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub done: bool,
+}
+
+/// Qator manzilini o'qiydi: `s3.w2.m1` → `(3, Some(2), Some(1))`.
+pub fn locate(id: &str) -> Option<(usize, Option<usize>, Option<usize>)> {
+    let mut si = None;
+    let mut wi = None;
+    let mut mi = None;
+    for part in id.trim().split('.') {
+        if !part.is_char_boundary(1) || part.len() < 2 {
+            return None;
+        }
+        let (tag, num) = part.split_at(1);
+        let n: usize = num.parse().ok()?;
+        match tag {
+            "s" => si = Some(n),
+            "w" => wi = Some(n),
+            "m" => mi = Some(n),
+            _ => return None,
+        }
+    }
+    Some((si?, wi, mi))
+}
+
+/// Ish o'chirilgach topilmalardagi manzillarni suradi.
+pub fn shift_ids(findings: &mut [Finding], si: usize, removed_wi: usize) {
+    for f in findings {
+        if let Some((fs, Some(fw), fm)) = locate(&f.id) {
+            if fs == si && fw > removed_wi {
+                f.id = match fm {
+                    Some(m) => format!("s{fs}.w{}.m{m}", fw - 1),
+                    None => format!("s{fs}.w{}", fw - 1),
+                };
+            } else if fs == si && fw == removed_wi && !f.done {
+                // O'chirilgan ishga tegishli topilma endi ma'nosiz.
+                f.done = true;
+            }
+        }
+    }
+}
+
 /// Bitta obyektning smetasi.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Smeta {
@@ -392,6 +455,11 @@ pub struct Smeta {
     /// Loyiha o'rniga xolstda chizilgan reja.
     #[serde(default)]
     pub sketch: Option<Sketch>,
+    /// AI tekshiruvi: qisqa xulosa va topilmalar.
+    #[serde(default)]
+    pub review_summary: String,
+    #[serde(default)]
+    pub review: Vec<Finding>,
     #[serde(default)]
     pub model: String,
     #[serde(default)]
@@ -1029,6 +1097,38 @@ mod tests {
         c.set(false, &key("Beton B20", "m3"), 0.0, "2026-10-05");
         assert!(c.materials.is_empty());
         assert_eq!(split_key("beton b20|m3"), ("beton b20", "m3"));
+    }
+
+    #[test]
+    fn finding_ids_are_parsed_and_shifted() {
+        assert_eq!(locate("s3.w2.m1"), Some((3, Some(2), Some(1))));
+        assert_eq!(locate("s0"), Some((0, None, None)));
+        assert_eq!(locate("w2"), None);
+        assert_eq!(locate(""), None);
+        assert_eq!(locate("s"), None);
+        assert_eq!(locate("s3.x1"), None);
+        let mut fs = vec![
+            Finding {
+                id: "s1.w0".into(),
+                ..Default::default()
+            },
+            Finding {
+                id: "s1.w1".into(),
+                ..Default::default()
+            },
+            Finding {
+                id: "s1.w2.m0".into(),
+                ..Default::default()
+            },
+            Finding {
+                id: "s2.w1".into(),
+                ..Default::default()
+            },
+        ];
+        shift_ids(&mut fs, 1, 1);
+        assert!(fs[1].done);
+        assert_eq!(fs[2].id, "s1.w1.m0");
+        assert_eq!(fs[3].id, "s2.w1");
     }
 
     #[test]
