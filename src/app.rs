@@ -531,6 +531,9 @@ pub struct CostRow {
     pub price: Option<f64>,
     /// Narx qo'lda kiritilganmi (aks holda narx bazasidan).
     pub manual: bool,
+    /// Narx orientir bo'lsa — uning manbasi. Bu ta'minotchi narxi emas va
+    /// ekranda alohida belgilanadi.
+    pub orientir: Option<&'static str>,
 }
 
 impl CostRow {
@@ -776,6 +779,8 @@ pub struct App {
     pub takeoff_lines: Vec<crate::takeoff::Line>,
     /// Sanalmagan takror spetsifikatsiyalar: sarlavha va sahifa.
     pub takeoff_repeats: Vec<(String, usize)>,
+    /// Kalkulyatsiyada tafsiloti ochilgan material.
+    pub takeoff_open: Option<String>,
     /// Tepadagi AI oynasi ochiqmi.
     ///
     /// Holat shu yerda turadi, egui ning umumiy «popup» xotirasida emas:
@@ -983,6 +988,7 @@ impl App {
             cost_rows: Vec::new(),
             takeoff_lines: Vec::new(),
             takeoff_repeats: Vec::new(),
+            takeoff_open: None,
             ai_panel: false,
             sales_block: None,
             selected_unit: None,
@@ -2284,11 +2290,17 @@ impl App {
                     );
                     crate::prices::range(&found).map(|r| r.avg)
                 };
-                let price = manual.or_else(book);
+                // Tartib: qo'lda kiritilgan → narx bazasi → orientir.
+                let known = manual.or_else(book);
+                let hint = match known {
+                    Some(_) => None,
+                    None => crate::takeoff::orientir(total.kind, &total.material, &total.unit),
+                };
                 CostRow {
-                    total,
-                    price,
+                    price: known.or(hint.map(|h| h.0)),
                     manual: manual.is_some(),
+                    orientir: hint.map(|h| h.1),
+                    total,
                 }
             })
             .collect();

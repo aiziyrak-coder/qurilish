@@ -1936,6 +1936,25 @@ mod screen_tests {
         assert_eq!(app.takeoff_repeats.len(), 1);
         assert!(!app.cost_rows.is_empty());
 
+        // Orientir narx: beton qo'lda narxlangan, armaturaga narx
+        // kiritilmagan — Ø14 uchun orientir chiqadi va belgilanadi.
+        let rebar = app
+            .cost_rows
+            .iter()
+            .find(|r| r.total.material.starts_with("Armatura"))
+            .expect("armatura");
+        assert!(rebar.orientir.is_some() && rebar.price == Some(8_200.0));
+        let beton = app
+            .cost_rows
+            .iter()
+            .find(|r| r.total.material == "Beton B20")
+            .expect("beton");
+        assert!(beton.manual && beton.orientir.is_none());
+        // Tafsilot ochiq holda ham chiziladi.
+        app.takeoff_open = Some("Beton B20".into());
+        app.check_tab = crate::app::CheckTab::Calc;
+        frame(&ctx, &mut app);
+
         // Jadval hisobdan chiqarilsa uning materiali yig'indidan ketadi,
         // qaytarilsa — qaytadi.
         let before = app.takeoff_lines.len();

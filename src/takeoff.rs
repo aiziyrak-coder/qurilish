@@ -1346,6 +1346,70 @@ pub fn totals(lines: &[Line]) -> Vec<Total> {
     out
 }
 
+/// Beton narxlari manbasi.
+pub const ORIENTIR_CONCRETE: &str = "prom.uz e'lonlari, 2026-10";
+/// Metall narxlari manbasi. Prays eski — bu ochiq aytiladi.
+pub const ORIENTIR_METAL: &str = "uzmetallsavdo.uz praysi, 2023-09";
+
+/// Orientir narx: `(so'm, manba)`.
+///
+/// Bu **ta'minotchi narxi emas**. Raqamlar Toshkentdagi ochiq e'lon va
+/// prayslardan olingan va faqat tartibni ko'rsatadi: beton — bir necha
+/// sotuvchi e'lonining o'rtachasi, metall — QQS bilan prays narxi. Narx
+/// bazasida yoki qo'lda kiritilgan narx bo'lsa, u ustun turadi.
+///
+/// Manbada yo'q material uchun narx **berilmaydi**: Ø10 dan ingichka
+/// armatura va sim praysda yo'q, shuning uchun ular narxsiz qoladi —
+/// o'xshash narxni taxmin qilib qo'yish yolg'on jami bergan bo'lardi.
+pub fn orientir(kind: Kind, material: &str, unit: &str) -> Option<(f64, &'static str)> {
+    match kind {
+        Kind::Concrete if unit == "m3" => {
+            let price = match material {
+                "Beton B7.5" => 451_000.0,
+                "Beton B15" => 523_000.0,
+                "Beton B20" => 675_000.0,
+                "Beton B22.5" => 684_000.0,
+                "Beton B25" => 750_000.0,
+                _ => return None,
+            };
+            Some((price, ORIENTIR_CONCRETE))
+        }
+        Kind::Rebar if unit == "kg" => {
+            let at = material.find('Ø')?;
+            let dia: String = material[at + 'Ø'.len_utf8()..]
+                .chars()
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            let price = match dia.parse::<u32>().ok()? {
+                10..=12 => 8_350.0,
+                14..=32 => 8_200.0,
+                _ => return None,
+            };
+            Some((price, ORIENTIR_METAL))
+        }
+        Kind::Steel if unit == "kg" => {
+            let low = material.to_lowercase();
+            let price = if low.contains("kvadrat quvur") {
+                10_700.0
+            } else if low.contains("труба") {
+                10_500.0
+            } else if low.contains("shveller") {
+                13_500.0
+            } else if low.contains("burchak")
+                || material.contains('∠')
+                || low.contains("po'lat list")
+            {
+                // Praysda list va burchak narxi yaqin: 11,8–13,0 mln/t.
+                12_400.0
+            } else {
+                return None;
+            };
+            Some((price, ORIENTIR_METAL))
+        }
+        _ => None,
+    }
+}
+
 /// Loyihadan olingan hisob — bazada saqlanadi, qayta o'qish shart emas.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Takeoff {
@@ -2200,6 +2264,34 @@ mod tests {
         assert_eq!(repeats(&both, &[]), vec![("Бетон В15".to_string(), 76)]);
         // Egasi boshqa — bu boshqa konstruksiya, takror emas.
         assert_eq!(lines(&[table(19, "К3"), table(20, "К4")], &[]).len(), 2);
+    }
+
+    /// Orientir narx faqat manbada bor material uchun beriladi.
+    #[test]
+    fn reference_prices_cover_only_what_the_source_lists() {
+        assert_eq!(
+            orientir(Kind::Concrete, "Beton B20", "m3"),
+            Some((675_000.0, ORIENTIR_CONCRETE))
+        );
+        assert_eq!(orientir(Kind::Concrete, "Beton B30", "m3"), None);
+        assert_eq!(
+            orientir(Kind::Rebar, "Armatura Ø12 A-III", "kg").map(|p| p.0),
+            Some(8_350.0)
+        );
+        assert_eq!(
+            orientir(Kind::Rebar, "Armatura Ø28 A-III", "kg").map(|p| p.0),
+            Some(8_200.0)
+        );
+        // Praysda Ø8 va sim yo'q — narx o'ylab topilmaydi.
+        assert_eq!(orientir(Kind::Rebar, "Armatura Ø8 A-I", "kg"), None);
+        assert_eq!(orientir(Kind::Rebar, "Armatura Ø5 B-I", "kg"), None);
+        assert_eq!(
+            orientir(Kind::Steel, "Prokat Kvadrat quvur 80х80х4 С255", "kg").map(|p| p.0),
+            Some(10_700.0)
+        );
+        assert_eq!(orientir(Kind::Steel, "Изделие закладное УП2-8", "kg"), None);
+        // Dona bilan sanaladigan buyumga kg narxi qo'yilmaydi.
+        assert_eq!(orientir(Kind::Other, "Сп-1", "dona"), None);
     }
 
     #[test]

@@ -2002,9 +2002,24 @@ mod tests {
             .find(|r| r.total.material == "Armatura Ø14 A-III")
             .expect("armatura");
         assert_eq!(rebar.total.amount, 272.0);
-        // Narx yo'q — summa ham yo'q: nol ko'rsatilmaydi.
-        assert_eq!(rebar.price, None);
-        assert_eq!(rebar.sum(), None);
+        // Bazada narx yo'q — orientir qo'yiladi va shunday deb belgilanadi.
+        assert_eq!(rebar.price, Some(8_200.0));
+        assert!(rebar.orientir.is_some() && !rebar.manual);
+        // Manbada yo'q material narxsiz qoladi: summa ham yo'q, nol emas.
+        let bare = crate::app::CostRow {
+            total: crate::takeoff::Total {
+                kind: crate::takeoff::Kind::Other,
+                material: "x".into(),
+                unit: "dona".into(),
+                amount: 3.0,
+                lines: 1,
+                unsure: 0,
+            },
+            price: None,
+            manual: false,
+            orientir: None,
+        };
+        assert_eq!(bare.sum(), None);
 
         // Narx qo'lda qo'yiladi.
         app.set_takeoff_price("Armatura Ø14 A-III", 9_500.0);

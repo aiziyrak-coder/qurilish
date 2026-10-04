@@ -445,6 +445,11 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
     let cost: f64 = priced.iter().sum();
     let no_price = app.cost_rows.len() - priced.len();
     let unsure: usize = app.cost_rows.iter().map(|r| r.total.unsure).sum();
+    let hinted = app
+        .cost_rows
+        .iter()
+        .filter(|r| r.orientir.is_some())
+        .count();
 
     ui.horizontal_wrapped(|ui| {
         kpi(
@@ -471,13 +476,21 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
             &if priced.is_empty() {
                 t("dash").to_string()
             } else {
-                money(cost)
+                format!("{} {}", money(cost), t("tk_sum_unit"))
             },
             &format!("{no_price} {}", t("tk_no_price")),
         );
     });
-    if unsure > 0 {
+    if hinted > 0 {
         ui.add_space(6.0);
+        ui.label(
+            RichText::new(format!("{hinted} {}", t("tk_orientir_note")))
+                .size(11.5)
+                .color(theme::warn()),
+        );
+    }
+    if unsure > 0 {
+        ui.add_space(4.0);
         ui.label(
             RichText::new(format!("{unsure} {}", t("tk_unsure_note")))
                 .size(11.5)
@@ -501,7 +514,9 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
     ui.add_space(10.0);
 
     let mut edit: Option<(String, f64)> = None;
+    let mut open: Option<String> = None;
     let rows = app.cost_rows.clone();
+    let shown = app.takeoff_open.clone();
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -510,68 +525,227 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
                 .spacing([16.0, 5.0])
                 .show(ui, |ui| {
                     for h in [
-                        "tk_col_kind",
+                        "tk_col_no",
                         "tk_col_material",
                         "tk_col_amount",
-                        "tk_col_lines",
                         "tk_col_price",
                         "tk_col_sum",
+                        "tk_col_source",
                     ] {
                         ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
                     }
                     ui.end_row();
 
-                    for r in &rows {
+                    // Har tur — alohida bo'lim, o'z jami bilan.
+                    let mut no = 0;
+                    for kind in [Kind::Concrete, Kind::Rebar, Kind::Steel, Kind::Other] {
+                        let part: Vec<&crate::app::CostRow> =
+                            rows.iter().filter(|r| r.total.kind == kind).collect();
+                        if part.is_empty() {
+                            continue;
+                        }
+                        ui.label("");
                         ui.label(
-                            RichText::new(kind_label(r.total.kind))
-                                .size(11.5)
-                                .color(theme::muted()),
+                            RichText::new(kind_label(kind).to_uppercase())
+                                .size(12.0)
+                                .strong()
+                                .color(theme::accent()),
                         );
-                        ui.label(RichText::new(&r.total.material).size(12.5));
+                        for _ in 0..4 {
+                            ui.label("");
+                        }
+                        ui.end_row();
+
+                        for r in &part {
+                            no += 1;
+                            ui.label(
+                                RichText::new(no.to_string())
+                                    .size(11.0)
+                                    .color(theme::muted()),
+                            );
+                            let is_open = shown.as_deref() == Some(r.total.material.as_str());
+                            let mark = if is_open { "−" } else { "+" };
+                            let name = ui
+                                .add(
+                                    egui::Label::new(
+                                        RichText::new(format!("{mark} {}", r.total.material))
+                                            .size(12.5),
+                                    )
+                                    .sense(egui::Sense::click()),
+                                )
+                                .on_hover_text(t("tk_detail_open"));
+                            if name.clicked() {
+                                open = Some(r.total.material.clone());
+                            }
+                            ui.label(
+                                RichText::new(amount(r.total.amount, &r.total.unit))
+                                    .size(12.5)
+                                    .strong(),
+                            );
+                            let mut p = r.price.unwrap_or(0.0);
+                            let resp = ui
+                                .horizontal(|ui| {
+                                    let resp = ui.add(
+                                        egui::DragValue::new(&mut p)
+                                            .speed(1000.0)
+                                            .range(0.0..=1e12),
+                                    );
+                                    ui.label(
+                                        RichText::new(format!("/{}", r.total.unit))
+                                            .size(11.0)
+                                            .color(theme::muted()),
+                                    );
+                                    resp
+                                })
+                                .inner;
+                            if resp.changed() {
+                                edit = Some((r.total.material.clone(), p));
+                            }
+                            match r.sum() {
+                                Some(v) => ui.label(RichText::new(money(v)).size(12.5)),
+                                None => ui.label(RichText::new(t("dash")).color(theme::muted())),
+                            };
+                            // Narx qayerdan kelgani har qatorda ko'rinadi.
+                            let src = if r.manual {
+                                RichText::new(t("tk_src_manual")).color(theme::muted())
+                            } else if let Some(s) = r.orientir {
+                                RichText::new(format!("{} · {s}", t("tk_src_orientir")))
+                                    .color(theme::warn())
+                            } else if r.price.is_some() {
+                                RichText::new(t("tk_src_book")).color(theme::muted())
+                            } else {
+                                RichText::new(t("tk_src_none")).color(theme::warn())
+                            };
+                            ui.label(src.size(11.0));
+                            ui.end_row();
+
+                            if is_open {
+                                detail_rows(ui, app, &r.total.material, &r.total.unit);
+                            }
+                        }
+
+                        // Bo'lim jami: miqdor bir xil birlikda bo'lsagina
+                        // qo'shiladi.
+                        let unit = &part[0].total.unit;
+                        let same = part.iter().all(|r| &r.total.unit == unit);
+                        let qty: f64 = part.iter().map(|r| r.total.amount).sum();
+                        let sums: Vec<f64> = part.iter().filter_map(|r| r.sum()).collect();
+                        ui.label("");
                         ui.label(
-                            RichText::new(amount(r.total.amount, &r.total.unit))
-                                .size(12.5)
+                            RichText::new(format!("{} — {}", t("tk_subtotal"), kind_label(kind)))
+                                .size(12.0)
                                 .strong(),
                         );
-                        // Nechta qatordan yig'ilgani va nechtasi noaniq.
-                        let src = if r.total.unsure > 0 {
-                            RichText::new(format!(
-                                "{} · {} {}",
-                                r.total.lines,
-                                r.total.unsure,
-                                t("tk_unsure")
-                            ))
-                            .size(11.0)
-                            .color(theme::warn())
+                        ui.label(if same {
+                            RichText::new(amount(qty, unit)).size(12.5).strong()
                         } else {
-                            RichText::new(r.total.lines.to_string())
+                            RichText::new("")
+                        });
+                        ui.label("");
+                        ui.label(if sums.is_empty() {
+                            RichText::new(t("dash")).color(theme::muted())
+                        } else {
+                            RichText::new(money(sums.iter().sum())).size(12.5).strong()
+                        });
+                        let missing = part.len() - sums.len();
+                        ui.label(if missing > 0 {
+                            RichText::new(format!("{missing} {}", t("tk_no_price")))
                                 .size(11.0)
-                                .color(theme::muted())
-                        };
-                        ui.label(src);
-
-                        let mut p = r.price.unwrap_or(0.0);
-                        let resp = ui
-                            .add(egui::DragValue::new(&mut p).speed(1000.0).range(0.0..=1e12))
-                            .on_hover_text(if r.manual {
-                                t("tk_price_manual")
-                            } else if r.price.is_some() {
-                                t("tk_price_book")
-                            } else {
-                                t("tk_price_none")
-                            });
-                        if resp.changed() {
-                            edit = Some((r.total.material.clone(), p));
-                        }
-                        match r.sum() {
-                            Some(v) => ui.label(RichText::new(money(v)).size(12.5)),
-                            None => ui.label(RichText::new(t("dash")).color(theme::muted())),
-                        };
+                                .color(theme::warn())
+                        } else {
+                            RichText::new("")
+                        });
                         ui.end_row();
                     }
                 });
+
+            // ---- Umumiy jami.
+            ui.add_space(10.0);
+            card(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(t("tk_grand_total")).size(13.0).strong());
+                    ui.add_space(12.0);
+                    ui.label(
+                        RichText::new(if priced.is_empty() {
+                            t("dash").to_string()
+                        } else {
+                            format!("{} {}", money(cost), t("tk_sum_unit"))
+                        })
+                        .size(20.0)
+                        .strong()
+                        .color(theme::accent()),
+                    );
+                });
+                // Jami to'liq emasligi yashirilmaydi.
+                ui.label(if no_price > 0 {
+                    RichText::new(format!("{no_price} {}", t("tk_total_partial")))
+                        .size(11.5)
+                        .color(theme::warn())
+                } else {
+                    RichText::new(t("tk_total_full"))
+                        .size(11.5)
+                        .color(theme::muted())
+                });
+            });
+            ui.add_space(8.0);
         });
     if let Some((material, price)) = edit {
         app.set_takeoff_price(&material, price);
+    }
+    if let Some(material) = open {
+        app.takeoff_open = if app.takeoff_open.as_deref() == Some(material.as_str()) {
+            None
+        } else {
+            Some(material)
+        };
+    }
+}
+
+/// Material qayerdan yig'ilgani: har konstruksiya uchun hisob formulasi.
+fn detail_rows(ui: &mut egui::Ui, app: &App, material: &str, unit: &str) {
+    for l in app
+        .takeoff_lines
+        .iter()
+        .filter(|l| l.item.material == material && l.item.unit == unit)
+    {
+        ui.label("");
+        let group = if l.group.trim().is_empty() {
+            t("dash").to_string()
+        } else {
+            super::issues::truncate(l.group.trim(), 48)
+        };
+        ui.label(
+            RichText::new(format!("      {} {} · {group}", t("pdf_page"), l.page))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        ui.label(
+            RichText::new(amount(l.total(), unit))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        // Formula: bir donaga × yig'ma birlik × konstruksiya soni.
+        let formula = match l.count {
+            Some(c) => {
+                let mut f = format!("{} {unit}", num(l.item.amount));
+                if (l.sub - 1.0).abs() > 1e-9 {
+                    f.push_str(&format!(" × {}", num(l.sub)));
+                }
+                format!("{f} × {}", num(c))
+            }
+            None => t("tk_detail_as_written").to_string(),
+        };
+        ui.label(
+            RichText::new(formula)
+                .size(11.0)
+                .color(if l.count.is_some() {
+                    theme::muted()
+                } else {
+                    theme::warn()
+                }),
+        );
+        ui.label("");
+        ui.label("");
+        ui.end_row();
     }
 }
