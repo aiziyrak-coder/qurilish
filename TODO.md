@@ -99,7 +99,7 @@ bu ro'yxatning asosiy vazifasi shu.
 > — hujjat rangi, «Obyekt raqamlarda» bo'limi, to'lov jadvali (avans +
 > bosqichlar bo'yicha), «narxga kirmaydi» bo'limi; PDF da rangli chiziq.
 
-> **Sahifa qayta qurildi — «Smeta» (olti bosqich).** Mijoz ko'rsatgan
+> **Sahifa qayta qurildi — «AI tahlil» (yetti bosqich).** Mijoz ko'rsatgan
 > namuna («Смета ИИ-Эксперт») bo'yicha: **Yuklash → Savollar → Obyekt
 > ma'lumoti → Spetsifikatsiya → Smeta → Taklif (KP)**.
 >

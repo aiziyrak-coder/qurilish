@@ -736,91 +736,107 @@ fn data_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(8.0);
             }
 
-            // ---- Ko'rsatkichlar.
-            egui::CollapsingHeader::new(format!("{} ({})", t("sm_facts"), m.facts.len()))
-                .default_open(true)
-                .show(ui, |ui| {
-                    egui::Grid::new("sm_facts")
-                        .striped(true)
-                        .spacing([14.0, 3.0])
-                        .show(ui, |ui| {
-                            for f in &m.facts {
-                                ui.label(RichText::new(&f.name).size(12.0));
-                                ui.label(RichText::new(format!("{} {}", f.value, f.unit)).strong());
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{} {}",
-                                        t("pdf_page"),
-                                        f.page.unwrap_or(0)
-                                    ))
-                                    .size(11.0)
-                                    .color(theme::muted()),
-                                );
-                                ui.end_row();
-                            }
-                        });
-                });
-
-            // ---- Loyihadan olingan materiallar.
-            ui.add_space(6.0);
-            egui::CollapsingHeader::new(format!(
-                "{} ({})",
-                t("sm_from_project"),
-                app.cost_rows.len()
-            ))
-            .default_open(true)
-            .show(ui, |ui| {
-                ui.label(
-                    RichText::new(t("sm_from_project_note"))
-                        .size(11.0)
-                        .color(theme::muted()),
-                );
-                egui::Grid::new("sm_mat")
-                    .striped(true)
-                    .spacing([14.0, 3.0])
-                    .show(ui, |ui| {
-                        for h in [
-                            "tk_col_material",
-                            "tk_col_amount",
-                            "pdf_page",
-                            "sm_col_status",
-                        ] {
-                            ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
+            // ---- Ko'rsatkichlar va loyihadan olingan materiallar —
+            // hisobotdagi jadval uslubida (tekis ustunlar, rangli sarlavha).
+            {
+                use crate::takeoff::Kind;
+                use DocLine::*;
+                let mut lines = Vec::new();
+                lines.push(Head(format!("{} ({})", t("sm_facts"), m.facts.len())));
+                lines.push(Table(
+                    vec![
+                        t("sm_col_fact").into(),
+                        t("sm_col_value").into(),
+                        t("sm_col_source").into(),
+                    ],
+                    m.facts
+                        .iter()
+                        .map(|f| {
+                            vec![
+                                f.name.clone(),
+                                format!("{} {}", f.value, f.unit).trim().to_string(),
+                                f.page
+                                    .map(|p| format!("{} {p}", t("pdf_page")))
+                                    .unwrap_or_else(|| t("sm_sketch").to_string()),
+                            ]
+                        })
+                        .collect(),
+                ));
+                if !app.cost_rows.is_empty() {
+                    lines.push(Head(format!(
+                        "{} ({})",
+                        t("sm_from_project"),
+                        app.cost_rows.len()
+                    )));
+                    lines.push(Muted(t("sm_from_project_note").to_string()));
+                    let kg = |v: f64| {
+                        if v >= 1000.0 {
+                            format!("{:.1} t", v / 1000.0)
+                        } else {
+                            format!("{} kg", num(v))
                         }
-                        ui.end_row();
-                        for r in &app.cost_rows {
-                            let mut pages: Vec<usize> = app
-                                .takeoff_lines
-                                .iter()
-                                .filter(|l| {
-                                    l.item.material == r.total.material
-                                        && l.item.unit == r.total.unit
-                                })
-                                .map(|l| l.page)
-                                .collect();
-                            pages.sort_unstable();
-                            pages.dedup();
-                            ui.label(RichText::new(&r.total.material).size(12.0));
-                            ui.label(
-                                RichText::new(format!("{} {}", num(r.total.amount), r.total.unit))
-                                    .strong(),
-                            );
-                            ui.label(
-                                RichText::new(
+                    };
+                    for kind in [Kind::Concrete, Kind::Rebar, Kind::Steel, Kind::Other] {
+                        let rows: Vec<Vec<String>> = app
+                            .cost_rows
+                            .iter()
+                            .filter(|r| r.total.kind == kind)
+                            .map(|r| {
+                                let mut pages: Vec<usize> = app
+                                    .takeoff_lines
+                                    .iter()
+                                    .filter(|l| {
+                                        l.item.material == r.total.material
+                                            && l.item.unit == r.total.unit
+                                    })
+                                    .map(|l| l.page)
+                                    .collect();
+                                pages.sort_unstable();
+                                pages.dedup();
+                                vec![
+                                    r.total.material.clone(),
+                                    if r.total.unit == "kg" {
+                                        kg(r.total.amount)
+                                    } else {
+                                        format!("{} {}", num(r.total.amount), r.total.unit)
+                                    },
                                     pages
                                         .iter()
                                         .map(|p| p.to_string())
                                         .collect::<Vec<_>>()
                                         .join(", "),
-                                )
-                                .size(11.0)
-                                .color(theme::muted()),
-                            );
-                            badge(ui, &Source::Project { page: None });
-                            ui.end_row();
+                                    t("sm_src_project").to_string(),
+                                ]
+                            })
+                            .collect();
+                        if rows.is_empty() {
+                            continue;
                         }
-                    });
-            });
+                        let title = match kind {
+                            Kind::Concrete => t("tk_concrete"),
+                            Kind::Rebar => t("tk_rebar"),
+                            Kind::Steel => t("tk_steel"),
+                            Kind::Other => t("tk_other"),
+                        };
+                        lines.push(Sub(title.to_string()));
+                        lines.push(Table(
+                            vec![
+                                t("tk_col_material").into(),
+                                t("tk_col_amount").into(),
+                                t("pdf_page").into(),
+                                t("sm_col_status").into(),
+                            ],
+                            rows,
+                        ));
+                    }
+                }
+                egui::Frame::new()
+                    .fill(theme::canvas())
+                    .stroke(Stroke::new(1.0_f32, theme::line()))
+                    .inner_margin(egui::Margin::same(14))
+                    .show(ui, |ui| draw_doc(ui, &lines, theme::accent()));
+                ui.add_space(8.0);
+            }
 
             // ---- Konstruksiyalar soni — shu yerda tuzatiladi.
             if let Some(tk) = &app.takeoff {
