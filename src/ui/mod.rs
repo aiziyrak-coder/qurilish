@@ -1900,6 +1900,8 @@ mod screen_tests {
                     row("Фм3", "Фундамент монолитный Фм3", "4", "", "шт."),
                     row("К3", "2К138-6М3-c-а", "12", "", ""),
                 ],
+                off: false,
+                owner: String::new(),
             },
             SpecTable {
                 page: 13,
@@ -1908,6 +1910,8 @@ mod screen_tests {
                     row("1", "∅14 A-III L=2550", "22", "3.09", "68.0"),
                     row("", "Бетон кл. В20(М250)W8", "", "", "3.66"),
                 ],
+                off: false,
+                owner: String::new(),
             },
             // Takror: sanalmaydi, lekin ekranda aytiladi.
             SpecTable {
@@ -1916,6 +1920,8 @@ mod screen_tests {
                     row("", "Фундамент Фм3", "1", "", "шт."),
                     row("1", "∅14 A-III L=2550", "22", "3.09", "68.0"),
                 ],
+                off: false,
+                owner: String::new(),
             },
         ];
         let constructs = crate::takeoff::constructs(&tables);
@@ -1929,6 +1935,16 @@ mod screen_tests {
         app.set_takeoff_price("Beton B20", 650_000.0);
         assert_eq!(app.takeoff_repeats.len(), 1);
         assert!(!app.cost_rows.is_empty());
+
+        // Jadval hisobdan chiqarilsa uning materiali yig'indidan ketadi,
+        // qaytarilsa — qaytadi.
+        let before = app.takeoff_lines.len();
+        app.set_table_off(1, true);
+        assert!(app.takeoff_lines.len() < before);
+        app.check_tab = crate::app::CheckTab::Project;
+        frame(&ctx, &mut app);
+        app.set_table_off(1, false);
+        assert_eq!(app.takeoff_lines.len(), before);
 
         for tab in crate::app::CheckTab::ALL {
             app.check_tab = tab;

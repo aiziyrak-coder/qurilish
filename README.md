@@ -156,6 +156,31 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
   texnologik kartasi esa yo'q.
 
 ### AI loyiha tekshiruvi (TZ II)
+
+> **Sahifa qayta qurildi — «Loyiha kalkulyatsiyasi».** Mijoz talabi bilan
+> eski «muvofiq / nomuvofiq» ko'rinishi olib tashlandi. Hozir sahifa bitta
+> ishni qiladi: loyiha PDF'i yuklanadi → spetsifikatsiya jadvallari
+> o'qiladi → konstruksiyalar soni bilan → **nimadan qancha ketadi** (beton,
+> armatura, prokat, boshqa buyumlar) va narx bazasidan qiymat.
+>
+> Nimalar o'qiladi (haqiqiy 77 varaqli loyihada tekshirilgan):
+> spetsifikatsiya jadvallari (KJ), uskunalar spetsifikatsiyasi (VK),
+> KMD «выборка металла», tom panellari; burilgan matn; shtampida bitta
+> konstruksiya yozilgan varaq (`К3`) uning soniga ko'paytiriladi; boshqa
+> varaqda aynan takrorlangan jadval bir marta sanaladi; har jadvalni
+> belgisini olib hisobdan chiqarish mumkin.
+>
+> Ochiq chegaralar: (1) skanerlangan (rasm) PDF o'qilmaydi — matn qatlami
+> kerak; (2) hech bir konstruksiyaga bog'lanmagan qator loyihada
+> yozilganicha olinadi va «ko'paytirilmagan» deb belgilanadi; (3) bir xil
+> belgi bir necha varaqda turli son bilan kelsa (masalan `Сп-1`), birinchi
+> ro'yxatdagi son olinadi — «Konstruksiyalar» bo'limida qo'lda tuzatiladi;
+> (4) loyihada bir necha blok bo'lsa, qaysi jadval qaysi blokka tegishli
+> ekanini dastur o'zi hal qilmaydi — ortiqchasini odam o'chiradi.
+>
+> Pastda yozilgan IFC/DXF o'qish, bilimlar grafi qoidalari va kolliziya
+> dvigatellari kodda saqlangan (`src/ifc.rs`, `src/dxf.rs`, `src/clash.rs`,
+> sinovlari bilan), lekin **hozir ekranga ulanmagan**.
 - **Loyiha bilimlar grafi**: element (xona, deraza, teshik, quvur, rigel, kabel…)
   va ular orasidagi bog'lanish (`tarkibida`, `xizmat qiladi`, `kesib o'tadi`,
   `tayanadi`, `quvvat oladi`). Elementlar va bog'lanishlar ekrandan tahrirlanadi.
@@ -498,7 +523,8 @@ baza fayli yo'li va papkani ochish, namoyish obyektini yaratish, dastur haqida m
 | `src/ui/passport.rs` | Obyekt pasporti ekrani |
 | `src/ui/dashboard.rs` | Umumiy ko'rinish ekrani |
 | `src/ui/ppr.rs` | PPR va texnologik kartalar, resurs yetarliligi |
-| `src/ui/aicheck.rs` | AI loyiha tekshiruvi: nomuvofiqliklar, elementlar, bog'lanishlar, normativlar |
+| `src/ui/aicheck.rs` | Loyiha kalkulyatsiyasi: PDF yuklash, jadvallar, konstruksiyalar, material va qiymat |
+| `src/takeoff.rs` | Spetsifikatsiya jadvallarini o'qish va material hisobi |
 | `src/ui/estimate.rs` | AI smeta tekshiruvi: import, pozitsiyalar va natijalar |
 | `src/ui/execdocs.rs` | Ijro hujjatlari va rasmiylashtirilmagan ishlar |
 | `src/ui/journal.rs` | Kundalik ishlar jurnali |

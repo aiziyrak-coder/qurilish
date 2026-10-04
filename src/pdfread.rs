@@ -24,6 +24,22 @@ pub struct Piece {
     /// Shrift o'lchami — parcha kengligini baholash uchun.
     pub size: f64,
     pub text: String,
+    /// Yozuv yo'nalishi: 0 — o'ngga, 1 — yuqoriga, 2 — chapga, 3 — pastga.
+    ///
+    /// Koordinatalar har yo'nalish uchun alohida «tik» holatga
+    /// keltirilgan, shuning uchun bir yo'nalishdagi parchalar orasida
+    /// qator va ustun odatdagidek o'qiladi. Turli yo'nalishdagilarni
+    /// aralashtirib bo'lmaydi.
+    pub dir: u8,
+}
+
+/// Sahifadagi asosiy yo'nalish — eng ko'p parcha yozilgani.
+pub fn main_dir(pieces: &[Piece]) -> u8 {
+    let mut votes = [0usize; 4];
+    for p in pieces {
+        votes[(p.dir & 3) as usize] += 1;
+    }
+    (0..4u8).max_by_key(|i| votes[*i as usize]).unwrap_or(0)
 }
 
 /// PDF ni sahifalar bo'yicha, **joylashuvi bilan** o'qiydi.
@@ -112,7 +128,9 @@ pub fn table(path: &Path) -> Result<Vec<Vec<String>>, String> {
 
     for (_, page_id) in pages {
         let pieces = page_pieces(&doc, page_id);
-        rows.extend(lines_to_rows(pieces));
+        let main = main_dir(&pieces);
+        let upright: Vec<Piece> = pieces.into_iter().filter(|p| p.dir == main).collect();
+        rows.extend(lines_to_rows(upright));
     }
 
     if rows.is_empty() {
@@ -135,6 +153,10 @@ enum FontDecode {
         map: std::collections::HashMap<u32, String>,
         width: usize,
     },
+    /// `ToUnicode` jadval emas, `/Identity-H` nomi: kodlarning o'zi —
+    /// Unicode, ikki baytdan (UTF-16BE). Ba'zi chizma dasturlari shunday
+    /// yozadi; busiz butun varaq «Unimplemented» bo'lib o'qilardi.
+    Utf16,
 }
 
 impl FontDecode {
@@ -153,6 +175,17 @@ impl FontDecode {
                     }
                 }
                 out
+            }
+            FontDecode::Utf16 => {
+                let units: Vec<u16> = bytes
+                    .chunks(2)
+                    .filter(|c| c.len() == 2)
+                    .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                    .collect();
+                String::from_utf16_lossy(&units)
+                    .chars()
+                    .filter(|c| !c.is_control() && *c != char::REPLACEMENT_CHARACTER)
+                    .collect()
             }
         }
     }
@@ -207,6 +240,15 @@ fn font_decoders(
 ) -> std::collections::BTreeMap<Vec<u8>, FontDecode> {
     let mut out = std::collections::BTreeMap::new();
     for (name, font) in page_fonts(doc, page_id) {
+        let identity = font
+            .get(b"ToUnicode")
+            .ok()
+            .and_then(|o| o.as_name().ok())
+            .is_some_and(|n| n.starts_with(b"Identity"));
+        if identity {
+            out.insert(name, FontDecode::Utf16);
+            continue;
+        }
         let dec = font
             .get(b"ToUnicode")
             .ok()
@@ -448,6 +490,7 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
                             y: trm[5],
                             size: size * scale,
                             text: text.clone(),
+                            dir: 0,
                         },
                         trm[0] / scale,
                         trm[1] / scale,
@@ -462,13 +505,13 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
         }
     }
 
-    // Varaq burilgan bo'lishi mumkin: ko'pchilik matn qaysi tomonga
-    // yozilgan bo'lsa, o'sha «gorizontal» deb olinadi va koordinatalar
-    // shunga moslab aylantiriladi. Boshqa yo'nalishdagi yozuvlar (odatda
-    // chizmadagi vertikal o'lchamlar) tashlanadi — ular jadvalga
-    // tegishli emas va qatorlarni buzardi.
-    let mut votes = [0usize; 4];
-    let side = |dx: f64, dy: f64| -> usize {
+    // Varaqda matn turli yo'nalishda yozilgan bo'lishi mumkin: chizma
+    // yozuvlari bir tomonga, jadval boshqa tomonga. Avval faqat ko'pchilik
+    // yo'nalishi qoldirilardi — sendvich panellar varag'ida chizmadagi
+    // belgilar ko'p bo'lgani uchun **jadvalning o'zi tashlab yuborilardi**.
+    // Endi har parcha o'z yo'nalishi bo'yicha tik holatga keltiriladi va
+    // yo'nalishi belgilab qo'yiladi.
+    let side = |dx: f64, dy: f64| -> u8 {
         if dx.abs() >= dy.abs() {
             if dx >= 0.0 {
                 0
@@ -481,21 +524,16 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
             3
         }
     };
-    for (_, dx, dy) in &raw {
-        votes[side(*dx, *dy)] += 1;
-    }
-    let main = (0..4).max_by_key(|i| votes[*i]).unwrap_or(0);
     for (mut p, dx, dy) in raw {
-        if side(dx, dy) != main {
-            continue;
-        }
+        let d = side(dx, dy);
         let (x, y) = (p.x, p.y);
-        (p.x, p.y) = match main {
+        (p.x, p.y) = match d {
             0 => (x, y),
             1 => (y, -x),
             2 => (-x, -y),
             _ => (-y, x),
         };
+        p.dir = d;
         out.push(p);
     }
     out
@@ -588,6 +626,7 @@ mod tests {
             y,
             size: 10.0,
             text: text.into(),
+            dir: 0,
         }
     }
 
@@ -640,6 +679,18 @@ mod tests {
     }
 
     /// Matritsalar ketma-ket qo'llanadi: avval birinchisi, keyin ikkinchisi.
+    #[test]
+    fn identity_codes_are_read_as_unicode() {
+        // «Поз» — UTF-16BE.
+        let bytes = [0x04, 0x1F, 0x04, 0x3E, 0x04, 0x37];
+        assert_eq!(FontDecode::Utf16.decode(&bytes), "Поз");
+        // Toq bayt va boshqaruv belgisi tashlab yuboriladi.
+        assert_eq!(
+            FontDecode::Utf16.decode(&[0x00, 0x41, 0x00, 0x00, 0x42]),
+            "A"
+        );
+    }
+
     #[test]
     fn matrices_compose_in_order() {
         // Ikki barobar kattalashtirib, keyin (10, 5) ga surish.

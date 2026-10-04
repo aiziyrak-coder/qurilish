@@ -219,47 +219,84 @@ fn project_tab(ui: &mut egui::Ui, app: &mut App) {
             .color(theme::muted()),
     );
     ui.add_space(4.0);
+    let mut toggle: Option<(usize, bool)> = None;
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
             for (i, tb) in tk.tables.iter().enumerate() {
-                let title = format!(
+                let mut title = format!(
                     "{} {} · {} {}",
                     t("pdf_page"),
                     tb.page,
                     tb.rows.len(),
                     t("tk_rows")
                 );
-                egui::CollapsingHeader::new(title)
-                    .id_salt(("tk_table", i))
-                    .show(ui, |ui| {
-                        egui::Grid::new(("tk_grid", i))
-                            .striped(true)
-                            .spacing([10.0, 3.0])
+                // Varaq bitta konstruksiyaga bag'ishlangan bo'lsa — qaysi
+                // songa ko'paytirilgani ko'rinib tursin.
+                if let Some(c) = tk
+                    .constructs
+                    .iter()
+                    .find(|c| !tb.owner.is_empty() && c.mark == tb.owner)
+                {
+                    title.push_str(&format!(" · {} ×{}", c.mark, num(c.count)));
+                }
+                if tb.off {
+                    title.push_str(&format!(" · {}", t("tk_table_off")));
+                }
+                ui.horizontal_top(|ui| {
+                    let mut on = !tb.off;
+                    let ticked = ui
+                        .checkbox(&mut on, "")
+                        .on_hover_text(t("tk_table_on_hint"))
+                        .changed();
+                    if ticked {
+                        toggle = Some((i, !on));
+                    }
+                    ui.vertical(|ui| {
+                        egui::CollapsingHeader::new(title)
+                            .id_salt(("tk_table", i))
                             .show(ui, |ui| {
-                                for h in [
-                                    "tk_col_pos",
-                                    "tk_col_designation",
-                                    "tk_col_name",
-                                    "tk_col_qty",
-                                    "tk_col_mass",
-                                    "tk_col_note",
-                                ] {
-                                    ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
-                                }
-                                ui.end_row();
-                                for r in &tb.rows {
-                                    for c in
-                                        [&r.pos, &r.designation, &r.name, &r.qty, &r.mass, &r.note]
-                                    {
-                                        ui.label(RichText::new(c).size(12.0));
-                                    }
-                                    ui.end_row();
-                                }
+                                egui::Grid::new(("tk_grid", i))
+                                    .striped(true)
+                                    .spacing([10.0, 3.0])
+                                    .show(ui, |ui| {
+                                        for h in [
+                                            "tk_col_pos",
+                                            "tk_col_designation",
+                                            "tk_col_name",
+                                            "tk_col_qty",
+                                            "tk_col_mass",
+                                            "tk_col_note",
+                                        ] {
+                                            ui.label(
+                                                RichText::new(t(h))
+                                                    .size(11.0)
+                                                    .color(theme::muted()),
+                                            );
+                                        }
+                                        ui.end_row();
+                                        for r in &tb.rows {
+                                            for c in [
+                                                &r.pos,
+                                                &r.designation,
+                                                &r.name,
+                                                &r.qty,
+                                                &r.mass,
+                                                &r.note,
+                                            ] {
+                                                ui.label(RichText::new(c).size(12.0));
+                                            }
+                                            ui.end_row();
+                                        }
+                                    });
                             });
                     });
+                });
             }
         });
+    if let Some((i, off)) = toggle {
+        app.set_table_off(i, off);
+    }
 }
 
 fn kpi(ui: &mut egui::Ui, title: &str, value: &str, hint: &str) {

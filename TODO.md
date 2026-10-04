@@ -66,6 +66,31 @@ bu ro'yxatning asosiy vazifasi shu.
 
 ## II. AI loyiha tekshiruvi
 
+> **Sahifa qayta qurildi — «Loyiha kalkulyatsiyasi».** Mijoz talabi bilan
+> eski «muvofiq / nomuvofiq» ko'rinishi olib tashlandi. Hozir sahifa bitta
+> ishni qiladi: loyiha PDF'i yuklanadi → spetsifikatsiya jadvallari
+> o'qiladi → konstruksiyalar soni bilan → **nimadan qancha ketadi** (beton,
+> armatura, prokat, boshqa buyumlar) va narx bazasidan qiymat.
+>
+> Nimalar o'qiladi (haqiqiy 77 varaqli loyihada tekshirilgan):
+> spetsifikatsiya jadvallari (KJ), uskunalar spetsifikatsiyasi (VK),
+> KMD «выборка металла», tom panellari; burilgan matn; shtampida bitta
+> konstruksiya yozilgan varaq (`К3`) uning soniga ko'paytiriladi; boshqa
+> varaqda aynan takrorlangan jadval bir marta sanaladi; har jadvalni
+> belgisini olib hisobdan chiqarish mumkin.
+>
+> Ochiq chegaralar: (1) skanerlangan (rasm) PDF o'qilmaydi — matn qatlami
+> kerak; (2) hech bir konstruksiyaga bog'lanmagan qator loyihada
+> yozilganicha olinadi va «ko'paytirilmagan» deb belgilanadi; (3) bir xil
+> belgi bir necha varaqda turli son bilan kelsa (masalan `Сп-1`), birinchi
+> ro'yxatdagi son olinadi — «Konstruksiyalar» bo'limida qo'lda tuzatiladi;
+> (4) loyihada bir necha blok bo'lsa, qaysi jadval qaysi blokka tegishli
+> ekanini dastur o'zi hal qilmaydi — ortiqchasini odam o'chiradi.
+>
+> Pastda yozilgan IFC/DXF o'qish, bilimlar grafi qoidalari va kolliziya
+> dvigatellari kodda saqlangan (`src/ifc.rs`, `src/dxf.rs`, `src/clash.rs`,
+> sinovlari bilan), lekin **hozir ekranga ulanmagan**.
+
 - [x] 1. Umumiy vazifa — *bilimlar grafi va qoidalar dvigateli*
 - [x] 2. Ishlash tamoyili — *fakt/hisob/xulosa ajratilgan (III.32)*
 - [x] 3. **AR — arxitektura** — *eshik kengligi va tabiiy yoritish hisobi*

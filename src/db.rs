@@ -1971,6 +1971,8 @@ mod tests {
             SpecTable {
                 page: 10,
                 rows: vec![row("Фм3", "Фундамент монолитный Фм3", "4", "", "шт.")],
+                off: false,
+                owner: String::new(),
             },
             SpecTable {
                 page: 13,
@@ -1979,6 +1981,8 @@ mod tests {
                     row("1", "∅14 A-III L=2550", "22", "3.09", "68.0"),
                     row("", "Бетон кл. В20(М250)W8", "", "", "3.66"),
                 ],
+                off: false,
+                owner: String::new(),
             },
         ];
         let constructs = crate::takeoff::constructs(&tables);

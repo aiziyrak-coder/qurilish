@@ -42,6 +42,22 @@ pub struct SpecTable {
     /// Sahifa raqami, 1 dan.
     pub page: usize,
     pub rows: Vec<SpecRow>,
+    /// Jadval hisobdan chiqarilganmi.
+    ///
+    /// Loyihada bir necha blok bo'lsa yoki jadval boshqa obyektga
+    /// tegishli bo'lsa, odam uni o'chirib qo'yadi. Dastur buni o'zi hal
+    /// qilmaydi: qaysi varaq qaysi blokka tegishli ekani jadvalda
+    /// yozilmagan.
+    #[serde(default)]
+    pub off: bool,
+    /// Varaq shtampida nomi yozilgan konstruksiya belgisi (`К3`).
+    ///
+    /// Ba'zi varaqlar butunlay bitta konstruksiyaga bag'ishlangan va
+    /// jadval ichida uning nomi takrorlanmaydi. Bunday jadval shtampdagi
+    /// belgi orqali konstruksiya soniga ko'paytiriladi. Bo'sh — egasi
+    /// aniqlanmagan.
+    #[serde(default)]
+    pub owner: String,
 }
 
 // ============================================================ 1. Jadval
@@ -61,7 +77,9 @@ enum Col {
 fn header_kind(text: &str) -> Option<Col> {
     let t = text.trim().to_lowercase();
     // `Macca` ba'zan lotin harflari bilan terilgan — ikkalasi ham olinadi.
-    if t.starts_with("поз") {
+    // Aniq shakl: chizmadagi izoh ham «поз.1 - Строповочные петли» deb
+    // boshlanadi va uni sarlavha deb olish jadvalni o'rtasidan kesardi.
+    if matches!(t.as_str(), "поз" | "поз." | "позиция" | "поз.,") {
         Some(Col::Pos)
     } else if t.starts_with("обознач") {
         Some(Col::Designation)
@@ -99,6 +117,20 @@ fn width(p: &Piece) -> f64 {
 
 /// Sahifadagi barcha spetsifikatsiya jadvallarini o'qiydi.
 pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
+    // Har yo'nalishdagi matn alohida ko'riladi: jadval chizmadan boshqa
+    // tomonga yozilgan bo'lishi mumkin.
+    let mut out = Vec::new();
+    for dir in 0..4u8 {
+        let part: Vec<Piece> = pieces.iter().filter(|p| p.dir == dir).cloned().collect();
+        if !part.is_empty() {
+            out.extend(tables_in(&part, page));
+            out.extend(steel_tables(&part, page));
+        }
+    }
+    out
+}
+
+fn tables_in(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
     let mut out = Vec::new();
     // Har «Поз.» parchasi — jadval boshlanishiga nomzod.
     let anchors: Vec<&Piece> = pieces
@@ -110,6 +142,7 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
         let line = a.size;
         // Sarlavha qatori: «Поз.» bilan bir balandlikdagi sarlavha so'zlari.
         let mut cols: Vec<(Col, f64, f64)> = Vec::new();
+        let mut masses: Vec<(f64, f64)> = Vec::new();
         for p in pieces {
             // Sarlavha katagi ikki-uch qatorli bo'lishi mumkin («Коли-
             // чество», «Масса единицы кг»), shuning uchun so'zlar bir
@@ -120,12 +153,26 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
             let Some(kind) = header_kind(&p.text) else {
                 continue;
             };
-            // Juda uzoqdagi so'z boshqa jadvalniki.
-            if p.x - a.x > line * 70.0 {
+            // Juda uzoqdagi so'z boshqa jadvalniki. Uskunalar
+            // spetsifikatsiyasi butun varaq kengligida bo'ladi, shuning
+            // uchun chegara keng.
+            if p.x - a.x > line * 110.0 {
                 continue;
             }
             if !cols.iter().any(|c| c.0 == kind) {
                 cols.push((kind, p.x, p.x + width(p)));
+            } else if kind == Col::Mass {
+                masses.push((p.x, p.x + width(p)));
+            }
+        }
+        // Ba'zi jadvallarda «Примеч.» o'rnida ikkinchi «Масса» turadi:
+        // birinchisi — birlik massasi, ikkinchisi — jami. Jami massa
+        // boshqa jadvallarda «Примеч.» ustunida yoziladi, shuning uchun
+        // u shu ustun sifatida o'qiladi.
+        if !cols.iter().any(|c| c.0 == Col::Note) {
+            let first = cols.iter().find(|c| c.0 == Col::Mass).map(|c| c.1);
+            if let Some(m) = first.and_then(|f| masses.iter().find(|m| m.0 > f + line * 2.0)) {
+                cols.push((Col::Note, m.0, m.1));
             }
         }
         cols.sort_by(|x, y| x.1.total_cmp(&y.1));
@@ -190,7 +237,9 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
         let mut bounds: Vec<f64> = Vec::new();
         for w in cols.windows(2) {
             let (lo, hi) = (w[0].1, w[1].1 + line * 0.5);
-            bounds.push(widest_gap(&spans, lo, hi).unwrap_or((w[0].2 + w[1].1) / 2.0));
+            // Sarlavhalar orasidagi o'rta nuqta — taxminiy chegara.
+            let guess = (w[0].2 + w[1].1) / 2.0;
+            bounds.push(nearest_gap(&spans, lo, hi, guess, line * 0.8).unwrap_or(guess));
         }
 
         let mut rows = Vec::new();
@@ -200,12 +249,40 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
             let mut ends: Vec<f64> = vec![f64::MIN; cols.len()];
             let mut sorted: Vec<&&Piece> = l.iter().collect();
             sorted.sort_by(|x, y| x.x.total_cmp(&y.x));
+            // Pozitsiyasiz qator — sarlavha yoki izoh. U bir necha ustun
+            // ustidan yozilishi mumkin (`Монолитная перемычка Пм-1 (на 1
+            // п.м.)`): parchalar uzluksiz davom etsa, ular chegaradan
+            // o'tsa ham bitta katakda qoladi. Ikki son yonma-yon kelsa —
+            // bu ikki ustun, ular birlashtirilmaydi.
+            let has_pos = bounds
+                .first()
+                .is_some_and(|b| sorted.first().is_some_and(|p| p.x < *b));
+            let mut prev: Option<(usize, f64, f64, bool)> = None;
+            let mut carried = false;
             for p in sorted {
-                let idx = bounds
+                let mut idx = bounds
                     .iter()
                     .filter(|b| p.x >= **b)
                     .count()
                     .min(cols.len() - 1);
+                if let (false, Some((was, start, end, digit))) = (has_pos, prev) {
+                    let gap = p.x - end;
+                    let slack = (end - start) * 0.3 + p.size;
+                    let numeric = p
+                        .text
+                        .trim_start()
+                        .starts_with(|c: char| c.is_ascii_digit());
+                    if gap < p.size * 0.33 && gap > -slack && !(digit && numeric) && idx != was {
+                        idx = was;
+                        carried = true;
+                    }
+                }
+                prev = Some((
+                    idx,
+                    p.x,
+                    p.x + width(p),
+                    p.text.trim_end().ends_with(|c: char| c.is_ascii_digit()),
+                ));
                 let cell = &mut cells[idx];
                 // `∅` (U+2205) ko'p shriftlarda yo'q va katakcha bo'lib
                 // chiqadi; `Ø` hamma joyda bor va ma'nosi bir xil.
@@ -233,7 +310,7 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
                     .map(|i| cells[i].trim().to_string())
                     .unwrap_or_default()
             };
-            let row = SpecRow {
+            let mut row = SpecRow {
                 pos: get(Col::Pos),
                 designation: get(Col::Designation),
                 name: get(Col::Name),
@@ -242,9 +319,52 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
                 note: get(Col::Note),
                 unit: get(Col::Unit),
             };
-            if row != SpecRow::default() {
+            // Yoyilgan matn «Обозначение» ustunidan boshlangan bo'lsa ham
+            // u nom: belgi ustuniga bunday uzun yozuv sig'maydi.
+            if carried && row.name.is_empty() && !row.designation.is_empty() {
+                row.name = std::mem::take(&mut row.designation);
+            }
+            // Sarlavha ostidagi ustun raqamlari qatori: `1 2 3 4 5`.
+            let filled: Vec<&String> = [
+                &row.pos,
+                &row.designation,
+                &row.name,
+                &row.qty,
+                &row.mass,
+                &row.note,
+                &row.unit,
+            ]
+            .into_iter()
+            .filter(|c| !c.is_empty())
+            .collect();
+            let numbering = filled.len() >= 3
+                && filled
+                    .iter()
+                    .all(|c| c.chars().all(|ch| ch.is_ascii_digit() || ch == ' '));
+            if row != SpecRow::default() && !numbering {
                 rows.push(row);
             }
+        }
+        // Katakdagi matn raqamdan sal yuqoriroq yozilgan bo'lsa, u alohida
+        // qator bo'lib chiqadi: avval nom, keyin pozitsiya va miqdor.
+        // Bunday juftlik bitta qator.
+        let mut i = 0;
+        while i + 1 < rows.len() {
+            let (a, b) = (&rows[i], &rows[i + 1]);
+            let name_only = a.pos.is_empty()
+                && !a.name.is_empty()
+                && a.qty.is_empty()
+                && a.mass.is_empty()
+                && a.note.is_empty();
+            if name_only && !b.pos.is_empty() && b.name.is_empty() && !b.qty.is_empty() {
+                let a = rows.remove(i);
+                let b = &mut rows[i];
+                b.name = a.name;
+                if b.designation.is_empty() {
+                    b.designation = a.designation;
+                }
+            }
+            i += 1;
         }
         // Jadval tagidagi umumiy izohlar va chizmadagi o'lcham yozuvlari
         // jadvalga tegishli emas. Belgisi: ketma-ket uchta qatorda na
@@ -258,18 +378,25 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
                 && r.qty.is_empty()
                 && r.mass.is_empty()
                 && number(&r.note).is_none()
+                // Miqdori nomning ichida yozilgan qator — izoh emas.
+                && item(r).is_none()
         };
+        // Jadval boshida bir necha sarlavha ketma-ket kelishi mumkin
+        // (`Документация`, `Технические требования…`, `Сборочные
+        // единицы`) — sanash birinchi ma'lumotli qatordan boshlanadi.
         let mut run = 0;
+        let mut seen = false;
         let mut cut = rows.len();
         for (i, r) in rows.iter().enumerate() {
             if bare(r) {
                 run += 1;
-                if run == 3 {
+                if run == 3 && seen {
                     cut = i + 1 - 3;
                     break;
                 }
             } else {
                 run = 0;
+                seen = true;
             }
         }
         rows.truncate(cut);
@@ -277,39 +404,222 @@ pub fn tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
             rows.pop();
         }
         if !rows.is_empty() {
-            out.push(SpecTable { page, rows });
+            out.push(SpecTable {
+                page,
+                rows,
+                off: false,
+                owner: String::new(),
+            });
         }
     }
     out
 }
 
-/// `[lo, hi]` oralig'ida hech bir parcha egallamagan eng keng bo'shliqning
+/// Varaq shtampida nomi yozilgan konstruksiyani topadi.
+///
+/// Shtampning chap qismi — `Изм. | Кол.уч. | Лист | № док. | Подп. | Дата`,
+/// undan o'ngda varaq nomi yoziladi: `К3(2К80-6М3-с-а)`. Nomda ro'yxatdagi
+/// konstruksiyalardan **aynan bittasi** tilga olingan bo'lsa — varaq
+/// o'shaniki. Ikkita yoki undan ko'p bo'lsa (`Колонны К1, К2`) jadval
+/// qaysi biriga tegishli ekanini bilib bo'lmaydi va ega belgilanmaydi.
+pub fn sheet_owner(pieces: &[Piece], list: &[Construct]) -> Option<String> {
+    let izm = pieces.iter().find(|p| p.text.trim() == "Изм.")?;
+    let date = pieces
+        .iter()
+        .filter(|p| p.dir == izm.dir && (p.y - izm.y).abs() < izm.size * 0.5 && p.x > izm.x)
+        .find(|p| p.text.trim() == "Дата")?;
+    let left = date.x + width(date);
+    let mut zone: Vec<&Piece> = pieces
+        .iter()
+        .filter(|p| {
+            p.dir == izm.dir
+                && p.x > left
+                && p.y < izm.y + izm.size
+                && p.y > izm.y - izm.size * 10.0
+        })
+        .collect();
+    zone.sort_by(|a, b| b.y.total_cmp(&a.y).then(a.x.total_cmp(&b.x)));
+
+    // Qatorlar: zich turgan parchalar bitta so'z (`К` + `3(2` + `К80…`).
+    let mut text = String::new();
+    let mut prev: Option<&Piece> = None;
+    for p in zone {
+        match prev {
+            Some(q) if (q.y - p.y).abs() <= p.size * 0.5 => {
+                if p.x - (q.x + width(q)) >= p.size * 0.33 {
+                    text.push(' ');
+                }
+            }
+            Some(_) => text.push('\n'),
+            None => {}
+        }
+        text.push_str(&p.text);
+        prev = Some(p);
+    }
+    let tokens: Vec<String> = text
+        .split(|c: char| c.is_whitespace() || "(),;:".contains(c))
+        .filter(|t| !t.is_empty())
+        .map(mark_key)
+        .collect();
+    let mut owners = list
+        .iter()
+        .filter(|c| c.register && tokens.contains(&mark_key(&c.mark)));
+    let first = owners.next()?;
+    owners.next().is_none().then(|| first.mark.clone())
+}
+
+/// KMD varag'idagi «Выборка металла» jadvali belgisi.
+pub const KMD: &str = "КМД";
+
+/// Metall tanlovi jadvalini o'qiydi (KMD varaqlari).
+///
+/// Bu jadval spetsifikatsiyadan boshqacha tuzilgan: `Профиль | Материал |
+/// Масса общ. | с 1,032%`. Har qator — bitta prokat profili va uning shu
+/// varaqdagi **jami** massasi, ya'ni marka soniga allaqachon
+/// ko'paytirilgan. Shuning uchun bu qatorlar qayta ko'paytirilmaydi.
+///
+/// «общ.» ustuni olinadi — sof massa. Payvand va chiqindiga qo'shimcha
+/// (`1,032 %`) loyihachining o'z hisobi, u alohida ustunda va bu yerda
+/// qo'shilmaydi.
+fn steel_tables(pieces: &[Piece], page: usize) -> Vec<SpecTable> {
+    let mut out = Vec::new();
+    for a in pieces
+        .iter()
+        .filter(|p| p.text.trim().to_lowercase().starts_with("профиль"))
+    {
+        let line = a.size;
+        let same = |p: &&Piece| (p.y - a.y).abs() <= line * 1.2 && p.x > a.x;
+        let Some(grade) = pieces
+            .iter()
+            .filter(same)
+            .find(|p| p.text.trim().to_lowercase().starts_with("материал"))
+        else {
+            continue;
+        };
+        // «общ.» — massa ustunining boshi.
+        let total_x = pieces
+            .iter()
+            .filter(|p| (p.y - a.y).abs() <= line * 1.2 && p.x > grade.x)
+            .find(|p| p.text.trim().to_lowercase().starts_with("общ"))
+            .map(|p| p.x)
+            .unwrap_or(grade.x + line * 5.0);
+        let left = a.x - line * 1.5;
+        let b1 = grade.x - line * 0.6;
+        let b2 = total_x - line * 1.2;
+        let b3 = total_x + line * 3.2;
+
+        let mut body: Vec<&Piece> = pieces
+            .iter()
+            .filter(|p| p.y < a.y - line * 1.2 && p.x >= left && p.x < b3)
+            .collect();
+        body.sort_by(|x, y| y.y.total_cmp(&x.y).then(x.x.total_cmp(&y.x)));
+
+        let mut rows = Vec::new();
+        let mut prev = a.y;
+        let mut i = 0;
+        while i < body.len() {
+            let y = body[i].y;
+            if prev - y > line * 5.0 {
+                break;
+            }
+            prev = y;
+            let mut cells = [String::new(), String::new(), String::new()];
+            while i < body.len() && (body[i].y - y).abs() <= line * 0.5 {
+                let p = body[i];
+                let idx = if p.x < b1 {
+                    0
+                } else if p.x < b2 {
+                    1
+                } else {
+                    2
+                };
+                cells[idx].push_str(p.text.trim());
+                i += 1;
+            }
+            let low = cells[0].to_lowercase();
+            // Po'lat sinfi: `С245`, `С255` — harf va uch raqam. Bu shart
+            // varaqdagi boshqa jadvallarning (uzunlik, massa ro'yxati)
+            // qatorlarini chiqarib tashlaydi.
+            let grade_ok = {
+                let g = cells[1].trim();
+                let mut ch = g.chars();
+                matches!(ch.next(), Some('С' | 'C'))
+                    && g.chars().skip(1).all(|c| c.is_ascii_digit())
+                    && g.chars().count() >= 3
+            };
+            if cells[0].is_empty()
+                || !grade_ok
+                || low.contains("итого")
+                || low.contains("всего")
+                || number(&cells[2]).is_none()
+            {
+                continue;
+            }
+            // `□` ko'p shriftda yo'q — so'z bilan yoziladi.
+            let profile = cells[0].replace('□', "Kvadrat quvur ");
+            rows.push(SpecRow {
+                designation: KMD.to_string(),
+                name: format!("{} {}", profile.trim(), cells[1])
+                    .trim()
+                    .to_string(),
+                mass: cells[2].clone(),
+                note: "кг".into(),
+                ..Default::default()
+            });
+        }
+        if !rows.is_empty() {
+            out.push(SpecTable {
+                page,
+                rows,
+                off: false,
+                owner: String::new(),
+            });
+        }
+    }
+    out
+}
+
+/// `[lo, hi]` oralig'idagi bo'sh oraliqlardan `guess` ga eng yaqinining
 /// o'rtasi.
-fn widest_gap(spans: &[(f64, f64)], lo: f64, hi: f64) -> Option<f64> {
+///
+/// Ustun chegarasi ma'lumotdagi bo'shliqdan olinadi, lekin bo'shliq bir
+/// nechta bo'lishi mumkin: tor pozitsiya ustunida sarlavhadan chapda ham,
+/// o'ngda ham joy qoladi. Eng kengini olish xato berardi (uskunalar
+/// spetsifikatsiyasida pozitsiya raqami nomga yopishib ketgan edi),
+/// shuning uchun sarlavhalar o'rtasiga eng yaqini tanlanadi. `min` dan tor
+/// oraliq — harflar orasidagi joy, ustun chegarasi emas.
+fn nearest_gap(spans: &[(f64, f64)], lo: f64, hi: f64, guess: f64, min: f64) -> Option<f64> {
     let mut inside: Vec<(f64, f64)> = spans
         .iter()
         .filter(|s| s.1 > lo && s.0 < hi)
         .map(|s| (s.0.max(lo), s.1.min(hi)))
         .collect();
     inside.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let mut best: Option<(f64, f64)> = None;
+    let mut gaps: Vec<(f64, f64)> = Vec::new();
     let mut edge = lo;
     for (a, b) in inside {
-        if a > edge {
-            let gap = a - edge;
-            if best.is_none_or(|g| gap > g.0) {
-                best = Some((gap, (edge + a) / 2.0));
-            }
+        if a - edge >= min {
+            gaps.push((edge, a));
         }
         edge = edge.max(b);
     }
-    if hi > edge {
-        let gap = hi - edge;
-        if best.is_none_or(|g| gap > g.0) {
-            best = Some((gap, (edge + hi) / 2.0));
-        }
+    if hi - edge >= min {
+        gaps.push((edge, hi));
     }
-    best.map(|g| g.1)
+    gaps.into_iter()
+        .map(|(a, b)| {
+            // Taxmin oraliq ichida bo'lsa — masofa nol.
+            let dist = if guess < a {
+                a - guess
+            } else if guess > b {
+                guess - b
+            } else {
+                0.0
+            };
+            (dist, (a + b) / 2.0)
+        })
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|g| g.1)
 }
 
 // ============================================================= 2. Qator
@@ -366,7 +676,14 @@ fn rebar(name: &str) -> Option<(String, String)> {
         .chars()
         .take_while(|c| !c.is_whitespace() && *c != ',')
         .collect();
-    if class.is_empty() || !class.chars().next().is_some_and(|c| c.is_alphabetic()) {
+    // Sinf `A` yoki `B` bilan boshlanadi (lotin yoki kirill): `A-III`,
+    // `A400`, `Bp-I`. Aks holda bu armatura emas — `Ø 100мм` quvur
+    // diametri ham shu belgi bilan yoziladi.
+    if !class
+        .chars()
+        .next()
+        .is_some_and(|c| matches!(c, 'A' | 'А' | 'B' | 'В'))
+    {
         return None;
     }
     Some((dia, class))
@@ -407,9 +724,21 @@ pub fn item(row: &SpecRow) -> Option<Item> {
     let mass = number(&row.mass);
     let note = number(&row.note);
 
+    if row.designation == KMD {
+        return Some(Item {
+            kind: Kind::Steel,
+            material: format!("Prokat {name}"),
+            unit: "kg".into(),
+            amount: mass?,
+        });
+    }
+
     if let Some(class) = concrete(name) {
         // Hajm qaysi ustunda yozilgani loyihachiga qarab farq qiladi.
-        let amount = qty.or(mass).or(note)?;
+        // Ba'zan hajm nomning o'ziga yopishib yoziladi:
+        // `Бетон кл.В7.5(подготовка)1.12`.
+        let glued = || name.rsplit_once(')').and_then(|(_, tail)| number(tail));
+        let amount = qty.or(mass).or(note).or_else(glued)?;
         return Some(Item {
             kind: Kind::Concrete,
             material: format!("Beton {class}"),
@@ -448,22 +777,66 @@ pub fn item(row: &SpecRow) -> Option<Item> {
         } else {
             "Po'lat list"
         };
-        return Some(Item {
-            kind: Kind::Steel,
-            material: label.into(),
-            unit: "kg".into(),
-            amount: total?,
-        });
+        // Massasi yozilmagan bo'lsa (`Лоток из швеллера — 8 шт`) u dona
+        // bilan sanaladigan buyum — pastda shunday o'qiladi.
+        if let Some(amount) = total {
+            return Some(Item {
+                kind: Kind::Steel,
+                material: label.into(),
+                unit: "kg".into(),
+                amount,
+            });
+        }
     }
 
     // Boshqa buyum: miqdori va o'lchov birligi aniq yozilgan bo'lsa.
-    let unit = unit_of(&row.unit).or_else(|| unit_of(&row.note))?;
+    let unit = unit_of(&row.unit).or_else(|| unit_of(&row.note));
+    if let (Some(unit), Some(amount)) = (unit, qty.or(number(&row.note))) {
+        return Some(Item {
+            kind: Kind::Other,
+            material: name.to_string(),
+            unit,
+            amount,
+        });
+    }
+    let (material, amount, unit) = inline(name)?;
     Some(Item {
         kind: Kind::Other,
-        material: name.to_string(),
+        material,
         unit,
-        amount: qty.or(number(&row.note))?,
+        amount,
     })
+}
+
+/// Miqdori matnning o'zida yozilgan qator:
+/// `Водосборный лоток сталь листовая б=2 мм - 14.67 тонн`.
+///
+/// Faqat aniq shakl olinadi: oxirida ` - son birlik`. Boshqa har qanday
+/// yozuv tanilmaydi — taxmin qilinmaydi.
+fn inline(name: &str) -> Option<(String, f64, String)> {
+    let (head, tail) = name.rsplit_once(" - ")?;
+    let mut words = tail.split_whitespace();
+    let figure = words.next()?;
+    if !figure
+        .chars()
+        .all(|c| c.is_ascii_digit() || c == '.' || c == ',')
+    {
+        return None;
+    }
+    let amount = number(figure)?;
+    let unit = match words.next()?.to_lowercase().trim_end_matches('.') {
+        "тонн" | "т" => "t",
+        "кг" => "kg",
+        "м3" => "m3",
+        "м2" => "m2",
+        "м" => "m",
+        "шт" => "dona",
+        _ => return None,
+    };
+    if words.next().is_some() || head.trim().is_empty() {
+        return None;
+    }
+    Some((head.trim().to_string(), amount, unit.to_string()))
 }
 
 /// «Примеч.» ustunidagi o'lchov birligi: `шт.`, `п.м.`, `1050 м3`.
@@ -645,10 +1018,22 @@ fn heading_keys(name: &str) -> Vec<String> {
     out
 }
 
+/// Havola qatorining kalitlari: pozitsiyasi va nomining belgisi.
+fn ref_keys(r: &SpecRow) -> Vec<String> {
+    let mut keys = vec![mark_key(&r.pos)];
+    // Bir-ikki belgili pozitsiya (`2`, `а`) — tartib raqami, belgi emas;
+    // u holda havola nomdagi belgi bo'yicha topiladi.
+    keys.extend(heading_keys(&r.name));
+    keys.retain(|k| !k.is_empty());
+    keys
+}
+
 /// Yig'ma birlikka havola: konstruksiya ichida `С1 — 2 dona`.
 struct Reference {
     page: usize,
-    key: String,
+    /// Havola pozitsiyasi (`С1`) yoki nomining oxiri (`… МН-1`) bo'yicha
+    /// topiladi.
+    keys: Vec<String>,
     /// Jami soni: havoladagi son × konstruksiya soni. `None` — konstruksiya
     /// soni noma'lum.
     count: Option<f64>,
@@ -689,11 +1074,20 @@ pub fn repeats(tables: &[SpecTable], list: &[Construct]) -> Vec<(String, usize)>
     build(tables, list).1
 }
 
+/// Jadval egasi bo'lgan konstruksiya.
+fn owner_of<'a>(t: &SpecTable, list: &'a [Construct]) -> Option<&'a Construct> {
+    if t.owner.is_empty() {
+        return None;
+    }
+    let key = mark_key(&t.owner);
+    list.iter().find(|c| mark_key(&c.mark) == key)
+}
+
 fn build(tables: &[SpecTable], list: &[Construct]) -> (Vec<Line>, Vec<(String, usize)>) {
     // ---- 1-o'tish: yig'ma birliklarga havolalar.
     let mut refs: Vec<Reference> = Vec::new();
     for t in tables {
-        let mut count: Option<f64> = None;
+        let mut count: Option<f64> = owner_of(t, list).map(|c| c.count);
         for r in &t.rows {
             if r.pos.trim().is_empty() {
                 if let Some(c) = construct_of(&r.name, list) {
@@ -705,9 +1099,19 @@ fn build(tables: &[SpecTable], list: &[Construct]) -> (Vec<Line>, Vec<(String, u
                 let q = number(&r.qty).unwrap_or(0.0);
                 refs.push(Reference {
                     page: t.page,
-                    key: mark_key(&r.pos),
+                    keys: ref_keys(r),
                     count: count.map(|c| c * q),
                 });
+            }
+        }
+    }
+    // Sahifadagi sarlavhalar — havola o'z jadvalini topdimi, shundan
+    // bilinadi.
+    let mut heads: Vec<(usize, Vec<String>)> = Vec::new();
+    for t in tables {
+        for r in &t.rows {
+            if r.pos.trim().is_empty() && !r.name.trim().is_empty() && item(r).is_none() {
+                heads.push((t.page, heading_keys(&r.name)));
             }
         }
     }
@@ -715,7 +1119,7 @@ fn build(tables: &[SpecTable], list: &[Construct]) -> (Vec<Line>, Vec<(String, u
         let keys = heading_keys(name);
         let hits: Vec<&Reference> = refs
             .iter()
-            .filter(|r| r.page == page && keys.contains(&r.key))
+            .filter(|r| r.page == page && r.keys.iter().any(|k| keys.contains(k)))
             .collect();
         if hits.is_empty() {
             return None;
@@ -737,12 +1141,36 @@ fn build(tables: &[SpecTable], list: &[Construct]) -> (Vec<Line>, Vec<(String, u
     // Spetsifikatsiyasi allaqachon o'qilgan konstruksiyalar: belgi -> jadval.
     let mut done: Vec<(String, usize)> = Vec::new();
     for (ti, t) in tables.iter().enumerate() {
-        let mut group = String::new();
-        let mut count: Option<f64> = None;
+        // Varaq bitta konstruksiyaga bag'ishlangan bo'lsa — hisob o'sha
+        // konstruksiya sonidan boshlanadi.
+        let owner = owner_of(t, list);
+        let mut group = owner
+            .map(|c| format!("{} {}", c.mark, c.name).trim().to_string())
+            .unwrap_or_default();
+        let mut count: Option<f64> = owner.map(|c| c.count);
         let mut per = 1.0;
         let mut sub = 1.0;
         // Takror spetsifikatsiya ichidamiz — qatorlar sanalmaydi.
         let mut skip = false;
+        // Aynan bir xil jadval boshqa varaqda qayta berilgan (masalan,
+        // tom panellari ham AR, ham KM albomida): ikkinchisi sanalmaydi.
+        // Egasi boshqa bo'lsa (`К3` va `К4` varaqlari) — bu takror emas.
+        // Metall tanlovi bundan mustasno: bir xil fermalar varaqlari
+        // haqiqatan bir xil bo'lishi mumkin.
+        let kmd = t.rows.iter().any(|r| r.designation == KMD);
+        let twin = tables[..ti]
+            .iter()
+            .any(|o| o.page != t.page && o.owner == t.owner && o.rows == t.rows);
+        if twin && !kmd {
+            let title = t
+                .rows
+                .iter()
+                .map(|r| r.name.trim())
+                .find(|n| !n.is_empty())
+                .unwrap_or_default();
+            skipped.push((title.to_string(), t.page));
+            continue;
+        }
         for (i, r) in t.rows.iter().enumerate() {
             let it = item(r);
             // Pozitsiyasiz qator ikki xil bo'ladi: yig'ma birlik sarlavhasi
@@ -819,7 +1247,38 @@ fn build(tables: &[SpecTable], list: &[Construct]) -> (Vec<Line>, Vec<(String, u
                 }
                 continue;
             }
-            if skip || is_reference(r) {
+            if skip {
+                continue;
+            }
+            if is_reference(r) {
+                // Tarkibi shu varaqda yozilgan bo'lsa — material o'sha
+                // jadvaldan olinadi. Yozilmagan bo'lsa (seriya bo'yicha
+                // tayyor buyum: `Изделие закладное УП2-8 — 4 шт`) uning
+                // massasi loyihada yozilganicha olinadi, aks holda u
+                // hisobdan butunlay tushib qolardi.
+                let keys = ref_keys(r);
+                let resolved = heads
+                    .iter()
+                    .any(|h| h.0 == t.page && h.1.iter().any(|k| keys.contains(k)));
+                let mass = match (number(&r.note), number(&r.qty), number(&r.mass)) {
+                    (Some(n), _, _) => Some(n),
+                    (_, Some(q), Some(m)) => Some(q * m),
+                    _ => None,
+                };
+                if let (false, Some(mass)) = (resolved, mass) {
+                    out.push(Line {
+                        item: Item {
+                            kind: Kind::Steel,
+                            material: r.name.trim().to_string(),
+                            unit: "kg".into(),
+                            amount: mass / per,
+                        },
+                        group: group.clone(),
+                        sub: 1.0,
+                        count,
+                        page: t.page,
+                    });
+                }
                 continue;
             }
             let Some(mut it) = it else { continue };
@@ -904,6 +1363,17 @@ impl Takeoff {
             all.extend(tables(p, i + 1));
         }
         let list = constructs(&all);
+        for (i, p) in pages.iter().enumerate() {
+            let Some(owner) = sheet_owner(p, &list) else {
+                continue;
+            };
+            for t in all.iter_mut().filter(|t| t.page == i + 1) {
+                // Metall tanlovi — varaq bo'yicha jami, u ko'paytirilmaydi.
+                if !t.rows.iter().any(|r| r.designation == KMD) {
+                    t.owner = owner.clone();
+                }
+            }
+        }
         Takeoff {
             file: file.to_string(),
             pages: pages.len(),
@@ -913,11 +1383,16 @@ impl Takeoff {
     }
 
     pub fn repeats(&self) -> Vec<(String, usize)> {
-        repeats(&self.tables, &self.constructs)
+        repeats(&self.active(), &self.constructs)
+    }
+
+    /// Hisobga olinadigan jadvallar.
+    fn active(&self) -> Vec<SpecTable> {
+        self.tables.iter().filter(|t| !t.off).cloned().collect()
     }
 
     pub fn lines(&self) -> Vec<Line> {
-        let mut out = lines(&self.tables, &self.constructs);
+        let mut out = lines(&self.active(), &self.constructs);
         // Tarkibi loyihada yozilmagan konstruksiya (tayyor buyum: yig'ma
         // ustun, sendvich panel) o'zi material sifatida sanaladi — aks
         // holda u kalkulyatsiyadan tushib qolardi.
@@ -958,6 +1433,7 @@ mod tests {
             y,
             size: 10.0,
             text: text.to_string(),
+            dir: 0,
         }
     }
 
@@ -1063,6 +1539,8 @@ mod tests {
                 note: "шт.".into(),
                 ..Default::default()
             }],
+            off: false,
+            owner: String::new(),
         });
         let list = constructs(&all);
         assert_eq!(list.len(), 1);
@@ -1118,6 +1596,8 @@ mod tests {
             SpecTable {
                 page: 10,
                 rows: vec![row("Фм1", "Фундамент монолитный Фм1", "20", "", "шт.")],
+                off: false,
+                owner: String::new(),
             },
             // To'rning tarkibi — alohida jadval.
             SpecTable {
@@ -1126,6 +1606,8 @@ mod tests {
                     row("", "Арматурная сетка С 2", "", "", "13.7"),
                     row("3", "∅12A400, L= 1700", "5", "1.51", "7.5"),
                 ],
+                off: false,
+                owner: String::new(),
             },
             // Konstruksiya jadvali: to'rga havola.
             SpecTable {
@@ -1135,6 +1617,8 @@ mod tests {
                     row("С2", "Арматурная сетка С2", "2", "13.7", "27.4"),
                     row("", "Бетон кл. В 20(М250)W8", "7.2", "", "м³"),
                 ],
+                off: false,
+                owner: String::new(),
             },
         ];
         let list = constructs(&all);
@@ -1196,6 +1680,8 @@ mod tests {
                 // O'zi material: ortidan pozitsiya kelmaydi.
                 row("", "Объем кирпича 380мм", "", "", "1050 м3"),
             ],
+            off: false,
+            owner: String::new(),
         }];
         let ls = lines(&all, &[]);
         assert_eq!(ls.len(), 2, "{ls:#?}");
@@ -1220,6 +1706,8 @@ mod tests {
                     qty: "12".into(),
                     ..Default::default()
                 }],
+                off: false,
+                owner: String::new(),
             }],
             constructs: vec![Construct {
                 mark: "К3".into(),
@@ -1255,6 +1743,8 @@ mod tests {
                     row("Фл-1", "Фундамент Фл-1", "348", "", "п.м."),
                     row("Фм1", "Фундамент монолитный Фм1", "20", "", "шт."),
                 ],
+                off: false,
+                owner: String::new(),
             },
             SpecTable {
                 page: 15,
@@ -1262,6 +1752,8 @@ mod tests {
                     row("", "Фундамент Фл-1 (на 1 п.м)", "", "", ""),
                     row("C-1", "∅12 A-III м.п.", "27", "0.888", "24.0"),
                 ],
+                off: false,
+                owner: String::new(),
             },
             // O'sha konstruksiya, endi 64 metrga yozilgan.
             SpecTable {
@@ -1270,6 +1762,8 @@ mod tests {
                     row("", "Фундамент Фл-1 (на 64 п.м)", "", "", ""),
                     row("C-1", "∅12 A-III м.п.", "1728", "0.888", "1534"),
                 ],
+                off: false,
+                owner: String::new(),
             },
         ];
         let list = constructs(&all);
@@ -1301,6 +1795,8 @@ mod tests {
                     row("Фм3", "Фундамент монолитный Фм3", "4", "", "шт."),
                     row("Фм4", "Фундамент монолитный Фм4", "60", "", "шт."),
                 ],
+                off: false,
+                owner: String::new(),
             },
             SpecTable {
                 page: 13,
@@ -1310,6 +1806,8 @@ mod tests {
                     row("5", "∅28 A-III L=4000", "4", "19.3", "77.2"),
                     row("", "Бетон кл. В20(М250)W8", "", "", "3.66"),
                 ],
+                off: false,
+                owner: String::new(),
             },
             // Boshqa varaqda `Ан-1` o'zi konstruksiya sifatida yozilgan.
             SpecTable {
@@ -1318,6 +1816,8 @@ mod tests {
                     row("Ан-1", "Анкерная группа Ан-1", "2", "", "шт."),
                     row("1", "∅20 A-III L=800", "4", "2.47", "9.88"),
                 ],
+                off: false,
+                owner: String::new(),
             },
         ];
         let list = constructs(&all);
@@ -1354,6 +1854,8 @@ mod tests {
                 row("Об1", "Обвязочный пояс Об1", "", "804 п.м."),
                 row("", "Объем кирпича 380мм", "", "1050 м3"),
             ],
+            off: false,
+            owner: String::new(),
         }];
         let list = constructs(&all);
         assert_eq!(list.len(), 2, "{list:?}");
@@ -1365,6 +1867,339 @@ mod tests {
             .unwrap();
         assert_eq!(brick.count, None);
         assert_eq!(brick.total(), 1050.0);
+    }
+
+    /// KMD varag'idagi metall tanlovi: massasi jami, qayta ko'paytirilmaydi.
+    #[test]
+    fn a_metal_takeoff_sheet_is_read_as_totals() {
+        let pieces = vec![
+            p(344.0, 642.0, "Профиль"),
+            p(396.0, 642.0, "Материал"),
+            p(455.0, 637.0, "общ"),
+            p(493.0, 637.0, "с"),
+            // зд-6, С245, 3309,12, 3415.0
+            p(351.0, 623.0, "зд"),
+            p(360.0, 623.0, "-6"),
+            p(407.0, 623.0, "С"),
+            p(411.0, 623.0, "245"),
+            p(450.0, 623.0, "3309,12"),
+            p(496.0, 623.0, "3415.0"),
+            p(341.0, 603.0, "□"),
+            p(347.0, 603.0, "80х80х4"),
+            p(407.0, 603.0, "С"),
+            p(411.0, 603.0, "255"),
+            p(452.0, 603.0, "3856,8"),
+            p(494.0, 603.0, "3980.22"),
+            // Jami qatori sanalmaydi — aks holda massa ikkilanardi.
+            p(345.0, 590.0, "Итого"),
+            p(450.0, 590.0, "7165,92"),
+        ];
+        let t = tables(&pieces, 48);
+        assert_eq!(t.len(), 1, "{t:#?}");
+        assert_eq!(t[0].rows.len(), 2, "{:#?}", t[0].rows);
+        let it = item(&t[0].rows[0]).expect("prokat");
+        assert_eq!(it.kind, Kind::Steel);
+        assert_eq!(it.material, "Prokat зд-6 С245");
+        assert!((it.amount - 3309.12).abs() < 1e-9);
+        let it = item(&t[0].rows[1]).unwrap();
+        assert_eq!(it.material, "Prokat Kvadrat quvur 80х80х4 С255");
+
+        let ls = lines(&t, &[]);
+        assert_eq!(ls.len(), 2);
+        let sum: f64 = ls.iter().map(|l| l.total()).sum();
+        assert!((sum - 7165.92).abs() < 1e-6, "{sum}");
+    }
+
+    /// Hisobdan chiqarilgan jadval yig'indiga kirmaydi.
+    #[test]
+    fn a_switched_off_table_is_not_counted() {
+        let mut tk = Takeoff {
+            file: "x.pdf".into(),
+            pages: 1,
+            tables: vec![SpecTable {
+                page: 35,
+                rows: vec![SpecRow {
+                    name: "Бетон В15".into(),
+                    qty: "813.2".into(),
+                    note: "м3".into(),
+                    ..Default::default()
+                }],
+                off: false,
+                owner: String::new(),
+            }],
+            constructs: Vec::new(),
+        };
+        assert_eq!(tk.lines().len(), 1);
+        tk.tables[0].off = true;
+        assert!(tk.lines().is_empty());
+    }
+
+    /// Quvur diametri armatura emas.
+    #[test]
+    fn a_pipe_diameter_is_not_rebar() {
+        let r = SpecRow {
+            pos: "2".into(),
+            name: "Компенсационный патрубок Ø 100мм".into(),
+            qty: "44".into(),
+            unit: "шт".into(),
+            ..Default::default()
+        };
+        let it = item(&r).expect("buyum");
+        assert_eq!(it.kind, Kind::Other);
+        assert_eq!(it.amount, 44.0);
+        // Massasiz shveller buyumi ham dona bilan sanaladi.
+        let r = SpecRow {
+            pos: "12".into(),
+            name: "Лоток из швеллера №20 длиной 3,0м".into(),
+            qty: "8".into(),
+            unit: "шт".into(),
+            ..Default::default()
+        };
+        assert_eq!(item(&r).unwrap().kind, Kind::Other);
+    }
+
+    /// Tor pozitsiya ustuni: raqam nomga yopishib ketmaydi.
+    #[test]
+    fn a_narrow_position_column_keeps_its_number() {
+        let pieces = vec![
+            p(59.0, 788.0, "Позиция"),
+            p(148.0, 788.0, "Наименование и техническая характеристика"),
+            p(882.0, 796.0, "Единица"),
+            p(947.0, 796.0, "Коли-"),
+            p(82.0, 740.0, "1"),
+            p(120.0, 740.0, "Воронка водосточная диаметром 100мм"),
+            p(898.0, 742.0, "шт"),
+            p(951.0, 742.0, "44"),
+            p(82.0, 716.0, "2"),
+            p(120.0, 717.0, "Компенсационный патрубок"),
+            p(898.0, 719.0, "шт"),
+            p(951.0, 719.0, "44"),
+        ];
+        let t = tables(&pieces, 38);
+        assert_eq!(t.len(), 1, "{t:#?}");
+        let r = &t[0].rows[0];
+        assert_eq!(r.pos, "1");
+        assert_eq!(r.name, "Воронка водосточная диаметром 100мм");
+        assert_eq!(r.unit, "шт");
+        assert_eq!(r.qty, "44");
+    }
+
+    /// Ustunlararo yoyilgan sarlavha bitta nom bo'lib o'qiladi, ikkinchi
+    /// «Масса» ustuni — jami massa.
+    #[test]
+    fn a_heading_across_columns_stays_whole() {
+        let pieces = vec![
+            p(100.0, 500.0, "Поз."),
+            p(160.0, 500.0, "Обозначение"),
+            p(340.0, 500.0, "Наименование"),
+            p(470.0, 500.0, "Кол"),
+            p(500.0, 506.0, "Масса"),
+            p(560.0, 506.0, "Масса"),
+            // Sarlavha belgi ustunidan boshlanib nom ustuniga o'tadi.
+            p(280.0, 480.0, "Монолитная перемычка Пм"),
+            p(394.0, 480.0, "-1 (на 1 п.м.)"),
+            p(104.0, 460.0, "1"),
+            p(150.0, 460.0, "ГОСТ 5781-82"),
+            p(330.0, 460.0, "Ø16 A-III м.п."),
+            p(475.0, 460.0, "6"),
+            p(505.0, 460.0, "1.58"),
+            p(562.0, 460.0, "9.48"),
+            // Hajm nomga yopishib yozilgan.
+            p(280.0, 440.0, "Бетон кл"),
+            p(320.0, 440.0, ".В7.5(подготовка"),
+            p(400.0, 440.0, ")1.12"),
+        ];
+        let t = tables(&pieces, 23);
+        assert_eq!(t.len(), 1, "{t:#?}");
+        let r = &t[0].rows;
+        assert_eq!(r[0].name, "Монолитная перемычка Пм-1 (на 1 п.м.)");
+        assert!(r[0].designation.is_empty());
+        assert_eq!(r[1].mass, "1.58");
+        assert_eq!(r[1].note, "9.48");
+        let it = item(&r[1]).expect("armatura");
+        assert!((it.amount - 9.48).abs() < 1e-9);
+        let it = item(&r[2]).expect("beton");
+        assert_eq!(it.material, "Beton B7.5");
+        assert!((it.amount - 1.12).abs() < 1e-9);
+    }
+
+    /// Nom raqamdan yuqoriroq yozilgan qator bitta bo'lib o'qiladi;
+    /// miqdori matn ichida yozilgan qator ham taniladi.
+    #[test]
+    fn an_offset_name_joins_its_row_and_inline_amounts_are_read() {
+        let pieces = vec![
+            p(100.0, 500.0, "Поз."),
+            p(160.0, 500.0, "Обозначение"),
+            p(340.0, 500.0, "Наименование"),
+            p(470.0, 500.0, "Кол."),
+            p(540.0, 500.0, "Примеч."),
+            p(104.0, 470.0, "Сп-1"),
+            p(330.0, 471.0, "Сп-1, L=11450x1000"),
+            p(475.0, 470.0, "528"),
+            p(330.0, 449.0, "Сп-2, L=11350x1000"),
+            p(104.0, 443.0, "Сп-2"),
+            p(475.0, 443.0, "264"),
+            p(150.0, 420.0, "Водосборный лоток сталь листовая ГОСТ "),
+            p(338.0, 420.0, "19903-90* б=2 мм "),
+            p(424.0, 420.0, "- 14.67 "),
+            p(466.0, 420.0, "тонн"),
+        ];
+        let t = tables(&pieces, 34);
+        assert_eq!(t.len(), 1, "{t:#?}");
+        let r = &t[0].rows;
+        assert_eq!(r.len(), 3, "{r:#?}");
+        assert_eq!(r[1].pos, "Сп-2");
+        assert_eq!(r[1].name, "Сп-2, L=11350x1000");
+        assert_eq!(r[1].qty, "264");
+        let it = item(&r[2]).expect("lotok");
+        assert_eq!(it.unit, "t");
+        assert!((it.amount - 14.67).abs() < 1e-9);
+        assert!(
+            it.material.starts_with("Водосборный лоток"),
+            "{}",
+            it.material
+        );
+        // Aniq shakl bo'lmasa — taxmin qilinmaydi.
+        assert!(inline("Труба - примерно 5 тонн").is_none());
+        assert!(inline("Уголок 50х5").is_none());
+    }
+
+    /// Shtampida bitta konstruksiya yozilgan varaq uning soniga
+    /// ko'paytiriladi; ikkitasi yozilgan bo'lsa — yo'q.
+    #[test]
+    fn a_sheet_named_after_one_construct_is_multiplied() {
+        let stamp = |title: &[(f64, &str)]| {
+            let mut v = vec![
+                p(1433.0, 102.0, "Изм."),
+                p(1460.0, 102.0, "Кол. уч."),
+                p(1587.0, 102.0, "Дата"),
+            ];
+            v.extend(title.iter().map(|(x, t)| p(*x, 30.0, t)));
+            v
+        };
+        let list = vec![
+            Construct {
+                mark: "К3".into(),
+                name: "2К138-6М3-c-а".into(),
+                count: 12.0,
+                unit: "dona".into(),
+                page: 16,
+                register: true,
+            },
+            Construct {
+                mark: "К4".into(),
+                name: "2К138-6М3-c-б".into(),
+                count: 12.0,
+                unit: "dona".into(),
+                page: 16,
+                register: true,
+            },
+        ];
+        let one = stamp(&[(1660.0, "К"), (1665.0, "3(2"), (1680.0, "К80-6М3-c-а)")]);
+        assert_eq!(sheet_owner(&one, &list).as_deref(), Some("К3"));
+        let two = stamp(&[(1660.0, "Колонны К3, К4")]);
+        assert_eq!(sheet_owner(&two, &list), None);
+        assert_eq!(
+            sheet_owner(&stamp(&[(1660.0, "Общие данные")]), &list),
+            None
+        );
+
+        let table = SpecTable {
+            page: 19,
+            rows: vec![SpecRow {
+                pos: "4".into(),
+                name: "Ø8 A-I L=680".into(),
+                qty: "36".into(),
+                mass: "0.27".into(),
+                note: "9.72".into(),
+                ..Default::default()
+            }],
+            off: false,
+            owner: "К3".into(),
+        };
+        let ls = lines(&[table], &list);
+        assert_eq!(ls.len(), 1);
+        assert_eq!(ls[0].count, Some(12.0));
+        assert!((ls[0].total() - 9.72 * 12.0).abs() < 1e-9);
+    }
+
+    /// Nomi bo'yicha havola o'z jadvalini topadi; tarkibi yozilmagan
+    /// buyum massasi bilan hisobga kiradi.
+    #[test]
+    fn a_reference_by_name_and_a_bought_part() {
+        let row = |pos: &str, name: &str, qty: &str, mass: &str, note: &str| SpecRow {
+            pos: pos.into(),
+            name: name.into(),
+            qty: qty.into(),
+            mass: mass.into(),
+            note: note.into(),
+            ..Default::default()
+        };
+        let list = vec![Construct {
+            mark: "К3".into(),
+            name: String::new(),
+            count: 12.0,
+            unit: "dona".into(),
+            page: 16,
+            register: true,
+        }];
+        let main = SpecTable {
+            page: 19,
+            rows: vec![
+                // Jadval boshidagi sarlavhalar uni tugatmaydi.
+                row("", "Сборочные единицы", "", "", ""),
+                row("1", "Изделие закладное УП2-8", "4", "3.04кг", ""),
+                row("3", "Изделие закладное МН2", "2", "89.6кг.", ""),
+            ],
+            off: false,
+            owner: "К3".into(),
+        };
+        let parts = SpecTable {
+            page: 19,
+            rows: vec![
+                row("", "Изделие закладное МН2", "", "", "89.6"),
+                row("13", "Лист 16x300x500", "2", "18.8", "37.6"),
+            ],
+            off: false,
+            owner: "К3".into(),
+        };
+        let ls = lines(&[main, parts], &list);
+        assert_eq!(ls.len(), 2, "{ls:#?}");
+        // УП2-8: tarkibi yo'q — 4 × 3.04 kg, 12 ta kolonnaga.
+        assert_eq!(ls[0].item.material, "Изделие закладное УП2-8");
+        assert!((ls[0].total() - 4.0 * 3.04 * 12.0).abs() < 1e-9);
+        // МН2: tarkibi alohida jadvalda, 2 × 12 = 24 marta.
+        assert_eq!(ls[1].count, Some(24.0));
+        assert!((ls[1].total() - 37.6 * 24.0).abs() < 1e-9);
+    }
+
+    /// Chizmadagi «поз.1 - …» izohi jadval sarlavhasi emas.
+    #[test]
+    fn a_drawing_note_is_not_a_table_header() {
+        assert_eq!(header_kind("Поз."), Some(Col::Pos));
+        assert_eq!(header_kind("Позиция"), Some(Col::Pos));
+        assert_eq!(header_kind("поз.1 - Строповочные петли;"), None);
+    }
+
+    /// Boshqa varaqda aynan qayta berilgan jadval ikki marta sanalmaydi.
+    #[test]
+    fn an_identical_table_on_another_sheet_is_counted_once() {
+        let table = |page: usize, owner: &str| SpecTable {
+            page,
+            rows: vec![SpecRow {
+                name: "Бетон В15".into(),
+                qty: "10".into(),
+                note: "м3".into(),
+                ..Default::default()
+            }],
+            off: false,
+            owner: owner.into(),
+        };
+        let both = [table(34, ""), table(76, "")];
+        assert_eq!(lines(&both, &[]).len(), 1);
+        assert_eq!(repeats(&both, &[]), vec![("Бетон В15".to_string(), 76)]);
+        // Egasi boshqa — bu boshqa konstruksiya, takror emas.
+        assert_eq!(lines(&[table(19, "К3"), table(20, "К4")], &[]).len(), 2);
     }
 
     #[test]

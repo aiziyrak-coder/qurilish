@@ -1395,8 +1395,13 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "tk_rows" => ("qator", "строк"),
         "tk_tables_read" => ("O'qilgan jadvallar", "Прочитанные таблицы"),
         "tk_tables_read_hint" => (
-            "Har jadvalni ochib, loyiha varag'i bilan solishtirishingiz mumkin — hisob aynan shu qatorlardan chiqadi.",
-            "Каждую таблицу можно раскрыть и сверить с листом проекта — расчёт идёт именно по этим строкам.",
+            "Har jadvalni ochib, loyiha varag'i bilan solishtirishingiz mumkin — hisob aynan shu qatorlardan chiqadi. Boshqa obyektga tegishli yoki takror jadvalni belgisini olib hisobdan chiqaring.",
+            "Каждую таблицу можно раскрыть и сверить с листом проекта — расчёт идёт именно по этим строкам. Таблицу другого объекта или повтор исключите, сняв отметку.",
+        ),
+        "tk_table_off" => ("hisobdan chiqarilgan", "исключена"),
+        "tk_table_on_hint" => (
+            "Belgi olinsa jadval sanalmaydi. Jadval o'chirilmaydi — qaytarib yoqish mumkin.",
+            "Без отметки таблица не учитывается. Она не удаляется — отметку можно вернуть.",
         ),
         "tk_col_pos" => ("Poz.", "Поз."),
         "tk_col_designation" => ("Belgilanishi", "Обозначение"),

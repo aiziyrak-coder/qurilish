@@ -37,6 +37,10 @@ Barcha TZ modullari va sotuv bo'limi qurilgan:
 
 - [x] **I.1 Obyekt pasporti** · **I.2 GPR** (CPM, Gantt) · **I.3 PPR**
 - [x] **II AI loyiha tekshiruvi** — bilimlar grafi, 12 qoida, normativ reyestri
+- [x] **II sahifa → «Loyiha kalkulyatsiyasi»** — PDF → jadvallar →
+  konstruksiyalar → material va qiymat (`src/takeoff.rs`, `src/pdfread.rs`,
+  `src/ui/aicheck.rs`). IFC/DXF/kolliziya kodi saqlangan, ekranga ulanmagan.
+  Chegaralar README «AI loyiha tekshiruvi» bo'limida.
 - [x] **III AI smeta tekshiruvi** — import, 8 qoida, qiymat nazorati
 - [x] **IV Ijro hujjatlari** · **V Ishlar jurnali** (fotofiksatsiya)
 - [x] **VI Prorab ish o'rni** — kunlik ekran: ishlar, jurnal, tabel, smenalar

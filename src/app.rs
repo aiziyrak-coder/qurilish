@@ -2326,6 +2326,22 @@ impl App {
         self.recompute_takeoff();
     }
 
+    /// Jadvalni hisobga qo'shadi yoki hisobdan chiqaradi.
+    ///
+    /// Jadvalning o'zi o'chirilmaydi — faqat sanalmaydi, istalgan payt
+    /// qaytarib yoqiladi.
+    pub fn set_table_off(&mut self, index: usize, off: bool) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if let Some(tb) = self.takeoff.as_mut().and_then(|t| t.tables.get_mut(index)) {
+            tb.off = off;
+        }
+        self.save_takeoff();
+        self.recompute_takeoff();
+    }
+
     /// Loyiha hisobini o'chiradi (fayl o'chirilmaydi).
     pub fn clear_takeoff(&mut self) {
         if !self.can_edit(Screen::AiCheck) {
