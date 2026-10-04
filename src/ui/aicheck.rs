@@ -2114,6 +2114,8 @@ enum DocLine {
     Table(Vec<String>, Vec<Vec<String>>),
     /// Ko'rsatkich plitkalari: `(nom, qiymat, izoh)`.
     Tiles(Vec<(String, String, String)>),
+    /// Gorizontal ustunlar: `(nom, qiymat, yozuv)` — eng kattasi to'liq en.
+    Bars(Vec<(String, f64, String)>),
     Muted(String),
     Gap,
 }
@@ -2237,6 +2239,35 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                             });
                     });
             }
+            DocLine::Bars(items) => {
+                let max = items.iter().map(|i| i.1).fold(0.0_f64, f64::max).max(1e-9);
+                let w = ui.available_width();
+                for (label, value, text) in items {
+                    ui.horizontal(|ui| {
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(w * 0.34, 16.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_size(egui::vec2(w * 0.34, 16.0));
+                                ui.add(
+                                    egui::Label::new(RichText::new(label).size(11.0)).truncate(),
+                                );
+                            },
+                        );
+                        let (rect, _) = ui
+                            .allocate_exact_size(egui::vec2(w * 0.44, 14.0), egui::Sense::hover());
+                        ui.painter()
+                            .rect_filled(rect, 3.0, accent.gamma_multiply(0.12));
+                        let fill = egui::Rect::from_min_size(
+                            rect.min,
+                            egui::vec2(rect.width() * (*value / max) as f32, rect.height()),
+                        );
+                        ui.painter()
+                            .rect_filled(fill, 3.0, accent.gamma_multiply(0.75));
+                        ui.label(RichText::new(text).size(11.0).strong());
+                    });
+                }
+            }
             DocLine::Tiles(tiles) => {
                 ui.horizontal_wrapped(|ui| {
                     for (name, value, hint) in tiles {
@@ -2294,6 +2325,18 @@ fn export_docx(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [
             DocLine::Muted(s) => Some(Block::Muted(s.clone())),
             DocLine::Table(h, r) => Some(Block::Table(h.clone(), r.clone())),
             DocLine::Tiles(t) => Some(Block::Tiles(t.clone())),
+            DocLine::Bars(items) => {
+                let max = items.iter().map(|i| i.1).fold(0.0_f64, f64::max).max(1e-9);
+                Some(Block::Table(
+                    vec![String::new(), "%".into(), String::new()],
+                    items
+                        .iter()
+                        .map(|(l, v, txt)| {
+                            vec![l.clone(), format!("{:.0}", v / max * 100.0), txt.clone()]
+                        })
+                        .collect(),
+                ))
+            }
             DocLine::Gap => None,
         })
         .collect();
@@ -2330,6 +2373,11 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
             head: bool,
         },
         Tiles(&'a [(String, String, String)]),
+        Bar {
+            label: String,
+            frac: f32,
+            text: String,
+        },
     }
     let step = |u: &Unit| -> f32 {
         match u {
@@ -2342,6 +2390,7 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
             Unit::Tab { head: true, .. } => 6.5,
             Unit::Tab { .. } => 5.4,
             Unit::Tiles(_) => 16.0,
+            Unit::Bar { .. } => 5.6,
         }
     };
     let wrap = |s: &str, per: usize| -> Vec<String> {
@@ -2386,6 +2435,16 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
                 }
             }
             DocLine::Tiles(t) => units.push(Unit::Tiles(t)),
+            DocLine::Bars(items) => {
+                let max = items.iter().map(|i| i.1).fold(0.0_f64, f64::max).max(1e-9);
+                for (l, v, txt) in items {
+                    units.push(Unit::Bar {
+                        label: l.clone(),
+                        frac: (v / max) as f32,
+                        text: txt.clone(),
+                    });
+                }
+            }
             other => units.push(Unit::Line(other)),
         }
     }
@@ -2474,6 +2533,14 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
                     }
                     // Qatorlar orasidagi ingichka chiziq.
                     page.bar(margin, y - 1.9, width, 0.15, [210, 214, 220]);
+                }
+                Unit::Bar { label, frac, text } => {
+                    let lw = width * 0.34;
+                    let bw = width * 0.44;
+                    page.text(&fit(label, 8.5, lw - 2.0), 8.5, margin, y);
+                    page.bar(margin + lw, y - 0.6, bw, 3.6, light);
+                    page.bar(margin + lw, y - 0.6, bw * frac.clamp(0.0, 1.0), 3.6, rgb);
+                    page.text(text, 8.5, margin + lw + bw + 3.0, y);
                 }
                 Unit::Tiles(tiles) => {
                     let n = tiles.len().max(1) as f32;
@@ -3552,6 +3619,25 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
             ],
             rows,
         ));
+        // Bosqichlar ulushi — bir qarashda qayerga pul ketadi.
+        if view.total > 0.0 {
+            out.push(Sub(t("sm_report_stage_share").to_string()));
+            let mut bars: Vec<(String, f64, String)> = m
+                .stages
+                .iter()
+                .enumerate()
+                .map(|(i, st)| {
+                    let v = view.stages.get(i).map(|v| v.total).unwrap_or(0.0);
+                    (
+                        st.name.clone(),
+                        v,
+                        format!("{} ({:.0}%)", money(v), v / view.total * 100.0),
+                    )
+                })
+                .collect();
+            bars.sort_by(|a, b| b.1.total_cmp(&a.1));
+            out.push(Bars(bars));
+        }
         out.push(Head(t("sm_tab_smeta").to_string()));
         out.push(Table(
             vec![String::new(), t("tk_col_sum").into()],
@@ -3578,12 +3664,73 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
             }
         }
         out.push(Sub(t("sm_report_price_sources").to_string()));
-        out.push(Table(
-            vec![t("sm_col_source").into(), t("tk_col_lines").into()],
+        out.push(Bars(
             by.into_iter()
-                .map(|(k, n)| vec![t(k).to_string(), n.to_string()])
+                .map(|(k, n)| (t(k).to_string(), n as f64, n.to_string()))
                 .collect(),
         ));
+        // Nisbiy ko'rsatkichlar — hisobni tekshirishning eng tez yo'li.
+        let total_area = m
+            .sketch
+            .as_ref()
+            .map(|sk| sk.area() * sk.floors.max(1) as f64)
+            .filter(|a| *a > 0.0)
+            .or_else(|| {
+                m.facts
+                    .iter()
+                    .filter(|f| {
+                        let n = f.name.to_lowercase();
+                        (n.contains("общая площадь") || n.contains("umumiy maydon"))
+                            && (f.unit.contains('2') || f.unit.contains('²'))
+                    })
+                    .filter_map(|f| crate::takeoff::number(&f.value.replace(' ', "")))
+                    .fold(None, |acc: Option<f64>, v| {
+                        Some(acc.map_or(v, |a| a.max(v)))
+                    })
+            });
+        let mut ratios: Vec<Vec<String>> = Vec::new();
+        if let Some(area) = total_area {
+            ratios.push(vec![
+                t("sm_ratio_cost_m2").into(),
+                format!("{} {}", money(view.total / area), t("tk_sum_unit")),
+                format!("{} {} m²", t("sm_ratio_basis"), num(area)),
+            ]);
+            if beton > 0.0 {
+                ratios.push(vec![
+                    t("sm_ratio_concrete_m2").into(),
+                    format!("{:.3} m³/m²", beton / area),
+                    t("sm_ratio_concrete_hint").into(),
+                ]);
+            }
+        }
+        if beton > 0.0 && rebar > 0.0 {
+            ratios.push(vec![
+                t("sm_ratio_rebar").into(),
+                format!("{:.0} kg/m³", rebar / beton),
+                t("sm_ratio_rebar_hint").into(),
+            ]);
+        }
+        if view.total > 0.0 {
+            ratios.push(vec![
+                t("sm_ratio_material_share").into(),
+                format!(
+                    "{:.0} %",
+                    view.material_sum / (view.work_sum + view.material_sum).max(1e-9) * 100.0
+                ),
+                t("sm_ratio_material_hint").into(),
+            ]);
+        }
+        if !ratios.is_empty() {
+            out.push(Sub(t("sm_report_ratios").to_string()));
+            out.push(Table(
+                vec![
+                    t("sm_col_fact").into(),
+                    t("sm_col_value").into(),
+                    t("sm_col_note").into(),
+                ],
+                ratios,
+            ));
+        }
         if view.missing > 0 {
             out.push(Muted(format!("{} {}", view.missing, t("tk_total_partial"))));
         }
@@ -3625,5 +3772,38 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
     for l in t("sm_report_limits_text").lines() {
         out.push(Text(l.to_string()));
     }
+    // ---- Imzo bloki.
+    out.push(Gap);
+    out.push(Table(
+        vec![
+            t("sm_sign_role").into(),
+            t("sm_sign_name").into(),
+            t("sm_sign_date").into(),
+        ],
+        vec![
+            vec![
+                t("sm_sign_prepared").into(),
+                format!(
+                    "QURAi · {}",
+                    if m.model.is_empty() {
+                        "AI".to_string()
+                    } else {
+                        m.model.clone()
+                    }
+                ),
+                app.today.format("%d.%m.%Y").to_string(),
+            ],
+            vec![
+                t("sm_sign_checked").into(),
+                "________________".into(),
+                "____.____.______".into(),
+            ],
+            vec![
+                t("sm_sign_approved").into(),
+                "________________".into(),
+                "____.____.______".into(),
+            ],
+        ],
+    ));
     out
 }
