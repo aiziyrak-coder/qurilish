@@ -480,38 +480,43 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
     next_button(ui, app, CheckTab::Questions, t("sm_tab_questions"));
     let Some(m) = &app.smeta else { return };
     ui.add_space(6.0);
+    // O'qilgan varaqlar — hisobot uslubidagi jadval.
+    let rows: Vec<Vec<String>> = m
+        .digest
+        .iter()
+        .map(|d| {
+            vec![
+                format!("{} {} - {}", t("pdf_page"), d.page, d.sheet),
+                d.kind.clone(),
+                d.facts.len().to_string(),
+                app.takeoff
+                    .as_ref()
+                    .map(|t| t.tables.iter().filter(|x| x.page == d.page).count())
+                    .unwrap_or(0)
+                    .to_string(),
+            ]
+        })
+        .collect();
+    let lines = vec![
+        DocLine::Head(format!("{} ({})", t("sm_pages_read"), rows.len())),
+        DocLine::Table(
+            vec![
+                t("sm_col_sheet").into(),
+                t("sm_col_kind").into(),
+                t("sm_facts").into(),
+                t("tk_tables").into(),
+            ],
+            rows,
+        ),
+    ];
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            egui::Grid::new("sm_pages")
-                .striped(true)
-                .spacing([14.0, 4.0])
-                .show(ui, |ui| {
-                    for h in [
-                        "pdf_page",
-                        "sm_col_kind",
-                        "sm_col_sheet",
-                        "sm_facts",
-                        "tk_tables",
-                    ] {
-                        ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
-                    }
-                    ui.end_row();
-                    for d in &m.digest {
-                        ui.label(d.page.to_string());
-                        ui.label(RichText::new(&d.kind).strong());
-                        ui.label(super::issues::truncate(&d.sheet, 70));
-                        ui.label(d.facts.len().to_string());
-                        ui.label(
-                            app.takeoff
-                                .as_ref()
-                                .map(|t| t.tables.iter().filter(|x| x.page == d.page).count())
-                                .unwrap_or(0)
-                                .to_string(),
-                        );
-                        ui.end_row();
-                    }
-                });
+            egui::Frame::new()
+                .fill(theme::canvas())
+                .stroke(Stroke::new(1.0_f32, theme::line()))
+                .inner_margin(egui::Margin::same(14))
+                .show(ui, |ui| draw_doc(ui, &lines, theme::accent()));
         });
 }
 
