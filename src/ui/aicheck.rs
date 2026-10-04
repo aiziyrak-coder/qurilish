@@ -1876,9 +1876,12 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut export = false;
     let mut remember = false;
 
-    ui.columns(2, |cols| {
-        // ---- Chapda sozlamalar.
-        card(&mut cols[0], |ui| {
+    // Sozlamalar yig'iladigan bo'limda, hujjat butun enda: ustunli
+    // joylashuvda hujjat eni noto'g'ri hisoblanib matn chetdan chiqardi.
+    egui::CollapsingHeader::new(t("sm_offer_settings"))
+        .default_open(m.offer.company.is_empty())
+        .show(ui, |ui| {
+        card(ui, |ui| {
             ui.label(RichText::new(t("sm_offer_settings")).strong().size(14.0));
             ui.add_space(6.0);
             let field = |ui: &mut egui::Ui, label: &str, v: &mut String, changed: &mut bool| {
@@ -2025,23 +2028,23 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
             });
         });
 
-        // ---- O'ngda hujjat ko'rinishi.
-        let ui = &mut cols[1];
-        let rgb = crate::smeta::ACCENTS
-            .get(m.offer.accent)
-            .map(|a| a.1)
-            .unwrap_or([31, 78, 160]);
-        let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-        let lines = offer_lines(app, &m, &view);
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                egui::Frame::new()
-                    .fill(theme::canvas())
-                    .stroke(Stroke::new(1.0_f32, theme::line()))
-                    .inner_margin(egui::Margin::same(18))
-                    .show(ui, |ui| draw_doc(ui, &lines, accent));
-            });
+    });
+    ui.add_space(6.0);
+    let rgb = crate::smeta::ACCENTS
+        .get(m.offer.accent)
+        .map(|a| a.1)
+        .unwrap_or([31, 78, 160]);
+    let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+    let lines = offer_lines(app, &m, &view);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Frame::new()
+                .fill(theme::canvas())
+                .stroke(Stroke::new(1.0_f32, theme::line()))
+                .inner_margin(egui::Margin::same(18))
+                .show(ui, |ui| draw_doc(ui, &lines, accent));
+        });
     });
 
     if changed {
@@ -2063,7 +2066,6 @@ enum DocLine {
     /// Kichik sarlavha (bo'lim ichida).
     Sub(String),
     Text(String),
-    Row(String, String),
     /// Jadval: sarlavhalar va qatorlar. Birinchi ustun matn (keng),
     /// qolganlari o'ngga tekis.
     Table(Vec<String>, Vec<Vec<String>>),
@@ -2075,8 +2077,12 @@ enum DocLine {
 
 /// Hujjat qatorlarini ekranga chizadi (taklif va hisobot bir xil).
 fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
-    let (bar, _) =
-        ui.allocate_exact_size(egui::vec2(ui.available_width(), 6.0), egui::Sense::hover());
+    // Hujjat eni berilgan joy bilan cheklanadi: matn shu enda o'raladi,
+    // ustunli joylashuvda ham tashqariga chiqmaydi.
+    let width = ui.available_width();
+    ui.set_max_width(width);
+    ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
+    let (bar, _) = ui.allocate_exact_size(egui::vec2(width, 6.0), egui::Sense::hover());
     ui.painter().rect_filled(bar, 2.0, accent);
     ui.add_space(6.0);
     let mut table_no = 0usize;
@@ -2109,15 +2115,7 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                 ui.label(RichText::new(s).size(12.0).strong());
             }
             DocLine::Text(s) => {
-                ui.label(RichText::new(s).size(11.5));
-            }
-            DocLine::Row(a, b) => {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(a).size(11.5));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(b).size(11.5).strong());
-                    });
-                });
+                ui.add(egui::Label::new(RichText::new(s).size(11.5)).wrap());
             }
             DocLine::Table(headers, rows) => {
                 table_no += 1;
@@ -2198,6 +2196,7 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                             .show(ui, |ui| {
                                 ui.vertical(|ui| {
                                     ui.set_min_width(150.0);
+                                    ui.set_max_width(260.0);
                                     ui.label(RichText::new(name).size(10.5).color(theme::muted()));
                                     ui.label(
                                         RichText::new(value).size(17.0).strong().color(accent),
@@ -2365,11 +2364,6 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
                 Unit::Line(DocLine::Sub(s)) => page.text(s, 10.0, margin, y),
                 Unit::Line(DocLine::Text(s)) => page.text(s, 9.5, margin, y),
                 Unit::Line(DocLine::Muted(s)) => page.text(s, 8.0, margin, y),
-                Unit::Line(DocLine::Row(a, b)) => {
-                    page.text(&fit(a, 9.5, width * 0.7), 9.5, margin, y);
-                    let bw = b.chars().count() as f32 * 9.5 * 0.19;
-                    page.text(b, 9.5, w - margin - bw, y);
-                }
                 Unit::Line(_) => {}
                 Unit::Wrapped(size, s) => page.text(s, *size, margin, y),
                 Unit::Tab { cols, n, head } => {
@@ -2427,30 +2421,28 @@ fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u
     }
 }
 
+/// Taklif qatorlari — mijoz ko'radigan hujjat.
 fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -> Vec<DocLine> {
+    use DocLine::*;
     let o = &m.offer;
     let project = app.project().map(|p| p.name.clone()).unwrap_or_default();
     let mut out = Vec::new();
     if !o.company.is_empty() {
-        out.push(DocLine::Head(o.company.clone()));
+        out.push(Head(o.company.clone()));
     }
     if !o.contacts.is_empty() {
-        out.push(DocLine::Muted(o.contacts.clone()));
+        out.push(Muted(o.contacts.clone()));
     }
-    out.push(DocLine::Gap);
-    out.push(DocLine::Title(if o.title.is_empty() {
+    out.push(Gap);
+    out.push(Title(if o.title.is_empty() {
         format!("{} — {project}", t("sm_offer_default_title"))
     } else {
         o.title.clone()
     }));
     if !o.customer.is_empty() {
-        out.push(DocLine::Text(format!(
-            "{}: {}",
-            t("sm_offer_customer"),
-            o.customer
-        )));
+        out.push(Text(format!("{}: {}", t("sm_offer_customer"), o.customer)));
     }
-    out.push(DocLine::Muted(format!(
+    out.push(Muted(format!(
         "{} {} · {} {} {}",
         t("sm_offer_date"),
         app.today.format("%d.%m.%Y"),
@@ -2458,67 +2450,120 @@ fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) ->
         o.valid_days,
         t("sm_days")
     )));
-    if !m.summary.is_empty() {
-        out.push(DocLine::Gap);
-        out.push(DocLine::Text(m.summary.clone()));
-    }
-    // Obyekt raqamlarda: varaqlardan yoki xolstdan olingan asosiy
-    // ko'rsatkichlar.
-    if o.show_numbers && !m.facts.is_empty() {
-        out.push(DocLine::Gap);
-        out.push(DocLine::Head(t("sm_offer_numbers_title").to_string()));
-        for f in m.facts.iter().take(10) {
-            out.push(DocLine::Row(
-                f.name.clone(),
-                format!("{} {}", f.value, f.unit).trim().to_string(),
-            ));
-        }
-    }
-    out.push(DocLine::Gap);
-    out.push(DocLine::Head(t("sm_offer_price_title").to_string()));
-    out.push(DocLine::Row(
-        t("sm_total").to_string(),
+
+    // ---- Asosiy raqamlar plitkalarda.
+    let mut tiles = vec![(
+        t("sm_offer_price_title").to_string(),
         format!("{} {}", money(view.total), t("tk_sum_unit")),
+        format!(
+            "{} {} · {} {}",
+            t("sm_works"),
+            money(view.work_sum),
+            t("sm_materials"),
+            money(view.material_sum)
+        ),
+    )];
+    tiles.push((
+        t("sm_stages").to_string(),
+        m.stages.len().to_string(),
+        format!(
+            "{} {}",
+            m.stages.iter().map(|s| s.works.len()).sum::<usize>(),
+            t("sm_works_short")
+        ),
     ));
-    out.push(DocLine::Muted(format!(
-        "{} {} · {} {}",
-        t("sm_works"),
-        money(view.work_sum),
-        t("sm_materials"),
-        money(view.material_sum)
-    )));
+    for f in m.facts.iter().take(2) {
+        tiles.push((
+            f.name.clone(),
+            format!("{} {}", f.value, f.unit).trim().to_string(),
+            String::new(),
+        ));
+    }
+    out.push(Gap);
+    out.push(Tiles(tiles));
     if view.missing > 0 {
-        out.push(DocLine::Muted(format!(
+        out.push(Muted(format!(
             "* {} {}",
             view.missing,
             t("sm_offer_missing")
         )));
     }
-    out.push(DocLine::Gap);
-    out.push(DocLine::Head(t("sm_offer_stages_title").to_string()));
-    for (si, st) in m.stages.iter().enumerate() {
-        let Some(sv) = view.stages.get(si) else {
-            continue;
-        };
-        out.push(DocLine::Row(
-            format!("{}. {}", si + 1, st.name),
-            format!(
-                "{}{}",
-                money(sv.total),
-                if sv.missing > 0 { " *" } else { "" }
-            ),
+
+    if !m.summary.is_empty() {
+        out.push(Head(t("sm_summary").to_string()));
+        out.push(Text(m.summary.clone()));
+    }
+
+    // Obyekt raqamlarda.
+    if o.show_numbers && !m.facts.is_empty() {
+        out.push(Head(t("sm_offer_numbers_title").to_string()));
+        out.push(Table(
+            vec![t("sm_col_fact").into(), t("sm_col_value").into()],
+            m.facts
+                .iter()
+                .take(12)
+                .map(|f| {
+                    vec![
+                        f.name.clone(),
+                        format!("{} {}", f.value, f.unit).trim().to_string(),
+                    ]
+                })
+                .collect(),
         ));
-        if o.detailed {
-            for w in &st.works {
-                out.push(DocLine::Muted(format!(
-                    "      {} — {} {}",
-                    w.name,
-                    num(w.qty),
-                    w.unit
-                )));
+    }
+
+    // Bosqichlar.
+    out.push(Head(t("sm_offer_stages_title").to_string()));
+    let rows: Vec<Vec<String>> = m
+        .stages
+        .iter()
+        .enumerate()
+        .map(|(si, st)| {
+            let sv = view.stages.get(si);
+            vec![
+                format!("{}. {}", si + 1, st.name),
+                st.works.len().to_string(),
+                sv.map(|v| money(v.work_sum)).unwrap_or_default(),
+                sv.map(|v| money(v.material_sum)).unwrap_or_default(),
+                format!(
+                    "{}{}",
+                    sv.map(|v| money(v.total)).unwrap_or_default(),
+                    if sv.is_some_and(|v| v.missing > 0) {
+                        " *"
+                    } else {
+                        ""
+                    }
+                ),
+            ]
+        })
+        .collect();
+    out.push(Table(
+        vec![
+            t("sm_stages").into(),
+            t("sm_works").into(),
+            format!("{}, {}", t("sm_works"), t("tk_sum_unit")),
+            format!("{}, {}", t("sm_materials"), t("tk_sum_unit")),
+            t("tk_col_sum").into(),
+        ],
+        rows,
+    ));
+    if o.detailed {
+        for (si, st) in m.stages.iter().enumerate() {
+            if st.works.is_empty() {
+                continue;
             }
+            out.push(Sub(format!("{}. {}", si + 1, st.name)));
+            out.push(Table(
+                vec![t("sm_col_work").into(), t("tk_col_amount").into()],
+                st.works
+                    .iter()
+                    .map(|w| vec![w.name.clone(), format!("{} {}", num(w.qty), w.unit)])
+                    .collect(),
+            ));
         }
     }
+
+    // To'lov jadvali.
     if o.show_schedule {
         let stages: Vec<(String, f64)> = m
             .stages
@@ -2533,28 +2578,38 @@ fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) ->
             .collect();
         let plan = crate::smeta::schedule(&m.offer, &stages, view.total);
         if !plan.is_empty() {
-            out.push(DocLine::Gap);
-            out.push(DocLine::Head(t("sm_offer_schedule_title").to_string()));
-            for (i, p) in plan.iter().enumerate() {
-                out.push(DocLine::Row(
-                    format!("{}. {} ({:.0}%)", i + 1, p.title, p.pct),
-                    money(p.amount),
-                ));
-            }
+            out.push(Head(t("sm_offer_schedule_title").to_string()));
+            out.push(Table(
+                vec![
+                    "№".into(),
+                    t("sm_pay_title").into(),
+                    "%".into(),
+                    t("tk_col_sum").into(),
+                ],
+                plan.iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        vec![
+                            (i + 1).to_string(),
+                            p.title.clone(),
+                            format!("{:.0}", p.pct),
+                            money(p.amount),
+                        ]
+                    })
+                    .collect(),
+            ));
         }
     }
     if !o.excluded.is_empty() {
-        out.push(DocLine::Gap);
-        out.push(DocLine::Head(t("sm_offer_excluded").to_string()));
+        out.push(Head(t("sm_offer_excluded").to_string()));
         for l in o.excluded.lines() {
-            out.push(DocLine::Text(l.to_string()));
+            out.push(Text(format!("• {l}")));
         }
     }
     if !o.terms.is_empty() {
-        out.push(DocLine::Gap);
-        out.push(DocLine::Head(t("sm_offer_terms").to_string()));
+        out.push(Head(t("sm_offer_terms").to_string()));
         for l in o.terms.lines() {
-            out.push(DocLine::Text(l.to_string()));
+            out.push(Text(l.to_string()));
         }
     }
     out

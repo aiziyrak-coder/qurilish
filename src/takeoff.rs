@@ -785,7 +785,11 @@ pub fn item(row: &SpecRow) -> Option<Item> {
     // «данный лист» («shu varaq») deb yoziladi — uni po'lat list deb olish
     // har bir yig'ma birlikni prokatga aylantirib yuborardi.
     let low = name.to_lowercase();
-    if low.starts_with("лист") || low.contains("уголок") || low.contains("швеллер")
+    // `-8x115` — KMD varag'ida list qalinligi va eni shunday yoziladi.
+    let plate_code = name.starts_with('-')
+        && name[1..].chars().next().is_some_and(|c| c.is_ascii_digit())
+        && name.contains(['x', 'х']);
+    if low.starts_with("лист") || plate_code || low.contains("уголок") || low.contains("швеллер")
     {
         let label = if low.contains("уголок") {
             "Burchak (ugolok)"
@@ -2265,6 +2269,24 @@ mod tests {
         assert_eq!(tk.lines().len(), 1);
         tk.tables[0].off = true;
         assert!(tk.lines().is_empty());
+    }
+
+    /// `-8x115` — po'lat list.
+    #[test]
+    fn a_plate_code_is_steel_sheet() {
+        let r = SpecRow {
+            pos: "3".into(),
+            name: "-8x115".into(),
+            qty: "2".into(),
+            mass: "3".into(),
+            note: "6".into(),
+            ..Default::default()
+        };
+        let it = item(&r).expect("list");
+        assert_eq!(
+            (it.kind, it.material.as_str(), it.amount),
+            (Kind::Steel, "Po'lat list", 6.0)
+        );
     }
 
     /// «Итого» va yolg'iz po'lat sinfi material emas.
