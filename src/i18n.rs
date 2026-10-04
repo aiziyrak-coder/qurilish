@@ -1364,6 +1364,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "pr_graph" => ("Bilimlar grafi", "Граф знаний"),
         "pr_norms" => ("Normativ reyestri", "Реестр нормативов"),
         "tab_project" => ("Loyiha", "Проект"),
+        "tk_repeats" => (
+            "Takror spetsifikatsiya sanalmadi (konstruksiya loyihada bir necha marta yozilgan, birinchisi olindi)",
+            "Повторные спецификации не учтены (конструкция описана в проекте несколько раз, взята первая)",
+        ),
         "tab_constructs" => ("Konstruksiyalar", "Конструкции"),
         "tab_calc" => ("Kalkulyatsiya", "Калькуляция"),
         "tk_load_title" => ("Loyiha faylini yuklash", "Загрузка файла проекта"),
@@ -1387,7 +1391,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "tk_tables_hint" => ("o'qilgan jadval", "прочитано таблиц"),
         "tk_constructs_hint" => ("soni bilan topilgan", "найдено с количеством"),
         "tk_lines" => ("Material qatorlari", "Строки материалов"),
-        "tk_unsure" => ("noaniq", "неясных"),
+        "tk_unsure" => ("ko'paytirilmagan", "без умножения"),
         "tk_rows" => ("qator", "строк"),
         "tk_tables_read" => ("O'qilgan jadvallar", "Прочитанные таблицы"),
         "tk_tables_read_hint" => (
@@ -1432,8 +1436,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "tk_cost" => ("Material qiymati", "Стоимость материалов"),
         "tk_no_price" => ("qatorda narx yo'q", "строк без цены"),
         "tk_unsure_note" => (
-            "qatorda konstruksiya soni topilmadi — ular birga ko'paytirilgan. «Konstruksiyalar» bo'limida sonni tekshiring.",
-            "строк без количества конструкций — они умножены на единицу. Проверьте количество в разделе «Конструкции».",
+            "qator hech bir konstruksiyaga bog'lanmadi — miqdori loyihada yozilganicha olindi, ko'paytirilmadi. Loyihada u jami yozilgan bo'lsa to'g'ri; bir donaga yozilgan bo'lsa — kam.",
+            "строк не привязаны к конструкции — количество взято как в проекте, без умножения. Если в проекте указан итог — верно; если на одну штуку — занижено.",
         ),
         "tk_col_kind" => ("Turi", "Вид"),
         "tk_col_amount" => ("Miqdori", "Количество"),

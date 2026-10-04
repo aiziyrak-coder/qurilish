@@ -39,10 +39,34 @@ pub fn pages(path: &Path) -> Result<Vec<Vec<Piece>>, String> {
     if pages.is_empty() {
         return Err(crate::i18n::t("pdf_no_pages").to_string());
     }
-    let out: Vec<Vec<Piece>> = pages
-        .into_values()
-        .map(|id| page_pieces(&doc, id))
-        .collect();
+    // Sahifalar bir-biriga bog'liq emas, shuning uchun parallel o'qiladi.
+    // Chizma varag'ining ichi — minglab vektor chiziq; ularni tahlil qilish
+    // 77 sahifali loyihada ikki daqiqadan ortiq olardi. Hujjat faqat
+    // o'qiladi, yozilmaydi — iplar orasida bo'lishish xavfsiz.
+    let ids: Vec<lopdf::ObjectId> = pages.into_values().collect();
+    let workers = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(2)
+        .clamp(1, 8);
+    let chunk = ids.len().div_ceil(workers).max(1);
+    let doc = &doc;
+    let out: Vec<Vec<Piece>> = std::thread::scope(|scope| {
+        let handles: Vec<_> = ids
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .map(|id| page_pieces(doc, *id))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        // Tartib saqlanadi: bo'laklar ketma-ket yig'iladi.
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap_or_default())
+            .collect()
+    });
     if out.iter().all(|p| p.is_empty()) {
         return Err(crate::i18n::t("pdf_no_text").to_string());
     }

@@ -1864,6 +1864,79 @@ mod screen_tests {
         }
     }
 
+    /// Kalkulyatsiya sahifasi hisob bilan ham, hisobsiz ham chiziladi.
+    ///
+    /// Uchala bo'lim haqiqatan chiziladi: jadvallar, konstruksiyalar va
+    /// narxli yig'ma.
+    #[test]
+    fn the_takeoff_screen_draws_with_and_without_data() {
+        use crate::takeoff::{SpecRow, SpecTable, Takeoff};
+        let (path, db) = temp_db();
+        let pid = db.seed_demo().expect("namuna");
+        let mut app = App::new(Db::open(&path).expect("baza"));
+        app.select_project(pid);
+        app.screen = Screen::AiCheck;
+        let ctx = egui::Context::default();
+        frame(&ctx, &mut app);
+
+        // Hisobsiz: uchala bo'lim ham yiqilmaydi.
+        for tab in crate::app::CheckTab::ALL {
+            app.check_tab = tab;
+            frame(&ctx, &mut app);
+        }
+
+        let row = |pos: &str, name: &str, qty: &str, mass: &str, note: &str| SpecRow {
+            pos: pos.into(),
+            name: name.into(),
+            qty: qty.into(),
+            mass: mass.into(),
+            note: note.into(),
+            ..Default::default()
+        };
+        let tables = vec![
+            SpecTable {
+                page: 10,
+                rows: vec![
+                    row("Фм3", "Фундамент монолитный Фм3", "4", "", "шт."),
+                    row("К3", "2К138-6М3-c-а", "12", "", ""),
+                ],
+            },
+            SpecTable {
+                page: 13,
+                rows: vec![
+                    row("", "Фундамент Фм3", "1", "", "шт."),
+                    row("1", "∅14 A-III L=2550", "22", "3.09", "68.0"),
+                    row("", "Бетон кл. В20(М250)W8", "", "", "3.66"),
+                ],
+            },
+            // Takror: sanalmaydi, lekin ekranda aytiladi.
+            SpecTable {
+                page: 14,
+                rows: vec![
+                    row("", "Фундамент Фм3", "1", "", "шт."),
+                    row("1", "∅14 A-III L=2550", "22", "3.09", "68.0"),
+                ],
+            },
+        ];
+        let constructs = crate::takeoff::constructs(&tables);
+        app.takeoff = Some(Takeoff {
+            file: "loyiha.pdf".into(),
+            pages: 77,
+            tables,
+            constructs,
+        });
+        app.recompute_takeoff();
+        app.set_takeoff_price("Beton B20", 650_000.0);
+        assert_eq!(app.takeoff_repeats.len(), 1);
+        assert!(!app.cost_rows.is_empty());
+
+        for tab in crate::app::CheckTab::ALL {
+            app.check_tab = tab;
+            frame(&ctx, &mut app);
+            frame(&ctx, &mut app);
+        }
+    }
+
     /// Yon panel ro'yxati erkin suriladi.
     ///
     /// Xato shunday edi: faol modul ko'rinishdan chiqishi bilan ro'yxat

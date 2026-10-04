@@ -1965,6 +1965,7 @@ mod tests {
             qty: qty.into(),
             mass: mass.into(),
             note: note.into(),
+            unit: String::new(),
         };
         let tables = vec![
             SpecTable {
@@ -1994,7 +1995,7 @@ mod tests {
         let rebar = app
             .cost_rows
             .iter()
-            .find(|r| r.total.material == "Armatura ∅14 A-III")
+            .find(|r| r.total.material == "Armatura Ø14 A-III")
             .expect("armatura");
         assert_eq!(rebar.total.amount, 272.0);
         // Narx yo'q — summa ham yo'q: nol ko'rsatilmaydi.
@@ -2002,11 +2003,11 @@ mod tests {
         assert_eq!(rebar.sum(), None);
 
         // Narx qo'lda qo'yiladi.
-        app.set_takeoff_price("Armatura ∅14 A-III", 9_500.0);
+        app.set_takeoff_price("Armatura Ø14 A-III", 9_500.0);
         let rebar = app
             .cost_rows
             .iter()
-            .find(|r| r.total.material == "Armatura ∅14 A-III")
+            .find(|r| r.total.material == "Armatura Ø14 A-III")
             .unwrap();
         assert!(rebar.manual);
         assert_eq!(rebar.sum(), Some(272.0 * 9_500.0));
@@ -2031,7 +2032,7 @@ mod tests {
         assert_eq!(tk.file, "loyiha.pdf");
         assert_eq!(tk.constructs[0].count, 10.0);
         assert_eq!(
-            again.takeoff_prices.get("Armatura ∅14 A-III"),
+            again.takeoff_prices.get("Armatura Ø14 A-III"),
             Some(&9_500.0)
         );
 

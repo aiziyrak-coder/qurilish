@@ -269,15 +269,19 @@ fn kpi(ui: &mut egui::Ui, title: &str, value: &str, hint: &str) {
         .corner_radius(8)
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
-            ui.set_min_width(170.0);
-            ui.set_max_width(260.0);
-            ui.label(RichText::new(title).size(11.0).color(theme::muted()));
-            ui.label(
-                RichText::new(super::issues::truncate(value, 30))
-                    .size(18.0)
-                    .color(theme::accent()),
-            );
-            ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+            // Ichki joylashuv vertikal: tashqi qator gorizontal bo'lgani
+            // uchun aks holda sarlavha, son va izoh bir qatorga siqilardi.
+            ui.vertical(|ui| {
+                ui.set_min_width(170.0);
+                ui.set_max_width(260.0);
+                ui.label(RichText::new(title).size(11.0).color(theme::muted()));
+                ui.label(
+                    RichText::new(super::issues::truncate(value, 30))
+                        .size(18.0)
+                        .color(theme::accent()),
+                );
+                ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+            });
         });
 }
 
@@ -441,6 +445,20 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
             RichText::new(format!("{unsure} {}", t("tk_unsure_note")))
                 .size(11.5)
                 .color(theme::warn()),
+        );
+    }
+    if !app.takeoff_repeats.is_empty() {
+        ui.add_space(4.0);
+        let list = app
+            .takeoff_repeats
+            .iter()
+            .map(|(name, page)| format!("{} ({} {page})", name.trim(), t("pdf_page")))
+            .collect::<Vec<_>>()
+            .join(", ");
+        ui.label(
+            RichText::new(format!("{}: {list}", t("tk_repeats")))
+                .size(11.5)
+                .color(theme::muted()),
         );
     }
     ui.add_space(10.0);

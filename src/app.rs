@@ -774,6 +774,8 @@ pub struct App {
     pub cost_rows: Vec<CostRow>,
     /// Kalkulyatsiya qatorlari (ko'paytuvchilari bilan).
     pub takeoff_lines: Vec<crate::takeoff::Line>,
+    /// Sanalmagan takror spetsifikatsiyalar: sarlavha va sahifa.
+    pub takeoff_repeats: Vec<(String, usize)>,
     /// Tepadagi AI oynasi ochiqmi.
     ///
     /// Holat shu yerda turadi, egui ning umumiy «popup» xotirasida emas:
@@ -980,6 +982,7 @@ impl App {
             takeoff_prices: Default::default(),
             cost_rows: Vec::new(),
             takeoff_lines: Vec::new(),
+            takeoff_repeats: Vec::new(),
             ai_panel: false,
             sales_block: None,
             selected_unit: None,
@@ -1081,6 +1084,12 @@ impl App {
             .and_then(|v| v.parse::<i64>().ok())
             .filter(|id| app.users.iter().any(|u| u.id == *id));
         app.sync_audit_user();
+        // Rol tanlangan bo'lsa, ilova uning uy ekranidan ochiladi — rolni
+        // almashtirganda ham shunday bo'ladi. Avval har doim umumiy
+        // ko'rinish ochilardi va odam o'z ish joyiga qo'lda o'tardi.
+        if app.current_user.is_some() || app.view_role.is_some() {
+            app.screen = app.role().home();
+        }
         // Jurnal cheksiz o'smasin: ochilishda eng eskilari olib tashlanadi.
         app.db.trim_audit_log(AUDIT_KEEP);
         app
@@ -1123,6 +1132,13 @@ impl App {
         self.auto_check_estimate = false;
         self.auto_check_ppr = false;
         self.reload_project_data();
+        // Hisob allaqachon bor obyektda sahifa natijadan ochiladi; yo'q
+        // bo'lsa — yuklash qadamidan.
+        self.check_tab = if self.takeoff.is_some() {
+            CheckTab::Calc
+        } else {
+            CheckTab::Project
+        };
         // Butun grafikni ko'rsatamiz: obyekt ochilganda bajarilgan ishlar ham,
         // oldindagilari ham bir qarashda ko'rinishi kerak.
         self.fit_timeline = true;
@@ -2248,6 +2264,11 @@ impl App {
     /// qoladi va summa ko'rsatilmaydi.
     pub fn recompute_takeoff(&mut self) {
         self.takeoff_lines = self.takeoff.as_ref().map(|t| t.lines()).unwrap_or_default();
+        self.takeoff_repeats = self
+            .takeoff
+            .as_ref()
+            .map(|t| t.repeats())
+            .unwrap_or_default();
         let index = crate::prices::Index::build(&self.price_book);
         self.cost_rows = crate::takeoff::totals(&self.takeoff_lines)
             .into_iter()
