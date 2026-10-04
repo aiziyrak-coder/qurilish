@@ -1879,11 +1879,9 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
     // Sozlamalar yig'iladigan bo'limda, hujjat butun enda: ustunli
     // joylashuvda hujjat eni noto'g'ri hisoblanib matn chetdan chiqardi.
     egui::CollapsingHeader::new(t("sm_offer_settings"))
-        .default_open(m.offer.company.is_empty())
+        .default_open(false)
         .show(ui, |ui| {
             card(ui, |ui| {
-                ui.label(RichText::new(t("sm_offer_settings")).strong().size(14.0));
-                ui.add_space(6.0);
                 let field = |ui: &mut egui::Ui, label: &str, v: &mut String, changed: &mut bool| {
                     ui.label(RichText::new(label).size(11.0).color(theme::muted()));
                     if ui
@@ -1915,7 +1913,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 if ui
                     .add(
                         egui::TextEdit::multiline(&mut offer.terms)
-                            .desired_rows(4)
+                            .desired_rows(2)
                             .desired_width(f32::INFINITY),
                     )
                     .changed()
@@ -1930,7 +1928,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 if ui
                     .add(
                         egui::TextEdit::multiline(&mut offer.excluded)
-                            .desired_rows(3)
+                            .desired_rows(2)
                             .desired_width(f32::INFINITY),
                     )
                     .changed()
