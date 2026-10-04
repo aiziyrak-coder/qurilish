@@ -2207,7 +2207,6 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                             )
                                             .truncate(),
                                         );
-                                        ui.add_space(6.0);
                                     });
                                 }
                                 ui.end_row();
@@ -2230,7 +2229,6 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                                 let text =
                                                     if i == 0 { text } else { text.strong() };
                                                 ui.add(egui::Label::new(text).truncate());
-                                                ui.add_space(6.0);
                                             },
                                         );
                                     }

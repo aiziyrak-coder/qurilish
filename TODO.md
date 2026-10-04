@@ -66,6 +66,16 @@ bu ro'yxatning asosiy vazifasi shu.
 
 ## II. AI loyiha tekshiruvi
 
+> **Tun yakuni (2026-10-05, ertalab):** sahifa nomi **«AI tahlil»** (TZ
+> bo'yicha), qadamlar izohi sodda tilda. AI hisobot kuchaytirildi:
+> bosqichlar ulushi diagrammasi, narx manbalari diagrammasi, nisbiy
+> ko'rsatkichlar (1 m² qiymati, beton/m², armatura kg/m³, materiallar
+> ulushi — odatiy oraliqlar bilan), imzo bloki (tayyorladi / tekshirdi /
+> tasdiqladi); hisobot va KP **Word (.docx)** ga ham chiqadi. AI matnlari
+> (savollar, javoblar, xulosa, hisobot) interfeys tilida — o'zbekcha.
+> Prays: narxsiz pozitsiyalar shabloni (Excel, 2 varaq) — mijoz to'ldirib
+> qaytaradi. Yuklash va obyekt ma'lumoti jadvallari hisobot uslubida.
+
 > **Hisobot va KP ko'rinishi (2026-10-05):** plitkalar, rangli bo'lim
 > lentalari, sarlavhali jadvallar (ekran, PDF va **Word .docx** — o'z
 > yozuvchimiz, kutubxonasiz). KP: bosqichlar jadvali (ishlar/materiallar/
