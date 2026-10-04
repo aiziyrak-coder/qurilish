@@ -66,6 +66,14 @@ bu ro'yxatning asosiy vazifasi shu.
 
 ## II. AI loyiha tekshiruvi
 
+> **AI loyiha hisoboti (7-bosqich, 2026-10-05):** mijoz va rahbar uchun
+> to'liq hujjat — AI yozgan 7 bo'lim (rezyume, obyekt va konstruktiv,
+> asosiy hajmlar, taxminlar, risklar, tavsiyalar, chegaralar) + dastur
+> jadvallari (ko'rsatkichlar varaq raqami bilan, konstruksiyalar,
+> loyihadan olingan materiallar, savollar-javoblar, spetsifikatsiya va
+> smeta yig'masi, narx manbalari statistikasi, ochiq AI topilmalari,
+> hisob chegaralari). Ekranda va PDF da bir xil; haqiqiy loyihada 10 s.
+
 > **Tungi kuchaytirish (2026-10-04/05):** spetsifikatsiya tuzilgach AI
 > bosqichlar orasidagi takrorlarni o'zi topib olib tashlaydi; AI xulosasi
 > endi **tuzilmali topilmalar** — miqdor (yangi qiymat bilan), yetishmagan

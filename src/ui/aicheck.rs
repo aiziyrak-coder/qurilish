@@ -33,6 +33,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     app.poll_review();
     app.poll_consolidate();
     app.poll_answers();
+    app.poll_report();
     if app.pdf_job.is_some()
         || app.pages_job.is_some()
         || app.questions_rx.is_some()
@@ -41,6 +42,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         || app.review_rx.is_some()
         || app.consolidate_rx.is_some()
         || app.answers_rx.is_some()
+        || app.report_rx.is_some()
     {
         // Fon ipi kadr so'ramaydi — jarayon ko'rinib tursin.
         ui.ctx()
@@ -78,6 +80,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         CheckTab::Spec => spec_tab(ui, app),
         CheckTab::Smeta => smeta_tab(ui, app),
         CheckTab::Offer => offer_tab(ui, app),
+        CheckTab::Report => report_tab(ui, app),
     }
 }
 
@@ -99,7 +102,7 @@ fn stepper(ui: &mut egui::Ui, app: &mut App) {
                 .inner_margin(egui::Margin::symmetric(10, 6))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        let mark = if ready && !active && i < 5 {
+                        let mark = if ready && !active && i < 6 {
                             "●".to_string()
                         } else {
                             (i + 1).to_string()
@@ -129,7 +132,7 @@ fn stepper(ui: &mut egui::Ui, app: &mut App) {
             if resp.clicked() && (ready || tab == CheckTab::Upload) {
                 app.check_tab = tab;
             }
-            if i < 5 {
+            if i < 6 {
                 ui.label(RichText::new("—").color(theme::line()));
             }
         }
@@ -2024,6 +2027,12 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
 
         // ---- O'ngda hujjat ko'rinishi.
         let ui = &mut cols[1];
+        let rgb = crate::smeta::ACCENTS
+            .get(m.offer.accent)
+            .map(|a| a.1)
+            .unwrap_or([31, 78, 160]);
+        let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+        let lines = offer_lines(app, &m, &view);
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| {
@@ -2031,50 +2040,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                     .fill(theme::canvas())
                     .stroke(Stroke::new(1.0_f32, theme::line()))
                     .inner_margin(egui::Margin::same(18))
-                    .show(ui, |ui| {
-                        let rgb = crate::smeta::ACCENTS
-                            .get(m.offer.accent)
-                            .map(|a| a.1)
-                            .unwrap_or([31, 78, 160]);
-                        let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
-                        let (bar, _) = ui.allocate_exact_size(
-                            egui::vec2(ui.available_width(), 6.0),
-                            egui::Sense::hover(),
-                        );
-                        ui.painter().rect_filled(bar, 2.0, accent);
-                        ui.add_space(6.0);
-                        for line in offer_lines(app, &m, &view) {
-                            match line {
-                                DocLine::Title(s) => {
-                                    ui.label(RichText::new(s).size(18.0).strong().color(accent));
-                                }
-                                DocLine::Head(s) => {
-                                    ui.add_space(6.0);
-                                    ui.label(RichText::new(s).size(13.0).strong().color(accent));
-                                }
-                                DocLine::Text(s) => {
-                                    ui.label(RichText::new(s).size(11.5));
-                                }
-                                DocLine::Row(a, b) => {
-                                    ui.horizontal(|ui| {
-                                        ui.label(RichText::new(a).size(11.5));
-                                        ui.with_layout(
-                                            egui::Layout::right_to_left(egui::Align::Center),
-                                            |ui| {
-                                                ui.label(RichText::new(b).size(11.5).strong());
-                                            },
-                                        );
-                                    });
-                                }
-                                DocLine::Muted(s) => {
-                                    ui.label(RichText::new(s).size(10.5).color(theme::muted()));
-                                }
-                                DocLine::Gap => {
-                                    ui.add_space(8.0);
-                                }
-                            }
-                        }
-                    });
+                    .show(ui, |ui| draw_doc(ui, &lines, accent));
             });
     });
 
@@ -2094,10 +2060,213 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
 enum DocLine {
     Title(String),
     Head(String),
+    /// Kichik sarlavha (bo'lim ichida).
+    Sub(String),
     Text(String),
     Row(String, String),
+    /// Jadval qatori: birinchi ustun keng, qolganlari teng.
+    Cols(Vec<String>),
     Muted(String),
     Gap,
+}
+
+/// Hujjat qatorlarini ekranga chizadi (taklif va hisobot bir xil).
+fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
+    let (bar, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 6.0), egui::Sense::hover());
+    ui.painter().rect_filled(bar, 2.0, accent);
+    ui.add_space(6.0);
+    for line in lines {
+        match line {
+            DocLine::Title(s) => {
+                ui.label(RichText::new(s).size(18.0).strong().color(accent));
+            }
+            DocLine::Head(s) => {
+                ui.add_space(8.0);
+                ui.label(RichText::new(s).size(13.5).strong().color(accent));
+            }
+            DocLine::Sub(s) => {
+                ui.add_space(4.0);
+                ui.label(RichText::new(s).size(12.0).strong());
+            }
+            DocLine::Text(s) => {
+                ui.label(RichText::new(s).size(11.5));
+            }
+            DocLine::Row(a, b) => {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(a).size(11.5));
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(RichText::new(b).size(11.5).strong());
+                    });
+                });
+            }
+            DocLine::Cols(cols) => {
+                let n = cols.len().max(1);
+                let w = ui.available_width();
+                let first = if n > 1 { w * 0.44 } else { w };
+                let rest = if n > 1 {
+                    (w - first) / (n - 1) as f32
+                } else {
+                    0.0
+                };
+                ui.horizontal(|ui| {
+                    for (i, c) in cols.iter().enumerate() {
+                        let cw = if i == 0 { first } else { rest };
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(cw, 16.0),
+                            if i == 0 {
+                                egui::Layout::left_to_right(egui::Align::Center)
+                            } else {
+                                egui::Layout::right_to_left(egui::Align::Center)
+                            },
+                            |ui| {
+                                ui.add(egui::Label::new(RichText::new(c).size(11.0)).truncate());
+                            },
+                        );
+                    }
+                });
+            }
+            DocLine::Muted(s) => {
+                ui.label(RichText::new(s).size(10.5).color(theme::muted()));
+            }
+            DocLine::Gap => {
+                ui.add_space(8.0);
+            }
+        }
+    }
+}
+
+/// Hujjatni PDF ga yozadi: tik A4, ustunli qatorlar bilan.
+fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u8; 3]) {
+    let name = format!("{file}_{}.pdf", app.today.format("%Y-%m-%d"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(&name)
+        .add_filter("PDF", &["pdf"])
+        .save_file()
+    else {
+        return;
+    };
+    let (w, h, margin) = (
+        crate::pdf::PAGE_W_PORTRAIT,
+        crate::pdf::PAGE_H_PORTRAIT,
+        18.0_f32,
+    );
+    let step = |l: &DocLine| -> f32 {
+        match l {
+            DocLine::Title(_) => 10.0,
+            DocLine::Head(_) => 8.5,
+            DocLine::Sub(_) => 6.5,
+            DocLine::Gap => 4.0,
+            DocLine::Cols(_) => 5.0,
+            _ => 5.5,
+        }
+    };
+    // Uzun matn satrlarga bo'linadi: taxminan 105 belgi bir satr.
+    let wrap = |s: &str, per: usize| -> Vec<String> {
+        let mut out = Vec::new();
+        for para in s.split('\n') {
+            let mut cur = String::new();
+            for word in para.split_whitespace() {
+                if cur.chars().count() + word.chars().count() + 1 > per && !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+                if !cur.is_empty() {
+                    cur.push(' ');
+                }
+                cur.push_str(word);
+            }
+            out.push(cur);
+        }
+        out
+    };
+    let mut flat: Vec<DocLine> = Vec::new();
+    for l in lines {
+        match l {
+            DocLine::Text(s) => flat.extend(wrap(s, 105).into_iter().map(DocLine::Text)),
+            DocLine::Muted(s) => flat.extend(wrap(s, 120).into_iter().map(DocLine::Muted)),
+            DocLine::Title(s) => flat.push(DocLine::Title(s.clone())),
+            DocLine::Head(s) => flat.push(DocLine::Head(s.clone())),
+            DocLine::Sub(s) => flat.push(DocLine::Sub(s.clone())),
+            DocLine::Row(a, b) => flat.push(DocLine::Row(a.clone(), b.clone())),
+            DocLine::Cols(c) => flat.push(DocLine::Cols(c.clone())),
+            DocLine::Gap => flat.push(DocLine::Gap),
+        }
+    }
+    let mut pages: Vec<Vec<&DocLine>> = vec![Vec::new()];
+    let mut y = h - margin;
+    for l in &flat {
+        if y - step(l) < margin + 8.0 {
+            pages.push(Vec::new());
+            y = h - margin;
+        }
+        y -= step(l);
+        if let Some(last) = pages.last_mut() {
+            last.push(l);
+        }
+    }
+    let total = pages.len();
+    let fit = |s: &str, size: f32, max: f32| -> String {
+        let per = size * 0.19;
+        let n = (max / per) as usize;
+        if s.chars().count() <= n {
+            s.to_string()
+        } else {
+            let cut: String = s.chars().take(n.saturating_sub(1)).collect();
+            format!("{cut}…")
+        }
+    };
+    let result = crate::pdf::write_pages(&path, title, total, |page, index| {
+        page.bar(margin, h - margin + 3.0, w - 2.0 * margin, 2.0, rgb);
+        let mut y = h - margin;
+        let width = w - 2.0 * margin;
+        for l in &pages[index] {
+            y -= step(l);
+            match l {
+                DocLine::Title(s) => page.text(s, 15.0, margin, y),
+                DocLine::Head(s) => page.text(s, 11.5, margin, y),
+                DocLine::Sub(s) => page.text(s, 10.0, margin, y),
+                DocLine::Text(s) => page.text(s, 9.5, margin, y),
+                DocLine::Muted(s) => page.text(s, 8.5, margin, y),
+                DocLine::Row(a, b) => {
+                    page.text(&fit(a, 9.5, width * 0.7), 9.5, margin, y);
+                    let bw = b.chars().count() as f32 * 9.5 * 0.19;
+                    page.text(b, 9.5, w - margin - bw, y);
+                }
+                DocLine::Cols(cols) => {
+                    let n = cols.len().max(1);
+                    let first = if n > 1 { width * 0.44 } else { width };
+                    let rest = if n > 1 {
+                        (width - first) / (n - 1) as f32
+                    } else {
+                        0.0
+                    };
+                    let mut x = margin;
+                    for (i, c) in cols.iter().enumerate() {
+                        let cw = if i == 0 { first } else { rest };
+                        let text = fit(c, 8.5, cw - 2.0);
+                        if i == 0 {
+                            page.text(&text, 8.5, x, y);
+                        } else {
+                            let tw = text.chars().count() as f32 * 8.5 * 0.19;
+                            page.text(&text, 8.5, x + cw - tw - 1.0, y);
+                        }
+                        x += cw;
+                    }
+                }
+                DocLine::Gap => {}
+            }
+        }
+        page.text(
+            &format!("{} {} / {total}", t("pdf_page"), index + 1),
+            7.5,
+            margin,
+            margin - 6.0,
+        );
+    });
+    match result {
+        Ok(()) => app.notify(format!("{} · {}", t("export_done"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
+    }
 }
 
 fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -> Vec<DocLine> {
@@ -2238,79 +2407,11 @@ fn export_offer(app: &mut App) {
     let Some(m) = app.smeta.clone() else { return };
     let view = app.smeta_view.clone();
     let lines = offer_lines(app, &m, &view);
-    let name = format!(
-        "{}_{}.pdf",
-        t("sm_offer_file"),
-        app.today.format("%Y-%m-%d")
-    );
-    let Some(path) = rfd::FileDialog::new()
-        .set_file_name(&name)
-        .add_filter("PDF", &["pdf"])
-        .save_file()
-    else {
-        return;
-    };
-    // Sahifaga sig'adigan qatorlar: tik A4, chekka 18 mm.
-    let (w, h, margin) = (
-        crate::pdf::PAGE_W_PORTRAIT,
-        crate::pdf::PAGE_H_PORTRAIT,
-        18.0_f32,
-    );
-    let step = |l: &DocLine| -> f32 {
-        match l {
-            DocLine::Title(_) => 10.0,
-            DocLine::Head(_) => 8.0,
-            DocLine::Gap => 4.0,
-            _ => 5.5,
-        }
-    };
-    let mut pages: Vec<Vec<&DocLine>> = vec![Vec::new()];
-    let mut y = h - margin;
-    for l in &lines {
-        if y - step(l) < margin + 8.0 {
-            pages.push(Vec::new());
-            y = h - margin;
-        }
-        y -= step(l);
-        if let Some(last) = pages.last_mut() {
-            last.push(l);
-        }
-    }
-    let total = pages.len();
     let rgb = crate::smeta::ACCENTS
         .get(m.offer.accent)
         .map(|a| a.1)
         .unwrap_or([31, 78, 160]);
-    let result = crate::pdf::write_pages(&path, t("sm_offer_file"), total, |page, index| {
-        page.bar(margin, h - margin + 3.0, w - 2.0 * margin, 2.0, rgb);
-        let mut y = h - margin;
-        for l in &pages[index] {
-            y -= step(l);
-            match l {
-                DocLine::Title(s) => page.text(s, 15.0, margin, y),
-                DocLine::Head(s) => page.text(s, 11.5, margin, y),
-                DocLine::Text(s) => page.text(s, 9.5, margin, y),
-                DocLine::Muted(s) => page.text(s, 8.5, margin, y),
-                DocLine::Row(a, b) => {
-                    page.text(a, 9.5, margin, y);
-                    // O'ng ustun: taxminiy kenglik bo'yicha o'ngga tekis.
-                    let bw = b.chars().count() as f32 * 9.5 * 0.19;
-                    page.text(b, 9.5, w - margin - bw, y);
-                }
-                DocLine::Gap => {}
-            }
-        }
-        page.text(
-            &format!("{} {} / {total}", t("pdf_page"), index + 1),
-            7.5,
-            margin,
-            margin - 6.0,
-        );
-    });
-    match result {
-        Ok(()) => app.notify(format!("{} · {}", t("export_done"), path.display())),
-        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
-    }
+    export_doc(app, &lines, t("sm_offer_file"), t("sm_offer_file"), rgb);
 }
 
 // ================================================================= Prays
@@ -2729,4 +2830,284 @@ fn sketch_view(ui: &mut egui::Ui, app: &mut App) {
     if close {
         app.sketch_open = false;
     }
+}
+
+// ================================================================ 7. Hisobot
+
+/// AI loyiha hisoboti: dastur jadvallari + AI matnli bo'limlari.
+fn report_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(m) = app.smeta.clone() else {
+        empty(ui, t("tk_not_loaded"));
+        return;
+    };
+    let view = app.smeta_view.clone();
+    let mut write = false;
+    let mut export = false;
+
+    card(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(t("sm_report_title")).strong().size(14.0));
+            if app.report_rx.is_some() {
+                ui.spinner();
+                ui.label(RichText::new(t("sm_report_writing")).color(theme::muted()));
+            } else if ui
+                .add_enabled(
+                    app.llm.is_ready(),
+                    egui::Button::new(if m.report.is_empty() {
+                        t("sm_report_write")
+                    } else {
+                        t("sm_report_rewrite")
+                    }),
+                )
+                .on_hover_text(t("sm_report_hint"))
+                .clicked()
+            {
+                write = true;
+            }
+            if ui.button(t("sm_offer_pdf")).clicked() {
+                export = true;
+            }
+        });
+        ui.label(
+            RichText::new(t("sm_report_note"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        if !app.smeta_note.is_empty() && app.report_rx.is_none() {
+            ui.label(
+                RichText::new(&app.smeta_note)
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+        }
+    });
+    ui.add_space(6.0);
+    let rgb = crate::smeta::ACCENTS
+        .get(m.offer.accent)
+        .map(|a| a.1)
+        .unwrap_or([31, 78, 160]);
+    let accent = egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2]);
+    let lines = report_lines(app, &m, &view);
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            egui::Frame::new()
+                .fill(theme::canvas())
+                .stroke(Stroke::new(1.0_f32, theme::line()))
+                .inner_margin(egui::Margin::same(18))
+                .show(ui, |ui| draw_doc(ui, &lines, accent));
+        });
+    if write {
+        app.start_report();
+    }
+    if export {
+        export_doc(app, &lines, t("sm_report_title"), t("sm_report_file"), rgb);
+    }
+}
+
+/// Hisobot qatorlari: hammasi dastur ma'lumotidan, AI bo'limlari esa
+/// alohida belgilangan.
+fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -> Vec<DocLine> {
+    use DocLine::*;
+    let project = app.project().map(|p| p.name.clone()).unwrap_or_default();
+    let mut out = vec![
+        Title(format!("{} — {project}", t("sm_report_title"))),
+        Muted(format!(
+            "{} {} · {} {} · {} {} · {}",
+            t("sm_offer_date"),
+            app.today.format("%d.%m.%Y"),
+            t("sm_pages_read"),
+            m.digest.len(),
+            t("tk_ai_tokens"),
+            m.tokens,
+            if m.model.is_empty() {
+                "—".to_string()
+            } else {
+                m.model.clone()
+            }
+        )),
+    ];
+    if let Some(tk) = &app.takeoff {
+        out.push(Muted(format!(
+            "{}: {} ({} {})",
+            t("tk_file"),
+            tk.file,
+            tk.pages,
+            t("tk_pages")
+        )));
+    }
+
+    // ---- AI matnli bo'limlari (bo'lsa) — birinchi, resume sifatida.
+    if m.report.is_empty() {
+        if !m.summary.is_empty() {
+            out.push(Gap);
+            out.push(Head(t("sm_summary").to_string()));
+            out.push(Text(m.summary.clone()));
+        }
+    } else {
+        for (title, body) in &m.report {
+            out.push(Gap);
+            out.push(Head(title.clone()));
+            out.push(Text(body.clone()));
+        }
+        out.push(Muted(t("sm_report_ai_mark").to_string()));
+    }
+
+    // ---- Obyekt raqamlarda.
+    if !m.facts.is_empty() {
+        out.push(Gap);
+        out.push(Head(t("sm_offer_numbers_title").to_string()));
+        for f in m.facts.iter().take(24) {
+            out.push(Cols(vec![
+                f.name.clone(),
+                format!("{} {}", f.value, f.unit).trim().to_string(),
+                f.page
+                    .map(|p| format!("{} {p}", t("pdf_page")))
+                    .unwrap_or_default(),
+            ]));
+        }
+        if m.facts.len() > 24 {
+            out.push(Muted(format!(
+                "… {} {}",
+                m.facts.len() - 24,
+                t("sm_report_more")
+            )));
+        }
+    }
+
+    // ---- Konstruksiyalar.
+    if let Some(tk) = &app.takeoff {
+        if !tk.constructs.is_empty() {
+            out.push(Gap);
+            out.push(Head(t("tab_constructs").to_string()));
+            for c in &tk.constructs {
+                out.push(Cols(vec![
+                    format!("{} {}", c.mark, c.name).trim().to_string(),
+                    format!("{} {}", num(c.count), c.unit),
+                    format!("{} {}", t("pdf_page"), c.page),
+                ]));
+            }
+        }
+    }
+
+    // ---- Loyihadan olingan materiallar.
+    if !app.cost_rows.is_empty() {
+        out.push(Gap);
+        out.push(Head(t("sm_from_project").to_string()));
+        out.push(Muted(t("sm_from_project_note").to_string()));
+        for r in &app.cost_rows {
+            out.push(Cols(vec![
+                r.total.material.clone(),
+                format!("{} {}", num(r.total.amount), r.total.unit),
+                format!("{} {}", r.total.lines, t("tk_col_lines")),
+            ]));
+        }
+    }
+
+    // ---- Savollar va javoblar.
+    if !m.questions.is_empty() {
+        out.push(Gap);
+        out.push(Head(t("sm_tab_questions").to_string()));
+        for q in &m.questions {
+            out.push(Row(
+                q.text.clone(),
+                if q.answer.is_empty() {
+                    t("sm_report_no_answer").to_string()
+                } else {
+                    q.answer.clone()
+                },
+            ));
+        }
+    }
+
+    // ---- Spetsifikatsiya va smeta yig'masi.
+    if !m.stages.is_empty() {
+        out.push(Gap);
+        out.push(Head(t("sm_tab_spec").to_string()));
+        out.push(Cols(vec![
+            t("sm_stages").to_string(),
+            t("sm_works").to_string(),
+            t("sm_materials").to_string(),
+            t("sm_src_assumption").to_string(),
+            t("tk_col_sum").to_string(),
+        ]));
+        let is_assume = |s: &Source| matches!(s, Source::Assumption { .. });
+        for (i, st) in m.stages.iter().enumerate() {
+            let mats: usize = st.works.iter().map(|w| w.materials.len()).sum();
+            let assume = st
+                .works
+                .iter()
+                .map(|w| {
+                    is_assume(&w.source) as usize
+                        + w.materials.iter().filter(|x| is_assume(&x.source)).count()
+                })
+                .sum::<usize>();
+            out.push(Cols(vec![
+                format!("{}. {}", i + 1, st.name),
+                st.works.len().to_string(),
+                mats.to_string(),
+                assume.to_string(),
+                view.stages
+                    .get(i)
+                    .map(|v| money(v.total))
+                    .unwrap_or_default(),
+            ]));
+        }
+        out.push(Gap);
+        out.push(Head(t("sm_tab_smeta").to_string()));
+        out.push(Row(t("sm_works").to_string(), money(view.work_sum)));
+        out.push(Row(t("sm_materials").to_string(), money(view.material_sum)));
+        out.push(Row(
+            t("sm_total").to_string(),
+            format!("{} {}", money(view.total), t("tk_sum_unit")),
+        ));
+        // Narx manbalari — qancha qator qaysi manbadan.
+        let mut by: std::collections::BTreeMap<&'static str, usize> = Default::default();
+        for sv in &view.stages {
+            for (wp, mps) in &sv.works {
+                *by.entry(wp.origin.label()).or_default() += 1;
+                for p in mps {
+                    *by.entry(p.origin.label()).or_default() += 1;
+                }
+            }
+        }
+        out.push(Sub(t("sm_report_price_sources").to_string()));
+        for (k, n) in by {
+            out.push(Row(t(k).to_string(), n.to_string()));
+        }
+        if view.missing > 0 {
+            out.push(Muted(format!("{} {}", view.missing, t("tk_total_partial"))));
+        }
+        if view.hinted > 0 {
+            out.push(Muted(format!("{} {}", view.hinted, t("sm_hinted_note"))));
+        }
+    }
+
+    // ---- AI topilmalari.
+    let open: Vec<&crate::smeta::Finding> = m.review.iter().filter(|f| !f.done).collect();
+    if !m.review_summary.is_empty() || !open.is_empty() {
+        out.push(Gap);
+        out.push(Head(t("sm_review_title").to_string()));
+        if !m.review_summary.is_empty() {
+            out.push(Text(m.review_summary.clone()));
+        }
+        for f in open {
+            let kind = match f.kind.as_str() {
+                "qty" => t("sm_f_qty"),
+                "missing" => t("sm_f_missing"),
+                "dup" => t("sm_f_dup"),
+                "price" => t("sm_f_price"),
+                _ => t("sm_f_ask"),
+            };
+            out.push(Text(format!("• [{kind}] {}", f.text)));
+        }
+    }
+
+    // ---- Chegaralar — doim.
+    out.push(Gap);
+    out.push(Head(t("sm_report_limits").to_string()));
+    for l in t("sm_report_limits_text").lines() {
+        out.push(Text(l.to_string()));
+    }
+    out
 }

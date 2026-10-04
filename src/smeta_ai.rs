@@ -687,6 +687,47 @@ pub fn spawn_review(cfg: Config, context: String) -> ReviewRx {
     rx
 }
 
+// ============================================================== 7. Hisobot
+
+const REPORT_SYSTEM: &str = "Ты — главный инженер проекта и сметчик. По данным объекта (показатели с листов, \
+конструкции, материалы из проекта, ответы заказчика, спецификация по этапам, смета и заключение проверки) напиши \
+разделы отчёта для заказчика и руководителя. Пиши по-русски, деловым языком, конкретно, с числами из данных. \
+Ничего не выдумывай: если данных нет — так и пиши. Разделы (ровно эти, в этом порядке):\n\
+1. Краткое резюме — 5–7 предложений: что за объект, главные объёмы, ориентировочная стоимость, степень надёжности расчёта.\n\
+2. Объект и конструктив — здания, площади, этажность, фундаменты, каркас, стены, перекрытия, кровля, инженерные разделы.\n\
+3. Основные объёмы — бетон по классам, арматура, металлопрокат, кладка, кровля, покрытия; откуда взяты (лист/расчёт).\n\
+4. Допущения и неопределённости — что принято без данных, что уточнить у заказчика, как это влияет на стоимость.\n\
+5. Риски — где расчёт может ошибаться (дубли, завышения, пропуски), на что обратить внимание при проверке.\n\
+6. Рекомендации — следующие шаги для получения точной сметы и договора.\n\
+7. Границы расчёта — что НЕ учтено (оборудование, НДС, накладные, непредвиденные, сроки), какие цены использованы (каталог/ориентир AI).\n\
+Ответ — только JSON: {\"sections\":[{\"title\":\"\",\"body\":\"\"}]}. Общий объём до 1200 слов.";
+
+/// Hisobot javobi: bo'limlar.
+pub fn parse_report(body: &str) -> Result<Vec<(String, String)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    Ok(v.get("sections")
+        .and_then(|a| a.as_array())
+        .ok_or_else(|| "JSON: sections yo'q".to_string())?
+        .iter()
+        .map(|x| (cell(x.get("title")), cell(x.get("body"))))
+        .filter(|x| !x.0.is_empty() && !x.1.is_empty())
+        .collect())
+}
+
+pub type ReportRx = Receiver<Result<(Vec<(String, String)>, u32), String>>;
+
+pub fn spawn_report(cfg: Config, context: String) -> ReportRx {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let out = llm::extract(&cfg, REPORT_SYSTEM, &[Part::Text(context)])
+            .map_err(|e| e.to_string())
+            .and_then(|a| parse_report(&a.text).map(|r| (r, a.usage.total)));
+        let _ = tx.send(out);
+    });
+    rx
+}
+
 // ========================================================= 6. Konsolidatsiya
 
 const CONSOLIDATE_SYSTEM: &str = "Ты — сметчик. Этапы сметы собирались параллельно и не видели друг друга, поэтому \
@@ -758,6 +799,15 @@ mod tests {
                 "типично".to_string()
             )]
         );
+    }
+
+    #[test]
+    fn report_sections_are_read() {
+        let r = parse_report(
+            r#"{"sections":[{"title":"Резюме","body":"Цех 9310 м2."},{"title":"","body":"x"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(r, vec![("Резюме".to_string(), "Цех 9310 м2.".to_string())]);
     }
 
     #[test]

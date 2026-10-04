@@ -460,6 +460,9 @@ pub struct Smeta {
     pub review_summary: String,
     #[serde(default)]
     pub review: Vec<Finding>,
+    /// AI loyiha hisobotining matnli bo'limlari: `(sarlavha, matn)`.
+    #[serde(default)]
+    pub report: Vec<(String, String)>,
     #[serde(default)]
     pub model: String,
     #[serde(default)]

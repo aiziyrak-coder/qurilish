@@ -303,17 +303,20 @@ pub enum CheckTab {
     Smeta,
     /// Mijozga taklif (KP).
     Offer,
+    /// AI loyiha hisoboti — mijoz va rahbar uchun to'liq hujjat.
+    Report,
 }
 
 impl CheckTab {
     /// Tartib — ish tartibi, chapdan o'ngga.
-    pub const ALL: [CheckTab; 6] = [
+    pub const ALL: [CheckTab; 7] = [
         CheckTab::Upload,
         CheckTab::Questions,
         CheckTab::Data,
         CheckTab::Spec,
         CheckTab::Smeta,
         CheckTab::Offer,
+        CheckTab::Report,
     ];
 
     pub fn label(self) -> &'static str {
@@ -324,6 +327,7 @@ impl CheckTab {
             CheckTab::Spec => t("sm_tab_spec"),
             CheckTab::Smeta => t("sm_tab_smeta"),
             CheckTab::Offer => t("sm_tab_offer"),
+            CheckTab::Report => t("sm_tab_report"),
         }
     }
 
@@ -336,6 +340,7 @@ impl CheckTab {
             CheckTab::Spec => t("sm_tab_spec_hint"),
             CheckTab::Smeta => t("sm_tab_smeta_hint"),
             CheckTab::Offer => t("sm_tab_offer_hint"),
+            CheckTab::Report => t("sm_tab_report_hint"),
         }
     }
 }
@@ -891,6 +896,8 @@ pub struct App {
     pub consolidate_rx: Option<crate::smeta_ai::ConsolidateRx>,
     /// Javobsiz savollarga AI taklifi.
     pub answers_rx: Option<crate::smeta_ai::AnswersRx>,
+    /// AI loyiha hisoboti bo'limlari so'rovi.
+    pub report_rx: Option<crate::smeta_ai::ReportRx>,
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
     pub pdf_note: String,
     /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
@@ -1131,6 +1138,7 @@ impl App {
             review_rx: None,
             consolidate_rx: None,
             answers_rx: None,
+            report_rx: None,
             pdf_note: String::new(),
             takeoff: None,
             takeoff_prices: Default::default(),
@@ -2465,6 +2473,7 @@ impl App {
         self.review_rx = None;
         self.consolidate_rx = None;
         self.answers_rx = None;
+        self.report_rx = None;
         // Boshqa obyektga o'tilsa, fon ishlari to'xtatiladi: natija
         // noto'g'ri obyektga yozilmasin.
         self.drop_jobs();
@@ -3049,6 +3058,8 @@ impl App {
             CheckTab::Spec | CheckTab::Smeta | CheckTab::Offer => {
                 m.is_some_and(|m| !m.stages.is_empty())
             }
+            // Hisobot bor ma'lumot bilan tuziladi — spetsifikatsiya shart emas.
+            CheckTab::Report => m.is_some_and(|m| !m.digest.is_empty()),
         }
     }
 
@@ -3543,6 +3554,7 @@ impl App {
             Err(TryRecvError::Disconnected) => Err(t("sm_answers_failed").to_string()),
         };
         self.answers_rx = None;
+        self.report_rx = None;
         match result {
             Ok((list, tokens)) => {
                 self.llm_tokens += tokens;
@@ -3562,6 +3574,69 @@ impl App {
                 self.save_takeoff();
             }
             Err(e) => self.smeta_note = format!("{}: {e}", t("sm_answers_failed")),
+        }
+        true
+    }
+
+    /// AI hisobot bo'limlarini yozadi (dastur jadvallari o'zgarmaydi).
+    pub fn start_report(&mut self) {
+        if self.report_rx.is_some() || !self.llm.is_ready() || self.smeta.is_none() {
+            return;
+        }
+        let mut ctx = self.smeta_context();
+        if let Some(m) = &self.smeta {
+            ctx.push_str("\nОТВЕТЫ ЗАКАЗЧИКА:\n");
+            for q in &m.questions {
+                ctx.push_str(&format!(
+                    "- {} — {}\n",
+                    q.text,
+                    if q.answer.is_empty() {
+                        "нет данных"
+                    } else {
+                        &q.answer
+                    }
+                ));
+            }
+            if !m.review_summary.is_empty() {
+                ctx.push_str(&format!("\nЗАКЛЮЧЕНИЕ ПРОВЕРКИ: {}\n", m.review_summary));
+                for f in m.review.iter().filter(|f| !f.done) {
+                    ctx.push_str(&format!("- [{}] {}\n", f.kind, f.text));
+                }
+            }
+        }
+        if let Some(tk) = &self.takeoff {
+            ctx.push_str("\nКОНСТРУКЦИИ ПРОЕКТА:\n");
+            for c in &tk.constructs {
+                ctx.push_str(&format!(
+                    "- {} {} — {} {} (лист {})\n",
+                    c.mark, c.name, c.count, c.unit, c.page
+                ));
+            }
+        }
+        self.report_rx = Some(crate::smeta_ai::spawn_report(self.extract_cfg(), ctx));
+    }
+
+    pub fn poll_report(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.report_rx else {
+            return false;
+        };
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => Err(t("sm_report_failed").to_string()),
+        };
+        self.report_rx = None;
+        match result {
+            Ok((sections, tokens)) => {
+                self.llm_tokens += tokens;
+                if let Some(m) = &mut self.smeta {
+                    m.report = sections;
+                    m.tokens += tokens;
+                }
+                self.save_takeoff();
+            }
+            Err(e) => self.smeta_note = format!("{}: {e}", t("sm_report_failed")),
         }
         true
     }
@@ -6501,6 +6576,49 @@ mod live {
             ));
         }
         std::fs::write(std::env::temp_dir().join("qurai_hints.txt"), log).unwrap();
+    }
+
+    /// Saqlangan smetaga AI hisobot matni. `QURAI_LIVE_DB`, `QURAI_LIVE_OUT`.
+    #[test]
+    #[ignore]
+    fn report_on_a_saved_smeta() {
+        let (Ok(src), Ok(out)) = (
+            std::env::var("QURAI_LIVE_DB"),
+            std::env::var("QURAI_LIVE_OUT"),
+        ) else {
+            return;
+        };
+        let Some((p, id)) = out.split_once('|') else {
+            return;
+        };
+        let keydb = crate::db::Db::open(&std::path::PathBuf::from(&src)).expect("baza");
+        let key = keydb.get_setting("llm_key").unwrap_or_default();
+        let mut app = App::new(crate::db::Db::open(&std::path::PathBuf::from(p)).expect("baza"));
+        app.set_llm_key(&key);
+        app.select_project(id.parse().expect("id"));
+        app.start_report();
+        assert!(app.report_rx.is_some(), "{}", app.smeta_note);
+        while app.report_rx.is_some() {
+            app.poll_report();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        let m = app.smeta.clone().expect("smeta");
+        let mut log = format!(
+            "{}
+bo'limlar {}
+",
+            app.smeta_note,
+            m.report.len()
+        );
+        for (t, b) in &m.report {
+            log.push_str(&format!(
+                "
+## {t}
+{b}
+"
+            ));
+        }
+        std::fs::write(std::env::temp_dir().join("qurai_report.txt"), log).unwrap();
     }
 
     #[test]
