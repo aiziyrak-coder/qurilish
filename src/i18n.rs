@@ -446,6 +446,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "sm_review_title" => ("AI xulosasi", "Заключение AI"),
         "sm_f_qty" => ("miqdor", "количество"),
         "sm_col_fact" => ("Ko'rsatkich", "Показатель"),
+        "sm_offer_docx" => ("Word saqlash", "Сохранить Word"),
         "sm_pay_title" => ("To'lov", "Платёж"),
         "sm_col_value" => ("Qiymat", "Значение"),
         "sm_col_construct" => ("Konstruksiya", "Конструкция"),

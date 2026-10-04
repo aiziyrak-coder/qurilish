@@ -30,6 +30,8 @@ rust_xlsxwriter = { version = "0.99.0", default-features = false }
 printpdf = { version = "0.7", default-features = false }
 lopdf = { version = "0.31", default-features = false, features = ["chrono_time", "pom_parser"] }
 qrcode = { version = "0.14", default-features = false }
+# Word hujjat (.docx) — ZIP ichidagi XML; shu kutubxona rust_xlsxwriter orqali allaqachon bor.
+zip = { version = "8", default-features = false, features = ["deflate"] }
 # Imzo va zanjir xeshi: ilova va server bitta hisobga tayanishi uchun.
 qurai-hash = { path = "hash" }
 

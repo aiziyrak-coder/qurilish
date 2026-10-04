@@ -1874,6 +1874,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut offer = m.offer.clone();
     let mut changed = false;
     let mut export = false;
+    let mut export_word = false;
     let mut remember = false;
 
     // Sozlamalar yig'iladigan bo'limda, hujjat butun enda: ustunli
@@ -2016,6 +2017,9 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                     if ui.button(t("sm_offer_pdf")).clicked() {
                         export = true;
                     }
+                    if ui.button(t("sm_offer_docx")).clicked() {
+                        export_word = true;
+                    }
                     if ui
                         .button(t("sm_offer_remember"))
                         .on_hover_text(t("sm_offer_remember_hint"))
@@ -2052,6 +2056,14 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
     }
     if export {
         export_offer(app);
+    }
+    if export_word {
+        let rgb = crate::smeta::ACCENTS
+            .get(m.offer.accent)
+            .map(|a| a.1)
+            .unwrap_or([31, 78, 160]);
+        let lines = offer_lines(app, &m, &view);
+        export_docx(app, &lines, t("sm_offer_file"), t("sm_offer_file"), rgb);
     }
 }
 
@@ -2214,6 +2226,36 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                 ui.add_space(8.0);
             }
         }
+    }
+}
+
+/// Hujjatni Word (.docx) ga yozadi — xuddi shu qatorlardan.
+fn export_docx(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u8; 3]) {
+    use crate::docx::Block;
+    let name = format!("{file}_{}.docx", app.today.format("%Y-%m-%d"));
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(&name)
+        .add_filter("Word", &["docx"])
+        .save_file()
+    else {
+        return;
+    };
+    let blocks: Vec<Block> = lines
+        .iter()
+        .filter_map(|l| match l {
+            DocLine::Title(s) => Some(Block::Title(s.clone())),
+            DocLine::Head(s) => Some(Block::Heading(s.clone())),
+            DocLine::Sub(s) => Some(Block::Sub(s.clone())),
+            DocLine::Text(s) => Some(Block::Para(s.clone())),
+            DocLine::Muted(s) => Some(Block::Muted(s.clone())),
+            DocLine::Table(h, r) => Some(Block::Table(h.clone(), r.clone())),
+            DocLine::Tiles(t) => Some(Block::Tiles(t.clone())),
+            DocLine::Gap => None,
+        })
+        .collect();
+    match crate::docx::write(&path, title, &blocks, rgb) {
+        Ok(()) => app.notify(format!("{} · {}", t("export_done"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
     }
 }
 
@@ -3052,6 +3094,7 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
     let view = app.smeta_view.clone();
     let mut write = false;
     let mut export = false;
+    let mut export_word = false;
 
     card(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
@@ -3075,6 +3118,9 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
             }
             if ui.button(t("sm_offer_pdf")).clicked() {
                 export = true;
+            }
+            if ui.button(t("sm_offer_docx")).clicked() {
+                export_word = true;
             }
         });
         ui.label(
@@ -3117,6 +3163,9 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
     }
     if export {
         export_doc(app, &lines, t("sm_report_title"), t("sm_report_file"), rgb);
+    }
+    if export_word {
+        export_docx(app, &lines, t("sm_report_title"), t("sm_report_file"), rgb);
     }
 }
 

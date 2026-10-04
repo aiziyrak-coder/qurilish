@@ -14,6 +14,7 @@ mod copilot;
 mod cpm;
 mod db;
 mod docgen;
+mod docx;
 mod domain;
 mod dxf;
 mod exif;
