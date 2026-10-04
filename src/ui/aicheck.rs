@@ -2163,8 +2163,10 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
             DocLine::Table(headers, rows) => {
                 table_no += 1;
                 let n = headers.len().max(1);
-                let total_w = ui.available_width() - 8.0;
-                let first_w = if n > 1 { total_w * 0.46 } else { total_w };
+                // Jadval butun enni egallaydi; tor oynada ham ustunlar
+                // siqilib ketmaydi.
+                let total_w = (ui.available_width() - 8.0).max(420.0);
+                let first_w = if n > 1 { total_w * 0.44 } else { total_w };
                 let rest_w = if n > 1 {
                     (total_w - first_w) / (n - 1) as f32
                 } else {
@@ -2194,8 +2196,11 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                             accent.gamma_multiply(0.14),
                                         );
                                         ui.add_space(6.0);
-                                        ui.label(
-                                            RichText::new(h).size(11.0).strong().color(accent),
+                                        ui.add(
+                                            egui::Label::new(
+                                                RichText::new(h).size(11.0).strong().color(accent),
+                                            )
+                                            .truncate(),
                                         );
                                         ui.add_space(6.0);
                                     });
