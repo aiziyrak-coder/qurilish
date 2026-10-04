@@ -288,27 +288,54 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
     ("nav_system", &[Screen::Settings]),
 ];
 
-/// AI tekshiruv ekranidagi ochiq bo'lim.
+/// Smeta yo'lining bosqichi — ekrandagi ochiq bo'lim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckTab {
-    /// Loyiha fayli va undan o'qilgan jadvallar.
-    Project,
-    /// Konstruksiyalar va ularning soni.
-    Constructs,
-    /// Material bo'yicha yig'ma va qiymat.
-    Calc,
+    /// Loyiha fayli: PDF yuklanadi, dastur va AI varaqlarni o'qiydi.
+    Upload,
+    /// Loyihada ko'rinmagan narsalar haqida savollar.
+    Questions,
+    /// Obyekt ma'lumoti: varaqlardan olingan ko'rsatkichlar va materiallar.
+    Data,
+    /// Spetsifikatsiya: bosqichlar, ishlar, materiallar.
+    Spec,
+    /// Smeta: narxlar, ustamalar, jami.
+    Smeta,
+    /// Mijozga taklif (KP).
+    Offer,
 }
 
 impl CheckTab {
-    /// Tartib — ish tartibi: loyiha yuklanadi, konstruksiyalar soni
-    /// tekshiriladi, so'ng kalkulyatsiya o'qiladi.
-    pub const ALL: [CheckTab; 3] = [CheckTab::Project, CheckTab::Constructs, CheckTab::Calc];
+    /// Tartib — ish tartibi, chapdan o'ngga.
+    pub const ALL: [CheckTab; 6] = [
+        CheckTab::Upload,
+        CheckTab::Questions,
+        CheckTab::Data,
+        CheckTab::Spec,
+        CheckTab::Smeta,
+        CheckTab::Offer,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
-            CheckTab::Project => t("tab_project"),
-            CheckTab::Constructs => t("tab_constructs"),
-            CheckTab::Calc => t("tab_calc"),
+            CheckTab::Upload => t("sm_tab_upload"),
+            CheckTab::Questions => t("sm_tab_questions"),
+            CheckTab::Data => t("sm_tab_data"),
+            CheckTab::Spec => t("sm_tab_spec"),
+            CheckTab::Smeta => t("sm_tab_smeta"),
+            CheckTab::Offer => t("sm_tab_offer"),
+        }
+    }
+
+    /// Bosqich ostidagi qisqa izoh.
+    pub fn hint(self) -> &'static str {
+        match self {
+            CheckTab::Upload => t("sm_tab_upload_hint"),
+            CheckTab::Questions => t("sm_tab_questions_hint"),
+            CheckTab::Data => t("sm_tab_data_hint"),
+            CheckTab::Spec => t("sm_tab_spec_hint"),
+            CheckTab::Smeta => t("sm_tab_smeta_hint"),
+            CheckTab::Offer => t("sm_tab_offer_hint"),
         }
     }
 }
@@ -523,23 +550,42 @@ pub struct PdfJob {
     rx: std::sync::mpsc::Receiver<Result<crate::takeoff::Takeoff, String>>,
 }
 
-/// Varaqlarni AI bilan o'qish — fon ishi.
+/// Varaqlarni AI bilan o'qish — fon ishi (smeta yo'lining 1-bosqichi).
 ///
 /// So'rovlar bir necha ipda ketadi; natijalar shu yerda yig'iladi va ish
-/// tugagach bir yo'la hisobga qo'llanadi. O'rtada to'xtatilsa — o'qib
-/// ulgurilgan varaqlar qo'llanadi.
-pub struct AiJob {
+/// tugagach bir yo'la qo'llanadi. O'rtada to'xtatilsa — o'qib ulgurilgan
+/// varaqlar qo'llanadi.
+pub struct PagesJob {
     pub started: std::time::Instant,
     /// O'qiladigan varaqlar; bo'sh — reja hali kelmagan.
     pub plan: Vec<usize>,
-    pub done: Vec<(usize, crate::aitake::PageResult)>,
+    pub done: Vec<(usize, crate::smeta_ai::PageOut)>,
     pub failed: Vec<(usize, String)>,
     pub model: String,
     cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    rx: std::sync::mpsc::Receiver<crate::aitake::Msg>,
+    rx: std::sync::mpsc::Receiver<crate::smeta_ai::PageMsg>,
+}
+
+/// Savollar so'rovining natijasi: xulosa, savollar, tokenlar.
+pub type QuestionsRx =
+    std::sync::mpsc::Receiver<Result<(String, Vec<crate::smeta::Question>, u32), String>>;
+
+/// Spetsifikatsiyani tuzish — fon ishi (4-bosqich).
+pub struct SpecJob {
+    pub started: std::time::Instant,
+    pub plan: Vec<String>,
+    pub done: Vec<(usize, crate::smeta::Stage)>,
+    pub failed: Vec<(usize, String)>,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    rx: std::sync::mpsc::Receiver<crate::smeta_ai::StageMsg>,
 }
 
 /// Kalkulyatsiyaning narx qo'yilgan qatori.
+///
+/// Smeta yo'lida bu qatorlar «loyihadan olingan materiallar» sifatida
+/// ko'rinadi; narxi smeta katalogi orqali qo'yiladi, shuning uchun
+/// qatorning o'z narx maydonlari ekranda hozir ishlatilmaydi.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct CostRow {
     pub total: crate::takeoff::Total,
@@ -554,6 +600,7 @@ pub struct CostRow {
 
 impl CostRow {
     /// Summa. Narx yo'q bo'lsa — yo'q: nol deb ko'rsatish yolg'on bo'lardi.
+    #[allow(dead_code)]
     pub fn sum(&self) -> Option<f64> {
         self.price.map(|p| p * self.total.amount)
     }
@@ -783,18 +830,29 @@ pub struct App {
     pub view_role: Option<crate::roles::Role>,
     /// Fon ipida o'qilayotgan fayl.
     pub pdf_job: Option<PdfJob>,
+    /// Obyekt smetasi: varaqlar xulosasi, savollar, bosqichlar, taklif.
+    pub smeta: Option<crate::smeta::Smeta>,
+    /// Narxlangan ko'rinish — har o'zgarishdan keyin qayta hisoblanadi.
+    pub smeta_view: crate::smeta::View,
+    /// Kompaniya katalogi: barcha obyektlarga umumiy narxlar.
+    pub catalog: crate::smeta::Catalog,
+    /// Narx tahriri qayerga yozilsin: `true` — katalogga (kompaniya
+    /// standarti), `false` — faqat shu smetaga.
+    pub price_to_catalog: bool,
     /// Varaqlarni AI bilan o'qish ketyaptimi.
-    pub ai_job: Option<AiJob>,
+    pub pages_job: Option<PagesJob>,
+    /// Savollar so'rovi.
+    pub questions_rx: Option<QuestionsRx>,
+    /// Spetsifikatsiya tuzilyaptimi.
+    pub spec_job: Option<SpecJob>,
     /// Varaq o'qish modeli — suhbat modelidan alohida (`llm::EXTRACT_MODEL`).
     pub ai_model: String,
-    /// AI o'qishining oxirgi xabari (xato yoki «to'xtatildi»).
-    pub ai_note: String,
+    /// Smeta yo'lidagi oxirgi xabar (xato yoki natija).
+    pub smeta_note: String,
     /// Loyiha faylining yo'li — AI varaqlarni shu fayldan oladi.
     pub takeoff_path: Option<std::path::PathBuf>,
-    /// Kalkulyatsiya bo'yicha AI xulosasi va uning fon so'rovi.
-    pub takeoff_review: String,
-    pub takeoff_review_rx:
-        Option<std::sync::mpsc::Receiver<Result<crate::llm::Answer, crate::llm::Error>>>,
+    /// Spetsifikatsiyada ochiq bosqich.
+    pub smeta_open: Option<usize>,
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
     pub pdf_note: String,
     /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
@@ -808,6 +866,7 @@ pub struct App {
     /// Sanalmagan takror spetsifikatsiyalar: sarlavha va sahifa.
     pub takeoff_repeats: Vec<(String, usize)>,
     /// Kalkulyatsiyada tafsiloti ochilgan material.
+    #[allow(dead_code)]
     pub takeoff_open: Option<String>,
     /// Tepadagi AI oynasi ochiqmi.
     ///
@@ -1010,12 +1069,17 @@ impl App {
             current_user: None,
             view_role: None,
             pdf_job: None,
-            ai_job: None,
+            smeta: None,
+            smeta_view: Default::default(),
+            catalog: Default::default(),
+            price_to_catalog: false,
+            pages_job: None,
+            questions_rx: None,
+            spec_job: None,
             ai_model: crate::llm::EXTRACT_MODEL.to_string(),
-            ai_note: String::new(),
+            smeta_note: String::new(),
             takeoff_path: None,
-            takeoff_review: String::new(),
-            takeoff_review_rx: None,
+            smeta_open: None,
             pdf_note: String::new(),
             takeoff: None,
             takeoff_prices: Default::default(),
@@ -1042,7 +1106,7 @@ impl App {
             auto_check_project: false,
             auto_check_estimate: false,
             auto_check_ppr: false,
-            check_tab: CheckTab::Project,
+            check_tab: CheckTab::Upload,
             issue_sev: None,
             issue_status: None,
             issue_search: String::new(),
@@ -1097,6 +1161,13 @@ impl App {
         {
             app.ai_model = m;
         }
+        app.catalog = app
+            .db
+            .get_setting("smeta_catalog")
+            .and_then(|c| serde_json::from_str(&c).ok())
+            .unwrap_or_default();
+        app.price_to_catalog =
+            app.db.get_setting("smeta_price_scope").as_deref() == Some("catalog");
 
         // Sinxronizatsiya sozlamasi. Parol saqlanmaydi — faqat seans belgisi.
         app.sync = crate::sync::Config {
@@ -1182,10 +1253,12 @@ impl App {
         self.reload_project_data();
         // Hisob allaqachon bor obyektda sahifa natijadan ochiladi; yo'q
         // bo'lsa — yuklash qadamidan.
-        self.check_tab = if self.takeoff.is_some() {
-            CheckTab::Calc
+        self.check_tab = if self.smeta.as_ref().is_some_and(|m| !m.stages.is_empty()) {
+            CheckTab::Smeta
+        } else if self.smeta.is_some() {
+            CheckTab::Questions
         } else {
-            CheckTab::Project
+            CheckTab::Upload
         };
         // Butun grafikni ko'rsatamiz: obyekt ochilganda bajarilgan ishlar ham,
         // oldindagilari ham bir qarashda ko'rinishi kerak.
@@ -2288,9 +2361,12 @@ impl App {
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_default();
         let _ = self.db.set_setting(&format!("takeoff_path.{pid}"), &path);
-        let _ = self
-            .db
-            .set_setting(&format!("takeoff_review.{pid}"), &self.takeoff_review);
+        let smeta = self
+            .smeta
+            .as_ref()
+            .and_then(|m| serde_json::to_string(m).ok())
+            .unwrap_or_default();
+        let _ = self.db.set_setting(&format!("smeta.{pid}"), &smeta);
         let prices = serde_json::to_string(&self.takeoff_prices).unwrap_or_default();
         let _ = self
             .db
@@ -2302,21 +2378,23 @@ impl App {
         self.takeoff = None;
         self.takeoff_prices.clear();
         self.takeoff_path = None;
-        self.takeoff_review.clear();
-        self.takeoff_review_rx = None;
-        // Boshqa obyektga o'tilsa, fon o'qishi to'xtatiladi: natija
+        self.smeta = None;
+        self.smeta_open = None;
+        self.smeta_note.clear();
+        self.questions_rx = None;
+        // Boshqa obyektga o'tilsa, fon ishlari to'xtatiladi: natija
         // noto'g'ri obyektga yozilmasin.
-        self.drop_ai_job();
+        self.drop_jobs();
         if let Some(pid) = self.current {
             self.takeoff_path = self
                 .db
                 .get_setting(&format!("takeoff_path.{pid}"))
                 .filter(|p| !p.is_empty())
                 .map(std::path::PathBuf::from);
-            self.takeoff_review = self
+            self.smeta = self
                 .db
-                .get_setting(&format!("takeoff_review.{pid}"))
-                .unwrap_or_default();
+                .get_setting(&format!("smeta.{pid}"))
+                .and_then(|m| serde_json::from_str(&m).ok());
             self.takeoff = self
                 .db
                 .get_setting(&format!("takeoff.{pid}"))
@@ -2371,10 +2449,26 @@ impl App {
                 }
             })
             .collect();
+        self.recompute_smeta();
+    }
+
+    /// Smetani narxlaydi: shu smetadagi narx → katalog → narx bazasi.
+    pub fn recompute_smeta(&mut self) {
+        let Some(smeta) = &self.smeta else {
+            self.smeta_view = Default::default();
+            return;
+        };
+        let index = crate::prices::Index::build(&self.price_book);
+        let book = |name: &str, unit: &str| -> Option<f64> {
+            let found = crate::prices::find_with(&self.price_book, &index, name, "", unit);
+            crate::prices::range(&found).map(|r| r.avg)
+        };
+        self.smeta_view = crate::smeta::view(smeta, &self.catalog, &book);
     }
 
     /// Material narxini qo'lda qo'yadi; nol yoki manfiy — narxni olib
-    /// tashlaydi.
+    /// tashlaydi. Smeta yo'lida narx katalog orqali qo'yiladi.
+    #[allow(dead_code)]
     pub fn set_takeoff_price(&mut self, material: &str, price: f64) {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());
@@ -2405,49 +2499,14 @@ impl App {
         self.recompute_takeoff();
     }
 
-    /// Fon o'qishini natijasiz tashlaydi.
-    fn drop_ai_job(&mut self) {
-        if let Some(job) = self.ai_job.take() {
+    /// Fon ishlarini natijasiz tashlaydi.
+    fn drop_jobs(&mut self) {
+        if let Some(job) = self.pages_job.take() {
             job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-    }
-
-    /// Varaqlarni AI bilan o'qishni boshlaydi.
-    ///
-    /// Bu amal loyiha varaqlarini **tashqi xizmatga yuboradi** — faqat
-    /// foydalanuvchi tugmani bosganda va kalit kiritilgan bo'lsa ishlaydi.
-    /// `limit` — sinov uchun faqat birinchi N ta jadvalli varaq.
-    pub fn start_ai(&mut self, limit: Option<usize>) {
-        if !self.can_edit(Screen::AiCheck) {
-            self.notify(t("role_readonly").to_string());
-            return;
+        if let Some(job) = self.spec_job.take() {
+            job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
-        if self.ai_job.is_some() || self.pdf_job.is_some() || self.takeoff.is_none() {
-            return;
-        }
-        if !self.llm.is_ready() {
-            self.ai_note = t("tk_ai_no_key").to_string();
-            return;
-        }
-        let Some(path) = self.takeoff_path.clone().filter(|p| p.exists()) else {
-            self.ai_note = t("tk_ai_no_file").to_string();
-            return;
-        };
-        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let mut cfg = self.llm.clone();
-        if !self.ai_model.trim().is_empty() {
-            cfg.model = self.ai_model.trim().to_string();
-        }
-        self.ai_note.clear();
-        self.ai_job = Some(AiJob {
-            started: std::time::Instant::now(),
-            plan: Vec::new(),
-            done: Vec::new(),
-            failed: Vec::new(),
-            model: cfg.model.clone(),
-            rx: crate::aitake::spawn(cfg, path, limit, cancel.clone()),
-            cancel,
-        });
     }
 
     /// Varaq o'qish modelini tanlaydi va eslab qoladi.
@@ -2456,35 +2515,162 @@ impl App {
         let _ = self.db.set_setting("takeoff_ai_model", &self.ai_model);
     }
 
-    /// O'qishni to'xtatadi: boshlangan so'rovlar tugaydi, yangilari
-    /// boshlanmaydi; o'qib ulgurilgan varaqlar qo'llanadi.
-    pub fn cancel_ai(&mut self) {
-        if let Some(job) = &self.ai_job {
+    /// Varaq o'qish sozlamasi: tanlangan model bilan.
+    fn extract_cfg(&self) -> crate::llm::Config {
+        let mut cfg = self.llm.clone();
+        if !self.ai_model.trim().is_empty() {
+            cfg.model = self.ai_model.trim().to_string();
+        }
+        cfg
+    }
+
+    /// Smeta yo'li qaysi bosqichda: nima tayyor.
+    pub fn smeta_ready(&self, tab: CheckTab) -> bool {
+        let m = self.smeta.as_ref();
+        match tab {
+            CheckTab::Upload => true,
+            CheckTab::Questions | CheckTab::Data => m.is_some_and(|m| !m.digest.is_empty()),
+            CheckTab::Spec | CheckTab::Smeta | CheckTab::Offer => {
+                m.is_some_and(|m| !m.stages.is_empty())
+            }
+        }
+    }
+
+    /// Smetani o'zgartiradi va saqlaydi (rol tekshiruvi bilan).
+    pub fn edit_smeta(&mut self, f: impl FnOnce(&mut crate::smeta::Smeta)) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if let Some(m) = &mut self.smeta {
+            f(m);
+        }
+        self.save_takeoff();
+        self.recompute_smeta();
+    }
+
+    /// Narxni qo'yadi: katalogga (kompaniya standarti) yoki faqat shu
+    /// smetaga — `price_to_catalog` ga qarab. Nol — narxni olib tashlaydi.
+    pub fn set_price(&mut self, stage: usize, work: usize, material: Option<usize>, price: f64) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        let Some(w) = self
+            .smeta
+            .as_mut()
+            .and_then(|m| m.stages.get_mut(stage))
+            .and_then(|s| s.works.get_mut(work))
+        else {
+            return;
+        };
+        let (name, unit, own) = match material {
+            Some(i) => match w.materials.get_mut(i) {
+                Some(m) => (m.name.clone(), m.unit.clone(), &mut m.price),
+                None => return,
+            },
+            None => (w.name.clone(), w.unit.clone(), &mut w.price),
+        };
+        if self.price_to_catalog {
+            // Katalogdagi narx shu smetadagi narxni ham almashtiradi —
+            // aks holda tahrir ko'rinmasdi.
+            *own = None;
+            let key = crate::smeta::key(&name, &unit);
+            let map = if material.is_some() {
+                &mut self.catalog.materials
+            } else {
+                &mut self.catalog.works
+            };
+            if price > 0.0 {
+                map.insert(key, price);
+            } else {
+                map.remove(&key);
+            }
+            let body = serde_json::to_string(&self.catalog).unwrap_or_default();
+            let _ = self.db.set_setting("smeta_catalog", &body);
+        } else {
+            *own = (price > 0.0).then_some(price);
+        }
+        self.save_takeoff();
+        self.recompute_smeta();
+    }
+
+    /// Narx tahriri qayerga yozilishini tanlaydi.
+    pub fn set_price_scope(&mut self, to_catalog: bool) {
+        self.price_to_catalog = to_catalog;
+        let _ = self.db.set_setting(
+            "smeta_price_scope",
+            if to_catalog { "catalog" } else { "smeta" },
+        );
+    }
+
+    // ------------------------------------------------ 1-bosqich: varaqlar
+
+    /// Varaqlarni AI bilan o'qishni boshlaydi.
+    ///
+    /// Bu amal loyiha varaqlarini **tashqi xizmatga yuboradi** — faqat
+    /// kalit kiritilgan bo'lsa ishlaydi va ekranda shunday deb yozilgan.
+    pub fn start_pages(&mut self) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if self.pages_job.is_some() || self.pdf_job.is_some() || self.takeoff.is_none() {
+            return;
+        }
+        if !self.llm.is_ready() {
+            self.smeta_note = t("sm_no_key").to_string();
+            return;
+        }
+        let Some(path) = self.takeoff_path.clone().filter(|p| p.exists()) else {
+            self.smeta_note = t("sm_no_file").to_string();
+            return;
+        };
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let cfg = self.extract_cfg();
+        self.smeta_note.clear();
+        self.pages_job = Some(PagesJob {
+            started: std::time::Instant::now(),
+            plan: Vec::new(),
+            done: Vec::new(),
+            failed: Vec::new(),
+            model: cfg.model.clone(),
+            rx: crate::smeta_ai::spawn_pages(cfg, path, cancel.clone()),
+            cancel,
+        });
+    }
+
+    /// Fon ishini to'xtatadi: boshlangan so'rovlar tugaydi, yangilari
+    /// boshlanmaydi; o'qib ulgurilgani qo'llanadi.
+    pub fn cancel_jobs(&mut self) {
+        if let Some(job) = &self.pages_job {
+            job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(job) = &self.spec_job {
             job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
 
-    /// Fon o'qishidan kelgan xabarlarni oladi. Har kadrda chaqiriladi va
-    /// bloklanmaydi.
-    pub fn poll_ai(&mut self) -> bool {
-        use crate::aitake::Msg;
+    /// Varaq o'qish xabarlarini oladi. Har kadrda chaqiriladi, bloklanmaydi.
+    pub fn poll_pages(&mut self) -> bool {
+        use crate::smeta_ai::PageMsg;
         use std::sync::mpsc::TryRecvError;
-        let Some(job) = &mut self.ai_job else {
+        let Some(job) = &mut self.pages_job else {
             return false;
         };
         let mut finished = false;
         let mut changed = false;
         loop {
             match job.rx.try_recv() {
-                Ok(Msg::Plan(plan)) => job.plan = plan,
-                Ok(Msg::Page(page, Ok(found))) => job.done.push((page, found)),
-                Ok(Msg::Page(page, Err(e))) => job.failed.push((page, e)),
-                Ok(Msg::Failed(e)) => {
-                    self.ai_note = e;
-                    self.ai_job = None;
+                Ok(PageMsg::Plan(plan)) => job.plan = plan,
+                Ok(PageMsg::Page(page, Ok(out))) => job.done.push((page, out)),
+                Ok(PageMsg::Page(page, Err(e))) => job.failed.push((page, e)),
+                Ok(PageMsg::Failed(e)) => {
+                    self.smeta_note = e;
+                    self.pages_job = None;
                     return true;
                 }
-                Ok(Msg::Done) | Err(TryRecvError::Disconnected) => {
+                Ok(PageMsg::Done) | Err(TryRecvError::Disconnected) => {
                     finished = true;
                     break;
                 }
@@ -2495,175 +2681,389 @@ impl App {
         if !finished {
             return changed;
         }
-        let Some(job) = self.ai_job.take() else {
+        let Some(mut job) = self.pages_job.take() else {
             return true;
         };
+        job.done.sort_by_key(|d| d.0);
+        job.failed.sort();
         let tokens: u32 = job.done.iter().map(|d| d.1.tokens).sum();
         self.llm_tokens += tokens;
-        let mut failed = job.failed;
-        failed.sort();
         let read = job.done.len();
+        let digest: Vec<crate::smeta::PageDigest> =
+            job.done.iter().map(|d| d.1.digest.clone()).collect();
         if let Some(tk) = &mut self.takeoff {
             let pages = job
                 .done
                 .into_iter()
-                .map(|(page, r)| (page, r.owner, r.tables))
+                .map(|(page, out)| (page, out.owner, out.tables))
                 .collect();
             tk.apply_ai(
                 pages,
                 crate::takeoff::AiInfo {
-                    model: job.model,
+                    model: job.model.clone(),
                     pages: Vec::new(),
-                    failed,
+                    failed: job.failed.clone(),
                     tokens,
                 },
             );
         }
-        self.ai_note = format!(
+        let smeta = self.smeta.get_or_insert_with(Default::default);
+        smeta.digest = digest;
+        smeta.facts = smeta.digest.iter().flat_map(|d| d.facts.clone()).collect();
+        smeta.model = job.model;
+        smeta.tokens += tokens;
+        self.smeta_note = format!(
             "{} {read} · {:.0} s",
-            t("tk_ai_done"),
+            t("sm_pages_done"),
             job.started.elapsed().as_secs_f64()
         );
         self.save_takeoff();
         self.recompute_takeoff();
+        // Keyingi bosqich o'zi boshlanadi: savollar.
+        self.start_questions();
+        if self.check_tab == CheckTab::Upload {
+            self.check_tab = CheckTab::Questions;
+        }
         true
     }
 
-    /// AI o'qishidan voz kechadi — qoida bo'yicha o'qilgan jadvallar
-    /// qaytadi.
-    pub fn revert_ai(&mut self) {
-        if !self.can_edit(Screen::AiCheck) {
-            self.notify(t("role_readonly").to_string());
-            return;
-        }
-        if let Some(tk) = &mut self.takeoff {
-            tk.revert_ai();
-        }
-        self.ai_note.clear();
-        self.save_takeoff();
-        self.recompute_takeoff();
-    }
+    // ------------------------------------------------ 2-bosqich: savollar
 
-    /// Kalkulyatsiya haqida AI ga beriladigan ma'lumot.
-    ///
-    /// Faqat dastur hisoblagan sonlar: model ulardan tashqariga chiqmasligi
-    /// kerak (umumiy ko'rsatma shuni talab qiladi).
-    pub fn takeoff_context(&self) -> String {
-        let Some(tk) = &self.takeoff else {
-            return String::new();
-        };
-        let mut out = format!(
-            "Loyiha fayli: {} ({} varaq). O'qilgan jadvallar: {}.\n",
-            tk.file,
-            tk.pages,
-            tk.tables.len()
-        );
-        out.push_str("\nKonstruksiyalar (belgi, nomi, soni, varaq):\n");
-        for c in &tk.constructs {
+    /// Savollar uchun ma'lumot: varaqlar xulosasi, konstruksiyalar,
+    /// loyihadan olingan materiallar.
+    pub fn questions_context(&self) -> String {
+        let mut out = String::new();
+        if let Some(tk) = &self.takeoff {
             out.push_str(&format!(
-                "- {} | {} | {} {} | {}\n",
-                c.mark, c.name, c.count, c.unit, c.page
+                "Файл проекта: {} ({} листов).\n",
+                tk.file, tk.pages
             ));
         }
-        out.push_str(
-            "\nMaterial yig'masi (material, miqdor, nechta qatordan, ko'paytirilmagan qatorlar):\n",
-        );
-        for r in &self.cost_rows {
-            out.push_str(&format!(
-                "- {} | {:.2} {} | {} | {}\n",
-                r.total.material, r.total.amount, r.total.unit, r.total.lines, r.total.unsure
-            ));
-        }
-        let sum = |k: crate::takeoff::Kind, unit: &str| -> f64 {
-            self.cost_rows
-                .iter()
-                .filter(|r| r.total.kind == k && r.total.unit == unit)
-                .map(|r| r.total.amount)
-                .sum()
-        };
-        let beton = sum(crate::takeoff::Kind::Concrete, "m3");
-        let rebar = sum(crate::takeoff::Kind::Rebar, "kg");
-        if beton > 0.0 {
-            out.push_str(&format!(
-                "\nNisbat: 1 m3 betonga {:.1} kg armatura (jami beton {:.1} m3, armatura {:.0} kg).\n",
-                rebar / beton,
-                beton,
-                rebar
-            ));
-        }
-        if !self.takeoff_repeats.is_empty() {
-            out.push_str("\nTakror deb sanalmagan spetsifikatsiyalar:\n");
-            for (name, page) in &self.takeoff_repeats {
-                out.push_str(&format!("- {} (varaq {page})\n", name.trim()));
+        if let Some(m) = &self.smeta {
+            out.push_str("\nЛИСТЫ ПРОЕКТА:\n");
+            for d in &m.digest {
+                out.push_str(&format!("\nЛист {} [{}] {}\n", d.page, d.kind, d.sheet));
+                for f in &d.facts {
+                    out.push_str(&format!("  - {}: {} {}\n", f.name, f.value, f.unit));
+                }
+                for l in &d.lists {
+                    out.push_str(&format!(
+                        "  Таблица «{}» ({})\n",
+                        l.title,
+                        l.columns.join(" | ")
+                    ));
+                    for r in l.rows.iter().take(40) {
+                        out.push_str(&format!("    {}\n", r.join(" | ")));
+                    }
+                    if l.rows.len() > 40 {
+                        out.push_str(&format!("    … ещё {} строк\n", l.rows.len() - 40));
+                    }
+                }
             }
         }
-        let diffs = tk.diffs();
-        if !diffs.is_empty() {
-            out.push_str("\nIkki mustaqil o'qish (qoida va AI) farq qilgan varaqlar:\n");
-            for d in diffs.iter().filter(|d| !d.agrees()) {
+        if let Some(tk) = &self.takeoff {
+            out.push_str("\nКОНСТРУКЦИИ (марка, название, количество, лист):\n");
+            for c in &tk.constructs {
                 out.push_str(&format!(
-                    "- varaq {}: metall {:.1} / {:.1} kg, beton {:.2} / {:.2} m3\n",
-                    d.page, d.rule_kg, d.ai_kg, d.rule_m3, d.ai_m3
+                    "- {} | {} | {} {} | лист {}\n",
+                    c.mark, c.name, c.count, c.unit, c.page
                 ));
             }
+        }
+        out.push_str(
+            "\nМАТЕРИАЛЫ, СНЯТЫЕ ПРОГРАММОЙ СО СПЕЦИФИКАЦИЙ (материал | количество | листы):\n",
+        );
+        for r in &self.cost_rows {
+            let mut pages: Vec<usize> = self
+                .takeoff_lines
+                .iter()
+                .filter(|l| l.item.material == r.total.material && l.item.unit == r.total.unit)
+                .map(|l| l.page)
+                .collect();
+            pages.sort_unstable();
+            pages.dedup();
+            out.push_str(&format!(
+                "- {} | {:.2} {} | листы {}\n",
+                r.total.material,
+                r.total.amount,
+                r.total.unit,
+                pages
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+        }
+        // Juda katta loyihada matn chegaralanadi — chegara ochiq yoziladi.
+        const MAX: usize = 160_000;
+        if out.chars().count() > MAX {
+            let mut cut: String = out.chars().take(MAX).collect();
+            cut.push_str("\n… (данные обрезаны: проект очень большой)\n");
+            return cut;
         }
         out
     }
 
-    /// Kalkulyatsiyani AI ga tekshirtiradi.
-    ///
-    /// Model **yangi son chiqarmaydi**: unga dastur hisobi beriladi va
-    /// undan shubhali joylarni, yetishmayotgan bo'lishi mumkin bo'lgan
-    /// narsalarni va odam qayta ko'rishi kerak bo'lgan varaqlarni
-    /// ko'rsatish so'raladi.
-    pub fn start_takeoff_review(&mut self) {
-        if self.takeoff_review_rx.is_some() || self.takeoff.is_none() {
+    /// Savollarni AI dan so'raydi.
+    pub fn start_questions(&mut self) {
+        if self.questions_rx.is_some() || !self.llm.is_ready() {
             return;
         }
-        if !self.llm.is_ready() {
-            self.ai_note = t("tk_ai_no_key").to_string();
+        if self.smeta.as_ref().is_none_or(|m| m.digest.is_empty()) {
             return;
         }
-        self.takeoff_review_rx = Some(crate::llm::spawn(
-            self.llm.clone(),
-            Vec::new(),
-            t("tk_review_question").to_string(),
-            self.takeoff_context(),
+        self.questions_rx = Some(crate::smeta_ai::spawn_questions(
+            self.extract_cfg(),
+            self.questions_context(),
         ));
     }
 
-    /// AI xulosasi kelgan bo'lsa oladi.
-    pub fn poll_takeoff_review(&mut self) -> bool {
+    pub fn poll_questions(&mut self) -> bool {
         use std::sync::mpsc::TryRecvError;
-        let Some(rx) = &self.takeoff_review_rx else {
+        let Some(rx) = &self.questions_rx else {
             return false;
         };
-        match rx.try_recv() {
-            Ok(Ok(answer)) => {
-                self.llm_tokens += answer.usage.total;
-                self.takeoff_review = answer.text;
-                self.takeoff_review_rx = None;
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => Err(t("sm_questions_failed").to_string()),
+        };
+        self.questions_rx = None;
+        match result {
+            Ok((summary, questions, tokens)) => {
+                self.llm_tokens += tokens;
+                if let Some(m) = &mut self.smeta {
+                    m.summary = summary;
+                    // Odam bergan javoblar qayta so'rovda yo'qolmaydi.
+                    let old = std::mem::take(&mut m.questions);
+                    m.questions = questions
+                        .into_iter()
+                        .map(|mut q| {
+                            if let Some(o) = old.iter().find(|o| o.text == q.text) {
+                                if !o.answer.is_empty() {
+                                    q.answer = o.answer.clone();
+                                }
+                            }
+                            q
+                        })
+                        .collect();
+                    m.tokens += tokens;
+                }
                 self.save_takeoff();
-                true
             }
-            Ok(Err(e)) => {
-                self.ai_note = format!("{}: {e}", t("tk_review_failed"));
-                self.takeoff_review_rx = None;
-                true
+            Err(e) => self.smeta_note = format!("{}: {e}", t("sm_questions_failed")),
+        }
+        true
+    }
+
+    // ------------------------------------------ 4-bosqich: spetsifikatsiya
+
+    /// Spetsifikatsiya uchun ma'lumot: xulosa, javoblar va loyihadan
+    /// olingan sonlar.
+    pub fn spec_context(&self) -> String {
+        let mut out = String::new();
+        if let Some(m) = &self.smeta {
+            out.push_str(&format!("ОБЪЕКТ: {}\n", m.summary));
+            out.push_str("\nПОКАЗАТЕЛИ С ЛИСТОВ (название: значение, лист):\n");
+            for f in &m.facts {
+                out.push_str(&format!(
+                    "- {}: {} {} (лист {})\n",
+                    f.name,
+                    f.value,
+                    f.unit,
+                    f.page.unwrap_or(0)
+                ));
             }
-            Err(TryRecvError::Empty) => false,
-            Err(TryRecvError::Disconnected) => {
-                self.ai_note = t("tk_review_failed").to_string();
-                self.takeoff_review_rx = None;
-                true
+            out.push_str("\nОТВЕТЫ ЗАКАЗЧИКА:\n");
+            for q in &m.questions {
+                let a = if q.answer.trim().is_empty() {
+                    "нет данных — принимай допущение и помечай его"
+                } else {
+                    q.answer.as_str()
+                };
+                out.push_str(&format!("- {} — {}\n", q.text, a));
+            }
+            // Vedomostlar (hajmlar, pardoz, pollar) — ishlar ro'yxatiga
+            // to'g'ridan-to'g'ri kiradi.
+            for d in &m.digest {
+                for l in &d.lists {
+                    out.push_str(&format!(
+                        "\nВЕДОМОСТЬ «{}» (лист {}): {}\n",
+                        l.title,
+                        d.page,
+                        l.columns.join(" | ")
+                    ));
+                    for r in l.rows.iter().take(60) {
+                        out.push_str(&format!("  {}\n", r.join(" | ")));
+                    }
+                }
             }
         }
+        if let Some(tk) = &self.takeoff {
+            out.push_str("\nКОНСТРУКЦИИ ПРОЕКТА (марка | название | количество | лист):\n");
+            for c in &tk.constructs {
+                out.push_str(&format!(
+                    "- {} | {} | {} {} | {}\n",
+                    c.mark, c.name, c.count, c.unit, c.page
+                ));
+            }
+        }
+        out.push_str(
+            "\nМАТЕРИАЛЫ ИЗ ПРОЕКТА — уже умножены на количество конструкций, используй как есть \
+             с source=project (материал | количество | листы):\n",
+        );
+        for r in &self.cost_rows {
+            let mut pages: Vec<usize> = self
+                .takeoff_lines
+                .iter()
+                .filter(|l| l.item.material == r.total.material && l.item.unit == r.total.unit)
+                .map(|l| l.page)
+                .collect();
+            pages.sort_unstable();
+            pages.dedup();
+            out.push_str(&format!(
+                "- {} | {:.2} {} | листы {}\n",
+                r.total.material,
+                r.total.amount,
+                r.total.unit,
+                pages
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+        }
+        const MAX: usize = 160_000;
+        if out.chars().count() > MAX {
+            let mut cut: String = out.chars().take(MAX).collect();
+            cut.push_str("\n… (данные обрезаны: проект очень большой)\n");
+            return cut;
+        }
+        out
+    }
+
+    /// Spetsifikatsiyani tuzishni boshlaydi (yoki qayta tuzadi).
+    pub fn start_spec(&mut self) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if self.spec_job.is_some() || self.smeta.is_none() {
+            return;
+        }
+        if !self.llm.is_ready() {
+            self.smeta_note = t("sm_no_key").to_string();
+            return;
+        }
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.smeta_note.clear();
+        self.spec_job = Some(SpecJob {
+            started: std::time::Instant::now(),
+            plan: Vec::new(),
+            done: Vec::new(),
+            failed: Vec::new(),
+            rx: crate::smeta_ai::spawn_spec(
+                self.extract_cfg(),
+                self.spec_context(),
+                cancel.clone(),
+            ),
+            cancel,
+        });
+    }
+
+    pub fn poll_spec(&mut self) -> bool {
+        use crate::smeta_ai::StageMsg;
+        use std::sync::mpsc::TryRecvError;
+        let Some(job) = &mut self.spec_job else {
+            return false;
+        };
+        let mut finished = false;
+        let mut changed = false;
+        loop {
+            match job.rx.try_recv() {
+                Ok(StageMsg::Plan(plan)) => job.plan = plan,
+                Ok(StageMsg::Stage(i, Ok(st))) => job.done.push((i, st)),
+                Ok(StageMsg::Stage(i, Err(e))) => job.failed.push((i, e)),
+                Ok(StageMsg::Failed(e)) => {
+                    self.smeta_note = e;
+                    self.spec_job = None;
+                    return true;
+                }
+                Ok(StageMsg::Done) | Err(TryRecvError::Disconnected) => {
+                    finished = true;
+                    break;
+                }
+                Err(TryRecvError::Empty) => break,
+            }
+            changed = true;
+        }
+        if !finished {
+            return changed;
+        }
+        let Some(mut job) = self.spec_job.take() else {
+            return true;
+        };
+        job.done.sort_by_key(|d| d.0);
+        let failed: Vec<String> = job
+            .failed
+            .iter()
+            .map(|(i, e)| {
+                let short: String = e.chars().take(60).collect();
+                format!(
+                    "{} ({short})",
+                    job.plan.get(*i).cloned().unwrap_or_default()
+                )
+            })
+            .collect();
+        if let Some(m) = &mut self.smeta {
+            // Eski narx va ustamalar yangi tuzilmada nom bo'yicha saqlanadi.
+            let old = std::mem::take(&mut m.stages);
+            m.stages = job
+                .done
+                .into_iter()
+                .map(|(_, mut st)| {
+                    if let Some(o) = old.iter().find(|o| o.name == st.name) {
+                        st.markup = o.markup;
+                        for w in &mut st.works {
+                            if let Some(ow) = o.works.iter().find(|ow| ow.name == w.name) {
+                                w.price = ow.price;
+                                for mat in &mut w.materials {
+                                    if let Some(om) =
+                                        ow.materials.iter().find(|om| om.name == mat.name)
+                                    {
+                                        mat.price = om.price;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    st
+                })
+                .collect();
+        }
+        self.smeta_note = if failed.is_empty() {
+            format!(
+                "{} · {:.0} s",
+                t("sm_spec_done"),
+                job.started.elapsed().as_secs_f64()
+            )
+        } else {
+            format!("{}: {}", t("sm_spec_failed"), failed.join(", "))
+        };
+        self.smeta_open = Some(0);
+        self.save_takeoff();
+        self.recompute_smeta();
+        if matches!(self.check_tab, CheckTab::Questions | CheckTab::Data) {
+            self.check_tab = CheckTab::Spec;
+        }
+        true
     }
 
     /// Jadvalni hisobga qo'shadi yoki hisobdan chiqaradi.
     ///
     /// Jadvalning o'zi o'chirilmaydi — faqat sanalmaydi, istalgan payt
-    /// qaytarib yoqiladi.
+    /// qaytarib yoqiladi. Ekranga hali ulanmagan.
+    #[allow(dead_code)]
     pub fn set_table_off(&mut self, index: usize, off: bool) {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());
@@ -2682,10 +3082,10 @@ impl App {
             self.notify(t("role_readonly").to_string());
             return;
         }
-        self.drop_ai_job();
+        self.drop_jobs();
         self.takeoff = None;
-        self.takeoff_review.clear();
-        self.ai_note.clear();
+        self.smeta = None;
+        self.smeta_note.clear();
         self.save_takeoff();
         self.recompute_takeoff();
     }

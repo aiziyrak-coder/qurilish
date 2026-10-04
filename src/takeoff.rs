@@ -1495,6 +1495,9 @@ pub struct AiInfo {
 }
 
 /// Bitta varaqda ikki o'qishning farqi: metall (kg) va beton (m³).
+///
+/// Ekranga hali ulanmagan — sinovlar qo'riqlaydi.
+#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diff {
     pub page: usize,
@@ -1504,6 +1507,7 @@ pub struct Diff {
     pub ai_m3: f64,
 }
 
+#[allow(dead_code)]
 impl Diff {
     /// Ikki o'qish mos keldimi: farq 1 % dan oshmasa.
     pub fn agrees(&self) -> bool {
@@ -1513,6 +1517,7 @@ impl Diff {
 }
 
 /// Jadvallardagi xom miqdor: ko'paytirilmagan metall va beton.
+#[allow(dead_code)]
 fn raw_sums(tables: &[&SpecTable]) -> (f64, f64) {
     let (mut kg, mut m3) = (0.0, 0.0);
     for r in tables.iter().flat_map(|t| &t.rows) {
@@ -1623,7 +1628,8 @@ impl Takeoff {
     }
 
     /// AI o'qishidan voz kechadi: qoida bo'yicha o'qilgan jadvallar
-    /// qaytariladi.
+    /// qaytariladi. Ekranga hali ulanmagan.
+    #[allow(dead_code)]
     pub fn revert_ai(&mut self) {
         let pages: Vec<usize> = self
             .tables
@@ -1643,11 +1649,13 @@ impl Takeoff {
         self.ai = None;
     }
 
-    /// Ikki mustaqil o'qishni varaqma-varaq solishtiradi.
+    /// Ikki mustaqil o'qishni varaqma-varaq solishtiradi. Ekranga hali
+    /// ulanmagan.
     ///
     /// Bu — aniqlikning o'lchovi: qoida ham, AI ham bir xil kilogramm va
     /// kub chiqargan varaqqa ishonish mumkin; farq qilganini odam ko'rishi
     /// kerak. Qaysi biri to'g'ri ekanini dastur hal qilmaydi.
+    #[allow(dead_code)]
     pub fn diffs(&self) -> Vec<Diff> {
         let mut pages: Vec<usize> = self
             .tables

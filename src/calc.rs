@@ -1,5 +1,10 @@
 //! Kalkulyatsiya varag'i: bo'limlar, sinflar va jamilar.
 //!
+//! Smeta sahifasi olti bosqichli yo'lga o'tgach bu varaq ekranga
+//! ulanmagan; sinovlari bilan saqlanadi — material bo'yicha yig'ma
+//! (Excel/PDF) kerak bo'lsa qayta ulanadi.
+#![allow(dead_code)]
+//!
 //! Ekran, Excel va PDF **bitta ro'yxatdan** chiqadi — shu yerda tuziladi.
 //! Aks holda ekranda bir jami, faylda boshqasi bo'lib qolishi mumkin edi.
 //!

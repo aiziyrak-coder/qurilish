@@ -1,22 +1,22 @@
-//! «Loyiha kalkulyatsiyasi» ekrani (TZ II.12, II.13).
+//! «Smeta» ekrani: loyihadan mijozga taklifgacha olti bosqich.
 //!
-//! Sahifa bitta savolga javob beradi: **loyihaga nimadan qancha ketadi va
-//! bu qancha turadi.** Uch qadam, chapdan o'ngga:
+//! Yo'l chapdan o'ngga, namunadagidek:
 //!
-//! 1. **Loyiha** — PDF yuklanadi; spetsifikatsiya jadvallari varaqdagi
-//!    joylashuvi bo'yicha o'qiladi.
-//! 2. **Konstruksiyalar** — loyihadagi konstruksiyalar va ularning soni
-//!    (`Фм1 — 20 dona`). Son shu yerda tuzatiladi.
-//! 3. **Kalkulyatsiya** — material bo'yicha yig'ma: birlikka ketadigan
-//!    miqdor konstruksiya soniga ko'paytirilgan, narx bilan.
+//! 1. **Yuklash** — PDF; dastur jadvallarni joylashuv bo'yicha o'qiydi,
+//!    AI har varaqni ko'rib chiqadi.
+//! 2. **Savollar** — loyihada ko'rinmagan narsalar; javob tugma bilan.
+//! 3. **Obyekt ma'lumoti** — varaqlardan nima olingani, nima hisoblangani.
+//! 4. **Spetsifikatsiya** — bosqichlar, ishlar, materiallar; har qatorda
+//!    manba belgisi.
+//! 5. **Smeta** — narxlar katalogdan, ustamalar, jami.
+//! 6. **Taklif** — mijozga hujjat, PDF.
 //!
-//! Hech bir son o'ylab topilmaydi. Konstruksiya soni topilmagan qator
-//! birga ko'paytiriladi va «noaniq» deb belgilanadi; narxi yo'q qatorda
-//! summa ko'rsatilmaydi.
+//! Hech bir son o'ylab topilmaydi: manbasi yo'q qator «taxmin» deb
+//! belgilanadi, narxsiz qator jamiga kirmaydi va sanab ko'rsatiladi.
 
 use super::*;
 use crate::app::CheckTab;
-use crate::takeoff::Kind;
+use crate::smeta::{Origin, Source};
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
     if app.current.is_none() {
@@ -24,42 +24,87 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
-    // Fon ipida o'qilayotgan fayl tugagan bo'lsa natijani olamiz.
+    // Fon ishlari tugagan bo'lsa natijani olamiz.
     app.poll_pdf();
-    app.poll_ai();
-    app.poll_takeoff_review();
-    if app.ai_job.is_some() || app.takeoff_review_rx.is_some() {
-        // Fon ipi kadr so'ramaydi — natija kelganini ko'rish uchun.
+    app.poll_pages();
+    app.poll_questions();
+    app.poll_spec();
+    if app.pdf_job.is_some()
+        || app.pages_job.is_some()
+        || app.questions_rx.is_some()
+        || app.spec_job.is_some()
+    {
+        // Fon ipi kadr so'ramaydi — jarayon ko'rinib tursin.
         ui.ctx()
             .request_repaint_after(std::time::Duration::from_millis(300));
     }
 
+    stepper(ui, app);
+    ui.add_space(10.0);
+
+    match app.check_tab {
+        CheckTab::Upload => upload_tab(ui, app),
+        CheckTab::Questions => questions_tab(ui, app),
+        CheckTab::Data => data_tab(ui, app),
+        CheckTab::Spec => spec_tab(ui, app),
+        CheckTab::Smeta => smeta_tab(ui, app),
+        CheckTab::Offer => offer_tab(ui, app),
+    }
+}
+
+/// Bosqichlar chizig'i: raqam, nom, izoh; tayyori belgi bilan.
+fn stepper(ui: &mut egui::Ui, app: &mut App) {
+    let current = app.check_tab;
     ui.horizontal_wrapped(|ui| {
-        for tab in CheckTab::ALL {
-            let ready = match tab {
-                CheckTab::Project => true,
-                CheckTab::Constructs | CheckTab::Calc => app.takeoff.is_some(),
-            };
-            let text = if ready {
-                RichText::new(tab.label())
+        for (i, tab) in CheckTab::ALL.into_iter().enumerate() {
+            let ready = app.smeta_ready(tab);
+            let active = tab == current;
+            let fill = if active {
+                theme::accent().gamma_multiply(0.16)
             } else {
-                RichText::new(tab.label()).color(theme::muted())
+                egui::Color32::TRANSPARENT
             };
-            if ui.selectable_label(app.check_tab == tab, text).clicked() {
+            let resp = egui::Frame::new()
+                .fill(fill)
+                .corner_radius(8)
+                .inner_margin(egui::Margin::symmetric(10, 6))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let mark = if ready && !active && i < 5 {
+                            "✓".to_string()
+                        } else {
+                            (i + 1).to_string()
+                        };
+                        let circle = if active {
+                            theme::accent()
+                        } else if ready {
+                            theme::ok()
+                        } else {
+                            theme::muted()
+                        };
+                        ui.label(RichText::new(mark).strong().color(circle).size(13.0));
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(tab.label()).strong().size(12.5).color(
+                                if ready || active {
+                                    theme::text()
+                                } else {
+                                    theme::muted()
+                                },
+                            ));
+                            ui.label(RichText::new(tab.hint()).size(10.0).color(theme::muted()));
+                        });
+                    });
+                })
+                .response
+                .interact(egui::Sense::click());
+            if resp.clicked() && (ready || tab == CheckTab::Upload) {
                 app.check_tab = tab;
             }
-            if tab != CheckTab::Calc {
-                ui.label(RichText::new("→").size(11.0).color(theme::muted()));
+            if i < 5 {
+                ui.label(RichText::new("—").color(theme::line()));
             }
         }
     });
-    ui.add_space(8.0);
-
-    match app.check_tab {
-        CheckTab::Project => project_tab(ui, app),
-        CheckTab::Constructs => constructs_tab(ui, app),
-        CheckTab::Calc => calc_tab(ui, app),
-    }
 }
 
 fn empty(ui: &mut egui::Ui, msg: &str) {
@@ -87,28 +132,77 @@ fn num(v: f64) -> String {
     }
 }
 
-/// Miqdorni o'qilishi oson birlikda ko'rsatadi: 1000 kg dan ortig'i —
-/// tonnada.
-fn amount(v: f64, unit: &str) -> String {
-    if unit == "kg" && v >= 1000.0 {
-        format!("{:.2} t", v / 1000.0)
-    } else {
-        format!("{} {unit}", num(v))
+fn kpi(ui: &mut egui::Ui, title: &str, value: &str, hint: &str) {
+    egui::Frame::new()
+        .fill(theme::card())
+        .stroke(Stroke::new(1.0_f32, theme::line()))
+        .corner_radius(8)
+        .inner_margin(egui::Margin::same(10))
+        .show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.set_min_width(170.0);
+                ui.set_max_width(280.0);
+                ui.label(RichText::new(title).size(11.0).color(theme::muted()));
+                ui.label(
+                    RichText::new(super::issues::truncate(value, 32))
+                        .size(18.0)
+                        .color(theme::accent()),
+                );
+                ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+            });
+        });
+}
+
+/// Manba belgisi: loyihadan / hisob / me'yor / taxmin / qo'lda.
+fn badge(ui: &mut egui::Ui, source: &Source) {
+    let (fill, color) = match source {
+        Source::Project { .. } => (theme::ok().gamma_multiply(0.18), theme::ok()),
+        Source::Calc { .. } | Source::Standard { .. } => {
+            (theme::accent().gamma_multiply(0.14), theme::accent())
+        }
+        Source::Assumption { .. } => (theme::warn().gamma_multiply(0.18), theme::warn()),
+        Source::Manual => (theme::line(), theme::muted()),
+    };
+    let detail = source.detail();
+    let resp = egui::Frame::new()
+        .fill(fill)
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(7, 2))
+        .show(ui, |ui| {
+            ui.label(RichText::new(t(source.badge())).size(10.5).color(color));
+        })
+        .response;
+    if !detail.is_empty() {
+        resp.on_hover_text(detail);
     }
 }
 
-// ================================================================ 1. Loyiha
+fn next_button(ui: &mut egui::Ui, app: &mut App, to: CheckTab, label: &str) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if ui
+            .add_enabled(app.smeta_ready(to), egui::Button::new(format!("{label} →")))
+            .clicked()
+        {
+            app.check_tab = to;
+        }
+    });
+}
 
-fn project_tab(ui: &mut egui::Ui, app: &mut App) {
-    let busy = app.pdf_job.is_some();
+// ================================================================ 1. Yuklash
+
+fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
+    let busy = app.pdf_job.is_some() || app.pages_job.is_some();
     let mut pick = false;
     let mut clear = false;
+    let mut start_ai = false;
+    let mut cancel = false;
+    let mut model: Option<String> = None;
 
     card(ui, |ui| {
-        ui.label(RichText::new(t("tk_load_title")).strong().size(14.0));
+        ui.label(RichText::new(t("sm_upload_title")).strong().size(14.0));
         ui.add_space(2.0);
         ui.label(
-            RichText::new(t("tk_load_hint"))
+            RichText::new(t("sm_upload_hint"))
                 .size(11.5)
                 .color(theme::muted()),
         );
@@ -128,33 +222,133 @@ fn project_tab(ui: &mut egui::Ui, app: &mut App) {
             {
                 clear = true;
             }
+            ui.label(
+                RichText::new(t("tk_ai_model"))
+                    .size(11.5)
+                    .color(theme::muted()),
+            );
+            egui::ComboBox::from_id_salt("sm_ai_model")
+                .selected_text(app.ai_model.clone())
+                .show_ui(ui, |ui| {
+                    for m in crate::llm::MODELS {
+                        if ui.selectable_label(app.ai_model == *m, *m).clicked() {
+                            model = Some(m.to_string());
+                        }
+                    }
+                })
+                .response
+                .on_hover_text(t("tk_ai_model_hint"));
+        });
+        if !app.llm.is_ready() {
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(t("sm_no_key"))
+                    .size(11.5)
+                    .color(theme::warn()),
+            );
+        }
+
+        // ---- Konveyer: fayl → AI varaqlar → savollar → tayyor.
+        ui.add_space(10.0);
+        let file_done = app.takeoff.is_some() && app.pdf_job.is_none();
+        let ai_done = app.smeta.as_ref().is_some_and(|m| !m.digest.is_empty());
+        let asked = app.smeta.as_ref().is_some_and(|m| !m.questions.is_empty());
+        let steps = [
+            (t("sm_conv_file"), file_done, app.pdf_job.is_some()),
+            (t("sm_conv_ai"), ai_done, app.pages_job.is_some()),
+            (t("sm_conv_questions"), asked, app.questions_rx.is_some()),
+            (
+                t("sm_conv_ready"),
+                ai_done && asked && app.questions_rx.is_none(),
+                false,
+            ),
+        ];
+        ui.horizontal_wrapped(|ui| {
+            for (i, (name, done, running)) in steps.iter().enumerate() {
+                if *running {
+                    ui.spinner();
+                } else {
+                    ui.label(
+                        RichText::new(if *done { "✓" } else { "○" })
+                            .color(if *done { theme::ok() } else { theme::muted() })
+                            .strong(),
+                    );
+                }
+                ui.label(RichText::new(*name).size(12.0).color(if *done || *running {
+                    theme::text()
+                } else {
+                    theme::muted()
+                }));
+                if i < 3 {
+                    ui.label(RichText::new("→").color(theme::line()));
+                }
+            }
         });
 
         if let Some(job) = &app.pdf_job {
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.spinner();
-                ui.label(format!(
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(format!(
                     "{} · {} · {} s",
                     t("pdf_reading"),
                     job.file,
                     job.started.elapsed().as_secs()
-                ));
-            });
-            ui.label(
-                RichText::new(t("tk_reading_hint"))
-                    .size(11.0)
-                    .color(theme::muted()),
+                ))
+                .size(11.5)
+                .color(theme::muted()),
             );
-            // Vaqt yurib tursin: fon ipi kadr so'ramaydi.
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(300));
         } else if app.takeoff.is_none() && !app.pdf_note.is_empty() {
             ui.add_space(6.0);
             ui.label(RichText::new(&app.pdf_note).color(theme::danger()));
         }
+        if let Some(job) = &app.pages_job {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let total = job.plan.len();
+                let ready = job.done.len() + job.failed.len();
+                ui.label(
+                    RichText::new(if total == 0 {
+                        format!(
+                            "{} · {} s",
+                            t("tk_ai_preparing"),
+                            job.started.elapsed().as_secs()
+                        )
+                    } else {
+                        format!(
+                            "{} {ready} / {total} · {} s · {}",
+                            t("tk_ai_reading"),
+                            job.started.elapsed().as_secs(),
+                            job.model
+                        )
+                    })
+                    .size(11.5),
+                );
+                if ui.button(t("tk_ai_stop")).clicked() {
+                    cancel = true;
+                }
+            });
+            if !job.failed.is_empty() {
+                ui.label(
+                    RichText::new(format!("{} {}", job.failed.len(), t("tk_ai_failed")))
+                        .size(11.5)
+                        .color(theme::warn()),
+                );
+            }
+        } else if file_done && !ai_done && app.llm.is_ready() {
+            ui.add_space(6.0);
+            if ui.button(t("sm_start_ai")).clicked() {
+                start_ai = true;
+            }
+        }
+        if !app.smeta_note.is_empty() && app.pages_job.is_none() {
+            ui.add_space(4.0);
+            ui.label(RichText::new(&app.smeta_note).size(11.5));
+        }
     });
 
+    if let Some(m) = model {
+        app.set_ai_model(&m);
+    }
     if pick {
         if let Some(path) = rfd::FileDialog::new()
             .set_title(t("tk_load_button"))
@@ -168,536 +362,697 @@ fn project_tab(ui: &mut egui::Ui, app: &mut App) {
         app.clear_takeoff();
         return;
     }
-
-    if app.takeoff.is_none() {
-        return;
+    if cancel {
+        app.cancel_jobs();
     }
-    ui.add_space(10.0);
-    ai_card(ui, app);
+    // Dastur o'qib bo'lgach AI o'zi boshlanadi — odam tugma kutib
+    // o'tirmasin. Kalit bo'lmasa, yuqorida sabab yozilgan.
+    let fresh = app.takeoff.is_some()
+        && app.pdf_job.is_none()
+        && app.pages_job.is_none()
+        && app.smeta.is_none()
+        && app.llm.is_ready()
+        && app.pdf_note.ends_with(" s");
+    if start_ai || fresh {
+        app.start_pages();
+    }
 
-    let Some(tk) = &app.takeoff else {
-        return;
+    // ---- O'qilgan varaqlar.
+    let (digest_len, facts_len, tokens, model_name) = match &app.smeta {
+        Some(m) if !m.digest.is_empty() => {
+            (m.digest.len(), m.facts.len(), m.tokens, m.model.clone())
+        }
+        _ => return,
     };
-
-    // ---- Nima o'qildi.
+    let (pages_total, tables_total) = app
+        .takeoff
+        .as_ref()
+        .map(|t| (t.pages, t.tables.len()))
+        .unwrap_or((0, 0));
     ui.add_space(10.0);
-    let lines = app.takeoff_lines.len();
-    let unsure = app
-        .takeoff_lines
-        .iter()
-        .filter(|l| l.count.is_none())
-        .count();
     ui.horizontal_wrapped(|ui| {
         kpi(
             ui,
-            t("tk_file"),
-            &tk.file,
-            &format!("{} {}", tk.pages, t("tk_pages")),
+            t("sm_pages_read"),
+            &digest_len.to_string(),
+            &format!("{pages_total} {}", t("tk_pages")),
+        );
+        kpi(
+            ui,
+            t("sm_facts"),
+            &facts_len.to_string(),
+            t("sm_facts_hint"),
         );
         kpi(
             ui,
             t("tk_tables"),
-            &tk.tables.len().to_string(),
+            &tables_total.to_string(),
             t("tk_tables_hint"),
         );
-        kpi(
-            ui,
-            t("tab_constructs"),
-            &tk.constructs.len().to_string(),
-            t("tk_constructs_hint"),
-        );
-        kpi(
-            ui,
-            t("tk_lines"),
-            &lines.to_string(),
-            &format!("{unsure} {}", t("tk_unsure")),
-        );
+        kpi(ui, t("tk_ai_tokens"), &tokens.to_string(), &model_name);
     });
-
-    // ---- O'qilgan jadvallar: odam ularni varaq bilan solishtira olsin.
-    ui.add_space(10.0);
-    ui.label(RichText::new(t("tk_tables_read")).strong());
-    ui.label(
-        RichText::new(t("tk_tables_read_hint"))
-            .size(11.0)
-            .color(theme::muted()),
-    );
-    ui.add_space(4.0);
-    let mut toggle: Option<(usize, bool)> = None;
+    ui.add_space(6.0);
+    next_button(ui, app, CheckTab::Questions, t("sm_tab_questions"));
+    let Some(m) = &app.smeta else { return };
+    ui.add_space(6.0);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            for (i, tb) in tk.tables.iter().enumerate() {
-                let mut title = format!(
-                    "{} {} · {} {}",
-                    t("pdf_page"),
-                    tb.page,
-                    tb.rows.len(),
-                    t("tk_rows")
-                );
-                // Varaq bitta konstruksiyaga bag'ishlangan bo'lsa — qaysi
-                // songa ko'paytirilgani ko'rinib tursin.
-                if let Some(c) = tk
-                    .constructs
-                    .iter()
-                    .find(|c| !tb.owner.is_empty() && c.mark == tb.owner)
-                {
-                    title.push_str(&format!(" · {} ×{}", c.mark, num(c.count)));
-                }
-                if tb.ai {
-                    title.push_str(" · AI");
-                }
-                if tb.off {
-                    title.push_str(&format!(" · {}", t("tk_table_off")));
-                }
-                ui.horizontal_top(|ui| {
-                    let mut on = !tb.off;
-                    let ticked = ui
-                        .checkbox(&mut on, "")
-                        .on_hover_text(t("tk_table_on_hint"))
-                        .changed();
-                    if ticked {
-                        toggle = Some((i, !on));
-                    }
-                    ui.vertical(|ui| {
-                        egui::CollapsingHeader::new(title)
-                            .id_salt(("tk_table", i))
-                            .show(ui, |ui| {
-                                egui::Grid::new(("tk_grid", i))
-                                    .striped(true)
-                                    .spacing([10.0, 3.0])
-                                    .show(ui, |ui| {
-                                        for h in [
-                                            "tk_col_pos",
-                                            "tk_col_designation",
-                                            "tk_col_name",
-                                            "tk_col_qty",
-                                            "tk_col_mass",
-                                            "tk_col_note",
-                                        ] {
-                                            ui.label(
-                                                RichText::new(t(h))
-                                                    .size(11.0)
-                                                    .color(theme::muted()),
-                                            );
-                                        }
-                                        ui.end_row();
-                                        for r in &tb.rows {
-                                            for c in [
-                                                &r.pos,
-                                                &r.designation,
-                                                &r.name,
-                                                &r.qty,
-                                                &r.mass,
-                                                &r.note,
-                                            ] {
-                                                ui.label(RichText::new(c).size(12.0));
-                                            }
-                                            ui.end_row();
-                                        }
-                                    });
-                            });
-                    });
-                });
-            }
-        });
-    if let Some((i, off)) = toggle {
-        app.set_table_off(i, off);
-    }
-}
-
-/// «AI bilan o'qish» kartasi: nima yuborilishi, jarayon va natija.
-fn ai_card(ui: &mut egui::Ui, app: &mut App) {
-    let mut start: Option<Option<usize>> = None;
-    let mut model: Option<String> = None;
-    let mut cancel = false;
-    let mut revert = false;
-    card(ui, |ui| {
-        ui.label(RichText::new(t("tk_ai_title")).strong().size(14.0));
-        ui.add_space(2.0);
-        // Varaqlar tashqi xizmatga ketishi yashirilmaydi.
-        ui.label(
-            RichText::new(t("tk_ai_hint"))
-                .size(11.5)
-                .color(theme::muted()),
-        );
-        ui.add_space(8.0);
-
-        if let Some(job) = &app.ai_job {
-            ui.horizontal(|ui| {
-                ui.spinner();
-                let total = job.plan.len();
-                let ready = job.done.len() + job.failed.len();
-                ui.label(if total == 0 {
-                    format!(
-                        "{} · {} s",
-                        t("tk_ai_preparing"),
-                        job.started.elapsed().as_secs()
-                    )
-                } else {
-                    format!(
-                        "{} {ready} / {total} · {} s · {}",
-                        t("tk_ai_reading"),
-                        job.started.elapsed().as_secs(),
-                        job.model
-                    )
-                });
-                if ui.button(t("tk_ai_stop")).clicked() {
-                    cancel = true;
-                }
-            });
-            if !job.failed.is_empty() {
-                ui.label(
-                    RichText::new(format!("{} {}", job.failed.len(), t("tk_ai_failed")))
-                        .size(11.5)
-                        .color(theme::warn()),
-                );
-            }
-            return;
-        }
-
-        let ready = app.llm.is_ready();
-        let busy = app.pdf_job.is_some();
-        ui.horizontal_wrapped(|ui| {
-            if ui
-                .add_enabled(ready && !busy, egui::Button::new(t("tk_ai_try")))
-                .on_hover_text(t("tk_ai_try_hint"))
-                .clicked()
-            {
-                start = Some(Some(3));
-            }
-            if ui
-                .add_enabled(ready && !busy, egui::Button::new(t("tk_ai_all")))
-                .clicked()
-            {
-                start = Some(None);
-            }
-            if app.takeoff.as_ref().is_some_and(|t| t.ai.is_some())
-                && ui
-                    .button(t("tk_ai_revert"))
-                    .on_hover_text(t("tk_ai_revert_hint"))
-                    .clicked()
-            {
-                revert = true;
-            }
-            ui.label(
-                RichText::new(t("tk_ai_model"))
-                    .size(11.5)
-                    .color(theme::muted()),
-            );
-            egui::ComboBox::from_id_salt("tk_ai_model")
-                .selected_text(app.ai_model.clone())
-                .show_ui(ui, |ui| {
-                    for m in crate::llm::MODELS {
-                        if ui.selectable_label(app.ai_model == *m, *m).clicked() {
-                            model = Some(m.to_string());
-                        }
-                    }
-                })
-                .response
-                .on_hover_text(t("tk_ai_model_hint"));
-        });
-        if !ready {
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(t("tk_ai_no_key"))
-                    .size(11.5)
-                    .color(theme::warn()),
-            );
-        }
-        if !app.ai_note.is_empty() {
-            ui.add_space(4.0);
-            ui.label(RichText::new(&app.ai_note).size(11.5));
-        }
-
-        // ---- Natija: nima o'qildi, nima o'qilmadi, ikki o'qish mosmi.
-        let Some(tk) = &app.takeoff else { return };
-        let Some(info) = &tk.ai else { return };
-        ui.add_space(6.0);
-        ui.label(
-            RichText::new(format!(
-                "{} {} · {} · {} {}",
-                t("tk_ai_pages"),
-                info.pages.len(),
-                info.model,
-                info.tokens,
-                t("tk_ai_tokens")
-            ))
-            .size(12.0),
-        );
-        if !info.failed.is_empty() {
-            let list = info
-                .failed
-                .iter()
-                .map(|(page, why)| format!("{page} ({})", super::issues::truncate(why, 60)))
-                .collect::<Vec<_>>()
-                .join(", ");
-            ui.label(
-                RichText::new(format!("{}: {list}", t("tk_ai_failed_pages")))
-                    .size(11.5)
-                    .color(theme::warn()),
-            );
-        }
-        let diffs = tk.diffs();
-        let differ: Vec<&crate::takeoff::Diff> = diffs.iter().filter(|d| !d.agrees()).collect();
-        ui.label(
-            RichText::new(format!(
-                "{}: {} · {}: {}",
-                t("tk_ai_agree"),
-                diffs.len() - differ.len(),
-                t("tk_ai_differ"),
-                differ.len()
-            ))
-            .size(12.0)
-            .color(if differ.is_empty() {
-                theme::ok()
-            } else {
-                theme::warn()
-            }),
-        );
-        if !differ.is_empty() {
-            ui.label(
-                RichText::new(t("tk_ai_differ_hint"))
-                    .size(11.0)
-                    .color(theme::muted()),
-            );
-            egui::Grid::new("tk_ai_diff")
+            egui::Grid::new("sm_pages")
                 .striped(true)
-                .spacing([14.0, 3.0])
+                .spacing([14.0, 4.0])
                 .show(ui, |ui| {
                     for h in [
                         "pdf_page",
-                        "tk_ai_rule_kg",
-                        "tk_ai_ai_kg",
-                        "tk_ai_rule_m3",
-                        "tk_ai_ai_m3",
+                        "sm_col_kind",
+                        "sm_col_sheet",
+                        "sm_facts",
+                        "tk_tables",
                     ] {
                         ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
                     }
                     ui.end_row();
-                    for d in differ {
+                    for d in &m.digest {
                         ui.label(d.page.to_string());
-                        ui.label(num(d.rule_kg));
-                        ui.label(RichText::new(num(d.ai_kg)).strong());
-                        ui.label(num(d.rule_m3));
-                        ui.label(RichText::new(num(d.ai_m3)).strong());
+                        ui.label(RichText::new(&d.kind).strong());
+                        ui.label(super::issues::truncate(&d.sheet, 70));
+                        ui.label(d.facts.len().to_string());
+                        ui.label(
+                            app.takeoff
+                                .as_ref()
+                                .map(|t| t.tables.iter().filter(|x| x.page == d.page).count())
+                                .unwrap_or(0)
+                                .to_string(),
+                        );
                         ui.end_row();
                     }
                 });
-        }
-    });
-    if let Some(m) = model {
-        app.set_ai_model(&m);
-    }
-    if let Some(limit) = start {
-        app.start_ai(limit);
-    }
-    if cancel {
-        app.cancel_ai();
-    }
-    if revert {
-        app.revert_ai();
-    }
-}
-
-fn kpi(ui: &mut egui::Ui, title: &str, value: &str, hint: &str) {
-    egui::Frame::new()
-        .fill(theme::card())
-        .stroke(Stroke::new(1.0_f32, theme::line()))
-        .corner_radius(8)
-        .inner_margin(egui::Margin::same(10))
-        .show(ui, |ui| {
-            // Ichki joylashuv vertikal: tashqi qator gorizontal bo'lgani
-            // uchun aks holda sarlavha, son va izoh bir qatorga siqilardi.
-            ui.vertical(|ui| {
-                ui.set_min_width(170.0);
-                ui.set_max_width(260.0);
-                ui.label(RichText::new(title).size(11.0).color(theme::muted()));
-                ui.label(
-                    RichText::new(super::issues::truncate(value, 30))
-                        .size(18.0)
-                        .color(theme::accent()),
-                );
-                ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
-            });
         });
 }
 
-// ======================================================= 2. Konstruksiyalar
+// =============================================================== 2. Savollar
 
-fn constructs_tab(ui: &mut egui::Ui, app: &mut App) {
-    let Some(tk) = app.takeoff.clone() else {
+fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(m) = app.smeta.clone() else {
         empty(ui, t("tk_not_loaded"));
         return;
     };
-    if tk.constructs.is_empty() {
-        empty(ui, t("tk_no_constructs"));
-        return;
-    }
-    ui.label(
-        RichText::new(t("tk_constructs_explain"))
-            .size(11.5)
-            .color(theme::muted()),
-    );
-    ui.add_space(8.0);
+    let mut answer: Option<(usize, String)> = None;
+    let mut refresh = false;
+    let mut build = false;
 
-    let mut edit: Option<(String, f64)> = None;
+    card(ui, |ui| {
+        ui.label(RichText::new(t("sm_questions_title")).strong().size(14.0));
+        ui.label(
+            RichText::new(t("sm_questions_hint"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        ui.add_space(6.0);
+        let total = m.questions.len();
+        let done = m.answered();
+        ui.horizontal(|ui| {
+            if app.questions_rx.is_some() {
+                ui.spinner();
+                ui.label(RichText::new(t("sm_questions_wait")).color(theme::muted()));
+            } else {
+                ui.label(format!("{} {done} / {total}", t("sm_answered")));
+                if ui.button(t("sm_questions_refresh")).clicked() {
+                    refresh = true;
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = if m.stages.is_empty() {
+                    t("sm_build_spec")
+                } else {
+                    t("sm_rebuild_spec")
+                };
+                if ui
+                    .add_enabled(
+                        app.spec_job.is_none() && !m.digest.is_empty() && app.llm.is_ready(),
+                        egui::Button::new(label),
+                    )
+                    .on_hover_text(t("sm_build_spec_hint"))
+                    .clicked()
+                {
+                    build = true;
+                }
+                if !m.stages.is_empty() && ui.button(format!("{} →", t("sm_tab_spec"))).clicked()
+                {
+                    app.check_tab = CheckTab::Spec;
+                }
+            });
+        });
+        if total > 0 {
+            let frac = done as f32 / total as f32;
+            ui.add(egui::ProgressBar::new(frac).desired_height(6.0));
+        }
+        if let Some(job) = &app.spec_job {
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(format!(
+                    "{} {} / {} · {} s",
+                    t("sm_spec_building"),
+                    job.done.len() + job.failed.len(),
+                    job.plan.len(),
+                    job.started.elapsed().as_secs()
+                ));
+            });
+        }
+        if !app.smeta_note.is_empty() {
+            ui.label(
+                RichText::new(&app.smeta_note)
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+        }
+    });
+
+    ui.add_space(8.0);
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            for c in &tk.constructs {
-                let key = crate::takeoff::mark_key(&c.mark);
-                // Shu konstruksiyaga tegishli material qatorlari.
-                let own: Vec<&crate::takeoff::Line> = app
-                    .takeoff_lines
-                    .iter()
-                    .filter(|l| crate::takeoff::mark_key(&l.group).contains(&key))
-                    .collect();
+            if !m.summary.is_empty() {
                 card(ui, |ui| {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new(&c.mark).strong().size(15.0));
-                        ui.label(RichText::new(&c.name).size(12.5));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            ui.label(
-                                RichText::new(format!("{} {}", t("pdf_page"), c.page))
-                                    .size(11.0)
-                                    .color(theme::muted()),
-                            );
-                            ui.label(RichText::new(&c.unit).size(12.0));
-                            let mut v = c.count;
-                            if ui
-                                .add(egui::DragValue::new(&mut v).speed(1.0).range(0.0..=1e6))
-                                .on_hover_text(t("tk_count_hint"))
-                                .changed()
-                            {
-                                edit = Some((c.mark.clone(), v));
-                            }
-                        });
-                    });
-                    if own.is_empty() {
-                        ui.label(
-                            RichText::new(t("tk_no_spec"))
-                                .size(11.0)
-                                .color(theme::muted()),
-                        );
-                        return;
-                    }
-                    egui::CollapsingHeader::new(format!("{} · {}", t("tk_composition"), own.len()))
-                        .id_salt(("tk_c", &c.mark))
-                        .show(ui, |ui| {
-                            egui::Grid::new(("tk_cg", &c.mark))
-                                .striped(true)
-                                .spacing([14.0, 3.0])
-                                .show(ui, |ui| {
-                                    for h in ["tk_col_material", "tk_per_unit", "tk_col_total"] {
-                                        ui.label(
-                                            RichText::new(t(h)).size(11.0).color(theme::muted()),
-                                        );
-                                    }
-                                    ui.end_row();
-                                    for l in &own {
-                                        ui.label(RichText::new(&l.item.material).size(12.0));
-                                        ui.label(
-                                            RichText::new(amount(
-                                                l.item.amount * l.sub,
-                                                &l.item.unit,
-                                            ))
-                                            .size(12.0),
-                                        );
-                                        ui.label(
-                                            RichText::new(amount(l.total(), &l.item.unit))
-                                                .size(12.0)
-                                                .strong(),
-                                        );
-                                        ui.end_row();
-                                    }
-                                });
-                        });
+                    ui.label(
+                        RichText::new(t("sm_summary"))
+                            .size(11.0)
+                            .color(theme::muted()),
+                    );
+                    ui.label(RichText::new(&m.summary).size(12.5));
                 });
                 ui.add_space(6.0);
             }
+            for (i, q) in m.questions.iter().enumerate() {
+                card(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let answered = !q.answer.trim().is_empty();
+                        ui.label(RichText::new(if answered { "✓" } else { "○" }).color(
+                            if answered {
+                                theme::ok()
+                            } else {
+                                theme::muted()
+                            },
+                        ));
+                        egui::Frame::new()
+                            .fill(theme::line())
+                            .corner_radius(8)
+                            .inner_margin(egui::Margin::symmetric(6, 1))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new(&q.topic).size(10.5));
+                            });
+                        ui.label(RichText::new(&q.text).size(12.5).strong());
+                    });
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        for o in &q.options {
+                            let on = q.answer == *o;
+                            if ui.selectable_label(on, o).clicked() {
+                                answer = Some((i, if on { String::new() } else { o.clone() }));
+                            }
+                        }
+                        // Variantlardan tashqari javob.
+                        let mut text = if q.options.contains(&q.answer) {
+                            String::new()
+                        } else {
+                            q.answer.clone()
+                        };
+                        let resp = ui.add(
+                            egui::TextEdit::singleline(&mut text)
+                                .hint_text(t("sm_answer_other"))
+                                .desired_width(260.0),
+                        );
+                        if resp.lost_focus() && !text.trim().is_empty() {
+                            answer = Some((i, text.trim().to_string()));
+                        }
+                    });
+                });
+                ui.add_space(4.0);
+            }
         });
-    if let Some((mark, v)) = edit {
+
+    if let Some((i, a)) = answer {
+        app.edit_smeta(|m| {
+            if let Some(q) = m.questions.get_mut(i) {
+                q.answer = a;
+            }
+        });
+    }
+    if refresh {
+        app.start_questions();
+    }
+    if build {
+        app.start_spec();
+    }
+}
+
+// ========================================================= 3. Obyekt ma'lumoti
+
+fn data_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(m) = app.smeta.clone() else {
+        empty(ui, t("tk_not_loaded"));
+        return;
+    };
+    let mut count_edit: Option<(String, f64)> = None;
+
+    ui.horizontal_wrapped(|ui| {
+        kpi(
+            ui,
+            t("sm_facts"),
+            &m.facts.len().to_string(),
+            t("sm_facts_hint"),
+        );
+        kpi(
+            ui,
+            t("sm_from_project"),
+            &app.cost_rows.len().to_string(),
+            t("sm_from_project_hint"),
+        );
+        kpi(
+            ui,
+            t("tab_constructs"),
+            &app.takeoff
+                .as_ref()
+                .map(|t| t.constructs.len())
+                .unwrap_or(0)
+                .to_string(),
+            t("tk_constructs_hint"),
+        );
+    });
+    ui.add_space(6.0);
+    next_button(ui, app, CheckTab::Spec, t("sm_tab_spec"));
+    ui.add_space(6.0);
+
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            if !m.summary.is_empty() {
+                card(ui, |ui| {
+                    ui.label(RichText::new(&m.summary).size(12.5));
+                });
+                ui.add_space(8.0);
+            }
+
+            // ---- Ko'rsatkichlar.
+            egui::CollapsingHeader::new(format!("{} ({})", t("sm_facts"), m.facts.len()))
+                .default_open(true)
+                .show(ui, |ui| {
+                    egui::Grid::new("sm_facts")
+                        .striped(true)
+                        .spacing([14.0, 3.0])
+                        .show(ui, |ui| {
+                            for f in &m.facts {
+                                ui.label(RichText::new(&f.name).size(12.0));
+                                ui.label(RichText::new(format!("{} {}", f.value, f.unit)).strong());
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{} {}",
+                                        t("pdf_page"),
+                                        f.page.unwrap_or(0)
+                                    ))
+                                    .size(11.0)
+                                    .color(theme::muted()),
+                                );
+                                ui.end_row();
+                            }
+                        });
+                });
+
+            // ---- Loyihadan olingan materiallar.
+            ui.add_space(6.0);
+            egui::CollapsingHeader::new(format!(
+                "{} ({})",
+                t("sm_from_project"),
+                app.cost_rows.len()
+            ))
+            .default_open(true)
+            .show(ui, |ui| {
+                ui.label(
+                    RichText::new(t("sm_from_project_note"))
+                        .size(11.0)
+                        .color(theme::muted()),
+                );
+                egui::Grid::new("sm_mat")
+                    .striped(true)
+                    .spacing([14.0, 3.0])
+                    .show(ui, |ui| {
+                        for h in [
+                            "tk_col_material",
+                            "tk_col_amount",
+                            "pdf_page",
+                            "sm_col_status",
+                        ] {
+                            ui.label(RichText::new(t(h)).size(11.0).color(theme::muted()));
+                        }
+                        ui.end_row();
+                        for r in &app.cost_rows {
+                            let mut pages: Vec<usize> = app
+                                .takeoff_lines
+                                .iter()
+                                .filter(|l| {
+                                    l.item.material == r.total.material
+                                        && l.item.unit == r.total.unit
+                                })
+                                .map(|l| l.page)
+                                .collect();
+                            pages.sort_unstable();
+                            pages.dedup();
+                            ui.label(RichText::new(&r.total.material).size(12.0));
+                            ui.label(
+                                RichText::new(format!("{} {}", num(r.total.amount), r.total.unit))
+                                    .strong(),
+                            );
+                            ui.label(
+                                RichText::new(
+                                    pages
+                                        .iter()
+                                        .map(|p| p.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                )
+                                .size(11.0)
+                                .color(theme::muted()),
+                            );
+                            badge(ui, &Source::Project { page: None });
+                            ui.end_row();
+                        }
+                    });
+            });
+
+            // ---- Konstruksiyalar soni — shu yerda tuzatiladi.
+            if let Some(tk) = &app.takeoff {
+                ui.add_space(6.0);
+                egui::CollapsingHeader::new(format!(
+                    "{} ({})",
+                    t("tab_constructs"),
+                    tk.constructs.len()
+                ))
+                .show(ui, |ui| {
+                    egui::Grid::new("sm_cons")
+                        .striped(true)
+                        .spacing([14.0, 3.0])
+                        .show(ui, |ui| {
+                            for c in &tk.constructs {
+                                ui.label(RichText::new(&c.mark).strong());
+                                ui.label(super::issues::truncate(&c.name, 50));
+                                let mut v = c.count;
+                                if ui
+                                    .add(egui::DragValue::new(&mut v).speed(1.0).range(0.0..=1e6))
+                                    .changed()
+                                {
+                                    count_edit = Some((c.mark.clone(), v));
+                                }
+                                ui.label(RichText::new(&c.unit).color(theme::muted()));
+                                ui.label(
+                                    RichText::new(format!("{} {}", t("pdf_page"), c.page))
+                                        .size(11.0)
+                                        .color(theme::muted()),
+                                );
+                                ui.end_row();
+                            }
+                        });
+                });
+            }
+        });
+
+    if let Some((mark, v)) = count_edit {
         app.set_construct_count(&mark, v);
     }
 }
 
-// ========================================================= 3. Kalkulyatsiya
+// ========================================================= 4. Spetsifikatsiya
 
-fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
-    use crate::calc::{Row, Sum};
-    use egui_extras::{Column, TableBuilder};
-
-    if app.takeoff.is_none() {
+fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(m) = app.smeta.clone() else {
         empty(ui, t("tk_not_loaded"));
         return;
-    }
-    if app.cost_rows.is_empty() {
-        empty(ui, t("tk_no_materials"));
+    };
+    if m.stages.is_empty() {
+        if app.spec_job.is_some() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(t("sm_spec_building"));
+            });
+        } else {
+            empty(ui, t("sm_no_spec"));
+            ui.vertical_centered(|ui| {
+                if ui.button(t("sm_build_spec")).clicked() {
+                    app.start_spec();
+                }
+            });
+        }
         return;
     }
 
-    let rows = app.cost_rows.clone();
-    let sheet = crate::calc::sheet(&rows);
-    let grand = match sheet.last() {
-        Some(Row::Grand(g)) => g.clone(),
-        _ => Sum::default(),
-    };
-    let sum_of = |k: Kind, unit: &str| -> f64 {
-        rows.iter()
-            .filter(|r| r.total.kind == k && r.total.unit == unit)
-            .map(|r| r.total.amount)
-            .sum()
-    };
-    let cost_text = |v: Option<f64>| match v {
-        Some(v) => format!("{} {}", money(v), t("tk_sum_unit")),
-        None => t("dash").to_string(),
-    };
-    let unsure: usize = rows.iter().map(|r| r.total.unsure).sum();
-    let hinted = rows.iter().filter(|r| r.orientir.is_some()).count();
-
-    // ---- Yig'ma ko'rsatkichlar.
+    let works: usize = m.stages.iter().map(|s| s.works.len()).sum();
+    let materials: usize = m
+        .stages
+        .iter()
+        .flat_map(|s| &s.works)
+        .map(|w| w.materials.len())
+        .sum();
     ui.horizontal_wrapped(|ui| {
         kpi(
             ui,
-            t("tk_concrete"),
-            &amount(sum_of(Kind::Concrete, "m3"), "m3"),
-            t("tk_all_classes"),
+            t("sm_stages"),
+            &m.stages.len().to_string(),
+            t("sm_stages_hint"),
         );
+        kpi(ui, t("sm_works"), &works.to_string(), "");
+        kpi(ui, t("sm_materials"), &materials.to_string(), "");
         kpi(
             ui,
-            t("tk_rebar"),
-            &amount(sum_of(Kind::Rebar, "kg"), "kg"),
-            t("tk_all_diameters"),
-        );
-        kpi(
-            ui,
-            t("tk_steel"),
-            &amount(sum_of(Kind::Steel, "kg"), "kg"),
-            t("tk_steel_hint"),
+            t("sm_src_assumption"),
+            &m.assumptions().to_string(),
+            t("sm_assumptions_hint"),
         );
     });
+    ui.add_space(6.0);
+    let mut rebuild = false;
+    ui.horizontal(|ui| {
+        if ui
+            .add_enabled(
+                app.spec_job.is_none(),
+                egui::Button::new(t("sm_rebuild_spec")),
+            )
+            .on_hover_text(t("sm_rebuild_hint"))
+            .clicked()
+        {
+            rebuild = true;
+        }
+        if let Some(job) = &app.spec_job {
+            ui.spinner();
+            ui.label(format!(
+                "{} {} / {}",
+                t("sm_spec_building"),
+                job.done.len() + job.failed.len(),
+                job.plan.len()
+            ));
+        }
+        ui.label(
+            RichText::new(t("sm_spec_legend"))
+                .size(11.0)
+                .color(theme::muted()),
+        );
+        next_button(ui, app, CheckTab::Smeta, t("sm_tab_smeta"));
+    });
+    if rebuild {
+        app.start_spec();
+    }
+    ui.add_space(6.0);
 
-    // ---- Umumiy jami va yuklab olish — doim ko'z oldida.
-    ui.add_space(8.0);
-    let mut export: Option<bool> = None;
+    let mut qty_edit: Option<(usize, usize, Option<usize>, f64)> = None;
+    let mut remove: Option<(usize, usize)> = None;
+    let mut open = app.smeta_open;
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for (si, st) in m.stages.iter().enumerate() {
+                let is_open = open == Some(si);
+                let mats: usize = st.works.iter().map(|w| w.materials.len()).sum();
+                let head = ui.add(
+                    egui::Label::new(
+                        RichText::new(format!(
+                            "{}  {}   ·   {} {} · {} {}",
+                            if is_open { "▾" } else { "▸" },
+                            st.name,
+                            st.works.len(),
+                            t("sm_works_short"),
+                            mats,
+                            t("sm_materials_short")
+                        ))
+                        .size(13.5)
+                        .strong(),
+                    )
+                    .sense(egui::Sense::click()),
+                );
+                if head.clicked() {
+                    open = if is_open { None } else { Some(si) };
+                }
+                if !is_open {
+                    ui.add_space(4.0);
+                    continue;
+                }
+                egui::Grid::new(("sm_spec", si))
+                    .striped(true)
+                    .spacing([12.0, 4.0])
+                    .min_col_width(40.0)
+                    .show(ui, |ui| {
+                        for h in [
+                            "sm_col_work",
+                            "tk_col_amount",
+                            "tk_col_unit",
+                            "sm_col_source",
+                            "",
+                            "sm_col_material",
+                            "tk_col_amount",
+                            "tk_col_unit",
+                            "sm_col_source",
+                        ] {
+                            let text = if h.is_empty() { "" } else { t(h) };
+                            ui.label(RichText::new(text).size(11.0).color(theme::muted()));
+                        }
+                        ui.end_row();
+                        for (wi, w) in st.works.iter().enumerate() {
+                            let rows = w.materials.len().max(1);
+                            for mi in 0..rows {
+                                if mi == 0 {
+                                    ui.label(RichText::new(&w.name).size(12.0));
+                                    let mut v = w.qty;
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut v)
+                                                .speed(0.1)
+                                                .range(0.0..=1e9),
+                                        )
+                                        .changed()
+                                    {
+                                        qty_edit = Some((si, wi, None, v));
+                                    }
+                                    ui.label(RichText::new(&w.unit).color(theme::muted()));
+                                    badge(ui, &w.source);
+                                    if ui
+                                        .small_button("×")
+                                        .on_hover_text(t("sm_remove_work"))
+                                        .clicked()
+                                    {
+                                        remove = Some((si, wi));
+                                    }
+                                } else {
+                                    for _ in 0..5 {
+                                        ui.label("");
+                                    }
+                                }
+                                match w.materials.get(mi) {
+                                    Some(mat) => {
+                                        ui.label(RichText::new(&mat.name).size(12.0));
+                                        let mut v = mat.qty;
+                                        if ui
+                                            .add(
+                                                egui::DragValue::new(&mut v)
+                                                    .speed(0.1)
+                                                    .range(0.0..=1e9),
+                                            )
+                                            .changed()
+                                        {
+                                            qty_edit = Some((si, wi, Some(mi), v));
+                                        }
+                                        ui.label(RichText::new(&mat.unit).color(theme::muted()));
+                                        badge(ui, &mat.source);
+                                    }
+                                    None => {
+                                        for _ in 0..4 {
+                                            ui.label("");
+                                        }
+                                    }
+                                }
+                                ui.end_row();
+                            }
+                        }
+                    });
+                ui.add_space(8.0);
+            }
+        });
+    app.smeta_open = open;
+
+    if let Some((si, wi, mi, v)) = qty_edit {
+        app.edit_smeta(|m| {
+            if let Some(w) = m.stages.get_mut(si).and_then(|s| s.works.get_mut(wi)) {
+                match mi {
+                    Some(mi) => {
+                        if let Some(mat) = w.materials.get_mut(mi) {
+                            mat.qty = v.max(0.0);
+                            mat.source = Source::Manual;
+                        }
+                    }
+                    None => {
+                        w.qty = v.max(0.0);
+                        w.source = Source::Manual;
+                    }
+                }
+            }
+        });
+    }
+    if let Some((si, wi)) = remove {
+        app.edit_smeta(|m| {
+            if let Some(s) = m.stages.get_mut(si) {
+                if wi < s.works.len() {
+                    s.works.remove(wi);
+                }
+            }
+        });
+    }
+}
+
+// ================================================================== 5. Smeta
+
+fn price_text(p: &crate::smeta::Priced) -> RichText {
+    match p.sum {
+        Some(v) => RichText::new(money(v)).size(12.0),
+        None => RichText::new(t("dash")).color(theme::warn()),
+    }
+}
+
+fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(m) = app.smeta.clone() else {
+        empty(ui, t("tk_not_loaded"));
+        return;
+    };
+    if m.stages.is_empty() {
+        empty(ui, t("sm_no_spec"));
+        return;
+    }
+    let view = app.smeta_view.clone();
+
+    // ---- Jami.
     card(ui, |ui| {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 ui.label(
-                    RichText::new(t("tk_grand_total"))
-                        .size(11.5)
+                    RichText::new(t("sm_total"))
+                        .size(11.0)
                         .color(theme::muted()),
                 );
                 ui.label(
-                    RichText::new(cost_text(grand.cost))
+                    RichText::new(format!("{} {}", money(view.total), t("tk_sum_unit")))
                         .size(24.0)
                         .strong()
                         .color(theme::accent()),
                 );
-                // Jami to'liq emasligi yashirilmaydi.
-                ui.label(if grand.missing > 0 {
-                    RichText::new(format!("{} {}", grand.missing, t("tk_total_partial")))
+                ui.label(
+                    RichText::new(format!(
+                        "{} {} · {} {}",
+                        t("sm_works"),
+                        money(view.work_sum),
+                        t("sm_materials"),
+                        money(view.material_sum)
+                    ))
+                    .size(11.5)
+                    .color(theme::muted()),
+                );
+                ui.label(if view.missing > 0 {
+                    RichText::new(format!("{} {}", view.missing, t("tk_total_partial")))
                         .size(11.5)
                         .color(theme::warn())
                 } else {
@@ -707,358 +1062,351 @@ fn calc_tab(ui: &mut egui::Ui, app: &mut App) {
                 });
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(format!("{} →", t("sm_tab_offer"))).clicked() {
+                    app.check_tab = CheckTab::Offer;
+                }
                 if ui.button(t("tk_export_pdf")).clicked() {
-                    export = Some(true);
+                    export_smeta(app, true);
                 }
                 if ui.button(t("tk_export_excel")).clicked() {
-                    export = Some(false);
+                    export_smeta(app, false);
                 }
             });
         });
     });
-
-    // ---- AI xulosasi: dastur hisobini model ko'zdan kechiradi.
     ui.add_space(6.0);
-    let mut review = false;
-    card(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(t("tk_review_title")).strong());
-            if app.takeoff_review_rx.is_some() {
-                ui.spinner();
-                ui.label(RichText::new(t("ai_thinking")).color(theme::muted()));
-            } else if ui
-                .add_enabled(app.llm.is_ready(), egui::Button::new(t("tk_review_button")))
-                .on_hover_text(t("tk_review_hint"))
-                .clicked()
-            {
-                review = true;
-            }
-        });
-        if app.takeoff_review.is_empty() {
-            ui.label(
-                RichText::new(t("tk_review_hint"))
-                    .size(11.5)
-                    .color(theme::muted()),
-            );
-        } else {
-            egui::ScrollArea::vertical()
-                .id_salt("tk_review")
-                .max_height(150.0)
-                .show(ui, |ui| {
-                    ui.label(RichText::new(&app.takeoff_review).size(12.0));
-                });
-        }
-        if !app.ai_note.is_empty() && app.takeoff_review_rx.is_none() {
-            ui.label(RichText::new(&app.ai_note).size(11.0).color(theme::muted()));
-        }
-    });
-    if review {
-        app.start_takeoff_review();
-    }
 
-    ui.add_space(6.0);
-    if hinted > 0 {
+    // ---- Tahrir qayerga yoziladi.
+    let mut scope: Option<bool> = None;
+    let mut markup: Option<f64> = None;
+    ui.horizontal_wrapped(|ui| {
         ui.label(
-            RichText::new(format!("{hinted} {}", t("tk_orientir_note")))
-                .size(11.5)
-                .color(theme::warn()),
-        );
-    }
-    if unsure > 0 {
-        ui.label(
-            RichText::new(format!("{unsure} {}", t("tk_unsure_note")))
-                .size(11.5)
-                .color(theme::warn()),
-        );
-    }
-    if !app.takeoff_repeats.is_empty() {
-        let list = app
-            .takeoff_repeats
-            .iter()
-            .map(|(name, page)| format!("{} ({} {page})", name.trim(), t("pdf_page")))
-            .collect::<Vec<_>>()
-            .join(", ");
-        ui.label(
-            RichText::new(format!("{}: {list}", t("tk_repeats")))
+            RichText::new(t("sm_edit_scope"))
                 .size(11.5)
                 .color(theme::muted()),
         );
+        if ui
+            .selectable_label(!app.price_to_catalog, t("sm_scope_smeta"))
+            .on_hover_text(t("sm_scope_smeta_hint"))
+            .clicked()
+        {
+            scope = Some(false);
+        }
+        if ui
+            .selectable_label(app.price_to_catalog, t("sm_scope_catalog"))
+            .on_hover_text(t("sm_scope_catalog_hint"))
+            .clicked()
+        {
+            scope = Some(true);
+        }
+        ui.add_space(16.0);
+        ui.label(
+            RichText::new(t("sm_markup_all"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        let mut v = m.markup;
+        if ui
+            .add(
+                egui::DragValue::new(&mut v)
+                    .speed(0.5)
+                    .range(-50.0..=200.0)
+                    .suffix(" %"),
+            )
+            .changed()
+        {
+            markup = Some(v);
+        }
+        ui.label(
+            RichText::new(format!(
+                "{}: {}",
+                t("sm_catalog_size"),
+                app.catalog.works.len() + app.catalog.materials.len()
+            ))
+            .size(11.0)
+            .color(theme::muted()),
+        );
+    });
+    if let Some(s) = scope {
+        app.set_price_scope(s);
     }
-    ui.add_space(8.0);
+    if let Some(v) = markup {
+        app.edit_smeta(|m| m.markup = v);
+    }
+    ui.add_space(6.0);
 
-    // ---- Jadval.
-    let mut edit: Option<(String, f64)> = None;
-    let mut open: Option<String> = None;
-    let shown = app.takeoff_open.clone();
-    let section_fill = theme::accent().gamma_multiply(0.16);
-    let total_fill = theme::accent().gamma_multiply(0.07);
-    // Qator fonini katak ortiga chizadi: bo'lim va jami qatorlari jadvalda
-    // darrov ko'rinsin.
-    let band = |ui: &egui::Ui, fill: egui::Color32| {
-        // Kataklar orasidagi bo'shliq ham bo'yaladi — aks holda chiziq
-        // uzuq-uzuq ko'rinadi.
-        let rect = ui.max_rect().expand2(egui::vec2(10.0, 0.0));
-        ui.painter()
-            .with_clip_rect(rect)
-            .rect_filled(rect, 0.0, fill);
-    };
-    let right = |ui: &mut egui::Ui, text: RichText| {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(text);
-        });
-    };
-    let total_row = |row: &mut egui_extras::TableRow<'_, '_>,
-                     label: String,
-                     s: &Sum,
-                     fill: egui::Color32,
-                     size: f32| {
-        row.col(|ui| band(ui, fill));
-        row.col(|ui| {
-            band(ui, fill);
-            ui.label(RichText::new(label).size(size).strong());
-        });
-        row.col(|ui| {
-            band(ui, fill);
-            if let Some((q, u)) = &s.qty {
-                right(ui, RichText::new(amount(*q, u)).size(size).strong());
-            }
-        });
-        row.col(|ui| band(ui, fill));
-        row.col(|ui| {
-            band(ui, fill);
-            right(
-                ui,
-                match s.cost {
-                    Some(v) => RichText::new(money(v)).size(size).strong(),
-                    None => RichText::new(t("dash")).color(theme::muted()),
-                },
-            );
-        });
-        row.col(|ui| {
-            band(ui, fill);
-            if s.missing > 0 {
-                ui.label(
-                    RichText::new(format!("{} {}", s.missing, t("tk_no_price")))
-                        .size(11.0)
-                        .color(theme::warn()),
-                );
-            }
-        });
-    };
-
-    TableBuilder::new(ui)
-        .id_salt("tk_calc")
-        .striped(true)
-        .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-        .column(Column::exact(34.0))
-        .column(Column::remainder().at_least(240.0).clip(true))
-        .column(Column::exact(110.0))
-        .column(Column::exact(150.0))
-        .column(Column::exact(130.0))
-        .column(Column::exact(300.0).clip(true))
-        .header(24.0, |mut header| {
-            for (i, h) in [
-                "tk_col_no",
-                "tk_col_material",
-                "tk_col_amount",
-                "tk_col_price",
-                "tk_col_sum",
-                "tk_col_source",
-            ]
-            .iter()
-            .enumerate()
-            {
-                header.col(|ui| {
-                    let text = RichText::new(t(h)).size(11.0).color(theme::muted());
-                    if i == 2 || i == 4 {
-                        right(ui, text);
-                    } else {
-                        ui.label(text);
-                    }
-                });
-            }
-        })
-        .body(|mut body| {
-            for item in &sheet {
-                match item {
-                    Row::Section(kind) => body.row(28.0, |mut row| {
-                        row.col(|ui| band(ui, section_fill));
-                        row.col(|ui| {
-                            band(ui, section_fill);
-                            ui.label(
-                                RichText::new(crate::calc::kind_name(*kind).to_uppercase())
-                                    .size(12.5)
-                                    .strong()
-                                    .color(theme::accent()),
+    let mut price_edit: Option<(usize, usize, Option<usize>, f64)> = None;
+    let mut stage_markup: Option<(usize, f64)> = None;
+    egui::ScrollArea::vertical()
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            for (si, st) in m.stages.iter().enumerate() {
+                let Some(sv) = view.stages.get(si) else {
+                    continue;
+                };
+                egui::Frame::new()
+                    .fill(theme::accent().gamma_multiply(0.10))
+                    .corner_radius(6)
+                    .inner_margin(egui::Margin::symmetric(8, 5))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(&st.name).size(13.5).strong());
+                            ui.with_layout(
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} {}",
+                                            money(sv.total),
+                                            t("tk_sum_unit")
+                                        ))
+                                        .size(13.0)
+                                        .strong(),
+                                    );
+                                    let mut v = st.markup;
+                                    if ui
+                                        .add(
+                                            egui::DragValue::new(&mut v)
+                                                .speed(0.5)
+                                                .range(-50.0..=200.0)
+                                                .suffix(" %"),
+                                        )
+                                        .on_hover_text(t("sm_markup_stage"))
+                                        .changed()
+                                    {
+                                        stage_markup = Some((si, v));
+                                    }
+                                    ui.label(
+                                        RichText::new(t("sm_markup_short"))
+                                            .size(11.0)
+                                            .color(theme::muted()),
+                                    );
+                                    let missing = if sv.missing > 0 {
+                                        format!(" · {} {}", sv.missing, t("tk_no_price"))
+                                    } else {
+                                        String::new()
+                                    };
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} {} · {} {}{missing}",
+                                            t("sm_works"),
+                                            money(sv.work_sum),
+                                            t("sm_materials"),
+                                            money(sv.material_sum),
+                                        ))
+                                        .size(11.0)
+                                        .color(
+                                            if sv.missing > 0 {
+                                                theme::warn()
+                                            } else {
+                                                theme::muted()
+                                            },
+                                        ),
+                                    );
+                                },
                             );
                         });
-                        for _ in 0..4 {
-                            row.col(|ui| band(ui, section_fill));
+                    });
+                egui::Grid::new(("sm_price", si))
+                    .striped(true)
+                    .spacing([12.0, 4.0])
+                    .show(ui, |ui| {
+                        for h in [
+                            "sm_col_work",
+                            "tk_col_amount",
+                            "tk_col_price",
+                            "tk_col_sum",
+                            "",
+                            "sm_col_material",
+                            "tk_col_amount",
+                            "tk_col_price",
+                            "tk_col_sum",
+                        ] {
+                            let text = if h.is_empty() { "" } else { t(h) };
+                            ui.label(RichText::new(text).size(11.0).color(theme::muted()));
                         }
-                    }),
-                    Row::Class(class) => body.row(24.0, |mut row| {
-                        row.col(|_| {});
-                        row.col(|ui| {
-                            ui.label(RichText::new(t(class)).size(12.0).strong());
-                        });
-                        for _ in 0..4 {
-                            row.col(|_| {});
-                        }
-                    }),
-                    Row::Item(no, i) => {
-                        let r = &rows[*i];
-                        let is_open = shown.as_deref() == Some(r.total.material.as_str());
-                        body.row(24.0, |mut row| {
-                            row.col(|ui| {
-                                ui.label(
-                                    RichText::new(no.to_string())
-                                        .size(11.0)
-                                        .color(theme::muted()),
-                                );
-                            });
-                            row.col(|ui| {
-                                let mark = if is_open { "−" } else { "+" };
-                                let name = ui
-                                    .add(
-                                        egui::Label::new(
-                                            RichText::new(format!("{mark}  {}", r.total.material))
-                                                .size(12.5),
-                                        )
-                                        .truncate()
-                                        .sense(egui::Sense::click()),
-                                    )
-                                    .on_hover_text(format!(
-                                        "{}\n{}",
-                                        r.total.material,
-                                        t("tk_detail_open")
-                                    ));
-                                if name.clicked() {
-                                    open = Some(r.total.material.clone());
+                        ui.end_row();
+                        for (wi, w) in st.works.iter().enumerate() {
+                            let Some((wp, mps)) = sv.works.get(wi) else {
+                                continue;
+                            };
+                            let rows = w.materials.len().max(1);
+                            for mi in 0..rows {
+                                if mi == 0 {
+                                    ui.label(RichText::new(&w.name).size(12.0));
+                                    ui.label(format!("{} {}", num(w.qty), w.unit));
+                                    price_cell(ui, wp, &mut |v| {
+                                        price_edit = Some((si, wi, None, v))
+                                    });
+                                    ui.label(price_text(wp));
+                                } else {
+                                    for _ in 0..4 {
+                                        ui.label("");
+                                    }
                                 }
-                            });
-                            row.col(|ui| {
-                                right(
-                                    ui,
-                                    RichText::new(amount(r.total.amount, &r.total.unit))
-                                        .size(12.5)
-                                        .strong(),
-                                );
-                            });
-                            row.col(|ui| {
-                                let mut p = r.price.unwrap_or(0.0);
-                                let resp = ui.add(
-                                    egui::DragValue::new(&mut p)
-                                        .speed(1000.0)
-                                        .range(0.0..=1e12)
-                                        .custom_formatter(|v, _| money(v))
-                                        .custom_parser(|s| {
-                                            s.replace([' ', '\u{a0}'], "")
-                                                .replace(',', ".")
-                                                .parse()
-                                                .ok()
-                                        }),
-                                );
-                                if resp.changed() {
-                                    edit = Some((r.total.material.clone(), p));
+                                ui.label("");
+                                match (w.materials.get(mi), mps.get(mi)) {
+                                    (Some(mat), Some(mp)) => {
+                                        ui.label(RichText::new(&mat.name).size(12.0));
+                                        ui.label(format!("{} {}", num(mat.qty), mat.unit));
+                                        price_cell(ui, mp, &mut |v| {
+                                            price_edit = Some((si, wi, Some(mi), v))
+                                        });
+                                        ui.label(price_text(mp));
+                                    }
+                                    _ => {
+                                        for _ in 0..4 {
+                                            ui.label("");
+                                        }
+                                    }
                                 }
-                                ui.label(
-                                    RichText::new(format!("/{}", r.total.unit))
-                                        .size(11.0)
-                                        .color(theme::muted()),
-                                );
-                            });
-                            row.col(|ui| {
-                                right(
-                                    ui,
-                                    match r.sum() {
-                                        Some(v) => RichText::new(money(v)).size(12.5),
-                                        None => RichText::new(t("dash")).color(theme::muted()),
-                                    },
-                                );
-                            });
-                            row.col(|ui| {
-                                // Narx qayerdan kelgani har qatorda ko'rinadi.
-                                let text = crate::calc::source(r);
-                                let sure = r.manual || (r.price.is_some() && r.orientir.is_none());
-                                ui.add(
-                                    egui::Label::new(
-                                        RichText::new(&text).size(11.0).color(if sure {
-                                            theme::muted()
-                                        } else {
-                                            theme::warn()
-                                        }),
-                                    )
-                                    .truncate(),
-                                )
-                                .on_hover_text(text);
-                            });
-                        });
-                        if is_open {
-                            detail_rows(&mut body, app, &r.total.material, &r.total.unit);
+                                ui.end_row();
+                            }
                         }
-                    }
-                    Row::ClassTotal(class, s) => body.row(24.0, |mut row| {
-                        total_row(
-                            &mut row,
-                            format!("{}: {}", t("tk_subtotal"), t(class)),
-                            s,
-                            egui::Color32::TRANSPARENT,
-                            12.0,
-                        );
-                    }),
-                    Row::SectionTotal(kind, s) => body.row(26.0, |mut row| {
-                        total_row(
-                            &mut row,
-                            format!("{} — {}", t("tk_subtotal"), crate::calc::kind_name(*kind)),
-                            s,
-                            total_fill,
-                            12.5,
-                        );
-                    }),
-                    Row::Grand(s) => body.row(32.0, |mut row| {
-                        total_row(
-                            &mut row,
-                            t("tk_grand_total").to_string(),
-                            s,
-                            section_fill,
-                            13.5,
-                        );
-                    }),
-                }
+                    });
+                ui.add_space(10.0);
             }
         });
 
-    if let Some((material, price)) = edit {
-        app.set_takeoff_price(&material, price);
+    if let Some((si, wi, mi, v)) = price_edit {
+        app.set_price(si, wi, mi, v);
     }
-    if let Some(material) = open {
-        app.takeoff_open = if app.takeoff_open.as_deref() == Some(material.as_str()) {
-            None
-        } else {
-            Some(material)
-        };
-    }
-    if let Some(pdf) = export {
-        export_calc(app, pdf);
+    if let Some((si, v)) = stage_markup {
+        app.edit_smeta(|m| {
+            if let Some(s) = m.stages.get_mut(si) {
+                s.markup = v;
+            }
+        });
     }
 }
 
-/// Kalkulyatsiyani faylga saqlaydi: Excel — ishlash uchun, PDF —
-/// topshirish uchun. Ikkalasi ham ekrandagi varaqning o'zidan chiqadi.
-fn export_calc(app: &mut App, pdf: bool) {
-    let table = crate::calc::table(&app.cost_rows, t("screen_ai_check"));
+/// Narx katagi: qiymat va manbasi (shu smeta / katalog / baza / yo'q).
+fn price_cell(ui: &mut egui::Ui, p: &crate::smeta::Priced, on_change: &mut dyn FnMut(f64)) {
+    ui.horizontal(|ui| {
+        let mut v = p.price.unwrap_or(0.0);
+        let resp = ui.add(
+            egui::DragValue::new(&mut v)
+                .speed(500.0)
+                .range(0.0..=1e12)
+                .custom_formatter(|v, _| money(v))
+                .custom_parser(|s| {
+                    s.replace([' ', '\u{a0}'], "")
+                        .replace(',', ".")
+                        .parse::<f64>()
+                        .ok()
+                }),
+        );
+        if resp.changed() {
+            on_change(v);
+        }
+        let color = match p.origin {
+            Origin::None => theme::warn(),
+            Origin::Line => theme::accent(),
+            _ => theme::muted(),
+        };
+        ui.label(RichText::new(t(p.origin.label())).size(10.0).color(color));
+    });
+}
+
+/// Smetani faylga saqlaydi: Excel yoki PDF — ekrandagi ko'rinishdan.
+fn export_smeta(app: &mut App, pdf: bool) {
+    use crate::docgen::{Cell, Table};
+    let Some(m) = &app.smeta else { return };
+    let view = &app.smeta_view;
+    let mut rows: Vec<Vec<Cell>> = Vec::new();
+    let text = |s: &str| Cell::Text(s.to_string());
+    let money_cell = |v: Option<f64>| v.map(Cell::Money).unwrap_or(Cell::Empty);
+    for (si, st) in m.stages.iter().enumerate() {
+        let Some(sv) = view.stages.get(si) else {
+            continue;
+        };
+        let mut head = vec![text(&st.name.to_uppercase())];
+        head.resize(6, Cell::Empty);
+        rows.push(head);
+        for (wi, w) in st.works.iter().enumerate() {
+            let Some((wp, mps)) = sv.works.get(wi) else {
+                continue;
+            };
+            rows.push(vec![
+                text(&w.name),
+                text(&w.unit),
+                Cell::Num(w.qty),
+                money_cell(wp.price),
+                money_cell(wp.sum),
+                text(&format!(
+                    "{} · {}",
+                    t(w.source.badge()),
+                    t(wp.origin.label())
+                )),
+            ]);
+            for (mi, mat) in w.materials.iter().enumerate() {
+                let Some(mp) = mps.get(mi) else { continue };
+                rows.push(vec![
+                    text(&format!("    {}", mat.name)),
+                    text(&mat.unit),
+                    Cell::Num(mat.qty),
+                    money_cell(mp.price),
+                    money_cell(mp.sum),
+                    text(&format!(
+                        "{} · {}",
+                        t(mat.source.badge()),
+                        t(mp.origin.label())
+                    )),
+                ]);
+            }
+        }
+        rows.push(vec![
+            text(&format!(
+                "{} — {} ({}%)",
+                t("tk_subtotal"),
+                st.name,
+                num(st.markup)
+            )),
+            Cell::Empty,
+            Cell::Empty,
+            Cell::Empty,
+            Cell::Money(sv.total),
+            if sv.missing > 0 {
+                text(&format!("{} {}", sv.missing, t("tk_no_price")))
+            } else {
+                Cell::Empty
+            },
+        ]);
+    }
+    rows.push(vec![
+        text(&format!("{} ({}%)", t("sm_total"), num(m.markup))),
+        Cell::Empty,
+        Cell::Empty,
+        Cell::Empty,
+        Cell::Money(view.total),
+        if view.missing > 0 {
+            text(&format!("{} {}", view.missing, t("tk_no_price")))
+        } else {
+            Cell::Empty
+        },
+    ]);
+    let table = Table {
+        name: t("sm_export_name").to_string(),
+        headers: [
+            "sm_col_work",
+            "tk_col_unit",
+            "tk_col_amount",
+            "tk_col_price",
+            "tk_col_sum",
+            "sm_col_source",
+        ]
+        .iter()
+        .map(|k| t(k).to_string())
+        .collect(),
+        rows,
+    };
     let ext = if pdf { "pdf" } else { "xlsx" };
     let name = format!(
         "{}_{}.{ext}",
-        t("tk_export_name"),
+        t("sm_export_name"),
         app.today.format("%Y-%m-%d")
     );
     let Some(path) = rfd::FileDialog::new()
-        .set_title(t(if pdf {
-            "tk_export_pdf"
-        } else {
-            "tk_export_excel"
-        }))
         .set_file_name(&name)
         .add_filter(if pdf { "PDF" } else { "Excel" }, &[ext])
         .save_file()
@@ -1066,18 +1414,11 @@ fn export_calc(app: &mut App, pdf: bool) {
         return;
     };
     let result = if pdf {
-        let subtitle = [
+        let subtitle = format!(
+            "{} · {}",
             app.project().map(|p| p.name.clone()).unwrap_or_default(),
-            app.takeoff
-                .as_ref()
-                .map(|t| t.file.clone())
-                .unwrap_or_default(),
-            app.today.format("%d.%m.%Y").to_string(),
-        ]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" · ");
+            app.today.format("%d.%m.%Y")
+        );
         crate::pdf::write_table(&path, &table, &subtitle)
     } else {
         crate::docgen::write_table(&path, &table).map_err(|e| format!("{e}"))
@@ -1093,60 +1434,316 @@ fn export_calc(app: &mut App, pdf: bool) {
     }
 }
 
-/// Material qayerdan yig'ilgani: har konstruksiya uchun hisob formulasi.
-fn detail_rows(body: &mut egui_extras::TableBody<'_>, app: &App, material: &str, unit: &str) {
-    for l in app
-        .takeoff_lines
-        .iter()
-        .filter(|l| l.item.material == material && l.item.unit == unit)
-    {
-        let group = if l.group.trim().is_empty() {
-            t("dash").to_string()
-        } else {
-            l.group.trim().to_string()
-        };
-        // Formula: bir donaga × yig'ma birlik × konstruksiya soni.
-        let formula = match l.count {
-            Some(c) => {
-                let mut f = format!("{} {unit}", num(l.item.amount));
-                if (l.sub - 1.0).abs() > 1e-9 {
-                    f.push_str(&format!(" × {}", num(l.sub)));
+// ================================================================= 6. Taklif
+
+fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
+    let Some(m) = app.smeta.clone() else {
+        empty(ui, t("tk_not_loaded"));
+        return;
+    };
+    if m.stages.is_empty() {
+        empty(ui, t("sm_no_spec"));
+        return;
+    }
+    let view = app.smeta_view.clone();
+    let mut offer = m.offer.clone();
+    let mut changed = false;
+    let mut export = false;
+
+    ui.columns(2, |cols| {
+        // ---- Chapda sozlamalar.
+        card(&mut cols[0], |ui| {
+            ui.label(RichText::new(t("sm_offer_settings")).strong().size(14.0));
+            ui.add_space(6.0);
+            let field = |ui: &mut egui::Ui, label: &str, v: &mut String, changed: &mut bool| {
+                ui.label(RichText::new(label).size(11.0).color(theme::muted()));
+                if ui
+                    .add(egui::TextEdit::singleline(v).desired_width(f32::INFINITY))
+                    .changed()
+                {
+                    *changed = true;
                 }
-                format!("{f} × {}", num(c))
+            };
+            field(ui, t("sm_offer_title"), &mut offer.title, &mut changed);
+            field(ui, t("sm_offer_company"), &mut offer.company, &mut changed);
+            field(
+                ui,
+                t("sm_offer_contacts"),
+                &mut offer.contacts,
+                &mut changed,
+            );
+            field(
+                ui,
+                t("sm_offer_customer"),
+                &mut offer.customer,
+                &mut changed,
+            );
+            ui.label(
+                RichText::new(t("sm_offer_terms"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            if ui
+                .add(
+                    egui::TextEdit::multiline(&mut offer.terms)
+                        .desired_rows(4)
+                        .desired_width(f32::INFINITY),
+                )
+                .changed()
+            {
+                changed = true;
             }
-            None => t("tk_detail_as_written").to_string(),
-        };
-        let color = if l.count.is_some() {
-            theme::muted()
-        } else {
-            theme::warn()
-        };
-        body.row(20.0, |mut row| {
-            row.col(|_| {});
-            row.col(|ui| {
-                ui.add(
-                    egui::Label::new(
-                        RichText::new(format!("        {} {} · {group}", t("pdf_page"), l.page))
-                            .size(11.0)
-                            .color(theme::muted()),
-                    )
-                    .truncate(),
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(t("sm_offer_valid"))
+                        .size(11.0)
+                        .color(theme::muted()),
                 );
+                let mut d = offer.valid_days as i64;
+                if ui
+                    .add(egui::DragValue::new(&mut d).range(1..=365))
+                    .changed()
+                {
+                    offer.valid_days = d as u32;
+                    changed = true;
+                }
+                if ui
+                    .checkbox(&mut offer.detailed, t("sm_offer_detailed"))
+                    .changed()
+                {
+                    changed = true;
+                }
             });
-            row.col(|ui| {
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        RichText::new(amount(l.total(), unit))
-                            .size(11.0)
-                            .color(theme::muted()),
-                    );
-                });
-            });
-            row.col(|ui| {
-                ui.label(RichText::new(&formula).size(11.0).color(color));
-            });
-            row.col(|_| {});
-            row.col(|_| {});
+            ui.add_space(8.0);
+            if ui.button(t("sm_offer_pdf")).clicked() {
+                export = true;
+            }
         });
+
+        // ---- O'ngda hujjat ko'rinishi.
+        let ui = &mut cols[1];
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                egui::Frame::new()
+                    .fill(theme::canvas())
+                    .stroke(Stroke::new(1.0_f32, theme::line()))
+                    .inner_margin(egui::Margin::same(18))
+                    .show(ui, |ui| {
+                        for line in offer_lines(app, &m, &view) {
+                            match line {
+                                DocLine::Title(s) => {
+                                    ui.label(RichText::new(s).size(18.0).strong());
+                                }
+                                DocLine::Head(s) => {
+                                    ui.add_space(6.0);
+                                    ui.label(RichText::new(s).size(13.0).strong());
+                                }
+                                DocLine::Text(s) => {
+                                    ui.label(RichText::new(s).size(11.5));
+                                }
+                                DocLine::Row(a, b) => {
+                                    ui.horizontal(|ui| {
+                                        ui.label(RichText::new(a).size(11.5));
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                ui.label(RichText::new(b).size(11.5).strong());
+                                            },
+                                        );
+                                    });
+                                }
+                                DocLine::Muted(s) => {
+                                    ui.label(RichText::new(s).size(10.5).color(theme::muted()));
+                                }
+                                DocLine::Gap => {
+                                    ui.add_space(8.0);
+                                }
+                            }
+                        }
+                    });
+            });
+    });
+
+    if changed {
+        app.edit_smeta(|m| m.offer = offer.clone());
+    }
+    if export {
+        export_offer(app);
+    }
+}
+
+/// Hujjat qatori — ekran va PDF bitta ro'yxatdan chiziladi.
+enum DocLine {
+    Title(String),
+    Head(String),
+    Text(String),
+    Row(String, String),
+    Muted(String),
+    Gap,
+}
+
+fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -> Vec<DocLine> {
+    let o = &m.offer;
+    let project = app.project().map(|p| p.name.clone()).unwrap_or_default();
+    let mut out = Vec::new();
+    if !o.company.is_empty() {
+        out.push(DocLine::Head(o.company.clone()));
+    }
+    if !o.contacts.is_empty() {
+        out.push(DocLine::Muted(o.contacts.clone()));
+    }
+    out.push(DocLine::Gap);
+    out.push(DocLine::Title(if o.title.is_empty() {
+        format!("{} — {project}", t("sm_offer_default_title"))
+    } else {
+        o.title.clone()
+    }));
+    if !o.customer.is_empty() {
+        out.push(DocLine::Text(format!(
+            "{}: {}",
+            t("sm_offer_customer"),
+            o.customer
+        )));
+    }
+    out.push(DocLine::Muted(format!(
+        "{} {} · {} {} {}",
+        t("sm_offer_date"),
+        app.today.format("%d.%m.%Y"),
+        t("sm_offer_valid_until"),
+        o.valid_days,
+        t("sm_days")
+    )));
+    if !m.summary.is_empty() {
+        out.push(DocLine::Gap);
+        out.push(DocLine::Text(m.summary.clone()));
+    }
+    out.push(DocLine::Gap);
+    out.push(DocLine::Head(t("sm_offer_price_title").to_string()));
+    out.push(DocLine::Row(
+        t("sm_total").to_string(),
+        format!("{} {}", money(view.total), t("tk_sum_unit")),
+    ));
+    out.push(DocLine::Muted(format!(
+        "{} {} · {} {}",
+        t("sm_works"),
+        money(view.work_sum),
+        t("sm_materials"),
+        money(view.material_sum)
+    )));
+    if view.missing > 0 {
+        out.push(DocLine::Muted(format!(
+            "* {} {}",
+            view.missing,
+            t("sm_offer_missing")
+        )));
+    }
+    out.push(DocLine::Gap);
+    out.push(DocLine::Head(t("sm_offer_stages_title").to_string()));
+    for (si, st) in m.stages.iter().enumerate() {
+        let Some(sv) = view.stages.get(si) else {
+            continue;
+        };
+        out.push(DocLine::Row(
+            format!("{}. {}", si + 1, st.name),
+            format!(
+                "{}{}",
+                money(sv.total),
+                if sv.missing > 0 { " *" } else { "" }
+            ),
+        ));
+        if o.detailed {
+            for w in &st.works {
+                out.push(DocLine::Muted(format!(
+                    "      {} — {} {}",
+                    w.name,
+                    num(w.qty),
+                    w.unit
+                )));
+            }
+        }
+    }
+    if !o.terms.is_empty() {
+        out.push(DocLine::Gap);
+        out.push(DocLine::Head(t("sm_offer_terms").to_string()));
+        for l in o.terms.lines() {
+            out.push(DocLine::Text(l.to_string()));
+        }
+    }
+    out
+}
+
+/// Taklifni PDF ga yozadi — ekrandagi hujjat ro'yxatidan.
+fn export_offer(app: &mut App) {
+    let Some(m) = app.smeta.clone() else { return };
+    let view = app.smeta_view.clone();
+    let lines = offer_lines(app, &m, &view);
+    let name = format!(
+        "{}_{}.pdf",
+        t("sm_offer_file"),
+        app.today.format("%Y-%m-%d")
+    );
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(&name)
+        .add_filter("PDF", &["pdf"])
+        .save_file()
+    else {
+        return;
+    };
+    // Sahifaga sig'adigan qatorlar: tik A4, chekka 18 mm.
+    let (w, h, margin) = (
+        crate::pdf::PAGE_W_PORTRAIT,
+        crate::pdf::PAGE_H_PORTRAIT,
+        18.0_f32,
+    );
+    let step = |l: &DocLine| -> f32 {
+        match l {
+            DocLine::Title(_) => 10.0,
+            DocLine::Head(_) => 8.0,
+            DocLine::Gap => 4.0,
+            _ => 5.5,
+        }
+    };
+    let mut pages: Vec<Vec<&DocLine>> = vec![Vec::new()];
+    let mut y = h - margin;
+    for l in &lines {
+        if y - step(l) < margin + 8.0 {
+            pages.push(Vec::new());
+            y = h - margin;
+        }
+        y -= step(l);
+        if let Some(last) = pages.last_mut() {
+            last.push(l);
+        }
+    }
+    let total = pages.len();
+    let result = crate::pdf::write_pages(&path, t("sm_offer_file"), total, |page, index| {
+        let mut y = h - margin;
+        for l in &pages[index] {
+            y -= step(l);
+            match l {
+                DocLine::Title(s) => page.text(s, 15.0, margin, y),
+                DocLine::Head(s) => page.text(s, 11.5, margin, y),
+                DocLine::Text(s) => page.text(s, 9.5, margin, y),
+                DocLine::Muted(s) => page.text(s, 8.5, margin, y),
+                DocLine::Row(a, b) => {
+                    page.text(a, 9.5, margin, y);
+                    // O'ng ustun: taxminiy kenglik bo'yicha o'ngga tekis.
+                    let bw = b.chars().count() as f32 * 9.5 * 0.19;
+                    page.text(b, 9.5, w - margin - bw, y);
+                }
+                DocLine::Gap => {}
+            }
+        }
+        page.text(
+            &format!("{} {} / {total}", t("pdf_page"), index + 1),
+            7.5,
+            margin,
+            margin - 6.0,
+        );
+    });
+    match result {
+        Ok(()) => app.notify(format!("{} · {}", t("export_done"), path.display())),
+        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
     }
 }

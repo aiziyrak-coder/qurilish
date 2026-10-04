@@ -37,6 +37,8 @@ mod reports;
 mod roles;
 mod sales;
 mod signlog;
+mod smeta;
+mod smeta_ai;
 mod store;
 mod sync;
 mod takeoff;

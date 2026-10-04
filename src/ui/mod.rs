@@ -1846,7 +1846,7 @@ mod screen_tests {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui/aicheck.rs");
         let src = std::fs::read_to_string(&path).expect("aicheck.rs");
         assert!(
-            src.contains("for tab in CheckTab::ALL"),
+            src.contains("CheckTab::ALL"),
             "bo'limlar to'liq ro'yxatdan olinmayapti"
         );
         // Har bo'lim uchun chizish yo'li bor: `match` da hammasi
@@ -1954,9 +1954,65 @@ mod screen_tests {
             .find(|r| r.total.material == "Beton B20")
             .expect("beton");
         assert!(beton.manual && beton.orientir.is_none());
-        // Tafsilot ochiq holda ham chiziladi.
-        app.takeoff_open = Some("Beton B20".into());
-        app.check_tab = crate::app::CheckTab::Calc;
+        // Smeta namunasi: olti bosqich ham ma'lumot bilan chiziladi.
+        {
+            use crate::smeta::*;
+            let mut m = Smeta {
+                summary: "Bir qavatli sex.".into(),
+                questions: vec![Question {
+                    topic: "Tom".into(),
+                    text: "Tom turi?".into(),
+                    options: vec!["Sendvich".into(), "Profnastil".into()],
+                    answer: "Sendvich".into(),
+                }],
+                ..Default::default()
+            };
+            m.digest.push(PageDigest {
+                page: 1,
+                sheet: "Reja".into(),
+                kind: "АР".into(),
+                facts: vec![Fact {
+                    name: "Maydon".into(),
+                    value: "2940".into(),
+                    unit: "m2".into(),
+                    page: Some(1),
+                }],
+                lists: Vec::new(),
+            });
+            m.facts = m.digest[0].facts.clone();
+            m.stages.push(Stage {
+                name: "Poydevor".into(),
+                markup: 10.0,
+                works: vec![Work {
+                    name: "Beton quyish".into(),
+                    qty: 14.64,
+                    unit: "m3".into(),
+                    source: Source::Project { page: Some(13) },
+                    price: Some(150_000.0),
+                    materials: vec![Resource {
+                        name: "Beton B20".into(),
+                        qty: 14.93,
+                        unit: "m3".into(),
+                        source: Source::Standard {
+                            note: "1.02".into(),
+                        },
+                        price: None,
+                    }],
+                }],
+            });
+            app.smeta = Some(m);
+            app.recompute_smeta();
+            assert!(app.smeta_view.total > 0.0);
+            assert_eq!(app.smeta_view.missing, 1);
+            // Katalogga narx: keyingi hisobda o'sha narx chiqadi.
+            app.set_price_scope(true);
+            app.set_price(0, 0, Some(0), 650_000.0);
+            assert_eq!(app.smeta_view.missing, 0);
+            assert_eq!(app.catalog.materials.len(), 1);
+            app.set_price_scope(false);
+        }
+        app.smeta_open = Some(0);
+        app.check_tab = crate::app::CheckTab::Smeta;
         frame(&ctx, &mut app);
 
         // Jadval hisobdan chiqarilsa uning materiali yig'indidan ketadi,
@@ -1964,7 +2020,7 @@ mod screen_tests {
         let before = app.takeoff_lines.len();
         app.set_table_off(1, true);
         assert!(app.takeoff_lines.len() < before);
-        app.check_tab = crate::app::CheckTab::Project;
+        app.check_tab = crate::app::CheckTab::Upload;
         frame(&ctx, &mut app);
         app.set_table_off(1, false);
         assert_eq!(app.takeoff_lines.len(), before);
