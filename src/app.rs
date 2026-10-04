@@ -570,6 +570,18 @@ pub struct PagesJob {
 pub type QuestionsRx =
     std::sync::mpsc::Receiver<Result<(String, Vec<crate::smeta::Question>, u32), String>>;
 
+/// AI narx taklifi — fon ishi (5-bosqich).
+pub struct PriceJob {
+    pub started: std::time::Instant,
+    pub asked: usize,
+    pub got: usize,
+    pub failed: usize,
+    /// Oxirgi xato — partiya o'qilmagan bo'lsa sababi ko'rinsin.
+    pub error: String,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    rx: std::sync::mpsc::Receiver<crate::smeta_ai::PriceMsg>,
+}
+
 /// Spetsifikatsiyani tuzish — fon ishi (4-bosqich).
 pub struct SpecJob {
     pub started: std::time::Instant,
@@ -863,6 +875,13 @@ pub struct App {
     pub sketch_draft: crate::smeta::Sketch,
     /// Katalogga qo'shilayotgan yangi pozitsiya: nom, birlik, narx, ishmi.
     pub catalog_new: (String, String, f64, bool),
+    /// AI taklif qilgan narxlar: kalit → (narx, izoh). Qabul qilingunicha
+    /// katalogga yozilmaydi; obyekt bilan birga saqlanadi.
+    pub price_hints: std::collections::BTreeMap<String, (f64, String)>,
+    pub price_job: Option<PriceJob>,
+    /// AI smeta tekshiruvi: xulosa matni va fon so'rovi.
+    pub smeta_review: String,
+    pub review_rx: Option<std::sync::mpsc::Receiver<Result<(String, u32), String>>>,
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
     pub pdf_note: String,
     /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
@@ -1095,6 +1114,10 @@ impl App {
             sketch_open: false,
             sketch_draft: Default::default(),
             catalog_new: (String::new(), String::new(), 0.0, false),
+            price_hints: Default::default(),
+            price_job: None,
+            smeta_review: String::new(),
+            review_rx: None,
             pdf_note: String::new(),
             takeoff: None,
             takeoff_prices: Default::default(),
@@ -2403,6 +2426,11 @@ impl App {
             .and_then(|m| serde_json::to_string(m).ok())
             .unwrap_or_default();
         let _ = self.db.set_setting(&format!("smeta.{pid}"), &smeta);
+        let hints = serde_json::to_string(&self.price_hints).unwrap_or_default();
+        let _ = self.db.set_setting(&format!("smeta_hints.{pid}"), &hints);
+        let _ = self
+            .db
+            .set_setting(&format!("smeta_review.{pid}"), &self.smeta_review);
         let prices = serde_json::to_string(&self.takeoff_prices).unwrap_or_default();
         let _ = self
             .db
@@ -2418,6 +2446,9 @@ impl App {
         self.smeta_open = None;
         self.smeta_note.clear();
         self.questions_rx = None;
+        self.price_hints.clear();
+        self.smeta_review.clear();
+        self.review_rx = None;
         // Boshqa obyektga o'tilsa, fon ishlari to'xtatiladi: natija
         // noto'g'ri obyektga yozilmasin.
         self.drop_jobs();
@@ -2431,6 +2462,15 @@ impl App {
                 .db
                 .get_setting(&format!("smeta.{pid}"))
                 .and_then(|m| serde_json::from_str(&m).ok());
+            self.price_hints = self
+                .db
+                .get_setting(&format!("smeta_hints.{pid}"))
+                .and_then(|m| serde_json::from_str(&m).ok())
+                .unwrap_or_default();
+            self.smeta_review = self
+                .db
+                .get_setting(&format!("smeta_review.{pid}"))
+                .unwrap_or_default();
             self.takeoff = self
                 .db
                 .get_setting(&format!("takeoff.{pid}"))
@@ -2494,12 +2534,270 @@ impl App {
             self.smeta_view = Default::default();
             return;
         };
+        // Katalog ham o'xshash nom bo'yicha qidiriladi: «Бетон B20» va
+        // «Бетон класса B20» bitta narx. Qidiruv narx bazasi mexanizmi
+        // bilan — nomdagi so'zlarning yarmidan ko'pi mos kelsa.
+        let as_rows =
+            |map: &std::collections::BTreeMap<String, f64>| -> Vec<crate::prices::PriceRow> {
+                map.iter()
+                    .map(|(k, v)| {
+                        let (name, unit) = crate::smeta::split_key(k);
+                        crate::prices::PriceRow {
+                            id: 0,
+                            code: String::new(),
+                            name: name.to_string(),
+                            unit: unit.to_string(),
+                            price: *v,
+                            source: String::new(),
+                            date: None,
+                            region: String::new(),
+                        }
+                    })
+                    .collect()
+            };
+        let cat_w = as_rows(&self.catalog.works);
+        let cat_m = as_rows(&self.catalog.materials);
+        let (idx_w, idx_m) = (
+            crate::prices::Index::build(&cat_w),
+            crate::prices::Index::build(&cat_m),
+        );
         let index = crate::prices::Index::build(&self.price_book);
-        let book = |name: &str, unit: &str| -> Option<f64> {
+        let lookup = |work: bool, name: &str, unit: &str| -> Option<(f64, crate::smeta::Origin)> {
+            let (rows, idx) = if work {
+                (&cat_w, &idx_w)
+            } else {
+                (&cat_m, &idx_m)
+            };
+            let found = crate::prices::find_with(rows, idx, name, "", unit);
+            if let Some(r) = crate::prices::range(&found) {
+                return Some((r.avg, crate::smeta::Origin::Catalog));
+            }
             let found = crate::prices::find_with(&self.price_book, &index, name, "", unit);
-            crate::prices::range(&found).map(|r| r.avg)
+            crate::prices::range(&found).map(|r| (r.avg, crate::smeta::Origin::Book))
         };
-        self.smeta_view = crate::smeta::view(smeta, &self.catalog, &book);
+        let hints: std::collections::BTreeMap<String, f64> = self
+            .price_hints
+            .iter()
+            .map(|(k, v)| (k.clone(), v.0))
+            .collect();
+        self.smeta_view = crate::smeta::view(
+            smeta,
+            &crate::smeta::Sources {
+                catalog: &self.catalog,
+                lookup: &lookup,
+                hints: &hints,
+            },
+        );
+    }
+
+    // ------------------------------------------------ 5-bosqich: narxlar
+
+    /// Narxsiz pozitsiyalar uchun AI dan taxminiy narx so'raydi.
+    ///
+    /// Taklif katalogga **yozilmaydi** — u «AI taxmini» belgisi bilan
+    /// turadi, jamiga kiradi, lekin alohida sanaladi; odam uni qabul
+    /// qiladi yoki o'z narxini yozadi.
+    pub fn start_price_hints(&mut self) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if self.price_job.is_some() {
+            return;
+        }
+        if !self.llm.is_ready() {
+            self.smeta_note = t("sm_no_key").to_string();
+            return;
+        }
+        let Some(m) = &self.smeta else { return };
+        let items = crate::smeta::unpriced(m, &self.smeta_view);
+        if items.is_empty() {
+            return;
+        }
+        let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.smeta_note.clear();
+        self.price_job = Some(PriceJob {
+            started: std::time::Instant::now(),
+            asked: items.len(),
+            got: 0,
+            failed: 0,
+            error: String::new(),
+            rx: crate::smeta_ai::spawn_prices(self.extract_cfg(), items, cancel.clone()),
+            cancel,
+        });
+    }
+
+    pub fn poll_prices(&mut self) -> bool {
+        use crate::smeta_ai::PriceMsg;
+        use std::sync::mpsc::TryRecvError;
+        let Some(job) = &mut self.price_job else {
+            return false;
+        };
+        let mut changed = false;
+        let mut finished = false;
+        loop {
+            match job.rx.try_recv() {
+                Ok(PriceMsg::Batch(list)) => {
+                    job.got += list.len();
+                    for (k, p, note) in list {
+                        self.price_hints.insert(k, (p, note));
+                    }
+                }
+                Ok(PriceMsg::Failed(e)) => {
+                    job.failed += 1;
+                    job.error = e;
+                }
+                Ok(PriceMsg::Done) | Err(TryRecvError::Disconnected) => {
+                    finished = true;
+                    break;
+                }
+                Err(TryRecvError::Empty) => break,
+            }
+            changed = true;
+        }
+        if finished {
+            let job = self.price_job.take();
+            if let Some(job) = job {
+                self.smeta_note = format!(
+                    "{} {} / {} · {:.0} s{}",
+                    t("sm_hints_done"),
+                    job.got,
+                    job.asked,
+                    job.started.elapsed().as_secs_f64(),
+                    if job.error.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" · {}", job.error)
+                    }
+                );
+            }
+            self.save_takeoff();
+        }
+        if changed {
+            self.recompute_smeta();
+        }
+        changed || finished
+    }
+
+    /// AI taklif qilgan barcha narxlarni katalogga qabul qiladi.
+    pub fn accept_hints(&mut self) -> usize {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return 0;
+        }
+        let Some(m) = &self.smeta else { return 0 };
+        // Qaysi kalit ish, qaysisi material — smetadan.
+        let mut works = std::collections::BTreeSet::new();
+        for w in m.stages.iter().flat_map(|s| &s.works) {
+            works.insert(crate::smeta::key(&w.name, &w.unit));
+        }
+        let day = self.today.format("%Y-%m-%d").to_string();
+        let hints = std::mem::take(&mut self.price_hints);
+        let n = hints.len();
+        for (k, (p, _)) in hints {
+            self.catalog.set(works.contains(&k), &k, p, &day);
+        }
+        self.save_catalog();
+        self.save_takeoff();
+        self.recompute_smeta();
+        n
+    }
+
+    /// Bitta taklifni qabul qiladi (katalogga) yoki rad etadi.
+    pub fn accept_hint(&mut self, work: bool, key: &str, accept: bool) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if let Some((p, _)) = self.price_hints.remove(key) {
+            if accept {
+                let day = self.today.format("%Y-%m-%d").to_string();
+                self.catalog.set(work, key, p, &day);
+                self.save_catalog();
+            }
+        }
+        self.save_takeoff();
+        self.recompute_smeta();
+    }
+
+    /// Smetani AI ga tekshirtiradi.
+    pub fn start_review(&mut self) {
+        if self.review_rx.is_some() || !self.llm.is_ready() {
+            return;
+        }
+        let Some(m) = &self.smeta else { return };
+        let v = &self.smeta_view;
+        let mut ctx = format!("ОБЪЕКТ: {}\n\nПОКАЗАТЕЛИ:\n", m.summary);
+        for f in m.facts.iter().take(60) {
+            ctx.push_str(&format!("- {}: {} {}\n", f.name, f.value, f.unit));
+        }
+        ctx.push_str(&format!(
+            "\nИТОГО: {:.0} сум (работы {:.0}, материалы {:.0}), без цены {} строк, по ориентиру AI {} строк\n",
+            v.total, v.work_sum, v.material_sum, v.missing, v.hinted
+        ));
+        let src = |s: &crate::smeta::Source| match s {
+            crate::smeta::Source::Project { page } => format!("проект л.{}", page.unwrap_or(0)),
+            crate::smeta::Source::Calc { formula } => format!("расчёт {formula}"),
+            crate::smeta::Source::Standard { note } => format!("стандарт {note}"),
+            crate::smeta::Source::Assumption { note } => format!("ДОПУЩЕНИЕ {note}"),
+            crate::smeta::Source::Manual => "вручную".to_string(),
+        };
+        for (si, st) in m.stages.iter().enumerate() {
+            ctx.push_str(&format!(
+                "\n## {} (итог {:.0})\n",
+                st.name,
+                v.stages.get(si).map(|s| s.total).unwrap_or(0.0)
+            ));
+            for (wi, w) in st.works.iter().enumerate() {
+                let wp = v.stages.get(si).and_then(|s| s.works.get(wi));
+                ctx.push_str(&format!(
+                    "- {} | {} {} | цена {} | {}\n",
+                    w.name,
+                    w.qty,
+                    w.unit,
+                    wp.and_then(|p| p.0.price)
+                        .map(|p| format!("{p:.0}"))
+                        .unwrap_or("нет".into()),
+                    src(&w.source)
+                ));
+                for (mi, mat) in w.materials.iter().enumerate() {
+                    let mp = wp.and_then(|p| p.1.get(mi));
+                    ctx.push_str(&format!(
+                        "    · {} | {} {} | цена {} | {}\n",
+                        mat.name,
+                        mat.qty,
+                        mat.unit,
+                        mp.and_then(|p| p.price)
+                            .map(|p| format!("{p:.0}"))
+                            .unwrap_or("нет".into()),
+                        src(&mat.source)
+                    ));
+                }
+            }
+        }
+        self.review_rx = Some(crate::smeta_ai::spawn_review(self.extract_cfg(), ctx));
+    }
+
+    pub fn poll_review(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.review_rx else {
+            return false;
+        };
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => Err(t("tk_review_failed").to_string()),
+        };
+        self.review_rx = None;
+        match result {
+            Ok((text, tokens)) => {
+                self.llm_tokens += tokens;
+                self.smeta_review = text;
+                self.save_takeoff();
+            }
+            Err(e) => self.smeta_note = format!("{}: {e}", t("tk_review_failed")),
+        }
+        true
     }
 
     /// Material narxini qo'lda qo'yadi; nol yoki manfiy — narxni olib
@@ -2541,6 +2839,9 @@ impl App {
             job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
         if let Some(job) = self.spec_job.take() {
+            job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        if let Some(job) = self.price_job.take() {
             job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
     }
@@ -5874,6 +6175,52 @@ impl App {
 #[cfg(test)]
 mod live {
     use super::*;
+
+    /// Saqlangan smetaga AI narx taklifi va tekshiruv. `QURAI_LIVE_DB`
+    /// (kalit), `QURAI_LIVE_OUT` (`yo'l|id` — smeta shu yerdan olinadi va
+    /// natija shu yerga yoziladi).
+    #[test]
+    #[ignore]
+    fn price_hints_on_a_saved_smeta() {
+        let (Ok(src), Ok(out)) = (
+            std::env::var("QURAI_LIVE_DB"),
+            std::env::var("QURAI_LIVE_OUT"),
+        ) else {
+            return;
+        };
+        let Some((p, id)) = out.split_once('|') else {
+            return;
+        };
+        let keydb = crate::db::Db::open(&std::path::PathBuf::from(&src)).expect("baza");
+        let key = keydb.get_setting("llm_key").unwrap_or_default();
+        let pid: i64 = id.parse().expect("id");
+        let mut app = App::new(crate::db::Db::open(&std::path::PathBuf::from(p)).expect("baza"));
+        app.set_llm_key(&key);
+        app.select_project(pid);
+        assert!(app.smeta.is_some(), "smeta yo'q");
+        let t0 = std::time::Instant::now();
+        app.start_price_hints();
+        assert!(app.price_job.is_some(), "{}", app.smeta_note);
+        while app.price_job.is_some() {
+            app.poll_prices();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        let v = app.smeta_view.clone();
+        let mut log = format!(
+            "{} · {:.0} s\njami {:.0} · ishlar {:.0} · materiallar {:.0} · narxsiz {} · taxmin {}\n",
+            app.smeta_note, t0.elapsed().as_secs_f64(), v.total, v.work_sum, v.material_sum, v.missing, v.hinted
+        );
+        for (k, (p, note)) in app.price_hints.iter().take(40) {
+            log.push_str(&format!("  {k} = {p:.0} — {note}\n"));
+        }
+        app.start_review();
+        while app.review_rx.is_some() {
+            app.poll_review();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        log.push_str(&format!("\nXULOSA:\n{}\n", app.smeta_review));
+        std::fs::write(std::env::temp_dir().join("qurai_hints.txt"), log).unwrap();
+    }
 
     #[test]
     #[ignore]

@@ -2010,6 +2010,26 @@ mod screen_tests {
             assert_eq!(app.smeta_view.missing, 0);
             assert_eq!(app.catalog.materials.len(), 1);
             app.set_price_scope(false);
+            // Katalogdagi o'xshash nom ham topiladi.
+            app.edit_smeta(|m| m.stages[0].works[0].materials[0].name = "Beton klassi B20".into());
+            assert_eq!(app.smeta_view.missing, 0);
+            assert_eq!(
+                app.smeta_view.stages[0].works[0].1[0].origin,
+                crate::smeta::Origin::Catalog
+            );
+            // AI taxmini: jamiga kiradi, qabul qilinsa katalogga tushadi.
+            app.edit_smeta(|m| m.stages[0].works[0].price = None);
+            assert_eq!(app.smeta_view.missing, 1);
+            app.price_hints.insert(
+                crate::smeta::key("Beton quyish", "m3"),
+                (120_000.0, "sinov".into()),
+            );
+            app.recompute_smeta();
+            assert_eq!((app.smeta_view.missing, app.smeta_view.hinted), (0, 1));
+            frame(&ctx, &mut app);
+            assert_eq!(app.accept_hints(), 1);
+            assert_eq!(app.smeta_view.hinted, 0);
+            assert_eq!(app.catalog.works.len(), 1);
         }
         app.smeta_open = Some(0);
         app.check_tab = crate::app::CheckTab::Smeta;

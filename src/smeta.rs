@@ -540,6 +540,8 @@ pub enum Origin {
     Catalog,
     /// Yuklangan narx bazasidan (prays).
     Book,
+    /// AI taklif qilgan taxminiy narx — tekshirilmagan, qabul qilinmagan.
+    Hint,
     None,
 }
 
@@ -549,8 +551,14 @@ impl Origin {
             Origin::Line => "sm_price_line",
             Origin::Catalog => "sm_price_catalog",
             Origin::Book => "sm_price_book",
+            Origin::Hint => "sm_price_hint",
             Origin::None => "sm_price_none",
         }
+    }
+
+    /// Odam tasdiqlagan narxmi (shu smeta, katalog, prays).
+    pub fn trusted(self) -> bool {
+        matches!(self, Origin::Line | Origin::Catalog | Origin::Book)
     }
 }
 
@@ -563,21 +571,37 @@ pub struct Priced {
     pub sum: Option<f64>,
 }
 
-fn priced(
-    own: Option<f64>,
-    catalog: &BTreeMap<String, f64>,
-    name: &str,
-    unit: &str,
-    qty: f64,
-    book: &dyn Fn(&str, &str) -> Option<f64>,
-) -> Priced {
+/// O'xshash nom bo'yicha narx qidiruvi: `(ishmi, nom, birlik)` → narx va
+/// manba.
+pub type Lookup<'a> = dyn Fn(bool, &str, &str) -> Option<(f64, Origin)> + 'a;
+
+/// Narx manbalari — `view` ga beriladi.
+pub struct Sources<'a> {
+    /// Aniq kalit bo'yicha katalog.
+    pub catalog: &'a Catalog,
+    /// Nom bo'yicha o'xshash qidiruv: katalog yoki narx bazasi;
+    /// qaytaradi narx va qayerdan topilgani.
+    pub lookup: &'a Lookup<'a>,
+    /// AI taklif qilgan taxminiy narxlar, kalit bo'yicha.
+    pub hints: &'a BTreeMap<String, f64>,
+}
+
+fn priced(own: Option<f64>, work: bool, name: &str, unit: &str, qty: f64, src: &Sources) -> Priced {
     let positive = |p: &f64| *p > 0.0;
+    let k = key(name, unit);
+    let map = if work {
+        &src.catalog.works
+    } else {
+        &src.catalog.materials
+    };
     let (price, origin) = if let Some(p) = own.filter(positive) {
         (Some(p), Origin::Line)
-    } else if let Some(p) = catalog.get(&key(name, unit)).copied().filter(positive) {
+    } else if let Some(p) = map.get(&k).copied().filter(positive) {
         (Some(p), Origin::Catalog)
-    } else if let Some(p) = book(name, unit).filter(positive) {
-        (Some(p), Origin::Book)
+    } else if let Some((p, o)) = (src.lookup)(work, name, unit).filter(|x| x.0 > 0.0) {
+        (Some(p), o)
+    } else if let Some(p) = src.hints.get(&k).copied().filter(positive) {
+        (Some(p), Origin::Hint)
     } else {
         (None, Origin::None)
     };
@@ -597,6 +621,8 @@ pub struct StageView {
     pub material_sum: f64,
     /// Narxsiz qatorlar — jamiga kirmagan.
     pub missing: usize,
+    /// AI taxminiy narxdagi qatorlar — jamiga kirgan, lekin tekshirilmagan.
+    pub hinted: usize,
     /// Ustama bilan jami.
     pub total: f64,
 }
@@ -608,15 +634,17 @@ pub struct View {
     pub work_sum: f64,
     pub material_sum: f64,
     pub missing: usize,
+    pub hinted: usize,
     /// Bosqich ustamalari va umumiy ustama bilan jami.
     pub total: f64,
 }
 
 /// Smetani narxlaydi va jamilarni chiqaradi.
 ///
-/// `book` — narx bazasidan izlash (`nom, birlik → narx`); ishlar uchun ham,
-/// materiallar uchun ham chaqiriladi.
-pub fn view(smeta: &Smeta, catalog: &Catalog, book: &dyn Fn(&str, &str) -> Option<f64>) -> View {
+/// Tartib: shu smetadagi narx → katalog (aniq kalit) → o'xshash qidiruv
+/// (katalog, keyin narx bazasi) → AI taxmini. Taxmin jamiga kiradi, lekin
+/// alohida sanaladi — u odam tasdig'ini kutayotgan narx.
+pub fn view(smeta: &Smeta, src: &Sources) -> View {
     let mut out = View::default();
     for stage in &smeta.stages {
         let mut sv = StageView {
@@ -624,21 +652,24 @@ pub fn view(smeta: &Smeta, catalog: &Catalog, book: &dyn Fn(&str, &str) -> Optio
             work_sum: 0.0,
             material_sum: 0.0,
             missing: 0,
+            hinted: 0,
             total: 0.0,
         };
         for w in &stage.works {
-            let wp = priced(w.price, &catalog.works, &w.name, &w.unit, w.qty, book);
+            let wp = priced(w.price, true, &w.name, &w.unit, w.qty, src);
             match wp.sum {
                 Some(s) => sv.work_sum += s,
                 None => sv.missing += 1,
             }
+            sv.hinted += (wp.origin == Origin::Hint) as usize;
             let mut ms = Vec::new();
             for m in &w.materials {
-                let mp = priced(m.price, &catalog.materials, &m.name, &m.unit, m.qty, book);
+                let mp = priced(m.price, false, &m.name, &m.unit, m.qty, src);
                 match mp.sum {
                     Some(s) => sv.material_sum += s,
                     None => sv.missing += 1,
                 }
+                sv.hinted += (mp.origin == Origin::Hint) as usize;
                 ms.push(mp);
             }
             sv.works.push((wp, ms));
@@ -647,10 +678,42 @@ pub fn view(smeta: &Smeta, catalog: &Catalog, book: &dyn Fn(&str, &str) -> Optio
         out.work_sum += sv.work_sum;
         out.material_sum += sv.material_sum;
         out.missing += sv.missing;
+        out.hinted += sv.hinted;
         out.total += sv.total;
         out.stages.push(sv);
     }
     out.total *= 1.0 + smeta.markup / 100.0;
+    out
+}
+
+/// Narxsiz qatorlar ro'yxati: `(ishmi, nom, birlik)` — AI dan narx
+/// so'rash va katalogni to'ldirish uchun. Takrorlar olib tashlangan.
+pub fn unpriced(smeta: &Smeta, view: &View) -> Vec<(bool, String, String)> {
+    let mut out: Vec<(bool, String, String)> = Vec::new();
+    let mut push = |work: bool, name: &str, unit: &str| {
+        let k = key(name, unit);
+        if !out.iter().any(|o| o.0 == work && key(&o.1, &o.2) == k) {
+            out.push((work, name.to_string(), unit.to_string()));
+        }
+    };
+    for (si, st) in smeta.stages.iter().enumerate() {
+        let Some(sv) = view.stages.get(si) else {
+            continue;
+        };
+        for (wi, w) in st.works.iter().enumerate() {
+            let Some((wp, mps)) = sv.works.get(wi) else {
+                continue;
+            };
+            if !wp.origin.trusted() {
+                push(true, &w.name, &w.unit);
+            }
+            for (mi, m) in w.materials.iter().enumerate() {
+                if mps.get(mi).is_some_and(|p| !p.origin.trusted()) {
+                    push(false, &m.name, &m.unit);
+                }
+            }
+        }
+    }
     out
 }
 
@@ -835,8 +898,17 @@ mod tests {
         let smeta = sample();
         let mut catalog = Catalog::default();
         catalog.works.insert(key("beton  QUYISH", "m3"), 150.0);
-        let book = |name: &str, _: &str| (name == "Qolip").then_some(50.0);
-        let v = view(&smeta, &catalog, &book);
+        let lookup =
+            |_: bool, name: &str, _: &str| (name == "Qolip").then_some((50.0, Origin::Book));
+        let hints = BTreeMap::new();
+        let v = view(
+            &smeta,
+            &Sources {
+                catalog: &catalog,
+                lookup: &lookup,
+                hints: &hints,
+            },
+        );
         let s = &v.stages[0];
         assert_eq!(s.works[0].0.origin, Origin::Catalog);
         assert_eq!(s.works[0].0.sum, Some(1500.0));
@@ -852,6 +924,30 @@ mod tests {
         assert!((v.total - 10_640.0 * 1.1 * 1.05).abs() < 1e-6);
         assert_eq!(smeta.lines(), 4);
         assert_eq!(smeta.assumptions(), 1);
+        // Narxsizlar ro'yxati — AI taklifi uchun.
+        let need = unpriced(&smeta, &v);
+        assert_eq!(
+            need,
+            vec![(false, "Vibrator ijarasi".to_string(), "smena".to_string())]
+        );
+
+        // AI taxmini: jamiga kiradi, lekin ishonchli emas va sanaladi.
+        let mut hints = BTreeMap::new();
+        hints.insert(key("Vibrator ijarasi", "smena"), 80.0);
+        let v2 = view(
+            &smeta,
+            &Sources {
+                catalog: &catalog,
+                lookup: &lookup,
+                hints: &hints,
+            },
+        );
+        assert_eq!(v2.missing, 0);
+        assert_eq!(v2.hinted, 1);
+        assert_eq!(v2.stages[0].works[0].1[1].origin, Origin::Hint);
+        assert!((v2.material_sum - 7220.0).abs() < 1e-6);
+        // Taxmin hali ham «narxsiz» ro'yxatida — tasdiq kutadi.
+        assert_eq!(unpriced(&smeta, &v2).len(), 1);
     }
 
     /// Bir xil loyiha soni ikki bosqichda — ikkinchisi tashlanadi; boshqa

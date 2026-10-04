@@ -418,6 +418,32 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "screen_ai_check" => ("Smeta", "Смета"),
         "sm_dedupe" => ("takror qator olib tashlandi:", "повторов убрано:"),
         "sm_search" => ("Qidiruv...", "Поиск..."),
+        "sm_price_hint" => ("AI taxmini", "ориентир AI"),
+        "sm_ai_prices_title" => ("AI yordami", "Помощь AI"),
+        "sm_hints_button" => ("Narxsiz qatorlarga AI narx taklifi", "AI-ориентир для строк без цены"),
+        "sm_hints_hint" => (
+            "AI har narxsiz pozitsiyaga Toshkent bozori bo'yicha taxminiy narx beradi. U katalogga yozilmaydi: «AI taxmini» belgisi bilan turadi, jamiga kiradi, lekin alohida sanaladi — ✓ bilan qabul qiling yoki o'z narxingizni yozing.",
+            "AI даст ориентировочную цену по рынку Ташкента для каждой строки без цены. В каталог она не пишется: стоит с пометкой «ориентир AI», входит в итог, но считается отдельно — примите ✓ или введите свою.",
+        ),
+        "sm_hints_running" => ("AI narx taklif qilyapti:", "AI предлагает цены:"),
+        "sm_hints_done" => ("AI narx taklif qildi:", "AI предложил цен:"),
+        "sm_hints_accept" => ("Barcha taxminlarni katalogga qabul qilish", "Принять все ориентиры в каталог"),
+        "sm_hints_accept_hint" => (
+            "Taxminlar kompaniya katalogiga yoziladi va keyingi obyektlarda ishlaydi. Keyin Prays ekranida tuzatish mumkin.",
+            "Ориентиры запишутся в каталог компании и будут действовать на следующих объектах. Потом их можно править на экране Прайс.",
+        ),
+        "sm_hinted_note" => (
+            "qator AI taxminiy narxida — jamiga kirgan, lekin tasdiqlanmagan",
+            "строк по ориентиру AI — в итоге, но не подтверждены",
+        ),
+        "sm_hint_accept" => ("Katalogga qabul qilish", "Принять в каталог"),
+        "sm_hint_reject" => ("Taxminni rad etish", "Отклонить ориентир"),
+        "sm_review_button" => ("Smetani AI ga tekshirtirish", "Проверить смету с AI"),
+        "sm_review_hint" => (
+            "AI shubhali miqdorlar, yetishmayotgan ishlar, takrorlar va narxlar haqida xulosa beradi. Yangi son chiqarmaydi.",
+            "AI даст заключение: сомнительные количества, пропуски, дубли, цены. Новых чисел не выдаёт.",
+        ),
+        "sm_review_title" => ("AI xulosasi", "Заключение AI"),
         "sm_catalog" => ("Prays", "Прайс"),
         "sm_catalog_title" => ("Prays — kompaniya katalogi", "Прайс — каталог компании"),
         "sm_catalog_hint" => (

@@ -29,10 +29,14 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     app.poll_pages();
     app.poll_questions();
     app.poll_spec();
+    app.poll_prices();
+    app.poll_review();
     if app.pdf_job.is_some()
         || app.pages_job.is_some()
         || app.questions_rx.is_some()
         || app.spec_job.is_some()
+        || app.price_job.is_some()
+        || app.review_rx.is_some()
     {
         // Fon ipi kadr so'ramaydi — jarayon ko'rinib tursin.
         ui.ctx()
@@ -1095,6 +1099,10 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                     RichText::new(format!("{} {}", view.missing, t("tk_total_partial")))
                         .size(11.5)
                         .color(theme::warn())
+                } else if view.hinted > 0 {
+                    RichText::new(format!("{} {}", view.hinted, t("sm_hinted_note")))
+                        .size(11.5)
+                        .color(theme::warn())
                 } else {
                     RichText::new(t("tk_total_full"))
                         .size(11.5)
@@ -1114,6 +1122,99 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
             });
         });
     });
+    ui.add_space(6.0);
+
+    // ---- AI: narx taklifi va tekshiruv.
+    let mut hints_start = false;
+    let mut hints_accept = false;
+    let mut review = false;
+    card(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(t("sm_ai_prices_title")).strong());
+            if let Some(job) = &app.price_job {
+                ui.spinner();
+                ui.label(format!(
+                    "{} {} / {} · {} s",
+                    t("sm_hints_running"),
+                    job.got,
+                    job.asked,
+                    job.started.elapsed().as_secs()
+                ));
+            } else {
+                let need = crate::smeta::unpriced(&m, &view).len();
+                if ui
+                    .add_enabled(
+                        app.llm.is_ready() && need > 0,
+                        egui::Button::new(format!("{} ({need})", t("sm_hints_button"))),
+                    )
+                    .on_hover_text(t("sm_hints_hint"))
+                    .clicked()
+                {
+                    hints_start = true;
+                }
+            }
+            if !app.price_hints.is_empty()
+                && ui
+                    .button(format!(
+                        "{} ({})",
+                        t("sm_hints_accept"),
+                        app.price_hints.len()
+                    ))
+                    .on_hover_text(t("sm_hints_accept_hint"))
+                    .clicked()
+            {
+                hints_accept = true;
+            }
+            ui.add_space(12.0);
+            if app.review_rx.is_some() {
+                ui.spinner();
+                ui.label(RichText::new(t("ai_thinking")).color(theme::muted()));
+            } else if ui
+                .add_enabled(app.llm.is_ready(), egui::Button::new(t("sm_review_button")))
+                .on_hover_text(t("sm_review_hint"))
+                .clicked()
+            {
+                review = true;
+            }
+        });
+        if view.hinted > 0 {
+            ui.label(
+                RichText::new(format!("{} {}", view.hinted, t("sm_hinted_note")))
+                    .size(11.5)
+                    .color(theme::warn()),
+            );
+        }
+        if !app.smeta_note.is_empty() {
+            ui.label(
+                RichText::new(&app.smeta_note)
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+        }
+        if !app.smeta_review.is_empty() {
+            ui.add_space(4.0);
+            egui::CollapsingHeader::new(t("sm_review_title"))
+                .default_open(true)
+                .show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .id_salt("sm_review")
+                        .max_height(220.0)
+                        .show(ui, |ui| {
+                            ui.label(RichText::new(&app.smeta_review).size(12.0));
+                        });
+                });
+        }
+    });
+    if hints_start {
+        app.start_price_hints();
+    }
+    if hints_accept {
+        let n = app.accept_hints();
+        app.notify(format!("{} {n}", t("sm_catalog_saved")));
+    }
+    if review {
+        app.start_review();
+    }
     ui.add_space(6.0);
 
     // ---- Tahrir qayerga yoziladi.
@@ -1177,6 +1278,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
 
     let mut price_edit: Option<(usize, usize, Option<usize>, f64)> = None;
     let mut stage_markup: Option<(usize, f64)> = None;
+    let mut hint_act: Option<(bool, String, bool)> = None;
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -1275,8 +1377,20 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                 if mi == 0 {
                                     ui.label(RichText::new(&w.name).size(12.0));
                                     ui.label(format!("{} {}", num(w.qty), w.unit));
-                                    price_cell(ui, wp, &mut |v| {
-                                        price_edit = Some((si, wi, None, v))
+                                    ui.horizontal(|ui| {
+                                        price_cell(ui, wp, &mut |v| {
+                                            price_edit = Some((si, wi, None, v))
+                                        });
+                                        if wp.origin == Origin::Hint {
+                                            hint_buttons(
+                                                ui,
+                                                app,
+                                                true,
+                                                &w.name,
+                                                &w.unit,
+                                                &mut hint_act,
+                                            );
+                                        }
                                     });
                                     ui.label(price_text(wp));
                                 } else {
@@ -1289,8 +1403,20 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                     (Some(mat), Some(mp)) => {
                                         ui.label(RichText::new(&mat.name).size(12.0));
                                         ui.label(format!("{} {}", num(mat.qty), mat.unit));
-                                        price_cell(ui, mp, &mut |v| {
-                                            price_edit = Some((si, wi, Some(mi), v))
+                                        ui.horizontal(|ui| {
+                                            price_cell(ui, mp, &mut |v| {
+                                                price_edit = Some((si, wi, Some(mi), v))
+                                            });
+                                            if mp.origin == Origin::Hint {
+                                                hint_buttons(
+                                                    ui,
+                                                    app,
+                                                    false,
+                                                    &mat.name,
+                                                    &mat.unit,
+                                                    &mut hint_act,
+                                                );
+                                            }
                                         });
                                         ui.label(price_text(mp));
                                     }
@@ -1310,6 +1436,9 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
 
     if let Some((si, wi, mi, v)) = price_edit {
         app.set_price(si, wi, mi, v);
+    }
+    if let Some((work, k, accept)) = hint_act {
+        app.accept_hint(work, &k, accept);
     }
     if let Some((si, v)) = stage_markup {
         app.edit_smeta(|m| {
@@ -1340,11 +1469,42 @@ fn price_cell(ui: &mut egui::Ui, p: &crate::smeta::Priced, on_change: &mut dyn F
             on_change(v);
         }
         let color = match p.origin {
-            Origin::None => theme::warn(),
+            Origin::None | Origin::Hint => theme::warn(),
             Origin::Line => theme::accent(),
             _ => theme::muted(),
         };
         ui.label(RichText::new(t(p.origin.label())).size(10.0).color(color));
+    });
+}
+
+/// AI taxminini qabul qilish / rad etish tugmachalari.
+fn hint_buttons(
+    ui: &mut egui::Ui,
+    app: &App,
+    work: bool,
+    name: &str,
+    unit: &str,
+    out: &mut Option<(bool, String, bool)>,
+) {
+    let k = crate::smeta::key(name, unit);
+    let Some((_, note)) = app.price_hints.get(&k) else {
+        return;
+    };
+    ui.horizontal(|ui| {
+        if ui
+            .small_button("✓")
+            .on_hover_text(format!("{}\n{note}", t("sm_hint_accept")))
+            .clicked()
+        {
+            *out = Some((work, k.clone(), true));
+        }
+        if ui
+            .small_button("×")
+            .on_hover_text(t("sm_hint_reject"))
+            .clicked()
+        {
+            *out = Some((work, k.clone(), false));
+        }
     });
 }
 

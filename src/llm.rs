@@ -542,7 +542,32 @@ pub fn build_extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<Strin
 /// Hujjat qismlarini modelga jo'natadi va JSON javobni qaytaradi.
 #[cfg(feature = "llm")]
 pub fn extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<Answer, Error> {
-    let body = build_extract(cfg, system, parts)?;
+    send_extract(cfg, system, parts, true)
+}
+
+/// Xuddi shu, lekin javob erkin matn (JSON talab qilinmaydi).
+#[cfg(feature = "llm")]
+pub fn extract_text(cfg: &Config, system: &str, parts: &[Part]) -> Result<Answer, Error> {
+    send_extract(cfg, system, parts, false)
+}
+
+#[cfg(not(feature = "llm"))]
+pub fn extract_text(_cfg: &Config, _system: &str, _parts: &[Part]) -> Result<Answer, Error> {
+    Err(Error::NotConfigured)
+}
+
+#[cfg(feature = "llm")]
+fn send_extract(cfg: &Config, system: &str, parts: &[Part], json: bool) -> Result<Answer, Error> {
+    let mut body = build_extract(cfg, system, parts)?;
+    if !json {
+        // `response_format` olib tashlanadi — model oddiy matn qaytaradi.
+        let mut v: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| Error::BadReply(e.to_string()))?;
+        if let Some(o) = v.as_object_mut() {
+            o.remove("response_format");
+        }
+        body = v.to_string();
+    }
     let timeout = cfg
         .timeout()
         .max(std::time::Duration::from_secs(EXTRACT_TIMEOUT));

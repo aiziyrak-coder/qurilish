@@ -475,9 +475,153 @@ pub fn spawn_spec(cfg: Config, context: String, cancel: Arc<AtomicBool>) -> Rece
     rx
 }
 
+// ================================================================ 4. Narx
+
+const PRICES_SYSTEM: &str = "Ты — сметчик с опытом работы в Узбекистане. Дан список позиций сметы: \
+вид (работа или материал), название, единица измерения. Для каждой дай ОРИЕНТИРОВОЧНУЮ рыночную цену в \
+узбекских сумах (UZS) для Ташкента на текущий год: для работы — стоимость выполнения за единицу (только труд, \
+без материала), для материала — закупочная цена за единицу с доставкой по городу. \
+В note одним коротким предложением напиши, на чём основана цена (типичный диапазон, аналог). \
+Если позицию оценить нельзя (неясно, что это, или единица не подходит) — поставь price 0 и объясни в note. \
+Не завышай точность: это ориентир, который человек проверит. \
+Ответ — только JSON: {\"prices\":[{\"i\":0,\"price\":0,\"note\":\"\"}]} — i совпадает с номером позиции во входе.";
+
+/// Bir so'rovda baholanadigan pozitsiyalar.
+const PRICE_BATCH: usize = 50;
+
+/// Narx taklifi javobini o'qiydi: `(o'rin, narx, izoh)`.
+pub fn parse_prices(body: &str) -> Result<Vec<(usize, f64, String)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    let list = v
+        .get("prices")
+        .and_then(|p| p.as_array())
+        .ok_or_else(|| "JSON: prices yo'q".to_string())?
+        .iter()
+        .filter_map(|p| {
+            let i = p.get("i")?.as_u64()? as usize;
+            let price = number(p.get("price"));
+            Some((i, price, cell(p.get("note"))))
+        })
+        .collect();
+    Ok(list)
+}
+
+pub enum PriceMsg {
+    /// `(kalit, narx, izoh)` — nol narx kelmaydi.
+    Batch(Vec<(String, f64, String)>),
+    Failed(String),
+    Done,
+}
+
+/// Narxsiz pozitsiyalar uchun AI taklifini fonda so'raydi.
+///
+/// `items` — `(ishmi, nom, birlik)`. Javoblar partiyalab keladi; nol
+/// narxli (baholab bo'lmagan) pozitsiya tashlab yuboriladi.
+pub fn spawn_prices(
+    cfg: Config,
+    items: Vec<(bool, String, String)>,
+    cancel: Arc<AtomicBool>,
+) -> Receiver<PriceMsg> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let batches: Vec<Vec<(bool, String, String)>> =
+            items.chunks(PRICE_BATCH).map(|c| c.to_vec()).collect();
+        let queue = Mutex::new(VecDeque::from(batches));
+        std::thread::scope(|s| {
+            for _ in 0..WORKERS {
+                s.spawn(|| loop {
+                    if cancel.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let Some(batch) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
+                        break;
+                    };
+                    let text = batch
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (work, name, unit))| {
+                            format!(
+                                "{i} | {} | {name} | {unit}",
+                                if *work {
+                                    "работа"
+                                } else {
+                                    "материал"
+                                }
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    let text = format!("Позиции (i | вид | название | единица):\n{text}");
+                    let mut result = llm::extract(&cfg, PRICES_SYSTEM, &[Part::Text(text.clone())]);
+                    if let Err(e) = &result {
+                        if e.retryable() {
+                            std::thread::sleep(std::time::Duration::from_secs(3));
+                            result = llm::extract(&cfg, PRICES_SYSTEM, &[Part::Text(text)]);
+                        }
+                    }
+                    let msg = match result
+                        .map_err(|e| e.to_string())
+                        .and_then(|a| parse_prices(&a.text))
+                    {
+                        Ok(list) => PriceMsg::Batch(
+                            list.into_iter()
+                                .filter(|(i, price, _)| *price > 0.0 && *i < batch.len())
+                                .map(|(i, price, note)| {
+                                    let (_, name, unit) = &batch[i];
+                                    (crate::smeta::key(name, unit), price, note)
+                                })
+                                .collect(),
+                        ),
+                        Err(e) => PriceMsg::Failed(e),
+                    };
+                    if tx.send(msg).is_err() {
+                        break;
+                    }
+                });
+            }
+        });
+        let _ = tx.send(PriceMsg::Done);
+    });
+    rx
+}
+
+// ============================================================ 5. Tekshiruv
+
+const REVIEW_SYSTEM: &str = "Ты — главный сметчик, проверяющий смету, собранную помощником. Дана структура: \
+этапы, работы, материалы, количества, источник каждого количества (из проекта / расчёт / стандарт / допущение) и цены. \
+Напиши короткое заключение по-русски, по пунктам, без воды:\n\
+1. Сомнительные количества — где число выглядит неправдоподобным для такого объекта и почему (сравни с показателями объекта).\n\
+2. Пропуски — работы и материалы, которые обычно есть в таком объекте, но в смете их нет.\n\
+3. Дубли — одно и то же, посчитанное в двух этапах.\n\
+4. Цены — какие выглядят заниженными или завышенными для рынка Узбекистана.\n\
+5. Что уточнить у заказчика в первую очередь.\n\
+Опирайся только на данные; новых чисел не выдумывай. Не больше 25 строк.";
+
+/// Smetani AI ga tekshirtiradi; javob — matn.
+pub fn spawn_review(cfg: Config, context: String) -> Receiver<Result<(String, u32), String>> {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let out = llm::extract_text(&cfg, REVIEW_SYSTEM, &[Part::Text(context)])
+            .map(|a| (a.text, a.usage.total))
+            .map_err(|e| e.to_string());
+        let _ = tx.send(out);
+    });
+    rx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn price_replies_are_keyed_and_zero_is_dropped() {
+        let body = r#"{"prices":[{"i":0,"price":650000,"note":"B20 Ташкент"},{"i":1,"price":0,"note":"неясно"},{"i":"x"}]}"#;
+        let list = parse_prices(body).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0], (0, 650000.0, "B20 Ташкент".to_string()));
+        assert!(parse_prices("{}").is_err());
+    }
 
     #[test]
     fn a_page_reply_gives_facts_lists_and_tables() {
