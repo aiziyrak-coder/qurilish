@@ -2189,6 +2189,9 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                         egui::Layout::right_to_left(egui::Align::Center)
                                     };
                                     ui.allocate_ui_with_layout(egui::vec2(w, 20.0), layout, |ui| {
+                                        // Katak eni aniq: aks holda ustun matn eniga
+                                        // siqilib, sarlavhalar ustma-ust tushardi.
+                                        ui.set_min_size(egui::vec2(w, 20.0));
                                         let r = ui.max_rect();
                                         ui.painter().rect_filled(
                                             r.expand2(egui::vec2(0.0, 2.0)),
@@ -2219,6 +2222,7 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                             egui::vec2(w, 18.0),
                                             layout,
                                             |ui| {
+                                                ui.set_min_size(egui::vec2(w, 18.0));
                                                 ui.add_space(6.0);
                                                 let text = RichText::new(c).size(11.0);
                                                 let text =
