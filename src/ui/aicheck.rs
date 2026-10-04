@@ -50,10 +50,14 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(8.0);
 
-    // Element yo'q — tekshiradigan narsa ham yo'q. Yuklash joyi shu
-    // sababli qaysi tabda turgandan qat'i nazar ko'rinib turadi.
-    if app.elements.is_empty() {
-        not_loaded_card(ui, app);
+    // Fon o'qishi tugagan bo'lsa natijani olamiz.
+    app.poll_pdf();
+
+    // Qadamlar kartochkasi birinchi tabda doim turadi: fayl yuklash,
+    // o'qish holati va tahlil bir joyda ko'rinib tursin. Boshqa tablarda
+    // u faqat hali hech narsa yuklanmagan bo'lsa chiqadi.
+    if app.check_tab == CheckTab::Issues || app.elements.is_empty() {
+        steps_card(ui, app);
     }
 
     match app.check_tab {
@@ -931,7 +935,7 @@ fn load_bar(ui: &mut egui::Ui, app: &mut App) {
             .add_filter("PDF", &["pdf", "PDF"])
             .pick_file()
         {
-            app.import_pdf(&path);
+            app.start_pdf(&path);
         }
     }
     if import_ifc {
@@ -968,25 +972,147 @@ fn load_bar(ui: &mut egui::Ui, app: &mut App) {
     }
 }
 
-/// Loyiha yuklanmaganda ekranning tepasida turadigan kartochka.
-fn not_loaded_card(ui: &mut egui::Ui, app: &mut App) {
+/// Loyiha bilan ishlashning uch qadami: fayl → o'qish → tahlil.
+///
+/// Avval hamma narsa bitta tugmaga yig'ilgan edi: odam faylni yuklar,
+/// oyna qotib qolar, keyin ekranda nima bo'lgani ko'rinmas va «tekshirish»
+/// tugmasi nega ishlamayotgani tushunarsiz bo'lardi. Endi har qadam o'z
+/// holatini ko'rsatadi va keyingisi faqat oldingisi tugagach ochiladi.
+fn steps_card(ui: &mut egui::Ui, app: &mut App) {
+    let busy = app.pdf_job.is_some();
     egui::Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0_f32, theme::accent()))
         .corner_radius(8)
         .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
-            ui.label(RichText::new(t("project_not_loaded")).strong().size(14.0));
+            // ---- 1-qadam: fayl
+            ui.label(RichText::new(t("pdf_step_file")).strong().size(13.0));
             ui.add_space(2.0);
             ui.label(
                 RichText::new(t("project_not_loaded_hint"))
+                    .size(11.0)
+                    .color(theme::muted()),
+            );
+            ui.add_space(6.0);
+            ui.add_enabled_ui(!busy, |ui| load_bar(ui, app));
+
+            // ---- 2-qadam: o'qish
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+            ui.label(RichText::new(t("pdf_step_read")).strong().size(13.0));
+            ui.add_space(2.0);
+            read_state(ui, app);
+
+            // ---- 3-qadam: tahlil
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(6.0);
+            ui.label(RichText::new(t("pdf_step_check")).strong().size(13.0));
+            ui.add_space(4.0);
+            check_state(ui, app, busy);
+        });
+    ui.add_space(8.0);
+}
+
+/// Ikkinchi qadam: fayl o'qilyaptimi va nima topildi.
+fn read_state(ui: &mut egui::Ui, app: &mut App) {
+    if let Some(job) = &app.pdf_job {
+        let secs = job.started.elapsed().as_secs();
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(
+                RichText::new(format!("{} · {} · {secs} s", t("pdf_reading"), job.file)).size(12.0),
+            );
+        });
+        // Vaqt yurib tursin: fon ipi kadr so'ramaydi.
+        ui.ctx()
+            .request_repaint_after(std::time::Duration::from_millis(250));
+        return;
+    }
+
+    let Some(r) = app.pdf_report.clone() else {
+        ui.label(
+            RichText::new(t("pdf_step_read_empty"))
+                .size(11.5)
+                .color(theme::muted()),
+        );
+        return;
+    };
+
+    if !r.error.is_empty() {
+        ui.label(RichText::new(format!("{} · {}", r.file, r.error)).color(theme::danger()));
+        return;
+    }
+    ui.label(
+        RichText::new(format!(
+            "{} · {:.1} s · {} {} · {} {}",
+            r.file,
+            r.secs,
+            r.rows,
+            t("pdf_rows"),
+            r.tables,
+            t("pdf_tables")
+        ))
+        .size(12.0),
+    );
+    if r.tables == 0 {
+        ui.label(
+            RichText::new(t("pdf_no_tables"))
+                .size(11.0)
+                .color(theme::warn()),
+        );
+        return;
+    }
+    ui.label(
+        RichText::new(format!(
+            "{} {} · {} {} · {} {}",
+            r.added,
+            t("pdf_elements"),
+            r.repeated,
+            t("pdf_repeated"),
+            r.skipped,
+            t("pdf_skipped")
+        ))
+        .size(11.5)
+        .color(theme::muted()),
+    );
+}
+
+/// Uchinchi qadam: tahlilni ishga tushirish va uning natijasi.
+fn check_state(ui: &mut egui::Ui, app: &mut App, busy: bool) {
+    let ready = !app.elements.is_empty();
+    let mut run = false;
+    ui.horizontal_wrapped(|ui| {
+        if ui
+            .add_enabled(ready && !busy, egui::Button::new(t("run_project_check")))
+            .on_disabled_hover_text(t("no_elements"))
+            .clicked()
+        {
+            run = true;
+        }
+        if let Some((secs, n)) = app.check_report {
+            ui.label(
+                RichText::new(format!(
+                    "{} {secs:.1} {} · {n}",
+                    t("check_took"),
+                    t("check_seconds")
+                ))
+                .size(11.5)
+                .color(theme::muted()),
+            );
+        } else if ready {
+            ui.label(
+                RichText::new(t("check_not_run"))
                     .size(11.5)
                     .color(theme::muted()),
             );
-            ui.add_space(8.0);
-            load_bar(ui, app);
-        });
-    ui.add_space(8.0);
+        }
+    });
+    if run {
+        app.run_project_check();
+    }
 }
 
 fn elements_tab(ui: &mut egui::Ui, app: &mut App) {

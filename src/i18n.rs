@@ -757,6 +757,31 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Faqat ko'rish: hech narsani o'zgartirmaydi.",
             "Только просмотр: ничего не изменяет.",
         ),
+        "pdf_step_read_empty" => (
+            "Hali fayl o'qilmadi.",
+            "Файл ещё не прочитан.",
+        ),
+        "check_not_run" => (
+            "Tahlil hali bajarilmadi.",
+            "Анализ ещё не выполнялся.",
+        ),
+        "pdf_busy" => (
+            "Oldingi fayl hali o'qilmoqda — tugashini kuting.",
+            "Предыдущий файл ещё читается — дождитесь окончания.",
+        ),
+        "pdf_failed" => ("O'qish uzilib qoldi", "Чтение прервалось"),
+        "pdf_reading" => ("O'qilmoqda", "Читается"),
+        "pdf_step_file" => ("1 · Fayl", "1 · Файл"),
+        "pdf_step_read" => ("2 · O'qish", "2 · Чтение"),
+        "pdf_step_check" => ("3 · Tahlil", "3 · Анализ"),
+        "pdf_tables" => ("spetsifikatsiya jadvali", "таблиц спецификации"),
+        "pdf_skipped" => ("markasiz qator tashlandi", "строк без марки пропущено"),
+        "pdf_no_tables" => (
+            "Spetsifikatsiya jadvali topilmadi. Element faqat «Поз./Марка» va «Наименование» ustunlari bor jadvaldan o'qiladi — shunday jadval bo'lmasa, hech narsa o'ylab topilmaydi.",
+            "Таблица спецификации не найдена. Элементы читаются только из таблицы со столбцами «Поз./Марка» и «Наименование» — без неё ничего не выдумывается.",
+        ),
+        "check_took" => ("Tahlil bajarildi", "Анализ выполнен"),
+        "check_seconds" => ("soniyada", "за секунд"),
         "import_pdf" => ("PDF loyiha", "Проект в PDF"),
         "import_pdf_hint" => (
             "PDF ning matni o'qiladi: spetsifikatsiya jadvalidagi markalar elementga aylanadi. Chizmaning o'zi rasm bo'lib qoladi.",

@@ -526,6 +526,39 @@ pub struct PriceCheck {
     pub trend: Option<crate::prices::Trend>,
 }
 
+/// Fon ipida o'qilayotgan loyiha fayli.
+///
+/// Katta chizma PDF ini o'qish daqiqalab vaqt oladi: `AL_QUDRA` ning 77
+/// sahifasi uch daqiqaga yaqin. Avval bu **asosiy ipda** bajarilardi va
+/// butun oyna qotib qolardi — dastur osilib qolgandek ko'rinardi.
+///
+/// Endi o'qish fon ipida ketadi: oyna ishlaydi, ketgan vaqt ko'rinib
+/// turadi. Bazaga yozishni esa asosiy ip qiladi — ulanish bitta.
+pub struct PdfJob {
+    pub file: String,
+    pub started: std::time::Instant,
+    rx: std::sync::mpsc::Receiver<Result<crate::pdfplan::Found, String>>,
+}
+
+/// Oxirgi o'qish hisoboti — ekranda turadi.
+///
+/// Nima bo'lgani oxirigacha ko'rsatiladi: nechta qator ko'rildi, nechta
+/// spetsifikatsiya jadvali topildi, nechta element qo'shildi va nechta
+/// qator tashlandi. Tashlanganlar yashirilmaydi — ular odamga jadval
+/// to'g'ri tanilganini tekshirish imkonini beradi.
+#[derive(Debug, Clone, Default)]
+pub struct PdfReport {
+    pub file: String,
+    pub secs: f64,
+    pub rows: usize,
+    pub tables: usize,
+    pub skipped: usize,
+    pub added: usize,
+    pub repeated: usize,
+    /// Bo'sh bo'lmasa — o'qilmadi va sabab shu.
+    pub error: String,
+}
+
 pub struct App {
     pub db: Db,
     pub projects: Vec<Project>,
@@ -748,6 +781,12 @@ pub struct App {
     /// ko'rish mumkin bo'lishi kerak: ilova bitta odamda ham, o'n kishilik
     /// jamoada ham ishlaydi. Xodim tanlansa, uning roli ustun turadi.
     pub view_role: Option<crate::roles::Role>,
+    /// Fon ipida o'qilayotgan fayl.
+    pub pdf_job: Option<PdfJob>,
+    /// Oxirgi o'qish hisoboti.
+    pub pdf_report: Option<PdfReport>,
+    /// Oxirgi tahlil: ketgan soniya va topilgan nomuvofiqliklar soni.
+    pub check_report: Option<(f64, usize)>,
     /// Tepadagi AI oynasi ochiqmi.
     ///
     /// Holat shu yerda turadi, egui ning umumiy «popup» xotirasida emas:
@@ -948,6 +987,9 @@ impl App {
             users: Vec::new(),
             current_user: None,
             view_role: None,
+            pdf_job: None,
+            pdf_report: None,
+            check_report: None,
             ai_panel: false,
             sales_block: None,
             selected_unit: None,
@@ -1333,8 +1375,12 @@ impl App {
             self.notify(t("no_elements").to_string());
             return;
         }
+        let t0 = std::time::Instant::now();
         let found = checks::check_project(&self.check_ctx());
         let n = found.len();
+        // Ketgan vaqt ko'rsatiladi: katta loyihada tahlil bir necha
+        // soniya oladi va odam uning tugaganini bilishi kerak.
+        self.check_report = Some((t0.elapsed().as_secs_f64(), n));
         self.db
             .replace_auto_issues(pid, IssueModule::Project, &found);
         self.reload_modules();
@@ -2102,65 +2148,106 @@ impl App {
     /// IFC bilan bir xil qoida: allaqachon bor marka takrorlanmaydi, yangi
     /// element esa varaq nomi bilan yoziladi. Bog'lanishlar chizmadan
     /// olinmaydi — chizmada ular yozilmagan bo'ladi.
-    /// PDF loyihani o'qiydi (TZ II.1).
+    /// PDF o'qishni fon ipida boshlaydi.
     ///
-    /// Haqiqiy ishda loyiha ko'pincha PDF bo'lib keladi, shuning uchun bu
-    /// chetdagi holat emas — asosiy yo'l. Fayl avval **biriktiriladi**
-    /// (ro'yxatda turadi va ochiladi), keyin matni o'qilib,
-    /// spetsifikatsiya qatorlaridan element chiqariladi.
-    ///
-    /// Nima topilgani ochiq aytiladi: nechta qator ko'rildi va nechtasida
-    /// marka bor edi. Markasi yo'q qator tashlanadi — element o'ylab
-    /// topilmaydi.
-    pub fn import_pdf(&mut self, path: &std::path::Path) {
+    /// Fayl darhol ro'yxatga tushadi — o'qilmasa ham u loyiha hujjati va
+    /// uni ochib ko'rish kerak bo'ladi.
+    pub fn start_pdf(&mut self, path: &std::path::Path) {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());
             return;
         }
         let Some(pid) = self.current else { return };
-
-        // Fayl har holda ro'yxatga tushadi: o'qilmasa ham u loyiha hujjati
-        // va uni ochib ko'rish kerak bo'ladi.
+        if self.pdf_job.is_some() {
+            // Ikkita o'qish bir vaqtda ketmaydi: natijalar aralashib
+            // ketardi va qaysi fayldan kelgani bilinmasdi.
+            self.notify(t("pdf_busy").to_string());
+            return;
+        }
         self.attach_drawings(std::slice::from_ref(&path.to_path_buf()));
 
-        let rows = match crate::pdfread::table(path) {
-            Ok(r) => r,
-            Err(e) => {
-                // Skan qilingan PDF da matn yo'q. Taxmin qilmaymiz.
-                self.notify(format!("{}: {e}", t("pdf_no_text")));
-                return;
-            }
-        };
+        let file = path
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
         let sheet = path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "PDF".to_string());
-        let found = crate::pdfplan::from_rows(&rows, pid, &sheet);
+        let owned = path.to_path_buf();
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let result = crate::pdfread::table(&owned)
+                .map(|rows| crate::pdfplan::from_rows(&rows, pid, &sheet));
+            // Qabul qiluvchi yopilgan bo'lsa (ilova yopildi) — e'tiborsiz.
+            let _ = tx.send(result);
+        });
+        self.pdf_report = None;
+        self.pdf_job = Some(PdfJob {
+            file,
+            started: std::time::Instant::now(),
+            rx,
+        });
+    }
 
-        let mut added = 0usize;
-        let mut existing = 0usize;
-        for e in &found.elements {
-            let same = self
-                .elements
-                .iter()
-                .any(|x| x.sheet == e.sheet && x.mark == e.mark);
-            if same {
-                existing += 1;
-                continue;
+    /// Fon o'qishi tugagan bo'lsa natijani oladi.
+    ///
+    /// Har kadrda chaqiriladi va bloklanmaydi.
+    pub fn poll_pdf(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(job) = &self.pdf_job else {
+            return false;
+        };
+        let (file, secs) = (job.file.clone(), job.started.elapsed().as_secs_f64());
+        match job.rx.try_recv() {
+            Ok(Ok(found)) => {
+                let mut report = PdfReport {
+                    file,
+                    secs,
+                    rows: found.rows,
+                    tables: found.tables,
+                    skipped: found.skipped,
+                    ..Default::default()
+                };
+                for e in &found.elements {
+                    let same = self
+                        .elements
+                        .iter()
+                        .any(|x| x.sheet == e.sheet && x.mark == e.mark);
+                    if same {
+                        report.repeated += 1;
+                        continue;
+                    }
+                    self.db.insert_element(e);
+                    report.added += 1;
+                }
+                self.pdf_job = None;
+                self.reload_modules();
+                self.pdf_report = Some(report);
+                true
             }
-            self.db.insert_element(e);
-            added += 1;
+            Ok(Err(e)) => {
+                self.pdf_job = None;
+                self.pdf_report = Some(PdfReport {
+                    file,
+                    secs,
+                    error: e,
+                    ..Default::default()
+                });
+                true
+            }
+            Err(TryRecvError::Empty) => false,
+            Err(TryRecvError::Disconnected) => {
+                self.pdf_job = None;
+                self.pdf_report = Some(PdfReport {
+                    file,
+                    secs,
+                    error: t("pdf_failed").to_string(),
+                    ..Default::default()
+                });
+                true
+            }
         }
-        self.reload_modules();
-        self.notify(format!(
-            "{}: {} · {} {} · {} {}",
-            t("pdf_read"),
-            found.rows,
-            added,
-            t("pdf_elements"),
-            existing,
-            t("pdf_repeated")
-        ));
     }
 
     /// Chizma fayllarini obyektga biriktiradi (TZ II.1).
