@@ -26,7 +26,6 @@ mod notify;
 mod ocr;
 mod package;
 mod pdf;
-mod pdfplan;
 mod pdfread;
 mod photocheck;
 mod portfolio;
@@ -38,6 +37,7 @@ mod sales;
 mod signlog;
 mod store;
 mod sync;
+mod takeoff;
 mod theme;
 mod ui;
 

@@ -18,6 +18,11 @@
 //!   uchun 3D model kerak; chizmadagi chiziq esa faqat tasvir. Dastur
 //!   ularni o'ylab topmaydi.
 
+// Bu modul hozir ekrandan chaqirilmaydi: loyiha sahifasi kalkulyatsiyaga
+// aylantirilgach, IFC/DXF yuklash tugmalari olib tashlandi. Kod va uning
+// sinovlari saqlangan — qaytarish yoki o'chirish alohida qaror.
+#![allow(dead_code)]
+
 use crate::domain::{Element, ElementKind};
 use crate::model::Section;
 

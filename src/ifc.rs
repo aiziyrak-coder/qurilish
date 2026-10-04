@@ -13,6 +13,11 @@
 //! bo'lib qoladi, tanilmagan tur `Other` bo'ladi va bo'lim `None` — muhandis
 //! ularni qo'lda aniqlashtiradi.
 
+// Bu modul hozir ekrandan chaqirilmaydi: loyiha sahifasi kalkulyatsiyaga
+// aylantirilgach, IFC/DXF yuklash tugmalari olib tashlandi. Kod va uning
+// sinovlari saqlangan — qaytarish yoki o'chirish alohida qaror.
+#![allow(dead_code)]
+
 use crate::domain::{Element, ElementKind, Relation};
 use crate::model::Section;
 use std::collections::HashMap;

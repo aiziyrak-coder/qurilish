@@ -1946,6 +1946,101 @@ mod tests {
         assert!(t.db.projects().unwrap().is_empty());
     }
 
+    /// Loyiha hisobi saqlanadi, narx bilan summaga aylanadi va
+    /// konstruksiya soni o'zgarsa qayta hisoblanadi.
+    #[test]
+    fn the_takeoff_is_kept_priced_and_recomputed() {
+        use crate::takeoff::{SpecRow, SpecTable, Takeoff};
+        let t = TempDb::new();
+        let pid = t.db.seed_demo().unwrap();
+        let mut app = crate::app::App::new(Db::open(&t.path).unwrap());
+        app.select_project(pid);
+        assert!(app.takeoff.is_none());
+        assert!(app.cost_rows.is_empty());
+
+        let row = |pos: &str, name: &str, qty: &str, mass: &str, note: &str| SpecRow {
+            pos: pos.into(),
+            designation: String::new(),
+            name: name.into(),
+            qty: qty.into(),
+            mass: mass.into(),
+            note: note.into(),
+        };
+        let tables = vec![
+            SpecTable {
+                page: 10,
+                rows: vec![row("Фм3", "Фундамент монолитный Фм3", "4", "", "шт.")],
+            },
+            SpecTable {
+                page: 13,
+                rows: vec![
+                    row("", "Фундамент Фм3", "1", "", "шт."),
+                    row("1", "∅14 A-III L=2550", "22", "3.09", "68.0"),
+                    row("", "Бетон кл. В20(М250)W8", "", "", "3.66"),
+                ],
+            },
+        ];
+        let constructs = crate::takeoff::constructs(&tables);
+        app.takeoff = Some(Takeoff {
+            file: "loyiha.pdf".into(),
+            pages: 77,
+            tables,
+            constructs,
+        });
+        app.save_takeoff();
+        app.recompute_takeoff();
+
+        // 68 kg × 4 poydevor; 3.66 m3 × 4.
+        let rebar = app
+            .cost_rows
+            .iter()
+            .find(|r| r.total.material == "Armatura ∅14 A-III")
+            .expect("armatura");
+        assert_eq!(rebar.total.amount, 272.0);
+        // Narx yo'q — summa ham yo'q: nol ko'rsatilmaydi.
+        assert_eq!(rebar.price, None);
+        assert_eq!(rebar.sum(), None);
+
+        // Narx qo'lda qo'yiladi.
+        app.set_takeoff_price("Armatura ∅14 A-III", 9_500.0);
+        let rebar = app
+            .cost_rows
+            .iter()
+            .find(|r| r.total.material == "Armatura ∅14 A-III")
+            .unwrap();
+        assert!(rebar.manual);
+        assert_eq!(rebar.sum(), Some(272.0 * 9_500.0));
+
+        // Konstruksiya soni tuzatilsa — hisob ham o'zgaradi.
+        app.set_construct_count("Фм3", 10.0);
+        let beton = app
+            .cost_rows
+            .iter()
+            .find(|r| r.total.material == "Beton B20")
+            .unwrap();
+        assert!(
+            (beton.total.amount - 36.6).abs() < 1e-9,
+            "{}",
+            beton.total.amount
+        );
+
+        // Ilova qayta ochilganda fayl ikkinchi marta o'qilmaydi.
+        let mut again = crate::app::App::new(Db::open(&t.path).unwrap());
+        again.select_project(pid);
+        let tk = again.takeoff.as_ref().expect("hisob saqlanmadi");
+        assert_eq!(tk.file, "loyiha.pdf");
+        assert_eq!(tk.constructs[0].count, 10.0);
+        assert_eq!(
+            again.takeoff_prices.get("Armatura ∅14 A-III"),
+            Some(&9_500.0)
+        );
+
+        // O'chirilganda qoldiq qolmaydi.
+        again.clear_takeoff();
+        assert!(again.takeoff.is_none());
+        assert!(again.cost_rows.is_empty());
+    }
+
     impl Drop for TempDb {
         fn drop(&mut self) {
             let _ = std::fs::remove_file(&self.path);

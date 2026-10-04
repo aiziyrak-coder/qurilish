@@ -16,14 +16,37 @@ use std::path::Path;
 
 /// Bitta matn parchasi va uning qog'ozdagi o'rni.
 #[derive(Debug, Clone)]
-struct Piece {
+pub struct Piece {
     /// Chapdan masofa (PDF birligi — punkt).
-    x: f64,
+    pub x: f64,
     /// Pastdan masofa. PDF da y yuqoriga qarab o'sadi.
-    y: f64,
+    pub y: f64,
     /// Shrift o'lchami — parcha kengligini baholash uchun.
-    size: f64,
-    text: String,
+    pub size: f64,
+    pub text: String,
+}
+
+/// PDF ni sahifalar bo'yicha, **joylashuvi bilan** o'qiydi.
+///
+/// `table` matnni qatorlarga yig'ib beradi va joylashuvni tashlab
+/// yuboradi. Chizma varag'ida bu yetmaydi: bitta balandlikda ham jadval
+/// katagi, ham chizmadagi o'lcham yozuvi turadi va ular bitta qatorga
+/// aralashib ketadi. Spetsifikatsiyani aniq o'qish uchun har parchaning
+/// o'rni kerak — ustun sarlavhaning tagidagi matn sifatida aniqlanadi.
+pub fn pages(path: &Path) -> Result<Vec<Vec<Piece>>, String> {
+    let doc = Document::load(path).map_err(|e| format!("{e}"))?;
+    let pages = doc.get_pages();
+    if pages.is_empty() {
+        return Err(crate::i18n::t("pdf_no_pages").to_string());
+    }
+    let out: Vec<Vec<Piece>> = pages
+        .into_values()
+        .map(|id| page_pieces(&doc, id))
+        .collect();
+    if out.iter().all(|p| p.is_empty()) {
+        return Err(crate::i18n::t("pdf_no_text").to_string());
+    }
+    Ok(out)
 }
 
 /// Bir qatorga tegishli deb hisoblanadigan balandlik farqi, punktda.
@@ -294,6 +317,23 @@ fn utf16(hex: &str) -> Option<String> {
 }
 
 /// Bitta sahifadagi matn parchalari va ularning o'rni.
+/// 2D o'zgartirish matritsasi: `[a b c d e f]`.
+type Mat = [f64; 6];
+
+const IDENT: Mat = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0];
+
+/// `m1` dan keyin `m2` qo'llanadi.
+fn mul(m1: &Mat, m2: &Mat) -> Mat {
+    [
+        m1[0] * m2[0] + m1[1] * m2[2],
+        m1[0] * m2[1] + m1[1] * m2[3],
+        m1[2] * m2[0] + m1[3] * m2[2],
+        m1[2] * m2[1] + m1[3] * m2[3],
+        m1[4] * m2[0] + m1[5] * m2[2] + m2[4],
+        m1[4] * m2[1] + m1[5] * m2[3] + m2[5],
+    ]
+}
+
 fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
     let mut out = Vec::new();
     let Ok(data) = doc.get_page_content(page_id) else {
@@ -307,11 +347,20 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
     let decoders = font_decoders(doc, page_id);
     let mut decoder: Option<&FontDecode> = None;
 
-    // Matn holati: joriy nuqta, qator boshi va qatorlar orasidagi masofa.
-    let (mut x, mut y) = (0.0_f64, 0.0_f64);
-    let (mut line_x, mut line_y) = (0.0_f64, 0.0_f64);
+    // Grafik holat. Chizma PDF larida matn o'rni ikki matritsadan chiqadi:
+    // sahifa matritsasi (`cm`) va matn matritsasi (`Tm`). Avval faqat
+    // `Tm` ning siljishi olinardi — masshtab va burilish tashlab
+    // yuborilardi. Shu sababli burilgan varaqda jadval ustunlari qatorga,
+    // qatorlari ustunga aylanib ketardi.
+    let mut ctm: Mat = IDENT;
+    let mut stack: Vec<Mat> = Vec::new();
+    let mut tm: Mat = IDENT;
+    let mut tlm: Mat = IDENT;
     let mut leading = 0.0_f64;
     let mut size = 10.0_f64;
+
+    // Har parcha yo'nalishi bilan yig'iladi: (parcha, dx, dy).
+    let mut raw: Vec<(Piece, f64, f64)> = Vec::new();
 
     for op in &content.operations {
         let nums = |i: usize| -> f64 {
@@ -325,11 +374,19 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
                 .unwrap_or(0.0)
         };
         match op.operator.as_str() {
+            "q" => stack.push(ctm),
+            "Q" => {
+                if let Some(m) = stack.pop() {
+                    ctm = m;
+                }
+            }
+            "cm" => {
+                let m: Mat = [nums(0), nums(1), nums(2), nums(3), nums(4), nums(5)];
+                ctm = mul(&m, &ctm);
+            }
             "BT" => {
-                x = 0.0;
-                y = 0.0;
-                line_x = 0.0;
-                line_y = 0.0;
+                tm = IDENT;
+                tlm = IDENT;
             }
             "Tf" => {
                 if let Some(name) = op.operands.first().and_then(|o| o.as_name().ok()) {
@@ -341,41 +398,81 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
                 }
             }
             "TL" => leading = nums(0),
-            "Td" => {
-                line_x += nums(0);
-                line_y += nums(1);
-                x = line_x;
-                y = line_y;
+            "Td" | "TD" => {
+                if op.operator == "TD" {
+                    leading = -nums(1);
+                }
+                tlm = mul(&[1.0, 0.0, 0.0, 1.0, nums(0), nums(1)], &tlm);
+                tm = tlm;
             }
-            "TD" => {
-                leading = -nums(1);
-                line_x += nums(0);
-                line_y += nums(1);
-                x = line_x;
-                y = line_y;
-            }
-            // Matn matritsasi: bizga faqat ko'chirish qismi kerak.
             "Tm" => {
-                line_x = nums(4);
-                line_y = nums(5);
-                x = line_x;
-                y = line_y;
+                tlm = [nums(0), nums(1), nums(2), nums(3), nums(4), nums(5)];
+                tm = tlm;
             }
             "T*" => {
-                line_y -= leading;
-                x = line_x;
-                y = line_y;
+                tlm = mul(&[1.0, 0.0, 0.0, 1.0, 0.0, -leading], &tlm);
+                tm = tlm;
             }
-            "Tj" | "'" | "\"" => {
-                let s = decode(&op.operands, decoder);
-                push(&mut out, x, y, size, s);
-            }
-            "TJ" => {
-                let s = decode(&op.operands, decoder);
-                push(&mut out, x, y, size, s);
+            "Tj" | "'" | "\"" | "TJ" => {
+                let text = decode(&op.operands, decoder);
+                let trm = mul(&tm, &ctm);
+                let scale = (trm[0] * trm[0] + trm[1] * trm[1]).sqrt();
+                if !text.trim().is_empty() && scale > 0.0 {
+                    raw.push((
+                        Piece {
+                            x: trm[4],
+                            y: trm[5],
+                            size: size * scale,
+                            text: text.clone(),
+                        },
+                        trm[0] / scale,
+                        trm[1] / scale,
+                    ));
+                }
+                // Keyingi parcha shu qatorda davom etsa, ustiga tushmasin:
+                // matn kengligi taxminan suriladi.
+                let advance = text.chars().count() as f64 * size * 0.5;
+                tm = mul(&[1.0, 0.0, 0.0, 1.0, advance, 0.0], &tm);
             }
             _ => {}
         }
+    }
+
+    // Varaq burilgan bo'lishi mumkin: ko'pchilik matn qaysi tomonga
+    // yozilgan bo'lsa, o'sha «gorizontal» deb olinadi va koordinatalar
+    // shunga moslab aylantiriladi. Boshqa yo'nalishdagi yozuvlar (odatda
+    // chizmadagi vertikal o'lchamlar) tashlanadi — ular jadvalga
+    // tegishli emas va qatorlarni buzardi.
+    let mut votes = [0usize; 4];
+    let side = |dx: f64, dy: f64| -> usize {
+        if dx.abs() >= dy.abs() {
+            if dx >= 0.0 {
+                0
+            } else {
+                2
+            }
+        } else if dy > 0.0 {
+            1
+        } else {
+            3
+        }
+    };
+    for (_, dx, dy) in &raw {
+        votes[side(*dx, *dy)] += 1;
+    }
+    let main = (0..4).max_by_key(|i| votes[*i]).unwrap_or(0);
+    for (mut p, dx, dy) in raw {
+        if side(dx, dy) != main {
+            continue;
+        }
+        let (x, y) = (p.x, p.y);
+        (p.x, p.y) = match main {
+            0 => (x, y),
+            1 => (y, -x),
+            2 => (-x, -y),
+            _ => (-y, x),
+        };
+        out.push(p);
     }
     out
 }
@@ -404,13 +501,6 @@ fn decode(operands: &[Object], decoder: Option<&FontDecode>) -> String {
         }
     }
     out
-}
-
-fn push(out: &mut Vec<Piece>, x: f64, y: f64, size: f64, text: String) {
-    if text.trim().is_empty() {
-        return;
-    }
-    out.push(Piece { x, y, size, text });
 }
 
 /// Parchalarni qator va ustunlarga ajratadi.
@@ -521,11 +611,21 @@ mod tests {
     /// Bo'sh parchalar qator hosil qilmaydi.
     #[test]
     fn empty_pieces_are_dropped() {
-        let mut v = vec![piece(10.0, 10.0, "   ")];
-        assert!(v[0].text.trim().is_empty());
-        let mut out = Vec::new();
-        push(&mut out, 10.0, 10.0, 10.0, v.remove(0).text);
-        assert!(out.is_empty());
+        let rows = lines_to_rows(vec![piece(10.0, 10.0, "   ")]);
+        assert!(rows.is_empty());
+    }
+
+    /// Matritsalar ketma-ket qo'llanadi: avval birinchisi, keyin ikkinchisi.
+    #[test]
+    fn matrices_compose_in_order() {
+        // Ikki barobar kattalashtirib, keyin (10, 5) ga surish.
+        let scale: Mat = [2.0, 0.0, 0.0, 2.0, 0.0, 0.0];
+        let shift: Mat = [1.0, 0.0, 0.0, 1.0, 10.0, 5.0];
+        let m = mul(&scale, &shift);
+        // (3, 4) nuqta: (6, 8) bo'ladi, so'ng (16, 13).
+        assert_eq!(3.0 * m[0] + 4.0 * m[2] + m[4], 16.0);
+        assert_eq!(3.0 * m[1] + 4.0 * m[3] + m[5], 13.0);
+        assert_eq!(mul(&IDENT, &shift), shift);
     }
 
     /// Matni yo'q faylda taxmin qilinmaydi — sabab aytiladi.

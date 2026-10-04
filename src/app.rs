@@ -291,35 +291,24 @@ pub const NAV_GROUPS: &[(&str, &[Screen])] = &[
 /// AI tekshiruv ekranidagi ochiq bo'lim.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CheckTab {
-    /// Loyihaning o'zi: hujjat, element, bog'lanish, me'yor.
+    /// Loyiha fayli va undan o'qilgan jadvallar.
     Project,
-    /// Tahlil va uning topilmalari.
-    Check,
-    /// Kolliziyalar.
-    Clash,
-    /// Topilmadan ishga: vazifa, tasdiq, natija.
-    Action,
+    /// Konstruksiyalar va ularning soni.
+    Constructs,
+    /// Material bo'yicha yig'ma va qiymat.
+    Calc,
 }
 
 impl CheckTab {
-    /// Tartib TZ II.19 dagidek: PROYEKT -> AI CHECK -> CLASH -> ACTION.
-    ///
-    /// Bu shunchaki tab ro'yxati emas, **ish tartibi**: avval loyiha
-    /// yuklanadi, keyin tahlil qilinadi, topilgan kesishuvlar ko'riladi va
-    /// oxirida ularning har biri ishga aylanadi.
-    pub const ALL: [CheckTab; 4] = [
-        CheckTab::Project,
-        CheckTab::Check,
-        CheckTab::Clash,
-        CheckTab::Action,
-    ];
+    /// Tartib — ish tartibi: loyiha yuklanadi, konstruksiyalar soni
+    /// tekshiriladi, so'ng kalkulyatsiya o'qiladi.
+    pub const ALL: [CheckTab; 3] = [CheckTab::Project, CheckTab::Constructs, CheckTab::Calc];
 
     pub fn label(self) -> &'static str {
         match self {
             CheckTab::Project => t("tab_project"),
-            CheckTab::Check => t("tab_ai_check"),
-            CheckTab::Clash => t("tab_clash"),
-            CheckTab::Action => t("tab_action"),
+            CheckTab::Constructs => t("tab_constructs"),
+            CheckTab::Calc => t("tab_calc"),
         }
     }
 }
@@ -525,34 +514,30 @@ pub struct PriceCheck {
 /// Fon ipida o'qilayotgan loyiha fayli.
 ///
 /// Katta chizma PDF ini o'qish daqiqalab vaqt oladi: `AL_QUDRA` ning 77
-/// sahifasi uch daqiqaga yaqin. Avval bu **asosiy ipda** bajarilardi va
-/// butun oyna qotib qolardi — dastur osilib qolgandek ko'rinardi.
-///
-/// Endi o'qish fon ipida ketadi: oyna ishlaydi, ketgan vaqt ko'rinib
-/// turadi. Bazaga yozishni esa asosiy ip qiladi — ulanish bitta.
+/// sahifasi ikki daqiqadan ortiq. Asosiy ipda bajarilsa butun oyna qotib
+/// qolardi, shuning uchun o'qish fon ipida ketadi — oyna ishlaydi, ketgan
+/// vaqt ko'rinib turadi. Bazaga yozishni asosiy ip qiladi: ulanish bitta.
 pub struct PdfJob {
     pub file: String,
     pub started: std::time::Instant,
-    rx: std::sync::mpsc::Receiver<Result<crate::pdfplan::Found, String>>,
+    rx: std::sync::mpsc::Receiver<Result<crate::takeoff::Takeoff, String>>,
 }
 
-/// Oxirgi o'qish hisoboti — ekranda turadi.
-///
-/// Nima bo'lgani oxirigacha ko'rsatiladi: nechta qator ko'rildi, nechta
-/// spetsifikatsiya jadvali topildi, nechta element qo'shildi va nechta
-/// qator tashlandi. Tashlanganlar yashirilmaydi — ular odamga jadval
-/// to'g'ri tanilganini tekshirish imkonini beradi.
-#[derive(Debug, Clone, Default)]
-pub struct PdfReport {
-    pub file: String,
-    pub secs: f64,
-    pub rows: usize,
-    pub tables: usize,
-    pub skipped: usize,
-    pub added: usize,
-    pub repeated: usize,
-    /// Bo'sh bo'lmasa — o'qilmadi va sabab shu.
-    pub error: String,
+/// Kalkulyatsiyaning narx qo'yilgan qatori.
+#[derive(Debug, Clone)]
+pub struct CostRow {
+    pub total: crate::takeoff::Total,
+    /// Birlik narxi. `None` — narx topilmadi va kiritilmagan.
+    pub price: Option<f64>,
+    /// Narx qo'lda kiritilganmi (aks holda narx bazasidan).
+    pub manual: bool,
+}
+
+impl CostRow {
+    /// Summa. Narx yo'q bo'lsa — yo'q: nol deb ko'rsatish yolg'on bo'lardi.
+    pub fn sum(&self) -> Option<f64> {
+        self.price.map(|p| p * self.total.amount)
+    }
 }
 
 pub struct App {
@@ -779,10 +764,16 @@ pub struct App {
     pub view_role: Option<crate::roles::Role>,
     /// Fon ipida o'qilayotgan fayl.
     pub pdf_job: Option<PdfJob>,
-    /// Oxirgi o'qish hisoboti.
-    pub pdf_report: Option<PdfReport>,
-    /// Oxirgi tahlil: ketgan soniya va topilgan nomuvofiqliklar soni.
-    pub check_report: Option<(f64, usize)>,
+    /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
+    pub pdf_note: String,
+    /// Loyihadan olingan hisob: jadvallar va konstruksiyalar.
+    pub takeoff: Option<crate::takeoff::Takeoff>,
+    /// Qo'lda kiritilgan narxlar: material -> birlik narxi.
+    pub takeoff_prices: std::collections::BTreeMap<String, f64>,
+    /// Kalkulyatsiya — bir marta hisoblanadi.
+    pub cost_rows: Vec<CostRow>,
+    /// Kalkulyatsiya qatorlari (ko'paytuvchilari bilan).
+    pub takeoff_lines: Vec<crate::takeoff::Line>,
     /// Tepadagi AI oynasi ochiqmi.
     ///
     /// Holat shu yerda turadi, egui ning umumiy «popup» xotirasida emas:
@@ -984,8 +975,11 @@ impl App {
             current_user: None,
             view_role: None,
             pdf_job: None,
-            pdf_report: None,
-            check_report: None,
+            pdf_note: String::new(),
+            takeoff: None,
+            takeoff_prices: Default::default(),
+            cost_rows: Vec::new(),
+            takeoff_lines: Vec::new(),
             ai_panel: false,
             sales_block: None,
             selected_unit: None,
@@ -1299,6 +1293,7 @@ impl App {
         // o'zgaradi, ekran esa soniyasiga o'nlab marta qayta chiziladi.
         self.clashes = crate::clash::find(&self.elements, &self.element_links);
         self.recompute_sales();
+        self.load_takeoff();
         self.estimates = self.db.estimates(id);
         self.norms = self.db.norms();
 
@@ -1371,12 +1366,8 @@ impl App {
             self.notify(t("no_elements").to_string());
             return;
         }
-        let t0 = std::time::Instant::now();
         let found = checks::check_project(&self.check_ctx());
         let n = found.len();
-        // Ketgan vaqt ko'rsatiladi: katta loyihada tahlil bir necha
-        // soniya oladi va odam uning tugaganini bilishi kerak.
-        self.check_report = Some((t0.elapsed().as_secs_f64(), n));
         self.db
             .replace_auto_issues(pid, IssueModule::Project, &found);
         self.reload_modules();
@@ -2060,6 +2051,9 @@ impl App {
     /// Mavjud elementlar o'chirilmaydi — import qo'shimcha qiladi. Bir xil
     /// marka ikki marta tushmasligi uchun IFC dan kelgan va o'sha markali
     /// element allaqachon bo'lsa, u qayta yozilmaydi.
+    // Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+    // sinovlar ishlatadi.
+    #[allow(dead_code)]
     pub fn import_ifc(&mut self, path: &std::path::Path) {
         // Rol cheklovi: bu amal yozuvchi.
         if !self.can_edit(Screen::AiCheck) {
@@ -2144,41 +2138,35 @@ impl App {
     /// IFC bilan bir xil qoida: allaqachon bor marka takrorlanmaydi, yangi
     /// element esa varaq nomi bilan yoziladi. Bog'lanishlar chizmadan
     /// olinmaydi — chizmada ular yozilmagan bo'ladi.
-    /// PDF o'qishni fon ipida boshlaydi.
-    ///
-    /// Fayl darhol ro'yxatga tushadi — o'qilmasa ham u loyiha hujjati va
-    /// uni ochib ko'rish kerak bo'ladi.
+    /// Loyiha PDF ini fon ipida o'qishni boshlaydi.
     pub fn start_pdf(&mut self, path: &std::path::Path) {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());
             return;
         }
-        let Some(pid) = self.current else { return };
+        if self.current.is_none() {
+            return;
+        }
         if self.pdf_job.is_some() {
             // Ikkita o'qish bir vaqtda ketmaydi: natijalar aralashib
             // ketardi va qaysi fayldan kelgani bilinmasdi.
             self.notify(t("pdf_busy").to_string());
             return;
         }
-        self.attach_drawings(std::slice::from_ref(&path.to_path_buf()));
-
         let file = path
             .file_name()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_default();
-        let sheet = path
-            .file_stem()
-            .map(|s| s.to_string_lossy().to_string())
-            .unwrap_or_else(|| "PDF".to_string());
         let owned = path.to_path_buf();
+        let name = file.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let result = crate::pdfread::table(&owned)
-                .map(|rows| crate::pdfplan::from_rows(&rows, pid, &sheet));
+            let result = crate::pdfread::pages(&owned)
+                .map(|pages| crate::takeoff::Takeoff::read(&name, &pages));
             // Qabul qiluvchi yopilgan bo'lsa (ilova yopildi) — e'tiborsiz.
             let _ = tx.send(result);
         });
-        self.pdf_report = None;
+        self.pdf_note.clear();
         self.pdf_job = Some(PdfJob {
             file,
             started: std::time::Instant::now(),
@@ -2186,64 +2174,146 @@ impl App {
         });
     }
 
-    /// Fon o'qishi tugagan bo'lsa natijani oladi.
-    ///
-    /// Har kadrda chaqiriladi va bloklanmaydi.
+    /// Fon o'qishi tugagan bo'lsa natijani oladi. Har kadrda chaqiriladi
+    /// va bloklanmaydi.
     pub fn poll_pdf(&mut self) -> bool {
         use std::sync::mpsc::TryRecvError;
         let Some(job) = &self.pdf_job else {
             return false;
         };
-        let (file, secs) = (job.file.clone(), job.started.elapsed().as_secs_f64());
+        let secs = job.started.elapsed().as_secs_f64();
         match job.rx.try_recv() {
             Ok(Ok(found)) => {
-                let mut report = PdfReport {
-                    file,
-                    secs,
-                    rows: found.rows,
-                    tables: found.tables,
-                    skipped: found.skipped,
-                    ..Default::default()
-                };
-                for e in &found.elements {
-                    let same = self
-                        .elements
-                        .iter()
-                        .any(|x| x.sheet == e.sheet && x.mark == e.mark);
-                    if same {
-                        report.repeated += 1;
-                        continue;
-                    }
-                    self.db.insert_element(e);
-                    report.added += 1;
-                }
                 self.pdf_job = None;
-                self.reload_modules();
-                self.pdf_report = Some(report);
+                self.pdf_note = format!("{secs:.0} s");
+                self.takeoff = Some(found);
+                self.save_takeoff();
+                self.recompute_takeoff();
                 true
             }
             Ok(Err(e)) => {
                 self.pdf_job = None;
-                self.pdf_report = Some(PdfReport {
-                    file,
-                    secs,
-                    error: e,
-                    ..Default::default()
-                });
+                self.pdf_note = e;
                 true
             }
             Err(TryRecvError::Empty) => false,
             Err(TryRecvError::Disconnected) => {
                 self.pdf_job = None;
-                self.pdf_report = Some(PdfReport {
-                    file,
-                    secs,
-                    error: t("pdf_failed").to_string(),
-                    ..Default::default()
-                });
+                self.pdf_note = t("pdf_failed").to_string();
                 true
             }
         }
+    }
+
+    /// Hisobni bazaga yozadi.
+    ///
+    /// O'qish daqiqalab vaqt oladi, shuning uchun natija saqlanadi: ilova
+    /// qayta ochilganda fayl ikkinchi marta o'qilmaydi.
+    pub fn save_takeoff(&mut self) {
+        let Some(pid) = self.current else { return };
+        let body = self
+            .takeoff
+            .as_ref()
+            .and_then(|t| serde_json::to_string(t).ok())
+            .unwrap_or_default();
+        let _ = self.db.set_setting(&format!("takeoff.{pid}"), &body);
+        let prices = serde_json::to_string(&self.takeoff_prices).unwrap_or_default();
+        let _ = self
+            .db
+            .set_setting(&format!("takeoff_price.{pid}"), &prices);
+    }
+
+    /// Saqlangan hisobni o'qiydi — obyekt almashganda.
+    pub fn load_takeoff(&mut self) {
+        self.takeoff = None;
+        self.takeoff_prices.clear();
+        if let Some(pid) = self.current {
+            self.takeoff = self
+                .db
+                .get_setting(&format!("takeoff.{pid}"))
+                .and_then(|s| serde_json::from_str(&s).ok());
+            self.takeoff_prices = self
+                .db
+                .get_setting(&format!("takeoff_price.{pid}"))
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
+        }
+        self.recompute_takeoff();
+    }
+
+    /// Kalkulyatsiyani qayta hisoblaydi: qatorlar, yig'ma va narx.
+    ///
+    /// Narx **o'ylab topilmaydi**: avval qo'lda kiritilgani, bo'lmasa narx
+    /// bazasidagi o'rtachasi olinadi; ikkalasi ham bo'lmasa narx bo'sh
+    /// qoladi va summa ko'rsatilmaydi.
+    pub fn recompute_takeoff(&mut self) {
+        self.takeoff_lines = self.takeoff.as_ref().map(|t| t.lines()).unwrap_or_default();
+        let index = crate::prices::Index::build(&self.price_book);
+        self.cost_rows = crate::takeoff::totals(&self.takeoff_lines)
+            .into_iter()
+            .map(|total| {
+                let manual = self.takeoff_prices.get(&total.material).copied();
+                let book = || {
+                    let found = crate::prices::find_with(
+                        &self.price_book,
+                        &index,
+                        &total.material,
+                        "",
+                        &total.unit,
+                    );
+                    crate::prices::range(&found).map(|r| r.avg)
+                };
+                let price = manual.or_else(book);
+                CostRow {
+                    total,
+                    price,
+                    manual: manual.is_some(),
+                }
+            })
+            .collect();
+    }
+
+    /// Material narxini qo'lda qo'yadi; nol yoki manfiy — narxni olib
+    /// tashlaydi.
+    pub fn set_takeoff_price(&mut self, material: &str, price: f64) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if price > 0.0 {
+            self.takeoff_prices.insert(material.to_string(), price);
+        } else {
+            self.takeoff_prices.remove(material);
+        }
+        self.save_takeoff();
+        self.recompute_takeoff();
+    }
+
+    /// Konstruksiya sonini o'zgartiradi — loyihada topilmagan yoki xato
+    /// o'qilgan bo'lsa.
+    pub fn set_construct_count(&mut self, mark: &str, count: f64) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        if let Some(t) = &mut self.takeoff {
+            if let Some(c) = t.constructs.iter_mut().find(|c| c.mark == mark) {
+                c.count = count.max(0.0);
+            }
+        }
+        self.save_takeoff();
+        self.recompute_takeoff();
+    }
+
+    /// Loyiha hisobini o'chiradi (fayl o'chirilmaydi).
+    pub fn clear_takeoff(&mut self) {
+        if !self.can_edit(Screen::AiCheck) {
+            self.notify(t("role_readonly").to_string());
+            return;
+        }
+        self.takeoff = None;
+        self.save_takeoff();
+        self.recompute_takeoff();
     }
 
     /// Chizma fayllarini obyektga biriktiradi (TZ II.1).
@@ -2257,6 +2327,9 @@ impl App {
     /// Fayl ko'chirilmaydi — yo'li saqlanadi, aks holda bitta chizmaning
     /// ikkita nusxasi paydo bo'lardi va qaysi biri yangi ekani
     /// bilinmasdi.
+    // Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+    // sinovlar ishlatadi.
+    #[allow(dead_code)]
     pub fn attach_drawings(&mut self, paths: &[std::path::PathBuf]) -> usize {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());
@@ -2297,6 +2370,9 @@ impl App {
         added
     }
 
+    // Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+    // sinovlar ishlatadi.
+    #[allow(dead_code)]
     pub fn import_dxf(&mut self, path: &std::path::Path) {
         if !self.can_edit(Screen::AiCheck) {
             self.notify(t("role_readonly").to_string());
@@ -2945,6 +3021,9 @@ impl App {
     /// ro'yxat beriladi va undan faqat tushuntirish, ustuvorlik va
     /// tavsiya so'raladi. Shuning uchun TZ II.17 buzilmaydi — me'yor
     /// reyestrdan keladi, model uni o'ylab topmaydi.
+    // Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+    // sinovlar ishlatadi.
+    #[allow(dead_code)]
     pub fn ask_ai_about_check(&mut self) {
         let mut found: Vec<String> = Vec::new();
         for i in self
@@ -3137,6 +3216,9 @@ impl App {
     /// elementlarning **o'lchamiga** tayanadi va faqat shakli tanilgan
     /// elementlarni qamraydi. Ro'yxat elementlar o'qilganda hisoblanadi
     /// va shu yerda faqat qaytariladi.
+    // Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+    // sinovlar ishlatadi.
+    #[allow(dead_code)]
     pub fn geometry_clashes(&self) -> &[crate::clash::Clash] {
         &self.clashes
     }
@@ -3615,6 +3697,8 @@ impl App {
                 let (added, repeated) = self.db.add_prices(&rows);
                 self.price_book = self.db.price_book();
                 self.recompute_price_checks();
+                // Loyiha kalkulyatsiyasidagi narxlar ham shu bazadan.
+                self.recompute_takeoff();
                 // Takrorlar jimgina tashlanmaydi: odam bir faylni ikki
                 // marta yuklaganini bilishi kerak.
                 self.notify(if repeated == 0 {
@@ -4568,6 +4652,9 @@ impl App {
         }
     }
 
+    // Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+    // sinovlar ishlatadi.
+    #[allow(dead_code)]
     pub fn save_norm(&mut self, key: &str, norm: Norm) {
         // Rol cheklovi: bu amal yozuvchi.
         if !self.can_edit(Screen::AiCheck) {

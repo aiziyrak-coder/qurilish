@@ -34,6 +34,9 @@ impl Norm {
 }
 
 /// Dastur biladigan qoidalar ro'yxati. Kalit — reyestrdagi identifikator.
+// Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+// sinovlar ishlatadi.
+#[allow(dead_code)]
 pub const RULES: &[(&str, &str)] = &[
     ("EST_ARITH", "rule_est_arith"),
     ("EST_TOTAL", "rule_est_total"),
@@ -1952,6 +1955,9 @@ pub fn check_project(ctx: &Ctx) -> Vec<Issue> {
 }
 
 /// TZ II.18: element o'zgarganda qaysi bo'limlarga ta'sir qilishini ko'rsatadi.
+// Ekrandan hozir chaqirilmaydi (loyiha sahifasi kalkulyatsiyaga aylandi);
+// sinovlar ishlatadi.
+#[allow(dead_code)]
 pub fn impact(elements: &[Element], links: &[ElementLink], root: i64) -> Vec<(Section, usize)> {
     let by_id: HashMap<i64, &Element> = elements.iter().map(|e| (e.id, e)).collect();
     let mut adj: HashMap<i64, Vec<i64>> = HashMap::new();

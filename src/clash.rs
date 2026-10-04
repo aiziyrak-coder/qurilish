@@ -19,6 +19,11 @@
 //!    rigelga tegadi — bu loyihaning o'zi. Shuning uchun kesishish har
 //!    uch o'q bo'yicha [`MIN_OVERLAP`] dan katta bo'lishi shart.
 
+// Bu modul hozir ekrandan chaqirilmaydi: loyiha sahifasi kalkulyatsiyaga
+// aylantirilgach, IFC/DXF yuklash tugmalari olib tashlandi. Kod va uning
+// sinovlari saqlangan — qaytarish yoki o'chirish alohida qaror.
+#![allow(dead_code)]
+
 use crate::domain::{Element, ElementLink, Relation};
 
 /// Kesishish shu qalinlikdan oshsagina kolliziya deb hisoblanadi, metrda.
