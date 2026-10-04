@@ -380,9 +380,23 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
             }
         } else if file_done && !ai_done && app.llm.is_ready() {
             ui.add_space(6.0);
-            if ui.button(t("sm_start_ai")).clicked() {
-                start_ai = true;
-            }
+            ui.horizontal_wrapped(|ui| {
+                if ui.button(t("sm_start_ai")).clicked() {
+                    start_ai = true;
+                }
+                // Xarajat taxmini: haqiqiy loyihada bir varaq ~6 ming token.
+                let pages = app.takeoff.as_ref().map(|t| t.pages).unwrap_or(0);
+                ui.label(
+                    RichText::new(format!(
+                        "{} ~{} {}",
+                        t("sm_cost_estimate"),
+                        pages * 6,
+                        t("sm_cost_estimate_unit")
+                    ))
+                    .size(11.0)
+                    .color(theme::muted()),
+                );
+            });
         }
         if !app.smeta_note.is_empty() && app.pages_job.is_none() {
             ui.add_space(4.0);
@@ -2674,6 +2688,7 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
     let mut import: Option<bool> = None;
     let mut add = false;
     let mut from_smeta = false;
+    let mut template = false;
 
     card(ui, |ui| {
         ui.label(RichText::new(t("sm_catalog_title")).strong().size(14.0));
@@ -2695,13 +2710,21 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
             if ui.button(t("sm_catalog_import_w")).clicked() {
                 import = Some(true);
             }
-            if app.smeta.as_ref().is_some_and(|m| !m.stages.is_empty())
-                && ui
+            if app.smeta.as_ref().is_some_and(|m| !m.stages.is_empty()) {
+                if ui
                     .button(t("sm_catalog_from_smeta"))
                     .on_hover_text(t("sm_catalog_from_smeta_hint"))
                     .clicked()
-            {
-                from_smeta = true;
+                {
+                    from_smeta = true;
+                }
+                if ui
+                    .button(t("sm_catalog_template"))
+                    .on_hover_text(t("sm_catalog_template_hint"))
+                    .clicked()
+                {
+                    template = true;
+                }
             }
         });
         ui.add_space(6.0);
@@ -2839,6 +2862,9 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
         let n = app.smeta_to_catalog();
         app.notify(format!("{} {n}", t("sm_catalog_saved")));
     }
+    if template {
+        export_price_template(app);
+    }
     if let Some(work) = import {
         if let Some(path) = rfd::FileDialog::new()
             .set_title(t("pb_import"))
@@ -2853,6 +2879,55 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
                 Err(e) => app.notify(format!("{}: {e}", t("import_failed"))),
             }
         }
+    }
+}
+
+/// Narxsiz pozitsiyalar shabloni: ikki varaq (ishlar, materiallar) —
+/// nom, birlik, bo'sh narx. Mijoz to'ldirib, «Excel: … narxi» tugmasi
+/// bilan qaytaradi.
+fn export_price_template(app: &mut App) {
+    use crate::docgen::{Cell, Table};
+    let Some(m) = &app.smeta else { return };
+    let items = crate::smeta::unpriced(m, &app.smeta_view);
+    let sheet = |work: bool, name: &str| Table {
+        name: name.to_string(),
+        headers: [t("tk_col_material"), t("tk_col_unit"), t("tk_col_price")]
+            .iter()
+            .map(|h| h.to_string())
+            .collect(),
+        rows: items
+            .iter()
+            .filter(|i| i.0 == work)
+            .map(|i| {
+                vec![
+                    Cell::Text(i.1.clone()),
+                    Cell::Text(i.2.clone()),
+                    Cell::Empty,
+                ]
+            })
+            .collect(),
+    };
+    let tables = [sheet(true, t("sm_works")), sheet(false, t("sm_materials"))];
+    let name = format!(
+        "{}_{}.xlsx",
+        t("sm_catalog_template_file"),
+        app.today.format("%Y-%m-%d")
+    );
+    let Some(path) = rfd::FileDialog::new()
+        .set_file_name(&name)
+        .add_filter("Excel", &["xlsx"])
+        .save_file()
+    else {
+        return;
+    };
+    match crate::docgen::write_book(&path, &tables) {
+        Ok(()) => app.notify(format!(
+            "{} {} · {}",
+            t("export_done"),
+            items.len(),
+            path.display()
+        )),
+        Err(e) => app.notify(format!("{}: {e}", t("export_failed"))),
     }
 }
 
