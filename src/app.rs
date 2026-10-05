@@ -2651,7 +2651,7 @@ impl App {
             got: 0,
             failed: 0,
             error: String::new(),
-            rx: crate::smeta_ai::spawn_prices(self.extract_cfg(), items, cancel.clone()),
+            rx: crate::smeta_ai::spawn_prices(self.cheap_cfg(), items, cancel.clone()),
             cancel,
         });
     }
@@ -2937,7 +2937,7 @@ impl App {
             return;
         }
         let ctx = self.smeta_context();
-        self.consolidate_rx = Some(crate::smeta_ai::spawn_consolidate(self.extract_cfg(), ctx));
+        self.consolidate_rx = Some(crate::smeta_ai::spawn_consolidate(self.cheap_cfg(), ctx));
     }
 
     pub fn poll_consolidate(&mut self) -> bool {
@@ -3070,6 +3070,23 @@ impl App {
         let mut cfg = self.llm.clone();
         if !self.ai_model.trim().is_empty() {
             cfg.model = self.ai_model.trim().to_string();
+        }
+        cfg
+    }
+
+    /// Oddiy vazifalar (narx taklifi, savollarni solishtirish, tipik
+    /// javob, takrorlar) uchun arzon model: sifat shu vazifalarda farq
+    /// qilmaydi, narx 5–10 barobar kam. Foydalanuvchi o'zi mini tanlagan
+    /// bo'lsa — o'sha qoladi.
+    fn cheap_cfg(&self) -> crate::llm::Config {
+        let mut cfg = self.extract_cfg();
+        let m = cfg.model.clone();
+        if m.starts_with("gpt-5") && !m.contains("mini") && !m.contains("nano") {
+            cfg.model = "gpt-5-mini".into();
+        } else if m.starts_with("gpt-4.1") && !m.contains("mini") {
+            cfg.model = "gpt-4.1-mini".into();
+        } else if m == "gpt-4o" {
+            cfg.model = "gpt-4o-mini".into();
         }
         cfg
     }
@@ -3432,11 +3449,11 @@ impl App {
                         l.title,
                         l.columns.join(" | ")
                     ));
-                    for r in l.rows.iter().take(40) {
+                    for r in l.rows.iter().take(25) {
                         out.push_str(&format!("    {}\n", r.join(" | ")));
                     }
-                    if l.rows.len() > 40 {
-                        out.push_str(&format!("    … ещё {} строк\n", l.rows.len() - 40));
+                    if l.rows.len() > 25 {
+                        out.push_str(&format!("    … ещё {} строк\n", l.rows.len() - 25));
                     }
                 }
             }
@@ -3559,7 +3576,7 @@ impl App {
         for (i, q) in open {
             ctx.push_str(&format!("{i} | {} | {}\n", q.text, q.options.join(" / ")));
         }
-        self.verify_rx = Some(crate::smeta_ai::spawn_verify(self.extract_cfg(), ctx));
+        self.verify_rx = Some(crate::smeta_ai::spawn_verify(self.cheap_cfg(), ctx));
     }
 
     pub fn poll_verify(&mut self) -> bool {
@@ -3636,7 +3653,7 @@ impl App {
             ));
         }
         let ctx = format!("{ctx}{}", self.ai_lang_note());
-        self.answers_rx = Some(crate::smeta_ai::spawn_answers(self.extract_cfg(), ctx));
+        self.answers_rx = Some(crate::smeta_ai::spawn_answers(self.cheap_cfg(), ctx));
     }
 
     pub fn poll_answers(&mut self) -> bool {
@@ -3776,7 +3793,7 @@ impl App {
                         d.page,
                         l.columns.join(" | ")
                     ));
-                    for r in l.rows.iter().take(60) {
+                    for r in l.rows.iter().take(30) {
                         out.push_str(&format!("  {}\n", r.join(" | ")));
                     }
                 }
@@ -3825,6 +3842,94 @@ impl App {
         out
     }
 
+    /// Har bosqich so'rovi uchun ixcham ma'lumot: xulosa, javoblar,
+    /// asosiy ko'rsatkichlar, konstruksiyalar, loyihadan olingan materiallar.
+    ///
+    /// Vedomostlar bu yerga kirmaydi — ular bosqichlar ro'yxati so'rovida
+    /// bir marta beriladi; 15 bosqichga 15 marta takrorlash tokenning
+    /// asosiy sarfi edi. Chegara 45 ming belgi.
+    pub fn stage_context(&self) -> String {
+        let mut out = String::new();
+        if let Some(m) = &self.smeta {
+            out.push_str(&format!("ОБЪЕКТ: {}\n\nПОКАЗАТЕЛИ:\n", m.summary));
+            for f in m.facts.iter().take(120) {
+                out.push_str(&format!(
+                    "- {}: {} {} (л.{})\n",
+                    f.name,
+                    f.value,
+                    f.unit,
+                    f.page.unwrap_or(0)
+                ));
+            }
+            out.push_str("\nОТВЕТЫ ЗАКАЗЧИКА:\n");
+            for q in &m.questions {
+                let a = if q.answer.trim().is_empty() {
+                    "нет данных — принимай допущение и помечай его"
+                } else {
+                    q.answer.as_str()
+                };
+                out.push_str(&format!("- {} — {}\n", q.text, a));
+            }
+            // Vedomostlar faqat sarlavha va ustunlar bilan — bor-yo'qligi
+            // bilinsin, lekin qatorlar takrorlanmasin.
+            for d in &m.digest {
+                for l in &d.lists {
+                    out.push_str(&format!(
+                        "ВЕДОМОСТЬ «{}» (л.{}, {} строк): {}\n",
+                        l.title,
+                        d.page,
+                        l.rows.len(),
+                        l.columns.join(" | ")
+                    ));
+                    for r in l.rows.iter().take(8) {
+                        out.push_str(&format!("  {}\n", r.join(" | ")));
+                    }
+                }
+            }
+        }
+        if let Some(tk) = &self.takeoff {
+            out.push_str("\nКОНСТРУКЦИИ (марка | название | количество | лист):\n");
+            for c in &tk.constructs {
+                out.push_str(&format!(
+                    "- {} | {} | {} {} | {}\n",
+                    c.mark, c.name, c.count, c.unit, c.page
+                ));
+            }
+        }
+        out.push_str(
+            "\nМАТЕРИАЛЫ ИЗ ПРОЕКТА — уже умножены на количество конструкций, используй как есть \
+             с source=project (материал | количество | листы):\n",
+        );
+        for r in &self.cost_rows {
+            let mut pages: Vec<usize> = self
+                .takeoff_lines
+                .iter()
+                .filter(|l| l.item.material == r.total.material && l.item.unit == r.total.unit)
+                .map(|l| l.page)
+                .collect();
+            pages.sort_unstable();
+            pages.dedup();
+            out.push_str(&format!(
+                "- {} | {:.2} {} | л.{}\n",
+                r.total.material,
+                r.total.amount,
+                r.total.unit,
+                pages
+                    .iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ));
+        }
+        const MAX: usize = 45_000;
+        if out.chars().count() > MAX {
+            let mut cut: String = out.chars().take(MAX).collect();
+            cut.push_str("\n… (данные обрезаны)\n");
+            return cut;
+        }
+        out
+    }
+
     /// Spetsifikatsiyani tuzishni boshlaydi (yoki qayta tuzadi).
     pub fn start_spec(&mut self) {
         if !self.can_edit(Screen::AiCheck) {
@@ -3848,6 +3953,7 @@ impl App {
             rx: crate::smeta_ai::spawn_spec(
                 self.extract_cfg(),
                 self.spec_context(),
+                self.stage_context(),
                 cancel.clone(),
             ),
             cancel,
@@ -6622,6 +6728,71 @@ impl App {
 #[cfg(test)]
 mod live {
     use super::*;
+
+    /// Arzon model: oddiy vazifalar uchun; foydalanuvchi mini tanlagan
+    /// bo'lsa — o'zgarmaydi.
+    #[test]
+    fn cheap_cfg_picks_the_small_sibling() {
+        let path = std::env::temp_dir().join(format!("qurai_cheap_{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let mut app = App::new(crate::db::Db::open(&path).expect("baza"));
+        for (chosen, cheap) in [
+            ("gpt-5", "gpt-5-mini"),
+            ("gpt-5-mini", "gpt-5-mini"),
+            ("gpt-4.1", "gpt-4.1-mini"),
+            ("gpt-4o", "gpt-4o-mini"),
+            ("o4-mini", "o4-mini"),
+        ] {
+            app.ai_model = chosen.into();
+            assert_eq!(app.cheap_cfg().model, cheap, "{chosen}");
+        }
+        drop(app);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// Saqlangan smetada kontekst hajmlari: bosqich so'rovi uchun
+    /// qisqa kontekst to'liq konteksdan necha barobar kichik. Tarmoqsiz;
+    /// faqat `QURAI_LIVE_OUT` kerak. Natija `%TEMP%\qurai_context.txt`.
+    #[test]
+    #[ignore]
+    fn context_sizes_on_a_saved_smeta() {
+        let Ok(out) = std::env::var("QURAI_LIVE_OUT") else {
+            return;
+        };
+        let Some((p, id)) = out.split_once('|') else {
+            return;
+        };
+        let mut app = App::new(crate::db::Db::open(&std::path::PathBuf::from(p)).expect("baza"));
+        app.select_project(id.parse().expect("id"));
+        let stages = app.smeta.as_ref().map(|m| m.stages.len()).unwrap_or(0);
+        let (q, full, short) = (
+            app.questions_context().chars().count(),
+            app.spec_context().chars().count(),
+            app.stage_context().chars().count(),
+        );
+        let (pages, with_pdf) = app
+            .takeoff
+            .as_ref()
+            .map(|t| {
+                let mut p: Vec<usize> = t.tables.iter().map(|x| x.page).collect();
+                p.sort_unstable();
+                p.dedup();
+                (t.pages, p.len())
+            })
+            .unwrap_or((0, 0));
+        let log = format!(
+            "savollar konteksti {q} belgi
+spec konteksti {full} belgi
+bosqich konteksti {short} belgi
+             bosqichlar {stages}: avval {} belgi, endi {} belgi
+varaqlar {pages}, jadvalli (PDF yuboriladi) {with_pdf}
+",
+            full * stages,
+            short * stages
+        );
+        std::fs::write(std::env::temp_dir().join("qurai_context.txt"), &log).unwrap();
+        assert!(short < full);
+    }
 
     /// Saqlangan smetaga AI narx taklifi va tekshiruv. `QURAI_LIVE_DB`
     /// (kalit), `QURAI_LIVE_OUT` (`yo'l|id` — smeta shu yerdan olinadi va

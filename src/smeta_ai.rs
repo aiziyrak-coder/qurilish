@@ -185,16 +185,22 @@ pub fn spawn_pages(cfg: Config, path: PathBuf, cancel: Arc<AtomicBool>) -> Recei
                     let Some(page) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
                         break;
                     };
-                    let text = format!(
-                        "Лист {page}. Текст, извлечённый программой:\n{}",
-                        crate::aitake::page_text(&pages[page - 1])
-                    );
+                    let page_text = crate::aitake::page_text(&pages[page - 1]);
+                    // PDF ning o'zi (ko'rish) qimmat: u faqat jadvalli varaqlarga
+                    // yoki matni juda kam varaqlarga yuboriladi. Reja va qirqim
+                    // varaqlarida matnning o'zi yetarli — sifat tushmaydi, token
+                    // ikki-uch barobar kamayadi.
+                    let has_table = !crate::takeoff::tables(&pages[page - 1], page).is_empty();
+                    let sparse = page_text.chars().count() < 800;
+                    let text = format!("Лист {page}. Текст, извлечённый программой:\n{page_text}");
                     let mut parts = vec![Part::Text(text)];
-                    if let Some(data) = crate::aitake::page_pdf(&doc, page as u32) {
-                        parts.push(Part::Pdf {
-                            name: format!("list-{page}.pdf"),
-                            data,
-                        });
+                    if has_table || sparse {
+                        if let Some(data) = crate::aitake::page_pdf(&doc, page as u32) {
+                            parts.push(Part::Pdf {
+                                name: format!("list-{page}.pdf"),
+                                data,
+                            });
+                        }
                     }
                     let mut result = llm::extract(&cfg, PAGE_SYSTEM, &parts);
                     if let Err(e) = &result {
@@ -515,7 +521,15 @@ pub enum StageMsg {
 }
 
 /// Spetsifikatsiyani fonda tuzadi: avval bosqichlar, keyin har biri.
-pub fn spawn_spec(cfg: Config, context: String, cancel: Arc<AtomicBool>) -> Receiver<StageMsg> {
+/// `context` — bosqichlar ro'yxati uchun to'liq ma'lumot (bir marta);
+/// `stage_context` — har bosqich so'roviga qisqa ma'lumot (15 marta
+/// takrorlanadi, shuning uchun ixcham).
+pub fn spawn_spec(
+    cfg: Config,
+    context: String,
+    stage_context: String,
+    cancel: Arc<AtomicBool>,
+) -> Receiver<StageMsg> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
         let stages = match llm::extract(&cfg, STAGES_SYSTEM, &[Part::Text(context.clone())])
@@ -549,7 +563,7 @@ pub fn spawn_spec(cfg: Config, context: String, cancel: Arc<AtomicBool>) -> Rece
                         break;
                     };
                     let text = format!(
-                        "{context}\n\nВсе этапы объекта (чтобы не дублировать работы между ними):\n{}\n\n\
+                        "{stage_context}\n\nВсе этапы объекта (чтобы не дублировать работы между ними):\n{}\n\n\
                          ЭТАП ДЛЯ РАЗВЁРТКИ: {name} — {scope}",
                         all.join("\n")
                     );

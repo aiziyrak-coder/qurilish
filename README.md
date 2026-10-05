@@ -218,6 +218,14 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 > to'ldirildi), 15 bosqich / 111 ish / 259 material; 98 qator «taxmin»
 > deb belgilangan; ≈484 ming token, ≈4 daqiqa.
 >
+> Token tejash (2026-10-05, jonli o'lchovsiz — hisob to'ldirilgach
+> tekshiriladi): varaq PDF faqat jadvalli yoki matni kam varaqlarga
+> yuboriladi (AL QUDRA: 77 dan 46 tasi); bosqich so'rovi qisqa kontekst
+> oladi (62,8 ming → 26,7 ming belgi, 15 bosqichda 943 ming → 401 ming);
+> varaq matni 14 → 9 ming belgi; vedomost qatorlari 40/60 → 25/30;
+> narx taklifi, savollarni solishtirish, tipik javob va takrorlar «mini»
+> modelda (`cheap_cfg`). O'lchov: `app::live::context_sizes_on_a_saved_smeta`.
+>
 > Ochiq chegaralar: (1) kalit bo'lmasa faqat jadvallar o'qiladi — savol va
 > spetsifikatsiya tuzilmaydi; (2) narx katalogi bo'sh boshlanadi — mijoz
 > o'z praysini kiritadi (Excel import orqali narx bazasiga yoki smetada

@@ -66,7 +66,12 @@ AI uchun INTERNET va OpenAI kaliti kerak: yuqoridagi "● AI" tugmasini
 bosib kalitni kiriting (kalit faqat sizning kompyuteringizda saqlanadi).
 Kalitsiz ham PDF jadvallari o'qiladi, lekin savollar, spetsifikatsiya
 va hisobot tuzilmaydi. Varaqlar AI xizmatiga yuboriladi va so'rovlar
-pullik: 77 varaqli loyiha ~0,5 mln token (gpt-4.1 da taxminan 1-2 $).
+pullik. Token tejaladi: varaq PDF ko'rinishida faqat jadvalli varaqlar
+uchun yuboriladi (qolganiga matn yetadi), bosqichlar qisqa kontekst
+bilan tuziladi, oddiy vazifalar (narx taklifi, savollarni solishtirish,
+takrorlar) arzon "mini" modelda. 77 varaqli loyiha avval ~0,5 mln token
+edi; endi taxminan 2 barobar kam bo'lishi kutiladi (jonli o'lchov
+hisob to'ldirilgach).
 
 Narxlar: "Prays" tugmasi - kompaniya katalogi. "Narxsiz pozitsiyalar
 shabloni (Excel)" tugmasi ikki varaqli fayl beradi (ishlar, materiallar);

@@ -27,7 +27,9 @@ use crate::pdfread::Piece;
 use crate::takeoff::{SpecRow, SpecTable};
 
 /// Modelga beriladigan varaq matni chegarasi, belgida.
-const MAX_TEXT: usize = 14_000;
+// Varaq matni chegarasi: ortig'i — chizma o'lchamlari, ular jadvalga
+// hech narsa bermaydi, token esa ketadi.
+const MAX_TEXT: usize = 9_000;
 /// Varaq matnini qatorlarga teradi: yuqoridan pastga, kataklar ` | `
 /// bilan ajratilgan.
 ///
