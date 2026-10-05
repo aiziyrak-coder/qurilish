@@ -3599,6 +3599,62 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
         out.push(Tiles(tiles));
     }
 
+    // ---- Komplektlik: qaysi bo'limlar bor, qaysilari topilmadi.
+    if !m.digest.is_empty() {
+        let comp = crate::smeta::completeness(&m.digest);
+        let missing: Vec<&str> = comp
+            .iter()
+            .filter(|c| c.1.is_empty())
+            .map(|c| c.0)
+            .collect();
+        out.push(Head(t("sm_completeness").to_string()));
+        let rows: Vec<Vec<String>> = comp
+            .iter()
+            .map(|(sec, pages)| {
+                let status = if pages.is_empty() {
+                    t("sm_sec_absent").to_string()
+                } else {
+                    format!(
+                        "{} · {} {}",
+                        t("sm_sec_present"),
+                        pages.len(),
+                        t("tk_pages")
+                    )
+                };
+                let list = if pages.is_empty() {
+                    "—".to_string()
+                } else {
+                    let mut l: Vec<String> = pages.iter().take(10).map(|p| p.to_string()).collect();
+                    if pages.len() > 10 {
+                        l.push("…".into());
+                    }
+                    l.join(", ")
+                };
+                vec![
+                    format!("{sec} — {}", t(&format!("sm_sec_{sec}"))),
+                    status,
+                    list,
+                ]
+            })
+            .collect();
+        out.push(Table(
+            vec![
+                t("sm_col_section").into(),
+                t("sm_col_status").into(),
+                t("sm_col_pages").into(),
+            ],
+            rows,
+        ));
+        if !missing.is_empty() {
+            out.push(Muted(format!(
+                "{} {}. {}",
+                t("sm_sec_missing_note"),
+                missing.join(", "),
+                t("sm_sec_missing_hint")
+            )));
+        }
+    }
+
     // ---- AI matnli bo'limlari (bo'lsa) — birinchi, resume sifatida.
     if m.report.is_empty() {
         if !m.summary.is_empty() {

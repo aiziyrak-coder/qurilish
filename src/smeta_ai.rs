@@ -156,11 +156,20 @@ pub fn parse_page(body: &str, page: usize) -> Result<PageOut, String> {
         })
         .filter(|l| !l.rows.is_empty())
         .collect();
+    let kind = cell(v.get("kind"));
+    // Varaq egasi (masalan «К3») faqat konstruksiya bo'limlarida ma'noli:
+    // ВК varaqidagi «К2 — внутренний водосток» tizim kodi, ustun К2 emas.
+    // Aks holda butun ВК spetsifikatsiyasi ustunlar soniga ko'payib
+    // ketadi (AL QUDRA: 44 voronka → 704).
+    let owner = match crate::smeta::section_of(&kind) {
+        Some("КЖ") | Some("КМ") | Some("АР") | None => owner,
+        _ => String::new(),
+    };
     Ok(PageOut {
         digest: PageDigest {
             page,
             sheet: cell(v.get("sheet")),
-            kind: cell(v.get("kind")),
+            kind,
             facts,
             lists,
         },
@@ -494,9 +503,21 @@ const STAGES_SYSTEM: &str = "Ты — опытный сметчик. По дан
 Для каждого этапа — короткое название и одно предложение, что в него входит. Не больше 15 этапов.\n\
 Ответ — только JSON: {\"stages\":[{\"name\":\"\",\"scope\":\"\"}]}";
 
-const STAGE_SYSTEM: &str = "Ты — опытный сметчик. Тебе даны данные объекта (показатели с листов, ответы заказчика, \
-материалы и конструкции, снятые программой с проекта) и ОДИН этап. Разверни этап в работы и материалы.\n\
-Правила:\n\
+const STAGE_SYSTEM: &str = "Ты — опытный сметчик. Тебе даны данные объекта (показатели с листов, ответы заказчика), \
+список всех этапов, ОДИН этап для развёртки и МАТЕРИАЛЫ ПРОЕКТА, ЗАКРЕПЛЁННЫЕ ЗА ЭТИМ ЭТАПОМ. Разверни этап в работы \
+и материалы.\n\
+Главные правила:\n\
+А. Из материалов проекта используй ТОЛЬКО закреплённые за этапом — каждый ровно один раз, с его количеством и листом. \
+Материалы других этапов не добавляй, даже если они кажутся уместными: их учтёт свой этап.\n\
+Б. Работы — только по существу этапа. Окна и двери — только в этапе проёмов, отделка — в этапе отделки, сети — в своих \
+этапах; не повторяй чужие работы.\n\
+В. Не создавай отдельных работ «доставка», «применение автокрана», «разбивка осей», «механизация»: техника и доставка — \
+строки materials внутри работы (unit смена / рейс), и только если без них работу не выполнить.\n\
+Г. qty «1 компл.» допустим только для действительно комплектных работ (пусконаладка, сдача). Измеримая работа всегда \
+с числом и единицей; если данных нет — source=assumption с инженерной оценкой и note, что уточнить.\n\
+Д. Если за этапом нет материалов проекта и нет ответа заказчика — не выдумывай состав: максимум 3 работы, все \
+source=assumption, с note «раздел в проекте отсутствует».\n\
+Остальные правила:\n\
 1. Каждая работа: name, qty, unit, source, materials. Единицы — м3, м2, м, шт, т, кг, компл.\n\
 2. source — откуда количество:\n\
    \"project\" — число взято из материалов/конструкций проекта или ведомости; укажи page (номер листа).\n\
@@ -510,6 +531,51 @@ const STAGE_SYSTEM: &str = "Ты — опытный сметчик. Тебе д�
 5. К материалам относи также технику и доставку отдельными строками (unit смена, рейс), если они нужны этапу.\n\
 Ответ — только JSON: {\"works\":[{\"name\":\"\",\"qty\":0,\"unit\":\"\",\"source\":\"\",\"page\":null,\"formula\":\"\",\"note\":\"\",\
 \"materials\":[{\"name\":\"\",\"qty\":0,\"unit\":\"\",\"source\":\"\",\"page\":null,\"formula\":\"\",\"note\":\"\"}]}]}";
+
+const ALLOCATE_SYSTEM: &str = "Ты — опытный сметчик. Даны этапы строительства (с номерами) и материалы/конструкции, \
+снятые программой с проекта (с номерами). Закрепи КАЖДЫЙ материал ровно за ОДНИМ этапом, где он монтируется или \
+расходуется (бетон подготовки — фундаменты; арматура фундаментов — фундаменты; арматура полов — полы; прогоны, фермы, \
+связи — каркас; сэндвич-панели стен — ограждающие конструкции, кровельные — кровля; трубы и воронки водостока — \
+инженерные сети; лотки, бортовые камни, асфальт — благоустройство). Учитывай лист материала: материалы одного листа \
+обычно относятся к одному этапу. Если материал ни к одному этапу не подходит — этап 0.\n\
+Ответ — только JSON: {\"assign\":[{\"r\":1,\"s\":3}]} — r номер материала, s номер этапа (1-based) или 0.";
+
+/// Taqsimlash javobi: material raqami → bosqich raqami (1 dan; 0 — hech qaysi).
+pub fn parse_allocation(body: &str) -> Result<Vec<(usize, usize)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    Ok(v.get("assign")
+        .and_then(|a| a.as_array())
+        .ok_or_else(|| "JSON: assign yo'q".to_string())?
+        .iter()
+        .filter_map(|x| {
+            let r = x.get("r")?.as_u64()? as usize;
+            let s = x.get("s").and_then(|s| s.as_u64()).unwrap_or(0) as usize;
+            Some((r, s))
+        })
+        .collect())
+}
+
+/// Materiallarni bosqichlarga bo'ladi: har bosqich uchun unga tegishli
+/// qatorlar. Taqsimlanmagan (0) yoki javobda yo'q material — oxirgi
+/// «qolganlar» ro'yxatiga; u barcha bosqichlarga ko'rsatilmaydi, lekin
+/// yo'qolmasin deb birinchi mos bosqichga emas, hisobotga qoladi.
+pub fn split_resources(
+    resources: &[String],
+    assign: &[(usize, usize)],
+    stages: usize,
+) -> Vec<Vec<String>> {
+    let mut out = vec![Vec::new(); stages];
+    for (i, line) in resources.iter().enumerate() {
+        let r = i + 1;
+        if let Some(&(_, s)) = assign.iter().find(|a| a.0 == r) {
+            if s >= 1 && s <= stages {
+                out[s - 1].push(line.clone());
+            }
+        }
+    }
+    out
+}
 
 fn source_of(v: &serde_json::Value, qty: &mut f64) -> Source {
     let page = v.get("page").and_then(|p| p.as_u64()).map(|p| p as usize);
@@ -625,10 +691,15 @@ pub enum StageMsg {
 /// `context` — bosqichlar ro'yxati uchun to'liq ma'lumot (bir marta);
 /// `stage_context` — har bosqich so'roviga qisqa ma'lumot (15 marta
 /// takrorlanadi, shuning uchun ixcham).
+/// `resources` — loyihadan olingan materiallar va konstruksiyalar
+/// (bir qator — bir material, raqamlanadi); ular avval bosqichlarga
+/// taqsimlanadi, har bosqich faqat o'zinikini ko'radi — takror yo'q,
+/// kontekst kichik.
 pub fn spawn_spec(
     cfg: Config,
     context: String,
     stage_context: String,
+    resources: Vec<String>,
     cancel: Arc<AtomicBool>,
 ) -> Receiver<StageMsg> {
     let (tx, rx) = channel();
@@ -648,7 +719,34 @@ pub fn spawn_spec(
             }
         };
         let _ = tx.send(StageMsg::Plan(stages.iter().map(|s| s.0.clone()).collect()));
-        let all: Vec<String> = stages.iter().map(|(n, s)| format!("- {n}: {s}")).collect();
+        let all: Vec<String> = stages
+            .iter()
+            .enumerate()
+            .map(|(i, (n, s))| format!("{}. {n}: {s}", i + 1))
+            .collect();
+        // Materiallarni bosqichlarga taqsimlash — bitta so'rov.
+        let per_stage: Vec<Vec<String>> = if resources.is_empty() {
+            vec![Vec::new(); stages.len()]
+        } else {
+            let numbered: Vec<String> = resources
+                .iter()
+                .enumerate()
+                .map(|(i, r)| format!("{}. {r}", i + 1))
+                .collect();
+            let text = format!(
+                "ЭТАПЫ:\n{}\n\nМАТЕРИАЛЫ И КОНСТРУКЦИИ ПРОЕКТА:\n{}",
+                all.join("\n"),
+                numbered.join("\n")
+            );
+            match llm::extract(&cfg, ALLOCATE_SYSTEM, &[Part::Text(text)])
+                .map_err(|e| e.to_string())
+                .and_then(|a| parse_allocation(&a.text))
+            {
+                Ok(assign) => split_resources(&resources, &assign, stages.len()),
+                // Taqsimlash o'tmasa — eski yo'l: hamma bosqich hammasini ko'radi.
+                Err(_) => vec![resources.clone(); stages.len()],
+            }
+        };
         let queue = Mutex::new(VecDeque::from(
             stages.into_iter().enumerate().collect::<Vec<_>>(),
         ));
@@ -663,10 +761,19 @@ pub fn spawn_spec(
                     else {
                         break;
                     };
+                    let mine = &per_stage[i];
+                    let materials = if mine.is_empty() {
+                        "— за этапом нет материалов проекта (см. правило Д)".to_string()
+                    } else {
+                        mine.iter().map(|m| format!("- {m}")).collect::<Vec<_>>().join("\n")
+                    };
                     let text = format!(
-                        "{stage_context}\n\nВсе этапы объекта (чтобы не дублировать работы между ними):\n{}\n\n\
-                         ЭТАП ДЛЯ РАЗВЁРТКИ: {name} — {scope}",
-                        all.join("\n")
+                        "{stage_context}\n\nВСЕ ЭТАПЫ ОБЪЕКТА (чтобы не дублировать работы между ними):\n{}\n\n\
+                         ЭТАП ДЛЯ РАЗВЁРТКИ: {}. {name} — {scope}\n\n\
+                         МАТЕРИАЛЫ ПРОЕКТА, ЗАКРЕПЛЁННЫЕ ЗА ЭТИМ ЭТАПОМ (уже умножены на количество конструкций; \
+                         использовать каждый ровно один раз, source=project, лист указан):\n{materials}",
+                        all.join("\n"),
+                        i + 1
                     );
                     let mut result = llm::extract(&cfg, STAGE_SYSTEM, &[Part::Text(text.clone())]);
                     if let Err(e) = &result {
@@ -982,6 +1089,28 @@ mod tests {
         );
         assert_eq!(batches(&[(1, 20_000)]), vec![vec![1]]);
         assert!(batches(&[]).is_empty());
+    }
+
+    #[test]
+    fn allocation_splits_resources_per_stage() {
+        let assign = parse_allocation(
+            r#"{"assign":[{"r":1,"s":2},{"r":2,"s":0},{"r":3,"s":2},{"r":4,"s":9}]}"#,
+        )
+        .unwrap();
+        let res: Vec<String> = ["a", "b", "c", "d"].iter().map(|s| s.to_string()).collect();
+        let per = split_resources(&res, &assign, 3);
+        assert!(per[0].is_empty());
+        assert_eq!(per[1], vec!["a".to_string(), "c".to_string()]);
+        assert!(per[2].is_empty(), "9-bosqich yo'q — tashlanadi");
+        assert!(parse_allocation("{}").is_err());
+    }
+
+    #[test]
+    fn owner_is_kept_only_for_construction_sections() {
+        let vk = r#"{"sheet":"ВК-1","kind":"ВК","owner":"К2","facts":[],"lists":[],"tables":[]}"#;
+        assert_eq!(parse_page(vk, 38).unwrap().owner, "");
+        let kj = r#"{"sheet":"КЖ-3","kind":"КЖ","owner":"К2","facts":[],"lists":[],"tables":[]}"#;
+        assert_eq!(parse_page(kj, 16).unwrap().owner, "К2");
     }
 
     #[test]

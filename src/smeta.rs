@@ -407,6 +407,50 @@ pub struct Finding {
 /// hisobot uchun ma'nosiz. Bir xil nom va qiymat bir marta qoladi
 /// (birinchi varaq bilan). Tartib: maydon, hajm, qavat, balandlik kabi
 /// asosiy ko'rsatkichlar birinchi, qolgani varaq tartibida.
+/// Loyiha bo'limlari — komplektlik tekshiruvi uchun. Varaq turi (`kind`)
+/// shu nomlarga keltiriladi: КР → КЖ, КМД → КМ.
+pub const SECTIONS: [&str; 10] = ["ПЗ", "ГП", "АР", "КЖ", "КМ", "ВК", "ОВ", "ЭОМ", "ПБ", "ТХ"];
+
+/// Varaq turini bo'lim nomiga keltiradi; notanish tur — `None`.
+pub fn section_of(kind: &str) -> Option<&'static str> {
+    let k = kind.trim().to_uppercase();
+    let k = k
+        .split(['/', ',', ' ', '-'])
+        .next()
+        .unwrap_or("")
+        .to_string();
+    match k.as_str() {
+        "КР" | "КЖ" | "КЖИ" => Some("КЖ"),
+        "КМ" | "КМД" => Some("КМ"),
+        "ПЗ" | "ОПЗ" => Some("ПЗ"),
+        "ГП" | "ПЗУ" | "ГЕНПЛАН" => Some("ГП"),
+        "ВК" | "НВК" => Some("ВК"),
+        "ОВ" | "ОВИК" => Some("ОВ"),
+        "ЭОМ" | "ЭМ" | "ЭО" | "ЭС" => Some("ЭОМ"),
+        "ПБ" | "ППМ" => Some("ПБ"),
+        "ТХ" => Some("ТХ"),
+        "АР" | "АС" => Some("АР"),
+        _ => None,
+    }
+}
+
+/// Komplektlik: har bo'lim uchun u topilgan varaqlar. Hech qanday AI
+/// so'rovi yo'q — faqat o'qilgan varaqlarning turi bo'yicha. Bo'sh ro'yxat
+/// «yo'q» degani emas: «topilmadi, qo'lda tekshiring».
+pub fn completeness(digest: &[PageDigest]) -> Vec<(&'static str, Vec<usize>)> {
+    SECTIONS
+        .iter()
+        .map(|sec| {
+            let pages: Vec<usize> = digest
+                .iter()
+                .filter(|d| section_of(&d.kind) == Some(*sec))
+                .map(|d| d.page)
+                .collect();
+            (*sec, pages)
+        })
+        .collect()
+}
+
 pub fn tidy_facts(facts: &[Fact]) -> Vec<Fact> {
     const NOISE: [&str; 6] = ["масштаб", "формат", "лист ", "стадия", "изм.", "дата"];
     const KEY: [&str; 9] = [
@@ -1169,6 +1213,31 @@ mod tests {
         c.set(false, &key("Beton B20", "m3"), 0.0, "2026-10-05");
         assert!(c.materials.is_empty());
         assert_eq!(split_key("beton b20|m3"), ("beton b20", "m3"));
+    }
+
+    #[test]
+    fn completeness_counts_pages_per_section_and_flags_missing() {
+        let d = |page: usize, kind: &str| PageDigest {
+            page,
+            kind: kind.into(),
+            ..Default::default()
+        };
+        let digest = vec![
+            d(1, "ГП"),
+            d(2, "АР"),
+            d(3, "КР"),
+            d(4, "КЖ"),
+            d(5, "КМД"),
+            d(6, "вк"),
+        ];
+        let c = completeness(&digest);
+        let get = |s: &str| c.iter().find(|x| x.0 == s).map(|x| x.1.clone()).unwrap();
+        assert_eq!(get("КЖ"), vec![3, 4]);
+        assert_eq!(get("КМ"), vec![5]);
+        assert_eq!(get("ВК"), vec![6]);
+        assert!(get("ОВ").is_empty() && get("ПБ").is_empty());
+        assert_eq!(section_of("КЖ/КМ"), Some("КЖ"));
+        assert_eq!(section_of("другое"), None);
     }
 
     #[test]

@@ -232,6 +232,14 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 > Ko'rsatkich nomlari aniq («Площадь застройки АБК»); yalang'och «Площадь»,
 > «Объём» hisobotga kirmaydi (`tidy_facts`).
 >
+> Spetsifikatsiya (2026-10-05): materiallar avval bosqichlarga taqsimlanadi
+> (`ALLOCATE_SYSTEM`, bitta so'rov), har bosqich faqat o'z materiallarini
+> ko'radi — bosqichlararo takror tuzilma jihatidan yo'q, bosqich konteksti
+> 22 ming belgi. Varaq egasi (owner) faqat КЖ/КМ/АР varaqlarida: ВК
+> varaqidagi «К2 — внутренний водосток» ustun К2 emas (AL QUDRA da 44
+> voronka 704 ga ko'payib ketgan edi). Hisobotda «Loyiha komplektligi»
+> jadvali (`smeta::completeness`, tokensiz).
+>
 > Ochiq chegaralar: (1) kalit bo'lmasa faqat jadvallar o'qiladi — savol va
 > spetsifikatsiya tuzilmaydi; (2) narx katalogi bo'sh boshlanadi — mijoz
 > o'z praysini kiritadi (Excel import orqali narx bazasiga yoki smetada

@@ -3437,6 +3437,20 @@ impl App {
             ));
         }
         if let Some(m) = &self.smeta {
+            // Komplektlik: yo'q bo'limlar — savol va taxmin uchun muhim
+            // (masalan, ЭОМ yo'q bo'lsa elektr ishlari bo'yicha so'raladi).
+            let missing: Vec<&str> = crate::smeta::completeness(&m.digest)
+                .into_iter()
+                .filter(|c| c.1.is_empty())
+                .map(|c| c.0)
+                .collect();
+            if !missing.is_empty() {
+                out.push_str(&format!(
+                    "\nРАЗДЕЛЫ, НЕ НАЙДЕННЫЕ В КОМПЛЕКТЕ (по типам листов): {}. Работы этих разделов \
+                     в проекте не описаны — это основание для вопроса заказчику или допущения.\n",
+                    missing.join(", ")
+                ));
+            }
             out.push_str("\nЛИСТЫ ПРОЕКТА:\n");
             for d in &m.digest {
                 out.push_str(&format!("\nЛист {} [{}] {}\n", d.page, d.kind, d.sheet));
@@ -3887,19 +3901,28 @@ impl App {
                 }
             }
         }
+        const MAX: usize = 30_000;
+        if out.chars().count() > MAX {
+            let mut cut: String = out.chars().take(MAX).collect();
+            cut.push_str("\n… (данные обрезаны)\n");
+            return cut;
+        }
+        out
+    }
+
+    /// Loyihadan olingan materiallar va konstruksiyalar — bir qator bir
+    /// material: `nom | miqdor birlik | л.varaqlar`. Bosqichlarga
+    /// taqsimlanadi, har bosqich faqat o'zinikini oladi.
+    pub fn stage_resources(&self) -> Vec<String> {
+        let mut out = Vec::new();
         if let Some(tk) = &self.takeoff {
-            out.push_str("\nКОНСТРУКЦИИ (марка | название | количество | лист):\n");
             for c in &tk.constructs {
-                out.push_str(&format!(
-                    "- {} | {} | {} {} | {}\n",
+                out.push(format!(
+                    "{} {} | {} {} | л.{} | конструкция",
                     c.mark, c.name, c.count, c.unit, c.page
                 ));
             }
         }
-        out.push_str(
-            "\nМАТЕРИАЛЫ ИЗ ПРОЕКТА — уже умножены на количество конструкций, используй как есть \
-             с source=project (материал | количество | листы):\n",
-        );
         for r in &self.cost_rows {
             let mut pages: Vec<usize> = self
                 .takeoff_lines
@@ -3909,8 +3932,8 @@ impl App {
                 .collect();
             pages.sort_unstable();
             pages.dedup();
-            out.push_str(&format!(
-                "- {} | {:.2} {} | л.{}\n",
+            out.push(format!(
+                "{} | {:.2} {} | л.{}",
                 r.total.material,
                 r.total.amount,
                 r.total.unit,
@@ -3920,12 +3943,6 @@ impl App {
                     .collect::<Vec<_>>()
                     .join(",")
             ));
-        }
-        const MAX: usize = 45_000;
-        if out.chars().count() > MAX {
-            let mut cut: String = out.chars().take(MAX).collect();
-            cut.push_str("\n… (данные обрезаны)\n");
-            return cut;
         }
         out
     }
@@ -3954,6 +3971,7 @@ impl App {
                 self.extract_cfg(),
                 self.spec_context(),
                 self.stage_context(),
+                self.stage_resources(),
                 cancel.clone(),
             ),
             cancel,
