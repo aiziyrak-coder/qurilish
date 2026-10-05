@@ -106,23 +106,23 @@ pub fn install_theme(ctx: &Context) {
     style.visuals.selection.stroke = Stroke::new(1.0_f32, theme::accent());
     style.visuals.window_corner_radius = 8.into();
     style.spacing.item_spacing = egui::vec2(8.0, 7.0);
-    style.spacing.button_padding = egui::vec2(10.0, 5.0);
+    style.spacing.button_padding = egui::vec2(12.0, 6.0);
 
     style.text_styles.insert(
         egui::TextStyle::Heading,
-        FontId::new(20.0, FontFamily::Proportional),
+        FontId::new(22.0, FontFamily::Proportional),
     );
     style.text_styles.insert(
         egui::TextStyle::Body,
-        FontId::new(14.0, FontFamily::Proportional),
+        FontId::new(15.0, FontFamily::Proportional),
     );
     style.text_styles.insert(
         egui::TextStyle::Button,
-        FontId::new(14.0, FontFamily::Proportional),
+        FontId::new(15.0, FontFamily::Proportional),
     );
     style.text_styles.insert(
         egui::TextStyle::Small,
-        FontId::new(12.0, FontFamily::Proportional),
+        FontId::new(13.0, FontFamily::Proportional),
     );
     ctx.set_style(style);
 }

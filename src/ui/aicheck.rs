@@ -94,48 +94,80 @@ fn stepper(ui: &mut egui::Ui, app: &mut App) {
             let ready = app.smeta_ready(tab);
             let active = tab == current;
             let fill = if active {
-                theme::accent().gamma_multiply(0.16)
+                theme::accent().gamma_multiply(0.14)
             } else {
                 egui::Color32::TRANSPARENT
             };
             let resp = egui::Frame::new()
                 .fill(fill)
-                .corner_radius(8)
+                .corner_radius(12)
                 .inner_margin(egui::Margin::symmetric(10, 6))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        let mark = if ready && !active && i < 6 {
-                            "●".to_string()
-                        } else {
-                            (i + 1).to_string()
-                        };
+                        // Raqamli doira: faol — rangli, tayyor — yashil, qolgani — kulrang.
                         let circle = if active {
                             theme::accent()
                         } else if ready {
                             theme::ok()
                         } else {
+                            theme::line()
+                        };
+                        let num_color = if active || ready {
+                            egui::Color32::WHITE
+                        } else {
                             theme::muted()
                         };
-                        ui.label(RichText::new(mark).strong().color(circle).size(13.0));
+                        let (r, _) =
+                            ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+                        ui.painter().circle_filled(r.center(), 14.0, circle);
+                        ui.painter().text(
+                            r.center(),
+                            egui::Align2::CENTER_CENTER,
+                            (i + 1).to_string(),
+                            egui::FontId::proportional(14.0),
+                            num_color,
+                        );
                         ui.vertical(|ui| {
-                            ui.label(RichText::new(tab.label()).strong().size(12.5).color(
+                            ui.spacing_mut().item_spacing.y = 1.0;
+                            ui.label(RichText::new(tab.label()).strong().size(15.0).color(
                                 if ready || active {
                                     theme::text()
                                 } else {
                                     theme::muted()
                                 },
                             ));
-                            ui.label(RichText::new(tab.hint()).size(10.0).color(theme::muted()));
+                            // Izoh faqat faol bosqichda: yettita bosqich bir
+                            // qatorga sig'sin, qolganlari ustiga borganda ko'rinadi.
+                            if active {
+                                ui.label(
+                                    RichText::new(tab.hint()).size(12.0).color(theme::muted()),
+                                );
+                            }
                         });
                     });
                 })
                 .response
-                .interact(egui::Sense::click());
+                .interact(egui::Sense::click())
+                .on_hover_text(tab.hint());
             if resp.clicked() && (ready || tab == CheckTab::Upload) {
                 app.check_tab = tab;
             }
             if i < 6 {
-                ui.label(RichText::new("—").color(theme::line()));
+                // Bosqichlar orasidagi bog'lovchi chiziq.
+                let (r, _) = ui.allocate_exact_size(egui::vec2(14.0, 28.0), egui::Sense::hover());
+                let y = r.center().y;
+                let color = if app.smeta_ready(CheckTab::ALL[i + 1]) {
+                    theme::ok()
+                } else {
+                    theme::line()
+                };
+                ui.painter().line_segment(
+                    [
+                        egui::pos2(r.left() + 2.0, y),
+                        egui::pos2(r.right() - 2.0, y),
+                    ],
+                    Stroke::new(2.0_f32, color),
+                );
             }
         }
     });
@@ -144,16 +176,31 @@ fn stepper(ui: &mut egui::Ui, app: &mut App) {
 fn empty(ui: &mut egui::Ui, msg: &str) {
     ui.add_space(40.0);
     ui.vertical_centered(|ui| {
-        ui.label(RichText::new(msg).color(theme::muted()).size(15.0));
+        ui.label(RichText::new(msg).color(theme::muted()).size(16.5));
     });
+}
+
+/// Yumshoq soya: kartalar fondan ko'tarilib turadi.
+fn shadow() -> egui::epaint::Shadow {
+    egui::epaint::Shadow {
+        offset: [0, 2],
+        blur: 10,
+        spread: 0,
+        color: egui::Color32::from_black_alpha(if theme::theme() == theme::Theme::Light {
+            22
+        } else {
+            70
+        }),
+    }
 }
 
 fn card(ui: &mut egui::Ui, body: impl FnOnce(&mut egui::Ui)) {
     egui::Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0_f32, theme::line()))
-        .corner_radius(8)
-        .inner_margin(egui::Margin::same(12))
+        .corner_radius(10)
+        .shadow(shadow())
+        .inner_margin(egui::Margin::same(14))
         .show(ui, body);
 }
 
@@ -167,24 +214,39 @@ fn num(v: f64) -> String {
 }
 
 fn kpi(ui: &mut egui::Ui, title: &str, value: &str, hint: &str) {
-    egui::Frame::new()
+    let resp = egui::Frame::new()
         .fill(theme::card())
         .stroke(Stroke::new(1.0_f32, theme::line()))
-        .corner_radius(8)
-        .inner_margin(egui::Margin::same(10))
+        .corner_radius(10)
+        .shadow(shadow())
+        .inner_margin(egui::Margin {
+            left: 16,
+            right: 12,
+            top: 10,
+            bottom: 10,
+        })
         .show(ui, |ui| {
             ui.vertical(|ui| {
-                ui.set_min_width(170.0);
-                ui.set_max_width(280.0);
-                ui.label(RichText::new(title).size(11.0).color(theme::muted()));
+                ui.set_min_width(180.0);
+                ui.set_max_width(300.0);
+                ui.label(RichText::new(title).size(13.0).color(theme::muted()));
                 ui.label(
                     RichText::new(super::issues::truncate(value, 32))
-                        .size(18.0)
+                        .size(23.0)
+                        .strong()
                         .color(theme::accent()),
                 );
-                ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+                ui.label(RichText::new(hint).size(13.0).color(theme::muted()));
             });
-        });
+        })
+        .response;
+    // Chap tomonda rangli chiziq — ko'rsatkich kartasi ekani ko'rinadi.
+    let r = resp.rect;
+    let strip = egui::Rect::from_min_max(
+        r.left_top() + egui::vec2(1.0, 6.0),
+        egui::pos2(r.left() + 5.0, r.bottom() - 6.0),
+    );
+    ui.painter().rect_filled(strip, 2.0, theme::accent());
 }
 
 /// Manba belgisi: loyihadan / hisob / me'yor / taxmin / qo'lda.
@@ -203,7 +265,7 @@ fn badge(ui: &mut egui::Ui, source: &Source) {
         .corner_radius(10)
         .inner_margin(egui::Margin::symmetric(7, 2))
         .show(ui, |ui| {
-            ui.label(RichText::new(t(source.badge())).size(10.5).color(color));
+            ui.label(RichText::new(t(source.badge())).size(12.5).color(color));
         })
         .response;
     if !detail.is_empty() {
@@ -238,11 +300,11 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut model: Option<String> = None;
 
     card(ui, |ui| {
-        ui.label(RichText::new(t("sm_upload_title")).strong().size(14.0));
+        ui.label(RichText::new(t("sm_upload_title")).strong().size(15.5));
         ui.add_space(2.0);
         ui.label(
             RichText::new(t("sm_upload_hint"))
-                .size(11.5)
+                .size(13.5)
                 .color(theme::muted()),
         );
         ui.add_space(8.0);
@@ -270,7 +332,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
             }
             ui.label(
                 RichText::new(t("tk_ai_model"))
-                    .size(11.5)
+                    .size(13.5)
                     .color(theme::muted()),
             );
             egui::ComboBox::from_id_salt("sm_ai_model")
@@ -289,7 +351,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
             ui.add_space(4.0);
             ui.label(
                 RichText::new(t("sm_no_key"))
-                    .size(11.5)
+                    .size(13.5)
                     .color(theme::warn()),
             );
         }
@@ -320,7 +382,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                             .strong(),
                     );
                 }
-                ui.label(RichText::new(*name).size(12.0).color(if *done || *running {
+                ui.label(RichText::new(*name).size(14.0).color(if *done || *running {
                     theme::text()
                 } else {
                     theme::muted()
@@ -340,7 +402,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                     job.file,
                     job.started.elapsed().as_secs()
                 ))
-                .size(11.5)
+                .size(13.5)
                 .color(theme::muted()),
             );
         } else if app.takeoff.is_none() && !app.pdf_note.is_empty() {
@@ -367,7 +429,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                             job.model
                         )
                     })
-                    .size(11.5),
+                    .size(13.5),
                 );
                 if ui.button(t("tk_ai_stop")).clicked() {
                     cancel = true;
@@ -376,7 +438,7 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
             if !job.failed.is_empty() {
                 ui.label(
                     RichText::new(format!("{} {}", job.failed.len(), t("tk_ai_failed")))
-                        .size(11.5)
+                        .size(13.5)
                         .color(theme::warn()),
                 );
             }
@@ -405,14 +467,14 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                         pages * 2 + with_pdf * 4,
                         t("sm_cost_estimate_unit")
                     ))
-                    .size(11.0)
+                    .size(13.0)
                     .color(theme::muted()),
                 );
             });
         }
         if !app.smeta_note.is_empty() && app.pages_job.is_none() {
             ui.add_space(4.0);
-            ui.label(RichText::new(&app.smeta_note).size(11.5));
+            ui.label(RichText::new(&app.smeta_note).size(13.5));
         }
     });
 
@@ -545,10 +607,10 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
     let mut auto = false;
 
     card(ui, |ui| {
-        ui.label(RichText::new(t("sm_questions_title")).strong().size(14.0));
+        ui.label(RichText::new(t("sm_questions_title")).strong().size(15.5));
         ui.label(
             RichText::new(t("sm_questions_hint"))
-                .size(11.5)
+                .size(13.5)
                 .color(theme::muted()),
         );
         ui.add_space(6.0);
@@ -622,7 +684,7 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
         if !app.smeta_note.is_empty() {
             ui.label(
                 RichText::new(&app.smeta_note)
-                    .size(11.0)
+                    .size(13.0)
                     .color(theme::muted()),
             );
         }
@@ -636,10 +698,10 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                 card(ui, |ui| {
                     ui.label(
                         RichText::new(t("sm_summary"))
-                            .size(11.0)
+                            .size(13.0)
                             .color(theme::muted()),
                     );
-                    ui.label(RichText::new(&m.summary).size(12.5));
+                    ui.label(RichText::new(&m.summary).size(14.5));
                 });
                 ui.add_space(6.0);
             }
@@ -691,7 +753,7 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                             .corner_radius(8)
                             .inner_margin(egui::Margin::symmetric(6, 1))
                             .show(ui, |ui| {
-                                ui.label(RichText::new(&q.topic).size(10.5));
+                                ui.label(RichText::new(&q.topic).size(12.5));
                             });
                         // Ta'sir darajasi — qaysi savol qimmatroq.
                         let (label, color) = match q.impact.as_str() {
@@ -706,15 +768,15 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                                 .corner_radius(8)
                                 .inner_margin(egui::Margin::symmetric(6, 1))
                                 .show(ui, |ui| {
-                                    ui.label(RichText::new(label).size(10.5).color(color));
+                                    ui.label(RichText::new(label).size(12.5).color(color));
                                 });
                         }
-                        ui.label(RichText::new(&q.text).size(12.5).strong());
+                        ui.label(RichText::new(&q.text).size(14.5).strong());
                     });
                     if !q.why.is_empty() {
                         ui.label(
                             RichText::new(format!("{} {}", t("sm_q_why"), q.why))
-                                .size(11.0)
+                                .size(13.0)
                                 .color(theme::muted()),
                         );
                     }
@@ -826,7 +888,7 @@ fn data_tab(ui: &mut egui::Ui, app: &mut App) {
         .show(ui, |ui| {
             if !m.summary.is_empty() {
                 card(ui, |ui| {
-                    ui.label(RichText::new(&m.summary).size(12.5));
+                    ui.label(RichText::new(&m.summary).size(14.5));
                 });
                 ui.add_space(8.0);
             }
@@ -959,7 +1021,7 @@ fn data_tab(ui: &mut egui::Ui, app: &mut App) {
                                 ui.label(RichText::new(&c.unit).color(theme::muted()));
                                 ui.label(
                                     RichText::new(format!("{} {}", t("pdf_page"), c.page))
-                                        .size(11.0)
+                                        .size(13.0)
                                         .color(theme::muted()),
                                 );
                                 ui.end_row();
@@ -1045,7 +1107,7 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
         }
         ui.label(
             RichText::new(t("sm_spec_legend"))
-                .size(11.0)
+                .size(13.0)
                 .color(theme::muted()),
         );
         next_button(ui, app, CheckTab::Smeta, t("sm_tab_smeta"));
@@ -1096,7 +1158,7 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                             mats,
                             t("sm_materials_short")
                         ))
-                        .size(13.5)
+                        .size(15.5)
                         .strong(),
                     )
                     .sense(egui::Sense::click()),
@@ -1127,7 +1189,7 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                             "sm_col_source",
                         ] {
                             let text = if h.is_empty() { "" } else { t(h) };
-                            ui.label(RichText::new(text).size(11.0).color(theme::muted()));
+                            ui.label(RichText::new(text).size(13.0).color(theme::muted()));
                         }
                         ui.end_row();
                         for (wi, w) in st.works.iter().enumerate() {
@@ -1173,7 +1235,7 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
                                 }
                                 match w.materials.get(mi) {
                                     Some(mat) => {
-                                        ui.label(RichText::new(&mat.name).size(12.0));
+                                        ui.label(RichText::new(&mat.name).size(14.0));
                                         let mut v = mat.qty;
                                         if ui
                                             .add(
@@ -1262,7 +1324,7 @@ fn spec_tab(ui: &mut egui::Ui, app: &mut App) {
 
 fn price_text(p: &crate::smeta::Priced) -> RichText {
     match p.sum {
-        Some(v) => RichText::new(money(v)).size(12.0),
+        Some(v) => RichText::new(money(v)).size(14.0),
         None => RichText::new(t("dash")).color(theme::warn()),
     }
 }
@@ -1284,12 +1346,12 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
             ui.vertical(|ui| {
                 ui.label(
                     RichText::new(t("sm_total"))
-                        .size(11.0)
+                        .size(13.0)
                         .color(theme::muted()),
                 );
                 ui.label(
                     RichText::new(format!("{} {}", money(view.total), t("tk_sum_unit")))
-                        .size(24.0)
+                        .size(26.0)
                         .strong()
                         .color(theme::accent()),
                 );
@@ -1301,20 +1363,20 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                         t("sm_materials"),
                         money(view.material_sum)
                     ))
-                    .size(11.5)
+                    .size(13.5)
                     .color(theme::muted()),
                 );
                 ui.label(if view.missing > 0 {
                     RichText::new(format!("{} {}", view.missing, t("tk_total_partial")))
-                        .size(11.5)
+                        .size(13.5)
                         .color(theme::warn())
                 } else if view.hinted > 0 {
                     RichText::new(format!("{} {}", view.hinted, t("sm_hinted_note")))
-                        .size(11.5)
+                        .size(13.5)
                         .color(theme::warn())
                 } else {
                     RichText::new(t("tk_total_full"))
-                        .size(11.5)
+                        .size(13.5)
                         .color(theme::muted())
                 });
             });
@@ -1391,14 +1453,14 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
         if view.hinted > 0 {
             ui.label(
                 RichText::new(format!("{} {}", view.hinted, t("sm_hinted_note")))
-                    .size(11.5)
+                    .size(13.5)
                     .color(theme::warn()),
             );
         }
         if !app.smeta_note.is_empty() {
             ui.label(
                 RichText::new(&app.smeta_note)
-                    .size(11.0)
+                    .size(13.0)
                     .color(theme::muted()),
             );
         }
@@ -1407,7 +1469,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.spinner();
                 ui.label(
                     RichText::new(t("sm_consolidating"))
-                        .size(11.5)
+                        .size(13.5)
                         .color(theme::muted()),
                 );
             });
@@ -1419,7 +1481,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                 .default_open(true)
                 .show(ui, |ui| {
                     if !m.review_summary.is_empty() {
-                        ui.label(RichText::new(&m.review_summary).size(12.0));
+                        ui.label(RichText::new(&m.review_summary).size(14.0));
                         ui.add_space(4.0);
                     }
                     egui::ScrollArea::vertical()
@@ -1443,14 +1505,14 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                         .corner_radius(8)
                                         .inner_margin(egui::Margin::symmetric(6, 1))
                                         .show(ui, |ui| {
-                                            ui.label(RichText::new(label).size(10.5).color(color));
+                                            ui.label(RichText::new(label).size(12.5).color(color));
                                         });
                                     if !f.id.is_empty() {
                                         ui.label(
-                                            RichText::new(&f.id).size(10.5).color(theme::muted()),
+                                            RichText::new(&f.id).size(12.5).color(theme::muted()),
                                         );
                                     }
-                                    ui.label(RichText::new(&f.text).size(12.0));
+                                    ui.label(RichText::new(&f.text).size(14.0));
                                     let action = match f.kind.as_str() {
                                         "qty" if f.qty.is_some() => Some(format!(
                                             "{} {} {}",
@@ -1500,7 +1562,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
     ui.horizontal_wrapped(|ui| {
         ui.label(
             RichText::new(t("sm_edit_scope"))
-                .size(11.5)
+                .size(13.5)
                 .color(theme::muted()),
         );
         if ui
@@ -1520,7 +1582,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(16.0);
         ui.label(
             RichText::new(t("sm_markup_all"))
-                .size(11.5)
+                .size(13.5)
                 .color(theme::muted()),
         );
         let mut v = m.markup;
@@ -1541,7 +1603,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                 t("sm_catalog_size"),
                 app.catalog.works.len() + app.catalog.materials.len()
             ))
-            .size(11.0)
+            .size(13.0)
             .color(theme::muted()),
         );
         ui.add_space(12.0);
@@ -1573,7 +1635,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                     .inner_margin(egui::Margin::symmetric(8, 5))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(&st.name).size(13.5).strong());
+                            ui.label(RichText::new(&st.name).size(15.5).strong());
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
@@ -1583,7 +1645,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                             money(sv.total),
                                             t("tk_sum_unit")
                                         ))
-                                        .size(13.0)
+                                        .size(15.0)
                                         .strong(),
                                     );
                                     let mut v = st.markup;
@@ -1601,7 +1663,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                     }
                                     ui.label(
                                         RichText::new(t("sm_markup_short"))
-                                            .size(11.0)
+                                            .size(13.0)
                                             .color(theme::muted()),
                                     );
                                     let missing = if sv.missing > 0 {
@@ -1617,7 +1679,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                             t("sm_materials"),
                                             money(sv.material_sum),
                                         ))
-                                        .size(11.0)
+                                        .size(13.0)
                                         .color(
                                             if sv.missing > 0 {
                                                 theme::warn()
@@ -1646,7 +1708,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                             "tk_col_sum",
                         ] {
                             let text = if h.is_empty() { "" } else { t(h) };
-                            ui.label(RichText::new(text).size(11.0).color(theme::muted()));
+                            ui.label(RichText::new(text).size(13.0).color(theme::muted()));
                         }
                         ui.end_row();
                         for (wi, w) in st.works.iter().enumerate() {
@@ -1662,7 +1724,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                             let rows = w.materials.len().max(1);
                             for mi in 0..rows {
                                 if mi == 0 {
-                                    ui.label(RichText::new(&w.name).size(12.0));
+                                    ui.label(RichText::new(&w.name).size(14.0));
                                     ui.label(format!("{} {}", num(w.qty), w.unit));
                                     ui.horizontal(|ui| {
                                         price_cell(ui, wp, &mut |v| {
@@ -1688,7 +1750,7 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
                                 ui.label("");
                                 match (w.materials.get(mi), mps.get(mi)) {
                                     (Some(mat), Some(mp)) => {
-                                        ui.label(RichText::new(&mat.name).size(12.0));
+                                        ui.label(RichText::new(&mat.name).size(14.0));
                                         ui.label(format!("{} {}", num(mat.qty), mat.unit));
                                         ui.horizontal(|ui| {
                                             price_cell(ui, mp, &mut |v| {
@@ -1760,7 +1822,7 @@ fn price_cell(ui: &mut egui::Ui, p: &crate::smeta::Priced, on_change: &mut dyn F
             Origin::Line => theme::accent(),
             _ => theme::muted(),
         };
-        ui.label(RichText::new(t(p.origin.label())).size(10.0).color(color));
+        ui.label(RichText::new(t(p.origin.label())).size(12.0).color(color));
     });
 }
 
@@ -2009,7 +2071,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
         .show(ui, |ui| {
             card(ui, |ui| {
                 let field = |ui: &mut egui::Ui, label: &str, v: &mut String, changed: &mut bool| {
-                    ui.label(RichText::new(label).size(11.0).color(theme::muted()));
+                    ui.label(RichText::new(label).size(13.0).color(theme::muted()));
                     if ui
                         .add(egui::TextEdit::singleline(v).desired_width(f32::INFINITY))
                         .changed()
@@ -2033,7 +2095,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 );
                 ui.label(
                     RichText::new(t("sm_offer_terms"))
-                        .size(11.0)
+                        .size(13.0)
                         .color(theme::muted()),
                 );
                 if ui
@@ -2048,7 +2110,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 }
                 ui.label(
                     RichText::new(t("sm_offer_excluded"))
-                        .size(11.0)
+                        .size(13.0)
                         .color(theme::muted()),
                 );
                 if ui
@@ -2065,7 +2127,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(
                         RichText::new(t("sm_offer_accent"))
-                            .size(11.0)
+                            .size(13.0)
                             .color(theme::muted()),
                     );
                     for (i, (name, rgb)) in crate::smeta::ACCENTS.iter().enumerate() {
@@ -2102,7 +2164,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                     }
                     ui.label(
                         RichText::new(t("sm_offer_advance"))
-                            .size(11.0)
+                            .size(13.0)
                             .color(theme::muted()),
                     );
                     if ui
@@ -2119,7 +2181,7 @@ fn offer_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new(t("sm_offer_valid"))
-                            .size(11.0)
+                            .size(13.0)
                             .color(theme::muted()),
                     );
                     let mut d = offer.valid_days as i64;
@@ -2217,14 +2279,14 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
     let width = ui.available_width();
     ui.set_max_width(width);
     ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Wrap);
-    let (bar, _) = ui.allocate_exact_size(egui::vec2(width, 6.0), egui::Sense::hover());
-    ui.painter().rect_filled(bar, 2.0, accent);
+    let (bar, _) = ui.allocate_exact_size(egui::vec2(width, 8.0), egui::Sense::hover());
+    ui.painter().rect_filled(bar, 3.0, accent);
     ui.add_space(6.0);
     let mut table_no = 0usize;
     for line in lines {
         match line {
             DocLine::Title(s) => {
-                ui.label(RichText::new(s).size(19.0).strong().color(accent));
+                ui.label(RichText::new(s).size(21.0).strong().color(accent));
             }
             DocLine::Head(s) => {
                 ui.add_space(10.0);
@@ -2240,17 +2302,17 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                             let (r, _) =
                                 ui.allocate_exact_size(egui::vec2(4.0, 16.0), egui::Sense::hover());
                             ui.painter().rect_filled(r, 2.0, accent);
-                            ui.label(RichText::new(s).size(13.5).strong().color(accent));
+                            ui.label(RichText::new(s).size(15.5).strong().color(accent));
                         });
                     });
                 ui.add_space(4.0);
             }
             DocLine::Sub(s) => {
                 ui.add_space(4.0);
-                ui.label(RichText::new(s).size(12.0).strong());
+                ui.label(RichText::new(s).size(14.0).strong());
             }
             DocLine::Text(s) => {
-                ui.add(egui::Label::new(RichText::new(s).size(11.5)).wrap());
+                ui.add(egui::Label::new(RichText::new(s).size(13.5)).wrap());
             }
             DocLine::Table(headers, rows) => {
                 table_no += 1;
@@ -2280,20 +2342,25 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                     } else {
                                         egui::Layout::right_to_left(egui::Align::Center)
                                     };
-                                    ui.allocate_ui_with_layout(egui::vec2(w, 20.0), layout, |ui| {
+                                    ui.allocate_ui_with_layout(egui::vec2(w, 26.0), layout, |ui| {
                                         // Katak eni aniq: aks holda ustun matn eniga
                                         // siqilib, sarlavhalar ustma-ust tushardi.
-                                        ui.set_min_size(egui::vec2(w, 20.0));
+                                        ui.set_min_size(egui::vec2(w, 26.0));
                                         let r = ui.max_rect();
+                                        // Sarlavha bandi to'q rangda, matn oq — jadval
+                                        // boshi darrov ko'rinadi.
                                         ui.painter().rect_filled(
                                             r.expand2(egui::vec2(0.0, 2.0)),
                                             0.0,
-                                            accent.gamma_multiply(0.14),
+                                            accent,
                                         );
-                                        ui.add_space(6.0);
+                                        ui.add_space(8.0);
                                         ui.add(
                                             egui::Label::new(
-                                                RichText::new(h).size(11.0).strong().color(accent),
+                                                RichText::new(h)
+                                                    .size(13.0)
+                                                    .strong()
+                                                    .color(egui::Color32::WHITE),
                                             )
                                             .truncate(),
                                         );
@@ -2310,12 +2377,12 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                                             egui::Layout::right_to_left(egui::Align::Center)
                                         };
                                         ui.allocate_ui_with_layout(
-                                            egui::vec2(w, 18.0),
+                                            egui::vec2(w, 24.0),
                                             layout,
                                             |ui| {
-                                                ui.set_min_size(egui::vec2(w, 18.0));
-                                                ui.add_space(6.0);
-                                                let text = RichText::new(c).size(11.0);
+                                                ui.set_min_size(egui::vec2(w, 24.0));
+                                                ui.add_space(8.0);
+                                                let text = RichText::new(c).size(13.0);
                                                 let text =
                                                     if i == 0 { text } else { text.strong() };
                                                 ui.add(egui::Label::new(text).truncate());
@@ -2338,7 +2405,7 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                             |ui| {
                                 ui.set_min_size(egui::vec2(w * 0.34, 16.0));
                                 ui.add(
-                                    egui::Label::new(RichText::new(label).size(11.0)).truncate(),
+                                    egui::Label::new(RichText::new(label).size(13.0)).truncate(),
                                 );
                             },
                         );
@@ -2352,38 +2419,51 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
                         );
                         ui.painter()
                             .rect_filled(fill, 3.0, accent.gamma_multiply(0.75));
-                        ui.label(RichText::new(text).size(11.0).strong());
+                        ui.label(RichText::new(text).size(13.0).strong());
                     });
                 }
             }
             DocLine::Tiles(tiles) => {
                 ui.horizontal_wrapped(|ui| {
                     for (name, value, hint) in tiles {
-                        egui::Frame::new()
-                            .fill(accent.gamma_multiply(0.08))
-                            .stroke(Stroke::new(1.0_f32, accent.gamma_multiply(0.35)))
-                            .corner_radius(8)
-                            .inner_margin(egui::Margin::same(10))
+                        let resp = egui::Frame::new()
+                            .fill(theme::card())
+                            .stroke(Stroke::new(1.0_f32, theme::line()))
+                            .corner_radius(10)
+                            .shadow(shadow())
+                            .inner_margin(egui::Margin {
+                                left: 16,
+                                right: 12,
+                                top: 10,
+                                bottom: 10,
+                            })
                             .show(ui, |ui| {
                                 ui.vertical(|ui| {
                                     ui.set_min_width(150.0);
                                     ui.set_max_width(260.0);
-                                    ui.label(RichText::new(name).size(10.5).color(theme::muted()));
+                                    ui.label(RichText::new(name).size(12.5).color(theme::muted()));
                                     ui.label(
-                                        RichText::new(value).size(17.0).strong().color(accent),
+                                        RichText::new(value).size(21.0).strong().color(accent),
                                     );
                                     if !hint.is_empty() {
                                         ui.label(
-                                            RichText::new(hint).size(10.0).color(theme::muted()),
+                                            RichText::new(hint).size(12.0).color(theme::muted()),
                                         );
                                     }
                                 });
-                            });
+                            })
+                            .response;
+                        let r = resp.rect;
+                        let strip = egui::Rect::from_min_max(
+                            r.left_top() + egui::vec2(1.0, 6.0),
+                            egui::pos2(r.left() + 5.0, r.bottom() - 6.0),
+                        );
+                        ui.painter().rect_filled(strip, 2.0, accent);
                     }
                 });
             }
             DocLine::Muted(s) => {
-                ui.label(RichText::new(s).size(10.5).color(theme::muted()));
+                ui.label(RichText::new(s).size(12.5).color(theme::muted()));
             }
             DocLine::Gap => {
                 ui.add_space(8.0);
@@ -2876,10 +2956,10 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
     let mut template = false;
 
     card(ui, |ui| {
-        ui.label(RichText::new(t("sm_catalog_title")).strong().size(14.0));
+        ui.label(RichText::new(t("sm_catalog_title")).strong().size(15.5));
         ui.label(
             RichText::new(t("sm_catalog_hint"))
-                .size(11.5)
+                .size(13.5)
                 .color(theme::muted()),
         );
         ui.add_space(8.0);
@@ -2916,7 +2996,7 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
         ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new(t("sm_catalog_add"))
-                    .size(11.5)
+                    .size(13.5)
                     .color(theme::muted()),
             );
             let (name, unit, price, work) = &mut app.catalog_new;
@@ -2977,17 +3057,17 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
                         "",
                     ] {
                         let text = if h.is_empty() { "" } else { t(h) };
-                        ui.label(RichText::new(text).size(11.0).color(theme::muted()));
+                        ui.label(RichText::new(text).size(13.0).color(theme::muted()));
                     }
                     ui.end_row();
                     for (work, key, price) in &rows {
                         let (name, unit) = crate::smeta::split_key(key);
                         ui.label(
                             RichText::new(t(if *work { "sm_works" } else { "sm_materials" }))
-                                .size(11.0)
+                                .size(13.0)
                                 .color(theme::muted()),
                         );
-                        ui.label(RichText::new(name).size(12.0));
+                        ui.label(RichText::new(name).size(14.0));
                         ui.label(RichText::new(unit).color(theme::muted()));
                         let mut v = *price;
                         let hist = app.catalog.history(*work, key);
@@ -3017,7 +3097,7 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
                         }
                         ui.label(
                             RichText::new(hist.first().map(|h| h.0.clone()).unwrap_or_default())
-                                .size(11.0)
+                                .size(13.0)
                                 .color(theme::muted()),
                         );
                         if ui
@@ -3131,10 +3211,10 @@ fn sketch_view(ui: &mut egui::Ui, app: &mut App) {
     ui.columns(2, |cols| {
         let ui = &mut cols[0];
         card(ui, |ui| {
-            ui.label(RichText::new(t("sm_sketch_title")).strong().size(14.0));
+            ui.label(RichText::new(t("sm_sketch_title")).strong().size(15.5));
             ui.label(
                 RichText::new(t("sm_sketch_how"))
-                    .size(11.5)
+                    .size(13.5)
                     .color(theme::muted()),
             );
             ui.add_space(6.0);
@@ -3223,14 +3303,14 @@ fn sketch_view(ui: &mut egui::Ui, app: &mut App) {
                         sk.points.len(),
                         t("sm_sketch_points")
                     ))
-                    .size(11.5),
+                    .size(13.5),
                 );
             });
         });
 
         let ui = &mut cols[1];
         card(ui, |ui| {
-            ui.label(RichText::new(t("sm_sketch_params")).strong().size(14.0));
+            ui.label(RichText::new(t("sm_sketch_params")).strong().size(15.5));
             ui.add_space(6.0);
             let sk = &mut app.sketch_draft;
             egui::Grid::new("sm_sketch_params")
@@ -3313,7 +3393,7 @@ fn sketch_view(ui: &mut egui::Ui, app: &mut App) {
             ui.add_space(8.0);
             ui.label(
                 RichText::new(t("sm_sketch_note"))
-                    .size(11.0)
+                    .size(13.0)
                     .color(theme::muted()),
             );
             ui.add_space(8.0);
@@ -3358,7 +3438,7 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
 
     card(ui, |ui| {
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(t("sm_report_title")).strong().size(14.0));
+            ui.label(RichText::new(t("sm_report_title")).strong().size(15.5));
             if app.report_rx.is_some() {
                 ui.spinner();
                 ui.label(RichText::new(t("sm_report_writing")).color(theme::muted()));
@@ -3385,13 +3465,13 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
         });
         ui.label(
             RichText::new(t("sm_report_note"))
-                .size(11.0)
+                .size(13.0)
                 .color(theme::muted()),
         );
         if !app.smeta_note.is_empty() && app.report_rx.is_none() {
             ui.label(
                 RichText::new(&app.smeta_note)
-                    .size(11.0)
+                    .size(13.0)
                     .color(theme::muted()),
             );
         }
