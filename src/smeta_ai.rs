@@ -300,6 +300,47 @@ pub fn spawn_questions(cfg: Config, context: String) -> crate::app::QuestionsRx 
     rx
 }
 
+// ============================================= 2b. Savollarni tekshirish
+
+const VERIFY_SYSTEM: &str = "Ты — проверяющий. Даны данные проекта (показатели с листов, ведомости, конструкции, \
+материалы) и список вопросов, которые помощник собирается задать заказчику. Найди вопросы, ответ на которые УЖЕ \
+содержится в данных проекта (прямо или однозначно выводится), и дай этот ответ со ссылкой на лист. Такие вопросы \
+заказчику задавать нельзя. Если данных нет или они противоречивы — вопрос оставь (не включай в found).\n\
+Ответ — только JSON: {\"found\":[{\"i\":0,\"answer\":\"краткий ответ из данных\",\"page\":12}]} — i совпадает с \
+номером вопроса во входе; page — номер листа или 0.";
+
+/// Tekshiruv javobi: `(o'rin, javob, varaq)`.
+pub fn parse_verify(body: &str) -> Result<Vec<(usize, String, usize)>, String> {
+    let v: serde_json::Value =
+        serde_json::from_str(strip(body)).map_err(|e| format!("JSON: {e}"))?;
+    Ok(v.get("found")
+        .and_then(|f| f.as_array())
+        .ok_or_else(|| "JSON: found yo'q".to_string())?
+        .iter()
+        .filter_map(|f| {
+            let i = f.get("i")?.as_u64()? as usize;
+            let answer = cell(f.get("answer"));
+            let page = f.get("page").and_then(|p| p.as_u64()).unwrap_or(0) as usize;
+            (!answer.is_empty()).then_some((i, answer, page))
+        })
+        .collect())
+}
+
+pub type VerifyRx = Receiver<Result<(Vec<(usize, String, usize)>, u32), String>>;
+
+/// Savollarni loyiha ma'lumotiga qarshi tekshiradi: javobi loyihada bor
+/// savol mijozga berilmaydi — javobi varaq raqami bilan yoziladi.
+pub fn spawn_verify(cfg: Config, context: String) -> VerifyRx {
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        let out = llm::extract(&cfg, VERIFY_SYSTEM, &[Part::Text(context)])
+            .map_err(|e| e.to_string())
+            .and_then(|a| parse_verify(&a.text).map(|r| (r, a.usage.total)));
+        let _ = tx.send(out);
+    });
+    rx
+}
+
 // ===================================================== 2a. AI javoblari
 
 const ANSWERS_SYSTEM: &str = "Ты — опытный подрядчик. Даны описание объекта и список вопросов без ответа, у каждого \
@@ -804,6 +845,16 @@ mod tests {
         )
         .unwrap();
         assert_eq!(rem, vec![("s2.w1".to_string(), "дубль".to_string())]);
+    }
+
+    #[test]
+    fn verify_replies_give_answer_and_page() {
+        let list = parse_verify(
+            r#"{"found":[{"i":1,"answer":"Монолитная лента","page":10},{"i":2,"answer":""}]}"#,
+        )
+        .unwrap();
+        assert_eq!(list, vec![(1, "Монолитная лента".to_string(), 10)]);
+        assert!(parse_verify("{}").is_err());
     }
 
     #[test]

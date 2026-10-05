@@ -33,6 +33,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     app.poll_review();
     app.poll_consolidate();
     app.poll_answers();
+    app.poll_verify();
     app.poll_report();
     if app.pdf_job.is_some()
         || app.pages_job.is_some()
@@ -42,6 +43,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         || app.review_rx.is_some()
         || app.consolidate_rx.is_some()
         || app.answers_rx.is_some()
+        || app.verify_rx.is_some()
         || app.report_rx.is_some()
     {
         // Fon ipi kadr so'ramaydi — jarayon ko'rinib tursin.
@@ -546,6 +548,9 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
             if app.questions_rx.is_some() {
                 ui.spinner();
                 ui.label(RichText::new(t("sm_questions_wait")).color(theme::muted()));
+            } else if app.verify_rx.is_some() {
+                ui.spinner();
+                ui.label(RichText::new(t("sm_verify_wait")).color(theme::muted()));
             } else {
                 ui.label(format!("{} {done} / {total}", t("sm_answered")));
                 if ui.button(t("sm_questions_refresh")).clicked() {

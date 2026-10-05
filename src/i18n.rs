@@ -653,6 +653,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "sm_questions_wait" => ("AI savollarni tuzyapti…", "AI готовит вопросы…"),
         "sm_answered" => ("Javob berildi:", "Отвечено:"),
         "sm_q_answered" => ("Javob berilganlar", "Отвеченные"),
+        "sm_verify_wait" => ("AI savollarni loyiha bilan solishtiryapti…", "AI сверяет вопросы с проектом…"),
+        "sm_verify_done" => ("Javobi loyihada topilgan savollar:", "Вопросов с ответом в проекте:"),
         "sm_impact_high" => ("ta'siri yuqori", "влияние высокое"),
         "sm_impact_medium" => ("ta'siri o'rta", "влияние среднее"),
         "sm_impact_low" => ("ta'siri past", "влияние низкое"),

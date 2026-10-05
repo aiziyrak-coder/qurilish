@@ -899,6 +899,8 @@ pub struct App {
     pub consolidate_rx: Option<crate::smeta_ai::ConsolidateRx>,
     /// Javobsiz savollarga AI taklifi.
     pub answers_rx: Option<crate::smeta_ai::AnswersRx>,
+    /// Savollarni loyiha ma'lumotiga qarshi tekshirish.
+    pub verify_rx: Option<crate::smeta_ai::VerifyRx>,
     /// AI loyiha hisoboti bo'limlari so'rovi.
     pub report_rx: Option<crate::smeta_ai::ReportRx>,
     /// O'qish xatosi yoki oxirgi o'qish vaqti haqidagi xabar.
@@ -1142,6 +1144,7 @@ impl App {
             review_rx: None,
             consolidate_rx: None,
             answers_rx: None,
+            verify_rx: None,
             report_rx: None,
             pdf_note: String::new(),
             takeoff: None,
@@ -2477,6 +2480,7 @@ impl App {
         self.review_rx = None;
         self.consolidate_rx = None;
         self.answers_rx = None;
+        self.verify_rx = None;
         self.report_rx = None;
         // Boshqa obyektga o'tilsa, fon ishlari to'xtatiladi: natija
         // noto'g'ri obyektga yozilmasin.
@@ -3526,9 +3530,77 @@ impl App {
                     m.tokens += tokens;
                 }
                 self.save_takeoff();
+                // Ikkinchi ko'z: javobi loyihada bo'lgan savol mijozga
+                // berilmaydi — AI tekshiradi va javobni varaq bilan yozadi.
+                self.start_verify();
             }
             Err(e) => self.smeta_note = format!("{}: {e}", t("sm_questions_failed")),
         }
+        true
+    }
+
+    /// Savollarni loyiha ma'lumotiga qarshi tekshirtiradi.
+    pub fn start_verify(&mut self) {
+        if self.verify_rx.is_some() || !self.llm.is_ready() {
+            return;
+        }
+        let Some(m) = &self.smeta else { return };
+        let open: Vec<(usize, &crate::smeta::Question)> = m
+            .questions
+            .iter()
+            .enumerate()
+            .filter(|(_, q)| q.answer.trim().is_empty())
+            .collect();
+        if open.is_empty() {
+            return;
+        }
+        let mut ctx = self.questions_context();
+        ctx.push_str("\n\nВОПРОСЫ ПОМОЩНИКА (i | вопрос | варианты):\n");
+        for (i, q) in open {
+            ctx.push_str(&format!("{i} | {} | {}\n", q.text, q.options.join(" / ")));
+        }
+        self.verify_rx = Some(crate::smeta_ai::spawn_verify(self.extract_cfg(), ctx));
+    }
+
+    pub fn poll_verify(&mut self) -> bool {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.verify_rx else {
+            return false;
+        };
+        let result = match rx.try_recv() {
+            Ok(r) => r,
+            Err(TryRecvError::Empty) => return false,
+            Err(TryRecvError::Disconnected) => Err(String::new()),
+        };
+        self.verify_rx = None;
+        if let Ok((found, tokens)) = result {
+            self.llm_tokens += tokens;
+            let mut n = 0;
+            if let Some(m) = &mut self.smeta {
+                m.tokens += tokens;
+                for (i, answer, page) in found {
+                    if let Some(q) = m.questions.get_mut(i) {
+                        if q.answer.trim().is_empty() {
+                            q.answer = if page > 0 {
+                                format!(
+                                    "{answer} ({}, {} {page})",
+                                    t("sm_src_project"),
+                                    t("pdf_page")
+                                )
+                            } else {
+                                format!("{answer} ({})", t("sm_src_project"))
+                            };
+                            n += 1;
+                        }
+                    }
+                }
+            }
+            if n > 0 {
+                self.smeta_note = format!("{} {n}", t("sm_verify_done"));
+            }
+            self.save_takeoff();
+        }
+        // Tekshiruv o'tmasa savollar o'z holida qoladi — bu xato emas.
         true
     }
 
@@ -3578,6 +3650,7 @@ impl App {
             Err(TryRecvError::Disconnected) => Err(t("sm_answers_failed").to_string()),
         };
         self.answers_rx = None;
+        self.verify_rx = None;
         self.report_rx = None;
         match result {
             Ok((list, tokens)) => {
