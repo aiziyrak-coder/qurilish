@@ -1386,6 +1386,95 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(6.0);
 
+    // ---- Xarajat moddalari (TNQurilish shaklidagi yig'ma hisob).
+    let mut terms: Option<crate::smeta::Terms> = None;
+    {
+        let b = crate::smeta::breakdown(&view, &m.terms);
+        let mut tm = m.terms.clone();
+        egui::CollapsingHeader::new(
+            RichText::new(format!(
+                "{} — {} {}",
+                t("sm_terms"),
+                money(b.grand),
+                t("tk_sum_unit")
+            ))
+            .strong(),
+        )
+        .id_salt("sm_terms")
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new(t("sm_terms_hint"))
+                    .size(13.0)
+                    .color(theme::muted()),
+            );
+            let mut changed = false;
+            ui.horizontal_wrapped(|ui| {
+                for (label, v) in [
+                    (t("sm_overhead"), &mut tm.overhead_pct),
+                    (t("sm_profit"), &mut tm.profit_pct),
+                    (t("sm_other"), &mut tm.other_pct),
+                    (t("sm_vat"), &mut tm.vat_pct),
+                ] {
+                    ui.label(RichText::new(label).size(13.5).color(theme::muted()));
+                    if ui
+                        .add(
+                            egui::DragValue::new(v)
+                                .speed(0.5)
+                                .range(0.0..=300.0)
+                                .suffix(" %"),
+                        )
+                        .changed()
+                    {
+                        changed = true;
+                    }
+                    ui.add_space(10.0);
+                }
+            });
+            if changed {
+                terms = Some(tm.clone());
+            }
+            ui.add_space(6.0);
+            let rows: Vec<Vec<String>> = vec![
+                vec![t("sm_materials").into(), money(b.materials)],
+                vec![t("sm_works_wages").into(), money(b.works)],
+                vec![
+                    format!("{} ({}%)", t("sm_direct"), num(m.markup)),
+                    money(b.direct),
+                ],
+                vec![
+                    format!("{} ({}%)", t("sm_overhead"), num(m.terms.overhead_pct)),
+                    money(b.overhead),
+                ],
+                vec![
+                    format!("{} ({}%)", t("sm_profit"), num(m.terms.profit_pct)),
+                    money(b.profit),
+                ],
+                vec![
+                    format!("{} ({}%)", t("sm_other"), num(m.terms.other_pct)),
+                    money(b.other),
+                ],
+                vec![t("sm_before_vat").into(), money(b.before_vat)],
+                vec![
+                    format!("{} ({}%)", t("sm_vat"), num(m.terms.vat_pct)),
+                    money(b.vat),
+                ],
+                vec![
+                    t("sm_grand").into(),
+                    format!("{} {}", money(b.grand), t("tk_sum_unit")),
+                ],
+            ];
+            draw_doc(
+                ui,
+                &[DocLine::Table(
+                    vec![t("sm_col_item").into(), t("tk_col_sum").into()],
+                    rows,
+                )],
+                theme::accent(),
+            );
+        });
+        ui.add_space(8.0);
+    }
+
     // ---- AI: narx taklifi va tekshiruv.
     let mut hints_start = false;
     let mut hints_accept = false;
@@ -1604,6 +1693,9 @@ fn smeta_tab(ui: &mut egui::Ui, app: &mut App) {
     let only_open = app.smeta_only_open;
     if let Some(s) = scope {
         app.set_price_scope(s);
+    }
+    if let Some(tm) = terms {
+        app.edit_smeta(|m| m.terms = tm);
     }
     if let Some(v) = markup {
         app.edit_smeta(|m| m.markup = v);
@@ -2001,6 +2093,80 @@ fn export_smeta(app: &mut App, pdf: bool) {
         .collect(),
         rows: summary_rows,
     };
+    // TNQurilish shakllari: lokal-resurs vedomosti va statyalar bo'yicha
+    // yig'ma hisob.
+    let resources = Table {
+        name: t("sm_sheet_resources").to_string(),
+        headers: [
+            "tk_col_material",
+            "tk_col_unit",
+            "tk_col_amount",
+            "tk_col_price",
+            "tk_col_sum",
+        ]
+        .iter()
+        .map(|k| t(k).to_string())
+        .collect(),
+        rows: crate::smeta::resources(m, view)
+            .into_iter()
+            .map(|(name, unit, qty, price, sum)| {
+                vec![
+                    Cell::Text(name),
+                    Cell::Text(unit),
+                    Cell::Num(qty),
+                    money_cell(price),
+                    money_cell(sum),
+                ]
+            })
+            .collect(),
+    };
+    let b = crate::smeta::breakdown(view, &m.terms);
+    let items = Table {
+        name: t("sm_sheet_items").to_string(),
+        headers: ["sm_col_item", "sm_col_pct", "tk_col_sum"]
+            .iter()
+            .map(|k| t(k).to_string())
+            .collect(),
+        rows: vec![
+            vec![
+                text(t("sm_materials")),
+                Cell::Empty,
+                Cell::Money(b.materials),
+            ],
+            vec![text(t("sm_works_wages")), Cell::Empty, Cell::Money(b.works)],
+            vec![
+                text(t("sm_direct")),
+                Cell::Num(m.markup),
+                Cell::Money(b.direct),
+            ],
+            vec![
+                text(t("sm_overhead")),
+                Cell::Num(m.terms.overhead_pct),
+                Cell::Money(b.overhead),
+            ],
+            vec![
+                text(t("sm_profit")),
+                Cell::Num(m.terms.profit_pct),
+                Cell::Money(b.profit),
+            ],
+            vec![
+                text(t("sm_other")),
+                Cell::Num(m.terms.other_pct),
+                Cell::Money(b.other),
+            ],
+            vec![
+                text(t("sm_before_vat")),
+                Cell::Empty,
+                Cell::Money(b.before_vat),
+            ],
+            vec![
+                text(t("sm_vat")),
+                Cell::Num(m.terms.vat_pct),
+                Cell::Money(b.vat),
+            ],
+            vec![text(t("sm_grand")), Cell::Empty, Cell::Money(b.grand)],
+        ],
+    };
     let row_count = table.rows.len();
     let ext = if pdf { "pdf" } else { "xlsx" };
     let name = format!(
@@ -2023,7 +2189,8 @@ fn export_smeta(app: &mut App, pdf: bool) {
         );
         crate::pdf::write_table(&path, &table, &subtitle)
     } else {
-        crate::docgen::write_book(&path, &[table, purchase, summary]).map_err(|e| format!("{e}"))
+        crate::docgen::write_book(&path, &[table, resources, items, purchase, summary])
+            .map_err(|e| format!("{e}"))
     };
     match result {
         Ok(()) => app.notify(format!(
@@ -3869,6 +4036,43 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
                 ],
             ],
         ));
+        // Xarajat moddalari — foizlar kiritilgan bo'lsa (QQS sukutda ham).
+        {
+            let b = crate::smeta::breakdown(view, &m.terms);
+            out.push(Sub(t("sm_terms").to_string()));
+            out.push(Table(
+                vec![
+                    t("sm_col_item").into(),
+                    t("sm_col_pct").into(),
+                    t("tk_col_sum").into(),
+                ],
+                vec![
+                    vec![t("sm_direct").into(), num(m.markup), money(b.direct)],
+                    vec![
+                        t("sm_overhead").into(),
+                        num(m.terms.overhead_pct),
+                        money(b.overhead),
+                    ],
+                    vec![
+                        t("sm_profit").into(),
+                        num(m.terms.profit_pct),
+                        money(b.profit),
+                    ],
+                    vec![t("sm_other").into(), num(m.terms.other_pct), money(b.other)],
+                    vec![
+                        t("sm_before_vat").into(),
+                        String::new(),
+                        money(b.before_vat),
+                    ],
+                    vec![t("sm_vat").into(), num(m.terms.vat_pct), money(b.vat)],
+                    vec![
+                        t("sm_grand").into(),
+                        String::new(),
+                        format!("{} {}", money(b.grand), t("tk_sum_unit")),
+                    ],
+                ],
+            ));
+        }
         let mut by: std::collections::BTreeMap<&'static str, usize> = Default::default();
         for sv in &view.stages {
             for (wp, mps) in &sv.works {

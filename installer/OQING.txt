@@ -73,6 +73,13 @@ matn bilan o'qiladi (77 varaq = 29 so'rov; PDF rasm faqat matni kam
 77 varaqli loyiha avval ~0,5 mln token edi; endi 2,5-3 barobar kam
 bo'lishi kutiladi (jonli o'lchov hisob to'ldirilgach).
 
+Smeta sahifasida "Xarajat moddalari bo'yicha yig'ma hisob" (TNQurilish
+shakli): qo'shimcha xarajatlar va rejali jamg'arma (ishlar summasidan),
+boshqa xarajatlar, QQS - foizlarni o'zingiz kiritasiz. Excel eksportida
+beshta varaq: smeta, resurs vedomosti, statyalar, xarid ro'yxati, yig'ma.
+AI hisobotda "Loyiha komplektligi" jadvali: qaysi bo'lim (АР, КЖ, ВК...)
+qaysi varaqlarda bor, qaysilari topilmadi.
+
 Narxlar: "Prays" tugmasi - kompaniya katalogi. "Narxsiz pozitsiyalar
 shabloni (Excel)" tugmasi ikki varaqli fayl beradi (ishlar, materiallar);
 narxlarni to'ldirib "Excel: ... narxi" tugmasi bilan qaytaring - keyingi

@@ -240,6 +240,14 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 > voronka 704 ga ko'payib ketgan edi). Hisobotda «Loyiha komplektligi»
 > jadvali (`smeta::completeness`, tokensiz).
 >
+> TNQurilish bilan solishtiruv (tnq.uz, 2026-10-05): uning shakllaridan
+> «сводный расчёт по статьям затрат» (`smeta::Terms`/`breakdown`: накладные,
+> плановые накопления, прочие, НДС) va «локально-ресурсная ведомость»
+> (`smeta::resources`) qo'shildi — Smeta sahifasi, Excel (5 varaq), hisobot.
+> SPPto shakllari (akt, M-29) QURAi da allaqachon bor (shartnomalar,
+> materiallar). ШНК расценка bazasi litsenziyali — QURAi ga kirmaydi; narx
+> mijozning o'z praysidan.
+>
 > Ochiq chegaralar: (1) kalit bo'lmasa faqat jadvallar o'qiladi — savol va
 > spetsifikatsiya tuzilmaydi; (2) narx katalogi bo'sh boshlanadi — mijoz
 > o'z praysini kiritadi (Excel import orqali narx bazasiga yoki smetada

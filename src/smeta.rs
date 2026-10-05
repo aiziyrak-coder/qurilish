@@ -563,6 +563,9 @@ pub struct Smeta {
     /// Butun smetaga ustama, foizda.
     #[serde(default)]
     pub markup: f64,
+    /// Xarajat moddalari (TNQurilish shaklidagi yig'ma hisob).
+    #[serde(default)]
+    pub terms: Terms,
     #[serde(default)]
     pub offer: Offer,
     /// Loyiha o'rniga xolstda chizilgan reja.
@@ -580,6 +583,115 @@ pub struct Smeta {
     pub model: String,
     #[serde(default)]
     pub tokens: u32,
+}
+
+// ========================================================== Xarajat moddalari
+
+/// Yig'ma hisob foizlari — TNQurilish «сводный расчёт по статьям затрат»
+/// shaklida. Foizlar me'yoriy hujjatdan (ШНК) yoki shartnomadan olinadi;
+/// dastur ularni o'zi bilmaydi — foydalanuvchi kiritadi.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Terms {
+    /// Qo'shimcha xarajatlar (накладные расходы), % ishlar summasidan.
+    #[serde(default)]
+    pub overhead_pct: f64,
+    /// Rejali jamg'arma (плановые накопления), % ishlar summasidan.
+    #[serde(default)]
+    pub profit_pct: f64,
+    /// Boshqa xarajatlar (прочие затраты), % oraliq jamidan.
+    #[serde(default)]
+    pub other_pct: f64,
+    /// QQS, % QQS gacha jamidan.
+    #[serde(default = "default_vat")]
+    pub vat_pct: f64,
+}
+
+fn default_vat() -> f64 {
+    12.0
+}
+
+impl Default for Terms {
+    fn default() -> Self {
+        Terms {
+            overhead_pct: 0.0,
+            profit_pct: 0.0,
+            other_pct: 0.0,
+            vat_pct: default_vat(),
+        }
+    }
+}
+
+/// Xarajat moddalari bo'yicha yig'ma: hamma son `view` dan, foizlar
+/// `terms` dan. Ishlar = ЗП + mashinalar (narx bazasidagi ish narxi),
+/// shunga qo'shimcha va rejali jamg'arma hisoblanadi.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct Breakdown {
+    pub materials: f64,
+    pub works: f64,
+    /// To'g'ridan-to'g'ri xarajatlar ustamalar bilan (`view.total`).
+    pub direct: f64,
+    pub overhead: f64,
+    pub profit: f64,
+    pub other: f64,
+    pub before_vat: f64,
+    pub vat: f64,
+    pub grand: f64,
+}
+
+pub fn breakdown(view: &View, terms: &Terms) -> Breakdown {
+    let overhead = view.work_sum * terms.overhead_pct / 100.0;
+    let profit = view.work_sum * terms.profit_pct / 100.0;
+    let other = (view.total + overhead + profit) * terms.other_pct / 100.0;
+    let before_vat = view.total + overhead + profit + other;
+    let vat = before_vat * terms.vat_pct / 100.0;
+    Breakdown {
+        materials: view.material_sum,
+        works: view.work_sum,
+        direct: view.total,
+        overhead,
+        profit,
+        other,
+        before_vat,
+        vat,
+        grand: before_vat + vat,
+    }
+}
+
+/// Resurs qatori: `(nom, birlik, miqdor, birlik narxi, summa)`.
+/// Narx `None` — qatorlarning kamida bittasi narxsiz.
+pub type ResourceRow = (String, String, f64, Option<f64>, Option<f64>);
+
+/// Lokal-resurs vedomosti: barcha bosqichlar materiallari bitta ro'yxatda,
+/// nom va birlik bo'yicha yig'ilgan, narx va summa bilan.
+pub fn resources(smeta: &Smeta, view: &View) -> Vec<ResourceRow> {
+    let mut map: BTreeMap<String, (String, String, f64, Option<f64>)> = BTreeMap::new();
+    for (si, st) in smeta.stages.iter().enumerate() {
+        let Some(sv) = view.stages.get(si) else {
+            continue;
+        };
+        for (wi, w) in st.works.iter().enumerate() {
+            let Some((_, mps)) = sv.works.get(wi) else {
+                continue;
+            };
+            for (mi, m) in w.materials.iter().enumerate() {
+                let sum = mps.get(mi).and_then(|p| p.sum);
+                let e = map
+                    .entry(key(&m.name, &m.unit))
+                    .or_insert_with(|| (m.name.clone(), m.unit.clone(), 0.0, Some(0.0)));
+                e.2 += m.qty;
+                e.3 = match (e.3, sum) {
+                    (Some(a), Some(b)) => Some(a + b),
+                    _ => None,
+                };
+            }
+        }
+    }
+    map.into_values()
+        .map(|(name, unit, qty, sum)| {
+            let price = sum.map(|s| if qty > 0.0 { s / qty } else { 0.0 });
+            (name, unit, qty, price, sum)
+        })
+        .collect()
 }
 
 // ================================================================ Formula
@@ -1213,6 +1325,33 @@ mod tests {
         c.set(false, &key("Beton B20", "m3"), 0.0, "2026-10-05");
         assert!(c.materials.is_empty());
         assert_eq!(split_key("beton b20|m3"), ("beton b20", "m3"));
+    }
+
+    #[test]
+    fn breakdown_applies_percentages_in_order() {
+        let view = View {
+            stages: Vec::new(),
+            work_sum: 1000.0,
+            material_sum: 3000.0,
+            missing: 0,
+            hinted: 0,
+            total: 4000.0,
+        };
+        let terms = Terms {
+            overhead_pct: 50.0,
+            profit_pct: 10.0,
+            other_pct: 2.0,
+            vat_pct: 12.0,
+        };
+        let b = breakdown(&view, &terms);
+        assert_eq!(b.overhead, 500.0);
+        assert_eq!(b.profit, 100.0);
+        assert!((b.other - 92.0).abs() < 1e-9);
+        assert!((b.before_vat - 4692.0).abs() < 1e-9);
+        assert!((b.grand - 4692.0 * 1.12).abs() < 1e-6);
+        // Sukut: faqat QQS 12 %.
+        let d = breakdown(&view, &Terms::default());
+        assert!((d.grand - 4480.0).abs() < 1e-9);
     }
 
     #[test]
