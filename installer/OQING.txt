@@ -19,7 +19,8 @@ NIMA KERAK
 =========================================================================
 
 - Windows 10 yoki 11
-- Internet KERAK EMAS. Dastur to'liq kompyuterda ishlaydi.
+- Internet faqat AI tahlil uchun kerak (OpenAI kaliti bilan).
+  Qolgan hamma bo'lim to'liq kompyuterda, internetsiz ishlaydi.
 - Hech qanday boshqa dastur, kutubxona yoki ro'yxatdan o'tish shart emas.
 
 =========================================================================
@@ -40,6 +41,41 @@ Ma'lumotlaringiz shu yerda saqlanadi:
 
 Bitta fayl. Nusxa olsangiz — hammasi saqlanadi. Sozlamalar bo'limida
 "Zaxira nusxa" tugmasi ham bor.
+
+=========================================================================
+AI TAHLIL (loyihadan smeta va taklif)
+=========================================================================
+
+Bu bo'lim loyiha PDF'ini yetti qadamda hujjatlarga aylantiradi:
+
+  1. Yuklash        - PDF loyihani tanlang (yoki loyiha bo'lmasa
+                      "Loyiha yo'q - rejani chizish").
+  2. Savollar       - AI loyihada ko'rinmagan narsalarni so'raydi,
+                      javobni tugma bilan tanlaysiz (yoki "AI tipik
+                      javob qo'ysin").
+  3. Obyekt ma'lumoti - varaqlardan olingan ko'rsatkichlar, konstruksiyalar,
+                      materiallar (har biri varaq raqami bilan).
+  4. Spetsifikatsiya - bosqich -> ish -> material; har qatorda manba
+                      belgisi: loyihadan / hisob / me'yor / taxmin.
+  5. Smeta          - narxlar: o'z narxingiz, kompaniya katalogi (Prays)
+                      yoki "AI narx taklifi" (alohida belgilanadi).
+  6. Taklif (KP)    - mijozga hujjat: PDF yoki Word.
+  7. AI hisobot     - to'liq tahlil hujjati: PDF yoki Word.
+
+AI uchun INTERNET va OpenAI kaliti kerak: yuqoridagi "● AI" tugmasini
+bosib kalitni kiriting (kalit faqat sizning kompyuteringizda saqlanadi).
+Kalitsiz ham PDF jadvallari o'qiladi, lekin savollar, spetsifikatsiya
+va hisobot tuzilmaydi. Varaqlar AI xizmatiga yuboriladi va so'rovlar
+pullik: 77 varaqli loyiha ~0,5 mln token (gpt-4.1 da taxminan 1-2 $).
+
+Narxlar: "Prays" tugmasi - kompaniya katalogi. "Narxsiz pozitsiyalar
+shabloni (Excel)" tugmasi ikki varaqli fayl beradi (ishlar, materiallar);
+narxlarni to'ldirib "Excel: ... narxi" tugmasi bilan qaytaring - keyingi
+obyektlarda ular o'zi chiqadi.
+
+Muhim: AI taxmin qilgan har bir son va narx alohida belgilanadi va
+tasdiqlashingizni kutadi. Dastur hech qanday sonni yashirmaydi:
+narxsiz qatorlar jamiga kirmaydi va sanab ko'rsatiladi.
 
 =========================================================================
 TIL

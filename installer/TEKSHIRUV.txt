@@ -18,11 +18,27 @@ Kamchilik topsangiz quyidagicha yozing:
 [ ] PPR — kartalar, resurs gistogrammasi, ishlar qoplanishi
 
 -------------------------------------------------------------------------
-2. TEKSHIRUVLAR
+2. AI TAHLIL (loyihadan smeta va taklif)
 -------------------------------------------------------------------------
-[ ] AI loyiha tekshiruvi — nomuvofiqliklar ro'yxati chiqadi
-[ ] AI smeta tekshiruvi — pozitsiyalar va signallar
-[ ] Har signal bosilganda tegishli joyga olib boradi
+[ ] "● AI" tugmasi orqali OpenAI kaliti kiritiladi va saqlanadi
+[ ] 1. Yuklash: PDF loyiha tanlanadi, jadvallar o'qiladi, AI varaqlarni
+    o'qiydi (jarayon va vaqt ko'rinib turadi, to'xtatish mumkin)
+[ ] "Loyiha yo'q - rejani chizish": kontur chiziladi, maydon va perimetr
+    hisoblanadi, davom etiladi
+[ ] 2. Savollar: variant tanlanadi, "boshqa javob" yoziladi,
+    "AI tipik javob qo'ysin" ishlaydi
+[ ] 3. Obyekt ma'lumoti: ko'rsatkichlar, loyihadan olingan materiallar,
+    konstruksiyalar soni tuzatiladi
+[ ] 4. Spetsifikatsiya tuziladi; har qatorda manba belgisi; miqdor
+    tahrirlanadi, ish qo'shiladi/olib tashlanadi, qidiruv ishlaydi
+[ ] 5. Smeta: narx kiritiladi ("faqat shu smeta" / "katalogga"),
+    AI narx taklifi va "Smetani AI ga tekshirtirish" ishlaydi,
+    topilmalar bir tugmada qo'llanadi; Excel/PDF saqlanadi
+[ ] Prays: Excel shablon olinadi, to'ldirib qaytariladi, narxlar
+    keyingi obyektda o'zi chiqadi
+[ ] 6. Taklif (KP): rekvizitlar, rang, to'lov jadvali; PDF va Word
+[ ] 7. AI hisobot: matn yoziladi, jadvallar to'g'ri; PDF va Word ochiladi
+[ ] AI smeta tekshiruvi (alohida bo'lim) - pozitsiyalar va signallar
 [ ] "Ma'lumot yo'q" holatida hukm chiqarilmasligi (soxta son yo'q)
 
 -------------------------------------------------------------------------
