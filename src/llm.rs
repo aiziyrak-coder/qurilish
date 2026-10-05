@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_ENDPOINT: &str = "https://api.openai.com/v1/chat/completions";
 
 /// Sukut bo'yicha model.
-pub const DEFAULT_MODEL: &str = "gpt-4o-mini";
+pub const DEFAULT_MODEL: &str = "gpt-5-mini";
 
 /// Tanlash uchun tayyor modellar. Ro'yxat yopiq emas — sozlamada istalgan
 /// nom yozilishi mumkin, chunki xizmat modellari vaqt o'tishi bilan
@@ -41,13 +41,15 @@ pub const DEFAULT_MODEL: &str = "gpt-4o-mini";
 /// Haqiqiy loyihada sinalgan: kichik model (`gpt-4o-mini`) sonlarni
 /// adashtirdi va qatorlarni tashlab ketdi, `gpt-4.1` esa varaqni to'liq
 /// o'qidi. Shuning uchun o'qish suhbat modelidan alohida sozlanadi.
-pub const EXTRACT_MODEL: &str = "gpt-4.1";
+pub const EXTRACT_MODEL: &str = "gpt-5";
 
 pub const MODELS: &[&str] = &[
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4.1-mini",
+    "gpt-5",
+    "gpt-5-mini",
     "gpt-4.1",
+    "gpt-4.1-mini",
+    "gpt-4o",
+    "gpt-4o-mini",
     "o4-mini",
 ];
 

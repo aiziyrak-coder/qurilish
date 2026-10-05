@@ -629,11 +629,20 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(6.0);
             }
             // Avval javob kutayotganlar; javob berilganlar pastda, yig'ilgan.
-            let open_first: Vec<(usize, &crate::smeta::Question)> = m
+            let rank = |q: &crate::smeta::Question| match q.impact.as_str() {
+                "high" => 0,
+                "medium" => 1,
+                _ => 2,
+            };
+            let mut open: Vec<(usize, &crate::smeta::Question)> = m
                 .questions
                 .iter()
                 .enumerate()
                 .filter(|(_, q)| q.answer.trim().is_empty())
+                .collect();
+            open.sort_by_key(|(_, q)| rank(q));
+            let open_first: Vec<(usize, &crate::smeta::Question)> = open
+                .into_iter()
                 .chain(
                     m.questions
                         .iter()
@@ -669,8 +678,31 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                             .show(ui, |ui| {
                                 ui.label(RichText::new(&q.topic).size(10.5));
                             });
+                        // Ta'sir darajasi — qaysi savol qimmatroq.
+                        let (label, color) = match q.impact.as_str() {
+                            "high" => (t("sm_impact_high"), theme::danger()),
+                            "medium" => (t("sm_impact_medium"), theme::warn()),
+                            "low" => (t("sm_impact_low"), theme::muted()),
+                            _ => ("", theme::muted()),
+                        };
+                        if !label.is_empty() {
+                            egui::Frame::new()
+                                .fill(color.gamma_multiply(0.16))
+                                .corner_radius(8)
+                                .inner_margin(egui::Margin::symmetric(6, 1))
+                                .show(ui, |ui| {
+                                    ui.label(RichText::new(label).size(10.5).color(color));
+                                });
+                        }
                         ui.label(RichText::new(&q.text).size(12.5).strong());
                     });
+                    if !q.why.is_empty() {
+                        ui.label(
+                            RichText::new(format!("{} {}", t("sm_q_why"), q.why))
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                    }
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
                         for o in &q.options {

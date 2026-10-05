@@ -1964,6 +1964,7 @@ mod screen_tests {
                     text: "Tom turi?".into(),
                     options: vec!["Sendvich".into(), "Profnastil".into()],
                     answer: "Sendvich".into(),
+                    ..Default::default()
                 }],
                 ..Default::default()
             };

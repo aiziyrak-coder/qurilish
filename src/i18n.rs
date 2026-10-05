@@ -653,6 +653,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "sm_questions_wait" => ("AI savollarni tuzyapti…", "AI готовит вопросы…"),
         "sm_answered" => ("Javob berildi:", "Отвечено:"),
         "sm_q_answered" => ("Javob berilganlar", "Отвеченные"),
+        "sm_impact_high" => ("ta'siri yuqori", "влияние высокое"),
+        "sm_impact_medium" => ("ta'siri o'rta", "влияние среднее"),
+        "sm_impact_low" => ("ta'siri past", "влияние низкое"),
+        "sm_q_why" => ("Nega muhim:", "Почему важно:"),
         "sm_questions_refresh" => ("Savollarni qayta so'rash", "Запросить вопросы заново"),
         "sm_build_spec" => ("Spetsifikatsiyani tuzish", "Собрать спецификацию"),
         "sm_rebuild_spec" => ("Spetsifikatsiyani qayta tuzish", "Пересобрать спецификацию"),
@@ -1789,8 +1793,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "tk_ai_model" => ("Model", "Модель"),
         "tk_ai_model_hint" => (
-            "Haqiqiy loyihada sinalgan: gpt-4.1 varaqni to'liq o'qidi, kichik model (gpt-4o-mini) sonlarni adashtirdi.",
-            "Проверено на реальном проекте: gpt-4.1 читает лист полностью, малая модель (gpt-4o-mini) путает числа.",
+            "gpt-5 — eng kuchli va eng yangi (sukut bo'yicha). gpt-4.1 haqiqiy loyihada sinalgan va ishonchli; kichik modellar (mini) sonlarni adashtirishi mumkin.",
+            "gpt-5 — самая сильная и новая (по умолчанию). gpt-4.1 проверена на реальном проекте; малые модели (mini) могут путать числа.",
         ),
         "tk_ai_no_key" => (
             "AI kaliti kiritilmagan — yuqoridagi «● AI» tugmasi orqali kiriting.",

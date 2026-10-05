@@ -117,6 +117,12 @@ pub struct Question {
     /// Bo'sh — javob berilmagan (ma'lumot yo'q).
     #[serde(default)]
     pub answer: String,
+    /// Nega bu savol muhim — qiymatga ta'siri (AI izohi).
+    #[serde(default)]
+    pub why: String,
+    /// Ta'sir darajasi: `high` / `medium` / `low`.
+    #[serde(default)]
+    pub impact: String,
 }
 
 /// Bitta varaqdan AI ajratib olgan narsa.
