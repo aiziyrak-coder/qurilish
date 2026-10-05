@@ -870,6 +870,9 @@ pub struct App {
     pub takeoff_path: Option<std::path::PathBuf>,
     /// Spetsifikatsiyada ochiq bosqich.
     pub smeta_open: Option<usize>,
+    /// «Boshqa javob» maydonidagi yozilayotgan matn: savol o'rni va matn.
+    /// Har kadrda qayta tuzilmasin — aks holda harf yozib bo'lmasdi.
+    pub question_draft: (usize, String),
     /// Prays (katalog) ko'rinishi ochiqmi — bosqichlar o'rnida.
     pub catalog_open: bool,
     /// Katalogdagi qidiruv.
@@ -1125,6 +1128,7 @@ impl App {
             smeta_note: String::new(),
             takeoff_path: None,
             smeta_open: None,
+            question_draft: (usize::MAX, String::new()),
             catalog_open: false,
             catalog_query: String::new(),
             sketch_open: false,
@@ -6597,6 +6601,51 @@ mod live {
             ));
         }
         std::fs::write(std::env::temp_dir().join("qurai_hints.txt"), log).unwrap();
+    }
+
+    /// Saqlangan smetaga savollarni qayta so'rash. `QURAI_LIVE_DB`, `QURAI_LIVE_OUT`.
+    #[test]
+    #[ignore]
+    fn questions_on_a_saved_smeta() {
+        let (Ok(src), Ok(out)) = (
+            std::env::var("QURAI_LIVE_DB"),
+            std::env::var("QURAI_LIVE_OUT"),
+        ) else {
+            return;
+        };
+        let Some((p, id)) = out.split_once('|') else {
+            return;
+        };
+        let keydb = crate::db::Db::open(&std::path::PathBuf::from(&src)).expect("baza");
+        let key = keydb.get_setting("llm_key").unwrap_or_default();
+        let mut app = App::new(crate::db::Db::open(&std::path::PathBuf::from(p)).expect("baza"));
+        app.set_llm_key(&key);
+        app.select_project(id.parse().expect("id"));
+        app.edit_smeta(|m| m.questions.clear());
+        app.start_questions();
+        assert!(app.questions_rx.is_some(), "{}", app.smeta_note);
+        while app.questions_rx.is_some() {
+            app.poll_questions();
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        let m = app.smeta.clone().expect("smeta");
+        let mut log = format!(
+            "savollar {} | note: {} | ctx {} belgi
+",
+            m.questions.len(),
+            app.smeta_note,
+            app.questions_context().chars().count()
+        );
+        for q in &m.questions {
+            log.push_str(&format!(
+                "  ? [{}] {} | {} | {}\n",
+                q.topic,
+                q.text,
+                q.options.join(" / "),
+                q.answer
+            ));
+        }
+        std::fs::write(std::env::temp_dir().join("qurai_questions.txt"), log).unwrap();
     }
 
     /// Saqlangan smetaga AI hisobot matni. `QURAI_LIVE_DB`, `QURAI_LIVE_OUT`.

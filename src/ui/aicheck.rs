@@ -628,7 +628,30 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                 });
                 ui.add_space(6.0);
             }
-            for (i, q) in m.questions.iter().enumerate() {
+            // Avval javob kutayotganlar; javob berilganlar pastda, yig'ilgan.
+            let open_first: Vec<(usize, &crate::smeta::Question)> = m
+                .questions
+                .iter()
+                .enumerate()
+                .filter(|(_, q)| q.answer.trim().is_empty())
+                .chain(
+                    m.questions
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, q)| !q.answer.trim().is_empty()),
+                )
+                .collect();
+            let mut shown_done_head = false;
+            for (i, q) in open_first {
+                if !q.answer.trim().is_empty() && !shown_done_head {
+                    shown_done_head = true;
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(format!("{} ({})", t("sm_q_answered"), m.answered()))
+                            .strong()
+                            .color(theme::muted()),
+                    );
+                }
                 card(ui, |ui| {
                     ui.horizontal(|ui| {
                         let answered = !q.answer.trim().is_empty();
@@ -656,19 +679,39 @@ fn questions_tab(ui: &mut egui::Ui, app: &mut App) {
                                 answer = Some((i, if on { String::new() } else { o.clone() }));
                             }
                         }
-                        // Variantlardan tashqari javob.
-                        let mut text = if q.options.contains(&q.answer) {
-                            String::new()
+                        // Variantlardan tashqari javob. Yozilayotgan matn
+                        // `app.question_draft` da turadi: maydon kadrdan
+                        // kadrga qayta tuzilsa, harflar yo'qolardi.
+                        if app.question_draft.0 != i {
+                            let mut shown = if q.options.contains(&q.answer) {
+                                String::new()
+                            } else {
+                                q.answer.clone()
+                            };
+                            let resp = ui.add(
+                                egui::TextEdit::singleline(&mut shown)
+                                    .hint_text(t("sm_answer_other"))
+                                    .desired_width(260.0),
+                            );
+                            if resp.gained_focus() || resp.changed() {
+                                app.question_draft = (i, shown);
+                            }
                         } else {
-                            q.answer.clone()
-                        };
-                        let resp = ui.add(
-                            egui::TextEdit::singleline(&mut text)
-                                .hint_text(t("sm_answer_other"))
-                                .desired_width(260.0),
-                        );
-                        if resp.lost_focus() && !text.trim().is_empty() {
-                            answer = Some((i, text.trim().to_string()));
+                            let resp = ui.add(
+                                egui::TextEdit::singleline(&mut app.question_draft.1)
+                                    .hint_text(t("sm_answer_other"))
+                                    .desired_width(260.0),
+                            );
+                            let enter =
+                                resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            if (resp.lost_focus() || enter)
+                                && !app.question_draft.1.trim().is_empty()
+                            {
+                                answer = Some((i, app.question_draft.1.trim().to_string()));
+                                app.question_draft = (usize::MAX, String::new());
+                            } else if resp.lost_focus() {
+                                app.question_draft = (usize::MAX, String::new());
+                            }
                         }
                     });
                 });

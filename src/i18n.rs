@@ -647,11 +647,12 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "sm_col_sheet" => ("Varaq nomi", "Название листа"),
         "sm_questions_title" => ("Obyekt tafsilotlarini aniqlaymiz", "Уточним детали объекта"),
         "sm_questions_hint" => (
-            "AI loyihadan topganini o'zi to'ldirdi. Qolganiga javob bering yoki bo'sh qoldiring — bo'sh javob «taxmin» bo'lib smetaga tushadi va belgilanadi.",
-            "AI заполнил то, что нашёл в проекте. На остальное ответьте или оставьте пустым — пустой ответ попадёт в смету как «допущение» и будет помечен.",
+            "AI faqat loyihada yo'q yoki qarama-qarshi narsalarni so'raydi (8 tagacha). Variantni bosing yoki «boshqa javob» ga yozib Enter bosing. Bo'sh qoldirsangiz — smetada «taxmin» bo'lib belgilanadi.",
+            "AI спрашивает только то, чего нет в проекте или что противоречиво (до 8 вопросов). Нажмите вариант или впишите «другой ответ» и Enter. Пустой ответ попадёт в смету как «допущение».",
         ),
         "sm_questions_wait" => ("AI savollarni tuzyapti…", "AI готовит вопросы…"),
         "sm_answered" => ("Javob berildi:", "Отвечено:"),
+        "sm_q_answered" => ("Javob berilganlar", "Отвеченные"),
         "sm_questions_refresh" => ("Savollarni qayta so'rash", "Запросить вопросы заново"),
         "sm_build_spec" => ("Spetsifikatsiyani tuzish", "Собрать спецификацию"),
         "sm_rebuild_spec" => ("Spetsifikatsiyani qayta tuzish", "Пересобрать спецификацию"),
@@ -1214,6 +1215,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "llm_err_auth" => (
             "API kaliti qabul qilinmadi. Kalitni sozlamada tekshiring.",
             "API-ключ не принят. Проверьте ключ в настройках.",
+        ),
+        "llm_err_quota" => (
+            "AI hisobida mablag' yoki limit tugagan — OpenAI balansini to'ldiring (platform.openai.com → Billing). Kalit to'g'ri, lekin so'rovlar rad etilyapti.",
+            "На счёте AI закончились средства или лимит — пополните баланс OpenAI (platform.openai.com → Billing). Ключ верный, но запросы отклоняются.",
         ),
         "llm_err_rate" => (
             "So'rovlar chegarasi yoki hisobdagi mablag' tugadi. Birozdan keyin urinib ko'ring.",

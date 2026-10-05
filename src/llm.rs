@@ -177,6 +177,9 @@ pub enum Error {
     Auth,
     /// So'rovlar chegarasi yoki hisobdagi mablag' tugadi (429).
     RateLimit,
+    /// Hisobdagi mablag' yoki limit tugagan (429 `insufficient_quota`).
+    /// Qayta urinish foydasiz — balansni to'ldirish kerak.
+    Quota(String),
     /// Xizmat tomonidagi xato (5xx).
     Service(u16),
     /// So'rov noto'g'ri tuzilgan yoki model nomi noma'lum (400/404).
@@ -194,6 +197,7 @@ impl Error {
             Error::NotConfigured => "llm_err_not_configured",
             Error::Auth => "llm_err_auth",
             Error::RateLimit => "llm_err_rate",
+            Error::Quota(_) => "llm_err_quota",
             Error::Service(_) => "llm_err_service",
             Error::BadRequest(_) => "llm_err_request",
             Error::Transport(_) => "llm_err_transport",
@@ -216,6 +220,7 @@ impl std::fmt::Display for Error {
             Error::NotConfigured => write!(f, "not_configured"),
             Error::Auth => write!(f, "auth"),
             Error::RateLimit => write!(f, "rate_limit"),
+            Error::Quota(m) => write!(f, "quota: {m}"),
             Error::Service(code) => write!(f, "service {code}"),
             Error::BadRequest(e) | Error::Transport(e) | Error::BadReply(e) => write!(f, "{e}"),
         }
@@ -409,6 +414,9 @@ pub fn error_for_status(code: u16, body: &str) -> Error {
         .unwrap_or_else(|| body.chars().take(200).collect());
     match code {
         401 | 403 => Error::Auth,
+        // 429 ikki xil: vaqtinchalik tezlik chegarasi (qayta urinsa
+        // bo'ladi) va hisob tugagani (`insufficient_quota` — foydasiz).
+        429 if detail.contains("quota") || detail.contains("billing") => Error::Quota(detail),
         429 => Error::RateLimit,
         500..=599 => Error::Service(code),
         _ => Error::BadRequest(detail),
@@ -561,23 +569,35 @@ fn send_extract(cfg: &Config, system: &str, parts: &[Part], json: bool) -> Resul
         .timeout()
         .max(std::time::Duration::from_secs(EXTRACT_TIMEOUT));
     let agent = ureq::AgentBuilder::new().timeout(timeout).build();
-    let result = agent
-        .post(cfg.endpoint.trim())
-        .set("Authorization", &format!("Bearer {}", cfg.api_key.trim()))
-        .set("Content-Type", "application/json")
-        .send_string(&body);
-    match result {
-        Ok(resp) => {
-            let text = resp
-                .into_string()
-                .map_err(|e| Error::Transport(e.to_string()))?;
-            parse_reply(&text)
+    // Tezlik chegarasi va xizmat xatosida ikki marta qayta uriniladi —
+    // kutish bilan. Hisob tugagan bo'lsa (`Quota`) — darhol qaytadi.
+    let mut attempt = 0;
+    loop {
+        let result = agent
+            .post(cfg.endpoint.trim())
+            .set("Authorization", &format!("Bearer {}", cfg.api_key.trim()))
+            .set("Content-Type", "application/json")
+            .send_string(&body);
+        let out = match result {
+            Ok(resp) => {
+                let text = resp
+                    .into_string()
+                    .map_err(|e| Error::Transport(e.to_string()))?;
+                parse_reply(&text)
+            }
+            Err(ureq::Error::Status(code, resp)) => {
+                let body = resp.into_string().unwrap_or_default();
+                Err(error_for_status(code, &body))
+            }
+            Err(e) => Err(Error::Transport(e.to_string())),
+        };
+        match &out {
+            Err(Error::RateLimit) | Err(Error::Service(_)) if attempt < 2 => {
+                attempt += 1;
+                std::thread::sleep(std::time::Duration::from_secs(4 * attempt as u64 + 2));
+            }
+            _ => return out,
         }
-        Err(ureq::Error::Status(code, resp)) => {
-            let body = resp.into_string().unwrap_or_default();
-            Err(error_for_status(code, &body))
-        }
-        Err(e) => Err(Error::Transport(e.to_string())),
     }
 }
 
@@ -806,6 +826,12 @@ mod tests {
         assert_eq!(error_for_status(401, body), Error::Auth);
         assert_eq!(error_for_status(403, "{}"), Error::Auth);
         assert_eq!(error_for_status(429, "{}"), Error::RateLimit);
+        let quota = error_for_status(
+            429,
+            r#"{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota"}}"#,
+        );
+        assert!(matches!(quota, Error::Quota(ref m) if m.contains("quota")));
+        assert!(!quota.retryable());
         assert_eq!(error_for_status(503, "{}"), Error::Service(503));
         // Noma'lum model — sabab matni saqlanadi.
         let bad = error_for_status(404, r#"{"error":{"message":"The model does not exist"}}"#);
