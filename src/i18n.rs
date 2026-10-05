@@ -471,7 +471,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "sm_catalog_template_file" => ("Narx_shabloni", "Shablon_cen"),
         "sm_cost_estimate" => ("Taxminiy sarf:", "Ориентировочный расход:"),
-        "sm_cost_estimate_unit" => ("ming token (PDF faqat jadvalli varaqlarga yuboriladi)", "тыс. токенов (PDF отправляется только для листов с таблицами)"),
+        "sm_cost_estimate_unit" => ("ming token (varaqlar guruhlab, matn bilan o'qiladi)", "тыс. токенов (листы читаются группами, текстом)"),
         "sm_pay_title" => ("To'lov", "Платёж"),
         "sm_col_value" => ("Qiymat", "Значение"),
         "sm_col_construct" => ("Konstruksiya", "Конструкция"),

@@ -226,6 +226,12 @@ TZ I.3 dagi beshta tekshiruv ham bajariladi:
 > narx taklifi, savollarni solishtirish, tipik javob va takrorlar «mini»
 > modelda (`cheap_cfg`). O'lchov: `app::live::context_sizes_on_a_saved_smeta`.
 >
+> Varaqlar guruhlab o'qiladi (`smeta_ai::batches`: 4 varaqgacha yoki 16 ming
+> belgi bir so'rovda, faqat matn; PDF faqat matni 800 belgidan kam varaqqa).
+> AL QUDRA: 77 varaq → 29 so'rov, PDF 6 tasida (`batches_on_a_real_pdf`).
+> Ko'rsatkich nomlari aniq («Площадь застройки АБК»); yalang'och «Площадь»,
+> «Объём» hisobotga kirmaydi (`tidy_facts`).
+>
 > Ochiq chegaralar: (1) kalit bo'lmasa faqat jadvallar o'qiladi — savol va
 > spetsifikatsiya tuzilmaydi; (2) narx katalogi bo'sh boshlanadi — mijoz
 > o'z praysini kiritadi (Excel import orqali narx bazasiga yoki smetada

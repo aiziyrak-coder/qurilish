@@ -420,12 +420,32 @@ pub fn tidy_facts(facts: &[Fact]) -> Vec<Fact> {
         "ширин",
         "периметр",
     ];
+    // Yalang'och nom («Площадь», «Объём») hech narsa demaydi — qaysi bino,
+    // qaysi element noma'lum. Bunday ko'rsatkich hisobotga kirmaydi.
+    const BARE: [&str; 12] = [
+        "площадь",
+        "объем",
+        "объём",
+        "высота",
+        "длина",
+        "ширина",
+        "размер",
+        "размеры",
+        "отметка",
+        "толщина",
+        "количество",
+        "кол-во",
+    ];
     let mut seen: Vec<String> = Vec::new();
     let mut main = Vec::new();
     let mut rest = Vec::new();
     for f in facts {
         let name = f.name.trim().to_lowercase();
-        if name.is_empty() || f.value.trim().is_empty() || NOISE.iter().any(|n| name.starts_with(n))
+        let bare = name.trim_end_matches([':', '.', ',']).trim();
+        if name.is_empty()
+            || f.value.trim().is_empty()
+            || NOISE.iter().any(|n| name.starts_with(n))
+            || BARE.contains(&bare)
         {
             continue;
         }
@@ -1168,6 +1188,10 @@ mod tests {
             f("", "x", 1),
         ];
         let out = tidy_facts(&facts);
+        assert!(
+            tidy_facts(&[f("Площадь", "609.9", 5), f("Объём", "12", 5)]).is_empty(),
+            "yalang'och nomlar tashlanadi"
+        );
         let names: Vec<&str> = out.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(
             names,

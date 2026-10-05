@@ -448,23 +448,14 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
                 if ui.button(t("sm_start_ai")).clicked() {
                     start_ai = true;
                 }
-                // Xarajat taxmini: matn bilan ~2 ming, PDF bilan ~6 ming token
-                // bir varaqqa; PDF faqat jadvalli varaqlarga ketadi.
+                // Xarajat taxmini: varaqlar guruhlab, faqat matn bilan
+                // yuboriladi — bir varaqqa ~1,5 ming token.
                 let pages = app.takeoff.as_ref().map(|t| t.pages).unwrap_or(0);
-                let with_pdf = app
-                    .takeoff
-                    .as_ref()
-                    .map(|t| {
-                        let mut p: Vec<usize> = t.tables.iter().map(|x| x.page).collect();
-                        p.dedup();
-                        p.len()
-                    })
-                    .unwrap_or(0);
                 ui.label(
                     RichText::new(format!(
                         "{} ~{} {}",
                         t("sm_cost_estimate"),
-                        pages * 2 + with_pdf * 4,
+                        (pages * 3).div_ceil(2),
                         t("sm_cost_estimate_unit")
                     ))
                     .size(13.0)

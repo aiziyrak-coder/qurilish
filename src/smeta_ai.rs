@@ -31,26 +31,33 @@ const WORKERS: usize = 4;
 
 // ================================================================ 1. Varaq
 
-const PAGE_SYSTEM: &str = "Ты — инженер ПТО. Тебе дан ОДИН лист проектной документации: PDF листа и текст, \
-который программа извлекла из него (строки сверху вниз, ячейки разделены « | »). Опиши, что на листе, в JSON.\n\
-Правила: числа переписывай точно как на листе, ничего не вычисляй и не придумывай; чего нет на листе — того нет в ответе.\n\
-Поля:\n\
+const PAGE_SYSTEM: &str = "Ты — инженер ПТО. Тебе дан текст одного или нескольких листов проектной документации, \
+извлечённый программой (каждый лист начинается строкой «=== Лист N ===»; строки сверху вниз, ячейки разделены « | »). \
+Иногда приложен PDF листа. Опиши каждый лист отдельно, в JSON.\n\
+Правила: числа переписывай точно как на листе, ничего не вычисляй и не придумывай; чего нет на листе — того нет в ответе. \
+Листы не смешивай: данные листа N только в объекте с page=N.\n\
+Поля листа:\n\
+page — номер листа из строки «=== Лист N ===».\n\
 sheet — название листа из штампа или заголовка.\n\
 kind — раздел: ГП, АР, КЖ, КМ, КМД, ВК, ОВ, ЭОМ, ПЗ, ТХ или другое.\n\
-facts — размеры и показатели, прямо написанные на листе: площадь застройки, общая площадь, строительный объём, \
-этажность, высота этажа, размеры в осях, шаг колонн, отметки, количество квартир/помещений, толщина стен, \
-марка бетона, класс арматуры, тип кровли, тип фундамента и т.п. Формат: {\"name\":\"\",\"value\":\"\",\"unit\":\"\"}.\n\
+facts — технико-экономические показатели и размеры, прямо написанные на листе: площадь застройки, общая/полезная площадь, \
+строительный объём, этажность, высота этажа, размеры в осях, шаг колонн, отметки, количество квартир/помещений, толщина \
+стен, марка бетона, класс арматуры, тип кровли, тип фундамента, нагрузки, сейсмичность. name ОБЯЗАТЕЛЬНО самодостаточный: \
+с объектом/зданием/элементом и маркой — «Площадь застройки АБК», «Объём бетона B20 фундамента Фм1», «Высота этажа корпуса №1», \
+«Толщина наружных стен корпуса №2». Голые «Площадь», «Объём», «Высота», «Отметка» — ошибка. Масштаб, формат, стадию, номера \
+листов, отметки осей и размерные цепочки не включай. Не больше 20 фактов на лист, самые важные для сметы. \
+Формат: {\"name\":\"\",\"value\":\"\",\"unit\":\"\"}.\n\
 lists — таблицы, кроме спецификаций конструкций: ведомости объёмов работ, экспликации помещений с площадями, \
 ведомости отделки, ведомости полов, проёмов, перемычек, расхода стали. Формат: {\"title\":\"\",\"columns\":[],\"rows\":[[]]}, \
-каждая строка — массив ячеек по столбцам.\n\
+каждая строка — массив ячеек по столбцам. Экспликация помещений — это list, а не десятки facts «Площадь».\n\
 tables — спецификации конструкций и изделий (столбцы Поз./Марка, Обозначение, Наименование, Кол., Масса, Примечание) \
 и «Выборка металла» с листов КМ/КМД (designation=\"КМД\", name=\"<профиль> <марка стали>\", mass=<масса общая>, unit=\"кг\"; \
 строки Итого не включай). Строки-заголовки внутри таблицы передавай отдельной строкой с заполненным только name. \
 Формат строки: {\"pos\":\"\",\"designation\":\"\",\"name\":\"\",\"qty\":\"\",\"mass\":\"\",\"total\":\"\",\"unit\":\"\"}; \
 total — масса общая либо число из столбца «Примечание». Название таблицы — в title.\n\
 owner — марка конструкции, которой посвящён весь лист, если она прямо написана в штампе (например «К3»), иначе \"\".\n\
-Штамп, примечания, ведомости чертежей и ссылочных документов не включай.\n\
-Ответ — только JSON: {\"sheet\":\"\",\"kind\":\"\",\"owner\":\"\",\"facts\":[],\"lists\":[],\"tables\":[]}";
+Штамп, примечания, ведомости чертежей и ссылочных документов не включай. Пустые поля не описывай словами — пустой массив.\n\
+Ответ — только JSON: {\"pages\":[{\"page\":1,\"sheet\":\"\",\"kind\":\"\",\"owner\":\"\",\"facts\":[],\"lists\":[],\"tables\":[]}]}";
 
 /// Bitta varaq natijasi.
 #[derive(Debug, Clone, Default)]
@@ -68,6 +75,37 @@ fn cell(v: Option<&serde_json::Value>) -> String {
         Some(serde_json::Value::Bool(b)) => b.to_string(),
         _ => String::new(),
     }
+}
+
+/// Guruh javobini varaqlarga ajratadi: har varaq uchun o'z JSON matni.
+/// Eski bir varaqli javob (`pages` yo'q) ham qabul qilinadi.
+pub fn split_pages(body: &str, wanted: &[usize]) -> Vec<(usize, Result<String, String>)> {
+    let v: serde_json::Value = match serde_json::from_str(strip(body)) {
+        Ok(v) => v,
+        Err(e) => {
+            return wanted
+                .iter()
+                .map(|p| (*p, Err(format!("JSON: {e}"))))
+                .collect()
+        }
+    };
+    let Some(pages) = v.get("pages").and_then(|p| p.as_array()) else {
+        // Bir varaqli javob.
+        return wanted.iter().map(|p| (*p, Ok(v.to_string()))).collect();
+    };
+    wanted
+        .iter()
+        .map(|p| {
+            let found = pages
+                .iter()
+                .find(|x| x.get("page").and_then(|n| n.as_u64()) == Some(*p as u64))
+                .or_else(|| (wanted.len() == 1 && pages.len() == 1).then(|| &pages[0]));
+            match found {
+                Some(x) => (*p, Ok(x.to_string())),
+                None => (*p, Err("javobda bu varaq yo'q".to_string())),
+            }
+        })
+        .collect()
 }
 
 /// Varaq javobini o'qiydi.
@@ -150,7 +188,47 @@ fn readable(pieces: &[crate::pdfread::Piece]) -> bool {
     words >= 8
 }
 
+/// Bir so'rovga sig'adigan matn (belgi). Tizim ko'rsatmasi har so'rovda
+/// takrorlanadi — varaqlar guruhlansa u amortizatsiya bo'ladi.
+const BATCH_CHARS: usize = 16_000;
+/// Bir so'rovda ko'pi bilan shuncha varaq: model varaqlarni aralashtirmasin.
+const BATCH_PAGES: usize = 4;
+/// Shu belgidan kam matnli varaq «kam matnli»: unga PDF ham qo'shiladi.
+const SPARSE_CHARS: usize = 800;
+
+/// Varaqlarni so'rov guruhlariga bo'ladi: ketma-ket, matn byudjeti va
+/// varaq soni bo'yicha. Kam matnli varaq alohida ketadi (PDF bilan).
+pub fn batches(sizes: &[(usize, usize)]) -> Vec<Vec<usize>> {
+    let mut out: Vec<Vec<usize>> = Vec::new();
+    let mut cur: Vec<usize> = Vec::new();
+    let mut cur_chars = 0usize;
+    for &(page, chars) in sizes {
+        if chars < SPARSE_CHARS {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+                cur_chars = 0;
+            }
+            out.push(vec![page]);
+            continue;
+        }
+        if !cur.is_empty() && (cur.len() >= BATCH_PAGES || cur_chars + chars > BATCH_CHARS) {
+            out.push(std::mem::take(&mut cur));
+            cur_chars = 0;
+        }
+        cur.push(page);
+        cur_chars += chars;
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
 /// Barcha o'qiladigan varaqlarni fon iplarida AI ga beradi.
+///
+/// Token tejash: varaqlar faqat matn bilan, guruhlab yuboriladi (tizim
+/// ko'rsatmasi 77 marta emas, ~25 marta ketadi); PDF ko'rinishi faqat
+/// matni kam varaqlarga (chizma, kam yozuv) qo'shiladi.
 pub fn spawn_pages(cfg: Config, path: PathBuf, cancel: Arc<AtomicBool>) -> Receiver<PageMsg> {
     let (tx, rx) = channel();
     std::thread::spawn(move || {
@@ -168,36 +246,42 @@ pub fn spawn_pages(cfg: Config, path: PathBuf, cancel: Arc<AtomicBool>) -> Recei
                 return;
             }
         };
-        let plan: Vec<usize> = pages
+        let texts: Vec<(usize, String)> = pages
             .iter()
             .enumerate()
             .filter(|(_, p)| readable(p))
-            .map(|(i, _)| i + 1)
+            .map(|(i, p)| (i + 1, crate::aitake::page_text(p)))
             .collect();
-        let _ = tx.send(PageMsg::Plan(plan.clone()));
-        let queue = Mutex::new(VecDeque::from(plan));
+        let plan: Vec<usize> = texts.iter().map(|t| t.0).collect();
+        let _ = tx.send(PageMsg::Plan(plan));
+        let sizes: Vec<(usize, usize)> =
+            texts.iter().map(|(p, t)| (*p, t.chars().count())).collect();
+        let text_of = |page: usize| -> &str {
+            texts
+                .iter()
+                .find(|t| t.0 == page)
+                .map(|t| t.1.as_str())
+                .unwrap_or("")
+        };
+        let queue = Mutex::new(VecDeque::from(batches(&sizes)));
         std::thread::scope(|s| {
             for _ in 0..WORKERS {
                 s.spawn(|| loop {
                     if cancel.load(Ordering::Relaxed) {
                         break;
                     }
-                    let Some(page) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
+                    let Some(batch) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
                         break;
                     };
-                    let page_text = crate::aitake::page_text(&pages[page - 1]);
-                    // PDF ning o'zi (ko'rish) qimmat: u faqat jadvalli varaqlarga
-                    // yoki matni juda kam varaqlarga yuboriladi. Reja va qirqim
-                    // varaqlarida matnning o'zi yetarli — sifat tushmaydi, token
-                    // ikki-uch barobar kamayadi.
-                    let has_table = !crate::takeoff::tables(&pages[page - 1], page).is_empty();
-                    let sparse = page_text.chars().count() < 800;
-                    let text = format!("Лист {page}. Текст, извлечённый программой:\n{page_text}");
+                    let mut text = String::new();
+                    for page in &batch {
+                        text.push_str(&format!("=== Лист {page} ===\n{}\n\n", text_of(*page)));
+                    }
                     let mut parts = vec![Part::Text(text)];
-                    if has_table || sparse {
-                        if let Some(data) = crate::aitake::page_pdf(&doc, page as u32) {
+                    if batch.len() == 1 && text_of(batch[0]).chars().count() < SPARSE_CHARS {
+                        if let Some(data) = crate::aitake::page_pdf(&doc, batch[0] as u32) {
                             parts.push(Part::Pdf {
-                                name: format!("list-{page}.pdf"),
+                                name: format!("list-{}.pdf", batch[0]),
                                 data,
                             });
                         }
@@ -209,13 +293,30 @@ pub fn spawn_pages(cfg: Config, path: PathBuf, cancel: Arc<AtomicBool>) -> Recei
                             result = llm::extract(&cfg, PAGE_SYSTEM, &parts);
                         }
                     }
-                    let out = result.map_err(|e| e.to_string()).and_then(|a| {
-                        parse_page(&a.text, page).map(|mut p| {
-                            p.tokens = a.usage.total;
-                            p
-                        })
-                    });
-                    if tx.send(PageMsg::Page(page, out)).is_err() {
+                    let mut stop = false;
+                    match result {
+                        Ok(a) => {
+                            // Tokenlar guruh varaqlariga teng bo'linadi.
+                            let share = a.usage.total / batch.len().max(1) as u32;
+                            for (page, body) in split_pages(&a.text, &batch) {
+                                let out = body.and_then(|b| parse_page(&b, page)).map(|mut p| {
+                                    p.tokens = share;
+                                    p
+                                });
+                                if tx.send(PageMsg::Page(page, out)).is_err() {
+                                    stop = true;
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            for page in &batch {
+                                if tx.send(PageMsg::Page(*page, Err(e.to_string()))).is_err() {
+                                    stop = true;
+                                }
+                            }
+                        }
+                    }
+                    if stop {
                         break;
                     }
                 });
@@ -859,6 +960,72 @@ mod tests {
         )
         .unwrap();
         assert_eq!(rem, vec![("s2.w1".to_string(), "дубль".to_string())]);
+    }
+
+    #[test]
+    fn batches_group_pages_by_budget_and_isolate_sparse_ones() {
+        // 1–3 sig'adi, 4 kam matnli — alohida, 5–8 to'rtta, 9 qoladi.
+        let sizes: Vec<(usize, usize)> = vec![
+            (1, 5000),
+            (2, 5000),
+            (3, 5000),
+            (4, 200),
+            (5, 3000),
+            (6, 3000),
+            (7, 3000),
+            (8, 3000),
+            (9, 3000),
+        ];
+        assert_eq!(
+            batches(&sizes),
+            vec![vec![1, 2, 3], vec![4], vec![5, 6, 7, 8], vec![9]]
+        );
+        assert_eq!(batches(&[(1, 20_000)]), vec![vec![1]]);
+        assert!(batches(&[]).is_empty());
+    }
+
+    #[test]
+    fn grouped_reply_is_split_per_page() {
+        let body = r#"{"pages":[{"page":3,"sheet":"A","facts":[],"lists":[],"tables":[]},{"page":4,"sheet":"B","facts":[],"lists":[],"tables":[]}]}"#;
+        let parts = split_pages(body, &[3, 4, 5]);
+        assert!(parts[0].1.as_ref().unwrap().contains("\"A\""));
+        assert!(parts[1].1.as_ref().unwrap().contains("\"B\""));
+        assert!(parts[2].1.is_err());
+        // Eski bir varaqli javob ham o'qiladi.
+        let single = r#"{"sheet":"C","facts":[],"lists":[],"tables":[]}"#;
+        let out = parse_page(&split_pages(single, &[7])[0].1.clone().unwrap(), 7).unwrap();
+        assert_eq!(out.digest.sheet, "C");
+    }
+
+    /// Haqiqiy PDF da so'rovlar soni (tarmoqsiz). `QURAI_LIVE_PDF`.
+    /// Natija `%TEMP%\qurai_batches.txt`.
+    #[test]
+    #[ignore]
+    fn batches_on_a_real_pdf() {
+        let Ok(path) = std::env::var("QURAI_LIVE_PDF") else {
+            return;
+        };
+        let pages = crate::pdfread::pages(&PathBuf::from(&path)).expect("pdf");
+        let sizes: Vec<(usize, usize)> = pages
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| readable(p))
+            .map(|(i, p)| (i + 1, crate::aitake::page_text(p).chars().count()))
+            .collect();
+        let b = batches(&sizes);
+        let chars: usize = sizes.iter().map(|s| s.1).sum();
+        let sparse = sizes.iter().filter(|s| s.1 < SPARSE_CHARS).count();
+        let log = format!(
+            "varaqlar {} / o'qiladigan {} / so'rovlar {} / PDF bilan {} / matn {} belgi
+",
+            pages.len(),
+            sizes.len(),
+            b.len(),
+            sparse,
+            chars
+        );
+        std::fs::write(std::env::temp_dir().join("qurai_batches.txt"), &log).unwrap();
+        assert!(b.len() < sizes.len());
     }
 
     #[test]

@@ -66,12 +66,12 @@ AI uchun INTERNET va OpenAI kaliti kerak: yuqoridagi "● AI" tugmasini
 bosib kalitni kiriting (kalit faqat sizning kompyuteringizda saqlanadi).
 Kalitsiz ham PDF jadvallari o'qiladi, lekin savollar, spetsifikatsiya
 va hisobot tuzilmaydi. Varaqlar AI xizmatiga yuboriladi va so'rovlar
-pullik. Token tejaladi: varaq PDF ko'rinishida faqat jadvalli varaqlar
-uchun yuboriladi (qolganiga matn yetadi), bosqichlar qisqa kontekst
-bilan tuziladi, oddiy vazifalar (narx taklifi, savollarni solishtirish,
-takrorlar) arzon "mini" modelda. 77 varaqli loyiha avval ~0,5 mln token
-edi; endi taxminan 2 barobar kam bo'lishi kutiladi (jonli o'lchov
-hisob to'ldirilgach).
+pullik. Token tejaladi: varaqlar guruhlab (4 tagacha bir so'rovda), faqat
+matn bilan o'qiladi (77 varaq = 29 so'rov; PDF rasm faqat matni kam
+6 varaqqa), bosqichlar qisqa kontekst bilan tuziladi, oddiy vazifalar
+(narx taklifi, savollarni solishtirish, takrorlar) arzon "mini" modelda.
+77 varaqli loyiha avval ~0,5 mln token edi; endi 2,5-3 barobar kam
+bo'lishi kutiladi (jonli o'lchov hisob to'ldirilgach).
 
 Narxlar: "Prays" tugmasi - kompaniya katalogi. "Narxsiz pozitsiyalar
 shabloni (Excel)" tugmasi ikki varaqli fayl beradi (ishlar, materiallar);
