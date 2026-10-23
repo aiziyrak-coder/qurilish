@@ -36,6 +36,10 @@ const FONTS: [&str; 4] = [
 
 /// Tizim shriftini o'qiydi.
 pub(crate) fn font_bytes() -> Option<Vec<u8>> {
+    // Brauzerda tizim shrifti yo'q — ilova ichidagisi (kirill bor).
+    if let Some(b) = crate::plat::EMBEDDED_FONT {
+        return Some(b.to_vec());
+    }
     FONTS.iter().find_map(|p| std::fs::read(p).ok())
 }
 

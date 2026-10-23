@@ -44,6 +44,10 @@ const LANGS: &str = "rus+uzb+uzb_cyrl+eng";
 
 /// Tesseract topilgan yo'l yoki `None`.
 pub fn tesseract() -> Option<PathBuf> {
+    // Brauzerda tashqi dastur ishga tushmaydi.
+    if crate::plat::WEB {
+        return None;
+    }
     CANDIDATES.iter().find_map(|c| runnable(c))
 }
 
@@ -66,6 +70,9 @@ fn runnable(cmd: &str) -> Option<PathBuf> {
 
 /// OCR mavjudligi haqidagi holat — sozlamalarda ko'rsatiladi.
 pub fn status() -> &'static str {
+    if crate::plat::WEB {
+        return crate::i18n::t("ocr_web");
+    }
     match (tesseract().is_some(), pdf_to_image().is_some()) {
         (true, true) => crate::i18n::t("ocr_ready"),
         (true, false) => crate::i18n::t("ocr_images_only"),
@@ -73,10 +80,20 @@ pub fn status() -> &'static str {
     }
 }
 
+/// OCR yo'qligi haqidagi xabar: brauzerda boshqacha (u yerda umuman yo'q).
+fn missing() -> String {
+    crate::i18n::t(if crate::plat::WEB {
+        "ocr_web"
+    } else {
+        "ocr_missing"
+    })
+    .to_string()
+}
+
 /// Rasmdan matn o'qiydi.
 pub fn image_text(path: &Path) -> Result<String, String> {
     let Some(exe) = tesseract() else {
-        return Err(crate::i18n::t("ocr_missing").to_string());
+        return Err(missing());
     };
     let out = Command::new(exe)
         .arg(path)
@@ -113,7 +130,7 @@ pub fn pdf_text(path: &Path) -> Result<String, String> {
         return Err(crate::i18n::t("ocr_no_pdftoppm").to_string());
     };
     if tesseract().is_none() {
-        return Err(crate::i18n::t("ocr_missing").to_string());
+        return Err(missing());
     }
 
     let dir = std::env::temp_dir().join(format!("qurai_ocr_{}", std::process::id()));

@@ -6740,7 +6740,59 @@ impl Db {
 
         // ---------- Jurnal: 60 kunlik tarix ----------
         // Yozuvlar dam olish kunlarisiz, ish mazmuni davrga qarab o'zgaradi.
-        let works: [(&str, &str, &str, &str, f64); 6] = [
+        // Obyekt past qavatli bo'lsa (bog'cha, 2 qavat) — o'z ishlari:
+        // aks holda 2 qavatli binoning jurnalida «6-qavat» yozilardi.
+        let floors = self
+            .projects()
+            .ok()
+            .and_then(|ps| ps.into_iter().find(|p| p.id == pid))
+            .map(|p| p.floors)
+            .unwrap_or(9);
+        let low: [(&str, &str, &str, &str, f64); 6] = [
+            (
+                "3",
+                "1-qavat g'isht devorlarini terish",
+                "Кладка кирпичных стен 1 этажа",
+                "m3",
+                38.0,
+            ),
+            (
+                "3",
+                "2-qavat oralig'ini betonlash",
+                "Бетонирование перекрытия 2 этажа",
+                "m3",
+                54.0,
+            ),
+            (
+                "4",
+                "Tom yopishning yog'och konstruksiyasi",
+                "Деревянная конструкция кровли",
+                "m2",
+                120.0,
+            ),
+            (
+                "4",
+                "Tom gidroizolyatsiyasi",
+                "Гидроизоляция кровли",
+                "m2",
+                160.0,
+            ),
+            (
+                "5",
+                "Isitish quvurlarini yotqizish",
+                "Прокладка труб отопления",
+                "m",
+                85.0,
+            ),
+            (
+                "5",
+                "Elektr kabellarini tortish",
+                "Прокладка электрокабеля",
+                "m",
+                140.0,
+            ),
+        ];
+        let high: [(&str, &str, &str, &str, f64); 6] = [
             (
                 "5",
                 "Poydevor plitasini betonlash",
@@ -6784,6 +6836,7 @@ impl Db {
                 3.8,
             ),
         ];
+        let works = if floors <= 3 { low } else { high };
         // Ob-havo: qurilish jurnalida u har kuni qayd etiladi.
         let weather: [(&str, &str, f64); 5] = [
             ("Ochiq", "Ясно", 27.0),
@@ -8669,6 +8722,12 @@ impl Db {
         if !self.workers(pid).is_empty() {
             return;
         }
+        // Past qavatli obyektda matnlar unga mos (7-qavat emas).
+        let low_rise = self
+            .projects()
+            .ok()
+            .and_then(|ps| ps.into_iter().find(|p| p.id == pid))
+            .is_some_and(|p| p.floors <= 3);
         let today = chrono::Local::now().date_naive();
         let tasks = self.tasks(pid).unwrap_or_default();
         let by_wbs = |w: &str| tasks.iter().find(|t| t.wbs == w).map(|t| t.id);
@@ -9286,10 +9345,11 @@ impl Db {
             } else {
                 "Kran zonasi"
             },
-            if ru {
-                "Падение доски с 7 этажа, пострадавших нет"
-            } else {
-                "7-qavatdan taxta tushdi, jabrlangan yo'q"
+            match (ru, low_rise) {
+                (true, false) => "Падение доски с 7 этажа, пострадавших нет",
+                (false, false) => "7-qavatdan taxta tushdi, jabrlangan yo'q",
+                (true, true) => "Падение доски с лесов 2 этажа, пострадавших нет",
+                (false, true) => "2-qavat havozasidan taxta tushdi, jabrlangan yo'q",
             },
             if ru {
                 "Установить защитный козырек"

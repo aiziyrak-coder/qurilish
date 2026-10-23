@@ -3704,10 +3704,7 @@ fn report_tab(ui: &mut egui::Ui, app: &mut App) {
     let lines = report_lines(app, &m, &view);
     let mut area = egui::ScrollArea::vertical().auto_shrink([false, false]);
     // Ekran suratlari uchun: tashqaridan berilgan siljish.
-    if let Some(off) = std::env::var("QURAI_SCROLL")
-        .ok()
-        .and_then(|v| v.parse::<f32>().ok())
-    {
+    if let Some(off) = crate::plat::diag("scroll").and_then(|v| v.parse::<f32>().ok()) {
         area = area.vertical_scroll_offset(off);
     }
     area.show(ui, |ui| {

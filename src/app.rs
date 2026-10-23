@@ -979,35 +979,36 @@ impl App {
             schedule: Schedule::default(),
             progress: Progress::default(),
             // Diagnostika uchun: QURAI_SCREEN=passport bilan kerakli ekranda ochiladi.
-            screen: match std::env::var("QURAI_SCREEN").as_deref() {
-                Ok("portfolio") => Screen::Portfolio,
-                Ok("notices") => Screen::Notices,
-                Ok("director") => Screen::Director,
-                Ok("inspections") => Screen::Inspections,
-                Ok("contracts") => Screen::Contracts,
-                Ok("passport") => Screen::Passport,
-                Ok("gantt") => Screen::Gantt,
-                Ok("ppr") => Screen::Ppr,
-                Ok("aicheck") => Screen::AiCheck,
-                Ok("estimate") => Screen::Estimate,
-                Ok("execdocs") => Screen::ExecDocs,
-                Ok("journal") => Screen::Journal,
-                Ok("materials") => Screen::Materials,
-                Ok("warehouse") => Screen::Warehouse,
-                Ok("requests") => Screen::Requests,
-                Ok("purchases") => Screen::Purchases,
-                Ok("sales") => Screen::Sales,
-                Ok("deals") => Screen::Deals,
-                Ok("timesheet") => Screen::Timesheet,
-                Ok("quality") => Screen::Quality,
-                Ok("safety") => Screen::Safety,
-                Ok("machines") => Screen::Machines,
-                Ok("analytics") => Screen::Analytics,
-                Ok("foreman") => Screen::Foreman,
-                Ok("supervision") => Screen::TechSupervision,
-                Ok("client") => Screen::Client,
-                Ok("copilot") => Screen::Copilot,
-                Ok("settings") => Screen::Settings,
+            screen: match crate::plat::diag("screen").as_deref() {
+                Some("portfolio") => Screen::Portfolio,
+                Some("notices") => Screen::Notices,
+                Some("director") => Screen::Director,
+                Some("inspections") => Screen::Inspections,
+                Some("contracts") => Screen::Contracts,
+                Some("passport") => Screen::Passport,
+                Some("gantt") => Screen::Gantt,
+                Some("ppr") => Screen::Ppr,
+                Some("aicheck") => Screen::AiCheck,
+                Some("estimate") => Screen::Estimate,
+                Some("execdocs") => Screen::ExecDocs,
+                Some("journal") => Screen::Journal,
+                Some("materials") => Screen::Materials,
+                Some("warehouse") => Screen::Warehouse,
+                Some("requests") => Screen::Requests,
+                Some("purchases") => Screen::Purchases,
+                Some("sales") => Screen::Sales,
+                Some("deals") => Screen::Deals,
+                Some("timesheet") => Screen::Timesheet,
+                Some("quality") => Screen::Quality,
+                Some("safety") => Screen::Safety,
+                Some("machines") => Screen::Machines,
+                Some("analytics") => Screen::Analytics,
+                Some("foreman") => Screen::Foreman,
+                Some("supervision") => Screen::TechSupervision,
+                Some("client") => Screen::Client,
+                Some("copilot") => Screen::Copilot,
+                Some("settings") => Screen::Settings,
+                Some("reports") => Screen::Reports,
                 _ => Screen::Dashboard,
             },
             today: chrono::Local::now().date_naive(),
@@ -1326,6 +1327,17 @@ impl App {
         self.auto_check_estimate = false;
         self.auto_check_ppr = false;
         self.reload_project_data();
+        // Tekshiruvlar obyekt ochilishi bilan ishlaydi: aks holda bosh sahifa
+        // va bildirishnomalar PPR yoki smeta ekrani ochilmaguncha kritik
+        // nomuvofiqliklarni ko'rmasdi (sinovda: 12 o'rniga 13 ta signal).
+        for module in [
+            crate::domain::IssueModule::Project,
+            crate::domain::IssueModule::Estimate,
+            crate::domain::IssueModule::Ppr,
+        ] {
+            self.auto_check(module);
+        }
+        self.refresh_notices();
         // Hisob allaqachon bor obyektda sahifa natijadan ochiladi; yo'q
         // bo'lsa — yuklash qadamidan.
         self.check_tab = if self.smeta.as_ref().is_some_and(|m| !m.stages.is_empty()) {
@@ -1336,7 +1348,7 @@ impl App {
             CheckTab::Upload
         };
         // Sinov va ekran suratlari uchun bosqichni tashqaridan tanlash.
-        if let Ok(tab) = std::env::var("QURAI_TAB") {
+        if let Some(tab) = crate::plat::diag("tab") {
             self.catalog_open = tab.eq_ignore_ascii_case("catalog");
             self.sketch_open = tab.eq_ignore_ascii_case("sketch");
             if self.sketch_open {
@@ -3340,7 +3352,7 @@ impl App {
             self.smeta_note = t("sm_no_key").to_string();
             return;
         }
-        let Some(path) = self.takeoff_path.clone().filter(|p| p.exists()) else {
+        let Some(path) = self.takeoff_path.clone().filter(|p| crate::plat::exists(p)) else {
             self.smeta_note = t("sm_no_file").to_string();
             return;
         };

@@ -50,6 +50,8 @@ class Cdp:
     def __init__(self, ws_url):
         self.ws = websocket.create_connection(ws_url, timeout=120, suppress_origin=True)
         self.n = 0
+        # Konsol xatolari va ushlanmagan istisnolar (panika shu yerga tushadi).
+        self.errors = []
 
     def call(self, method, **params):
         self.n += 1
@@ -57,10 +59,31 @@ class Cdp:
         self.ws.send(json.dumps({"id": my, "method": method, "params": params}))
         while True:
             msg = json.loads(self.ws.recv())
+            self.note(msg)
             if msg.get("id") == my:
                 if "error" in msg:
                     raise RuntimeError(f"{method}: {msg['error']}")
                 return msg.get("result", {})
+
+    def note(self, msg):
+        m = msg.get("method")
+        if m == "Runtime.exceptionThrown":
+            d = msg["params"]["exceptionDetails"]
+            self.errors.append("exception: " + str(d.get("exception", {}).get("description", d.get("text")))[:300])
+        elif m == "Runtime.consoleAPICalled" and msg["params"].get("type") in ("error", "assert"):
+            args = msg["params"].get("args", [])
+            self.errors.append("console: " + " ".join(str(a.get("value", a.get("description", ""))) for a in args)[:300])
+
+    def drain(self, seconds):
+        # Kutish paytida ham hodisalarni o'qib, xatolarni yig'adi.
+        end = time.time() + seconds
+        self.ws.settimeout(0.5)
+        while time.time() < end:
+            try:
+                self.note(json.loads(self.ws.recv()))
+            except Exception:
+                pass
+        self.ws.settimeout(120)
 
     def mouse(self, kind, x, y, **extra):
         self.call("Input.dispatchMouseEvent", type=kind, x=x, y=y, **extra)
@@ -111,7 +134,7 @@ def main():
             elif "open" in step:
                 cdp.call("Page.navigate", url=step["open"])
             elif "wait" in step:
-                time.sleep(step["wait"])
+                cdp.drain(step["wait"])
             elif "click" in step:
                 x, y = step["click"]
                 cdp.mouse("mouseMoved", x, y)
@@ -174,6 +197,8 @@ def main():
             returnByValue=True,
         )
         print("downloads", r.get("result", {}).get("value"))
+        for e in cdp.errors:
+            print("ERROR", e)
     finally:
         proc.terminate()
 

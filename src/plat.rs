@@ -89,6 +89,33 @@ pub async fn sleep(d: Duration) {
     let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
 }
 
+/// Ilova ichidagi shrift (DejaVu Sans, erkin litsenziya —
+/// assets/fonts/LICENSE_DEJAVU.txt). Faqat brauzer yig'ilishida: u yerda
+/// tizim shriftlari o'qilmaydi. Interfeys va PDF eksporti shuni ishlatadi.
+#[cfg(target_arch = "wasm32")]
+pub const EMBEDDED_FONT: Option<&[u8]> = Some(include_bytes!("../assets/fonts/DejaVuSans.ttf"));
+#[cfg(not(target_arch = "wasm32"))]
+pub const EMBEDDED_FONT: Option<&[u8]> = None;
+
+/// Diagnostika sozlamasi: desktopda muhit o'zgaruvchisi (`QURAI_SCREEN`),
+/// brauzerda manzil parametri (`?screen=`). Sinov va suratga olish uchun.
+pub fn diag(name: &str) -> Option<String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::var(format!("QURAI_{}", name.to_uppercase())).ok()
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        let search = web_sys::window()?.location().search().ok()?;
+        search
+            .trim_start_matches('?')
+            .split('&')
+            .filter_map(|kv| kv.split_once('='))
+            .find(|(k, _)| *k == name)
+            .map(|(_, v)| v.to_string())
+    }
+}
+
 // =================================================================== Fayl
 //
 // Desktopda fayl — diskdagi fayl. Brauzerda disk yo'q:

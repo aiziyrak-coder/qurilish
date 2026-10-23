@@ -41,7 +41,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 .color(theme::muted()),
         );
         ui.add_space(10.0);
-        super::assistant_button(ui, app);
+        // Yordamchi tugmasi ekran sarlavhasida — bu yerda takrorlanmaydi.
     });
     ui.add_space(6.0);
     kpi_row(ui, app);

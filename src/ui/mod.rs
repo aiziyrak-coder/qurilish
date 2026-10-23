@@ -55,11 +55,7 @@ pub fn install_fonts(ctx: &Context) {
     // Brauzerda tizim shriftlari o'qilmaydi: erkin litsenziyali DejaVu Sans
     // ilova ichida keladi (kirill, lotin, strelka va belgilar bor).
     // Litsenziyasi: assets/fonts/LICENSE_DEJAVU.txt.
-    #[cfg(target_arch = "wasm32")]
-    let embedded: Option<Vec<u8>> =
-        Some(include_bytes!("../../assets/fonts/DejaVuSans.ttf").to_vec());
-    #[cfg(not(target_arch = "wasm32"))]
-    let embedded: Option<Vec<u8>> = None;
+    let embedded: Option<Vec<u8>> = crate::plat::EMBEDDED_FONT.map(|b| b.to_vec());
     let found = embedded.or_else(|| candidates.iter().find_map(|p| std::fs::read(p).ok()));
     if let Some(bytes) = found {
         {
@@ -114,6 +110,9 @@ pub fn install_theme(ctx: &Context) {
     style.visuals.selection.stroke = Stroke::new(1.0_f32, theme::accent());
     style.visuals.window_corner_radius = 8.into();
     style.spacing.item_spacing = egui::vec2(8.0, 7.0);
+    // Aylantirish chizig'i doim ko'rinadi: keng jadval o'ngdan «kesilgan»
+    // ko'rinmasin — davomi borligi ko'zga tashlansin.
+    style.spacing.scroll = egui::style::ScrollStyle::solid();
     style.spacing.button_padding = egui::vec2(12.0, 6.0);
 
     style.text_styles.insert(

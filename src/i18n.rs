@@ -2812,6 +2812,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Tesseract topildi, lekin pdftoppm yo'q — skan PDF emas, faqat rasm o'qiladi",
             "Tesseract найден, но нет pdftoppm — читаются только изображения, не PDF-скан",
         ),
+        "ocr_web" => (
+            "Brauzer versiyasida skanerdan matn o'qish (OCR) yo'q — maydonlarni qo'lda to'ldiring yoki desktop dasturidan foydalaning.",
+            "В браузерной версии распознавания сканов (OCR) нет — заполните поля вручную или используйте настольную программу.",
+        ),
         "ocr_missing" => (
             "Matnni tanish dasturi topilmadi. Tesseract OCR ni o'rnating (rus va o'zbek til paketlari bilan) — ilova uni shu kompyuterdan chaqiradi, hech narsa internetga chiqmaydi.",
             "Программа распознавания не найдена. Установите Tesseract OCR (с языковыми пакетами для русского и узбекского) — приложение вызывает её локально, ничего не уходит в интернет.",

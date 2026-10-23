@@ -215,9 +215,15 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
                 ui.painter().circle_filled(rect.center(), 4.0, colour);
 
                 let reserve = if narrow { 130.0 } else { 220.0 };
-                ui.add_sized(
-                    [(ui.available_width() - reserve).max(110.0), 20.0],
-                    egui::Label::new(RichText::new(&n.title).size(13.0)).truncate(),
+                // Sarlavha chapga tekislanadi (`add_sized` markazga qo'yardi).
+                let tw = (ui.available_width() - reserve).max(110.0);
+                ui.allocate_ui_with_layout(
+                    vec2(tw, 20.0),
+                    egui::Layout::left_to_right(egui::Align::Center),
+                    |ui| {
+                        ui.set_min_width(tw);
+                        ui.add(egui::Label::new(RichText::new(&n.title).size(13.0)).truncate());
+                    },
                 );
                 ui.label(
                     RichText::new(if n.days > 0 {

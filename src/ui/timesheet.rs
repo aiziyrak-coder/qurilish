@@ -77,11 +77,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     );
     ui.add_space(8.0);
 
-    // Modul yordamchisi (TZ XIII.40).
-    ui.horizontal(|ui| {
-        super::assistant_button(ui, app);
-    });
-    ui.add_space(6.0);
+    // Modul yordamchisi (TZ XIII.40) ekran sarlavhasida — bu yerda takrorlanmaydi.
     kpi_row(ui, app, week);
     ui.add_space(10.0);
 

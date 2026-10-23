@@ -141,6 +141,12 @@ fn main() {
                 return;
             }
         };
+        // Sinov uchun: `?demo=1` — baza bo'sh bo'lsa namuna obyekt yaratiladi.
+        if crate::plat::diag("demo").as_deref() == Some("1")
+            && database.projects().map(|p| p.is_empty()).unwrap_or(false)
+        {
+            let _ = database.seed_demo();
+        }
         let canvas = web_sys::window()
             .and_then(|w| w.document())
             .and_then(|d| d.get_element_by_id("qurai_canvas"))
