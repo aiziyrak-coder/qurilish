@@ -900,8 +900,8 @@ fn analysis_window(ctx: &egui::Context, app: &mut App) {
         .open(&mut open)
         .collapsible(false)
         .resizable(false)
-        .default_width(560.0)
-        .anchor(egui::Align2::RIGHT_TOP, [-16.0, 64.0])
+        .default_width(super::fit_width(ctx, 560.0))
+        .anchor(egui::Align2::RIGHT_TOP, [-8.0, 64.0])
         .show(ctx, |ui| {
             let section = |ui: &mut egui::Ui, title: &str, color: Color32| {
                 ui.add_space(6.0);

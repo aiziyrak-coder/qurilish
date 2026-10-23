@@ -1168,28 +1168,28 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                         // 4-qator: fotofiksatsiya (TZ V).
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
-                            if ui
+                            let start = ui
                                 .small_button(t("jr_add_media"))
                                 .on_hover_text(t("jr_add_media_hint"))
-                                .clicked()
+                                .clicked();
+                            // Kalit yozuvga bog'liq: brauzerda fayl kech
+                            // keladi va aynan shu yozuvga tushishi kerak.
+                            if let Some(files) = crate::plat::FileDialog::new()
+                                .add_filter(
+                                    t("jr_media"),
+                                    &[
+                                        "jpg", "jpeg", "png", "bmp", "webp", "mp4", "mov", "avi",
+                                        "mkv", "webm", "3gp",
+                                    ],
+                                )
+                                .pick_files_when(start, &format!("jr_media_{}", e.id))
                             {
-                                if let Some(files) = rfd::FileDialog::new()
-                                    .add_filter(
-                                        t("jr_media"),
-                                        &[
-                                            "jpg", "jpeg", "png", "bmp", "webp", "mp4", "mov",
-                                            "avi", "mkv", "webm", "3gp",
-                                        ],
-                                    )
-                                    .pick_files()
-                                {
-                                    let mut all = photo_list(&e.photos);
-                                    for f in files {
-                                        all.push(f.to_string_lossy().to_string());
-                                    }
-                                    e.photos = all.join(";");
-                                    changed = true;
+                                let mut all = photo_list(&e.photos);
+                                for f in files {
+                                    all.push(crate::plat::keep(&f));
                                 }
+                                e.photos = all.join(";");
+                                changed = true;
                             }
                             let list = photo_list(&e.photos);
                             if list.is_empty() {
@@ -1258,11 +1258,14 @@ fn entries(ui: &mut egui::Ui, app: &mut App) {
                                             if resp.on_hover_text(path).clicked() {
                                                 open_path(path);
                                             }
-                                        } else if std::path::Path::new(path).exists() {
-                                            let img = egui::Image::new(format!("file://{path}"))
-                                                .fit_to_exact_size(vec2(104.0, 72.0))
-                                                .maintain_aspect_ratio(true)
-                                                .corner_radius(4);
+                                        } else if crate::plat::exists(std::path::Path::new(path)) {
+                                            let img = egui::Image::new(crate::plat::image_uri(
+                                                ui.ctx(),
+                                                path,
+                                            ))
+                                            .fit_to_exact_size(vec2(104.0, 72.0))
+                                            .maintain_aspect_ratio(true)
+                                            .corner_radius(4);
                                             if ui
                                                 .add(egui::ImageButton::new(img).frame(false))
                                                 .on_hover_text(t("open_file"))

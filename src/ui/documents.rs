@@ -55,10 +55,10 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
 
     card_frame(ui, t("card_documents"), w, |ui| {
         ui.horizontal(|ui| {
-            if ui.button(t("add_document")).clicked() {
-                if let Some(files) = rfd::FileDialog::new().pick_files() {
-                    added = files;
-                }
+            let start = ui.button(t("add_document")).clicked();
+            if let Some(files) = crate::plat::FileDialog::new().pick_files_when(start, "documents")
+            {
+                added = files;
             }
             ui.label(
                 RichText::new(t("documents_hint"))
@@ -91,11 +91,11 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 for d in &photos {
-                    let exists = std::path::Path::new(&d.path).exists();
+                    let exists = crate::plat::exists(std::path::Path::new(&d.path));
                     ui.vertical(|ui| {
                         ui.set_width(148.0);
                         if exists {
-                            let uri = format!("file://{}", d.path);
+                            let uri = crate::plat::image_uri(ui.ctx(), &d.path);
                             let img = egui::Image::new(uri)
                                 .fit_to_exact_size(egui::vec2(148.0, 100.0))
                                 .maintain_aspect_ratio(true)
@@ -151,7 +151,7 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
         for doc in &app.documents {
             let mut d = doc.clone();
             let mut changed = false;
-            let exists = std::path::Path::new(&d.path).exists();
+            let exists = crate::plat::exists(std::path::Path::new(&d.path));
             ui.horizontal(|ui| {
                 changed |= ui
                     .add_sized([300.0, 22.0], egui::TextEdit::singleline(&mut d.name))
@@ -315,7 +315,7 @@ pub fn card(ui: &mut egui::Ui, app: &mut App, w: f32) {
                     section: Section::None,
                     name,
                     format,
-                    path: path.to_string_lossy().to_string(),
+                    path: crate::plat::keep(&path),
                     sheets: 0,
                     added_at: String::new(),
                     revision: String::new(),

@@ -22,6 +22,16 @@ pub type Result = std::result::Result<PathBuf, String>;
 /// yozmaydi), shuning uchun avval o'chirib olamiz: foydalanuvchi saqlash
 /// oynasida ustiga yozishni allaqachon tasdiqlagan.
 pub fn create(conn: &rusqlite::Connection, dest: &Path) -> Result {
+    // Brauzerda disk yo'q: baza baytlari olinib, fayl yuklab beriladi.
+    #[cfg(target_arch = "wasm32")]
+    {
+        let data = conn
+            .serialize(rusqlite::MAIN_DB)
+            .map_err(|e| e.to_string())?;
+        crate::plat::write(dest, &data).map_err(|e| e.to_string())?;
+        return Ok(dest.to_path_buf());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
     if dest.exists() {
         std::fs::remove_file(dest).map_err(|e| e.to_string())?;
     }

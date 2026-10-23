@@ -1433,7 +1433,7 @@ fn save_timesheet(app: &mut App) {
     };
     let (from, to) = super::doc_period(app);
     let file = format!("T-13-{}.xlsx", to.format("%Y-%m"));
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("doc_save"))
         .set_file_name(&file)
         .add_filter("Excel", &["xlsx"])

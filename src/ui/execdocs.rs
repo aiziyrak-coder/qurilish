@@ -181,7 +181,7 @@ fn save_archive(app: &mut App) {
     };
     let (from, to) = super::doc_period(app);
     let file = format!("ARX-{}.xlsx", to.format("%Y-%m-%d"));
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("doc_save"))
         .set_file_name(&file)
         .add_filter("Excel", &["xlsx"])
@@ -891,7 +891,7 @@ fn build_act(app: &mut App, ks2: bool) {
         if ks2 { "KS-2" } else { "KS-3" },
         to.format("%Y-%m")
     );
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("doc_save"))
         .set_file_name(&file)
         .add_filter("Excel", &["xlsx"])
@@ -947,7 +947,7 @@ fn write_aosr(app: &mut App, doc_id: i64) {
         doc.number.replace(['/', '\\', ' '], "-"),
         doc.date.format("%Y-%m-%d")
     );
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("doc_save"))
         .set_file_name(&file)
         .add_filter("Excel", &["xlsx"])

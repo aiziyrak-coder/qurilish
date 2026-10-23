@@ -13,6 +13,37 @@ use crate::app::{App, Screen};
 use crate::docgen::{Cell, Table};
 use crate::i18n::t;
 
+/// Ekranda eksport jadvali bo'lishi mumkinmi — arzon tekshiruv (jadval
+/// har kadrda qurilmaydi). Bo'sh jadval bosilganda xabar chiqadi.
+pub fn exportable(screen: Screen) -> bool {
+    matches!(
+        screen,
+        Screen::Portfolio
+            | Screen::Inspections
+            | Screen::Contracts
+            | Screen::Gantt
+            | Screen::Ppr
+            | Screen::AiCheck
+            | Screen::Estimate
+            | Screen::ExecDocs
+            | Screen::Journal
+            | Screen::Materials
+            | Screen::Warehouse
+            | Screen::Requests
+            | Screen::Purchases
+            | Screen::Timesheet
+            | Screen::Quality
+            | Screen::Safety
+            | Screen::Machines
+            | Screen::Deals
+            | Screen::Sales
+            | Screen::Analytics
+            | Screen::Reports
+            | Screen::Notices
+            | Screen::Director
+    )
+}
+
 /// Joriy ekran uchun eksport jadvali. Ekranda jadval bo'lmasa — `None`.
 pub fn table_of(app: &App, screen: Screen) -> Option<Table> {
     let mut table = match screen {

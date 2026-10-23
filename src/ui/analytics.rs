@@ -209,13 +209,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             .unwrap_or_else(|| t("dash").to_string());
         let text = analytics::report(&inp, &name);
         let file = format!("qurai-{}.txt", app.today.format("%Y-%m-%d"));
-        if let Some(path) = rfd::FileDialog::new()
+        if let Some(path) = crate::plat::FileDialog::new()
             .set_title(t("an_export"))
             .set_file_name(&file)
             .add_filter("Text", &["txt"])
             .save_file()
         {
-            match std::fs::write(&path, text) {
+            match crate::plat::write(&path, text.as_bytes()) {
                 Ok(()) => app.notify(format!("{} {}", t("an_export_done"), path.display())),
                 Err(e) => app.notify(format!("{}: {e}", t("an_export_failed"))),
             }

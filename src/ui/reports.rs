@@ -248,7 +248,7 @@ fn save_one(app: &mut App, table: &crate::docgen::Table, pdf: bool) {
         return;
     }
     let ext = if pdf { "pdf" } else { "xlsx" };
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("rp_save"))
         .set_file_name(file_name(app, table, ext))
         .add_filter(if pdf { "PDF" } else { "Excel" }, &[ext])
@@ -290,7 +290,7 @@ fn save_all(app: &mut App, period: Period) {
         "qurai-{code}-hisobotlar-{}.xlsx",
         app.today.format("%Y-%m-%d")
     );
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("rp_save_all"))
         .set_file_name(name)
         .add_filter("Excel", &["xlsx"])

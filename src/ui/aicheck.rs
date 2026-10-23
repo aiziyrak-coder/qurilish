@@ -51,8 +51,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             .request_repaint_after(std::time::Duration::from_millis(300));
     }
 
-    ui.horizontal(|ui| {
+    // Bosqichlar qatori ekran eni bilan cheklanadi: tor ekranda u keyingi
+    // qatorga o'raladi va pastdagi kartalarni o'ngga surib yubormaydi.
+    let full = ui.available_width();
+    ui.scope(|ui| {
+        ui.set_max_width(full);
         stepper(ui, app);
+    });
+    ui.horizontal(|ui| {
+        ui.set_max_width(full);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let n = app.catalog.works.len() + app.catalog.materials.len();
             if ui
@@ -88,89 +95,133 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
 /// Bosqichlar chizig'i: raqam, nom, izoh; tayyori belgi bilan.
 fn stepper(ui: &mut egui::Ui, app: &mut App) {
+    // Bosqichlar o'lchab qatorlarga bo'linadi: sig'magan bosqich butunligicha
+    // keyingi qatorga o'tadi (aks holda oxirgisi harflarga bo'linib qolardi).
     let current = app.check_tab;
-    ui.horizontal_wrapped(|ui| {
-        for (i, tab) in CheckTab::ALL.into_iter().enumerate() {
-            let ready = app.smeta_ready(tab);
-            let active = tab == current;
-            let fill = if active {
-                theme::accent().gamma_multiply(0.14)
+    let avail = ui.available_width();
+    let text_w = |ui: &egui::Ui, s: &str, size: f32| {
+        ui.fonts(|f| {
+            f.layout_no_wrap(
+                s.to_string(),
+                egui::FontId::proportional(size),
+                egui::Color32::WHITE,
+            )
+            .size()
+            .x
+        })
+    };
+    let widths: Vec<f32> = CheckTab::ALL
+        .iter()
+        .map(|tab| {
+            let label = text_w(ui, tab.label(), 15.0);
+            let hint = if *tab == current {
+                text_w(ui, tab.hint(), 12.0)
             } else {
-                egui::Color32::TRANSPARENT
+                0.0
             };
-            let resp = egui::Frame::new()
-                .fill(fill)
-                .corner_radius(12)
-                .inner_margin(egui::Margin::symmetric(10, 6))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        // Raqamli doira: faol — rangli, tayyor — yashil, qolgani — kulrang.
-                        let circle = if active {
-                            theme::accent()
-                        } else if ready {
-                            theme::ok()
-                        } else {
-                            theme::line()
-                        };
-                        let num_color = if active || ready {
-                            egui::Color32::WHITE
-                        } else {
-                            theme::muted()
-                        };
-                        let (r, _) =
-                            ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
-                        ui.painter().circle_filled(r.center(), 14.0, circle);
-                        ui.painter().text(
-                            r.center(),
-                            egui::Align2::CENTER_CENTER,
-                            (i + 1).to_string(),
-                            egui::FontId::proportional(14.0),
-                            num_color,
-                        );
-                        ui.vertical(|ui| {
-                            ui.spacing_mut().item_spacing.y = 1.0;
-                            ui.label(RichText::new(tab.label()).strong().size(15.0).color(
-                                if ready || active {
-                                    theme::text()
-                                } else {
-                                    theme::muted()
-                                },
-                            ));
-                            // Izoh faqat faol bosqichda: yettita bosqich bir
-                            // qatorga sig'sin, qolganlari ustiga borganda ko'rinadi.
-                            if active {
-                                ui.label(
-                                    RichText::new(tab.hint()).size(12.0).color(theme::muted()),
-                                );
-                            }
-                        });
-                    });
-                })
-                .response
-                .interact(egui::Sense::click())
-                .on_hover_text(tab.hint());
-            if resp.clicked() && (ready || tab == CheckTab::Upload) {
-                app.check_tab = tab;
-            }
-            if i < 6 {
-                // Bosqichlar orasidagi bog'lovchi chiziq.
-                let (r, _) = ui.allocate_exact_size(egui::vec2(14.0, 28.0), egui::Sense::hover());
-                let y = r.center().y;
-                let color = if app.smeta_ready(CheckTab::ALL[i + 1]) {
-                    theme::ok()
-                } else {
-                    theme::line()
-                };
-                ui.painter().line_segment(
-                    [
-                        egui::pos2(r.left() + 2.0, y),
-                        egui::pos2(r.right() - 2.0, y),
-                    ],
-                    Stroke::new(2.0_f32, color),
-                );
-            }
+            // doira + bo'shliqlar + ichki chet + bog'lovchi chiziq.
+            28.0 + 8.0 + label.max(hint) + 20.0 + 14.0 + 16.0
+        })
+        .collect();
+    let mut rows: Vec<Vec<usize>> = vec![Vec::new()];
+    let mut used = 0.0;
+    for (i, w) in widths.iter().enumerate() {
+        if used + w > avail && !rows.last().is_some_and(|r| r.is_empty()) {
+            rows.push(Vec::new());
+            used = 0.0;
         }
-    });
+        used += w;
+        if let Some(r) = rows.last_mut() {
+            r.push(i);
+        }
+    }
+    for row in rows {
+        ui.horizontal(|ui| {
+            ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+            for i in row {
+                let tab = CheckTab::ALL[i];
+                let ready = app.smeta_ready(tab);
+                let active = tab == current;
+                let fill = if active {
+                    theme::accent().gamma_multiply(0.14)
+                } else {
+                    egui::Color32::TRANSPARENT
+                };
+                let resp = egui::Frame::new()
+                    .fill(fill)
+                    .corner_radius(12)
+                    .inner_margin(egui::Margin::symmetric(10, 6))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            // Raqamli doira: faol — rangli, tayyor — yashil, qolgani — kulrang.
+                            let circle = if active {
+                                theme::accent()
+                            } else if ready {
+                                theme::ok()
+                            } else {
+                                theme::line()
+                            };
+                            let num_color = if active || ready {
+                                egui::Color32::WHITE
+                            } else {
+                                theme::muted()
+                            };
+                            let (r, _) = ui
+                                .allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+                            ui.painter().circle_filled(r.center(), 14.0, circle);
+                            ui.painter().text(
+                                r.center(),
+                                egui::Align2::CENTER_CENTER,
+                                (i + 1).to_string(),
+                                egui::FontId::proportional(14.0),
+                                num_color,
+                            );
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 1.0;
+                                ui.label(RichText::new(tab.label()).strong().size(15.0).color(
+                                    if ready || active {
+                                        theme::text()
+                                    } else {
+                                        theme::muted()
+                                    },
+                                ));
+                                // Izoh faqat faol bosqichda: yettita bosqich bir
+                                // qatorga sig'sin, qolganlari ustiga borganda ko'rinadi.
+                                if active {
+                                    ui.label(
+                                        RichText::new(tab.hint()).size(12.0).color(theme::muted()),
+                                    );
+                                }
+                            });
+                        });
+                    })
+                    .response
+                    .interact(egui::Sense::click())
+                    .on_hover_text(tab.hint());
+                if resp.clicked() && (ready || tab == CheckTab::Upload) {
+                    app.check_tab = tab;
+                }
+                if i < 6 {
+                    // Bosqichlar orasidagi bog'lovchi chiziq.
+                    let (r, _) =
+                        ui.allocate_exact_size(egui::vec2(14.0, 28.0), egui::Sense::hover());
+                    let y = r.center().y;
+                    let color = if app.smeta_ready(CheckTab::ALL[i + 1]) {
+                        theme::ok()
+                    } else {
+                        theme::line()
+                    };
+                    ui.painter().line_segment(
+                        [
+                            egui::pos2(r.left() + 2.0, y),
+                            egui::pos2(r.right() - 2.0, y),
+                        ],
+                        Stroke::new(2.0_f32, color),
+                    );
+                }
+            }
+        });
+    }
 }
 
 fn empty(ui: &mut egui::Ui, msg: &str) {
@@ -395,9 +446,17 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
 
         if let Some(job) = &app.pdf_job {
             ui.add_space(6.0);
+            // Brauzerda varaqlar ketma-ket o'qiladi — qaysi varaqdaligi ko'rinsin.
+            let total = crate::pdfread::TOTAL.load(std::sync::atomic::Ordering::Relaxed);
+            let done = crate::pdfread::DONE.load(std::sync::atomic::Ordering::Relaxed);
+            let pages = if crate::plat::WEB && total > 0 {
+                format!(" · {done}/{total} {}", t("tk_pages"))
+            } else {
+                String::new()
+            };
             ui.label(
                 RichText::new(format!(
-                    "{} · {} · {} s",
+                    "{} · {}{pages} · {} s",
                     t("pdf_reading"),
                     job.file,
                     job.started.elapsed().as_secs()
@@ -479,14 +538,15 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
         app.sketch_open = true;
         return;
     }
-    if pick {
-        if let Some(path) = rfd::FileDialog::new()
-            .set_title(t("tk_load_button"))
-            .add_filter("PDF", &["pdf", "PDF"])
-            .pick_file()
-        {
-            app.start_pdf(&path);
-        }
+    if let Some(path) = crate::plat::FileDialog::new()
+        .set_title(t("tk_load_button"))
+        .add_filter("PDF", &["pdf", "PDF"])
+        .pick_file_when(pick, "tk_pdf")
+    {
+        // Brauzerda tanlangan fayl faqat xotirada — keyingi AI bosqichlari
+        // (va sahifa yangilangandan keyin) uni qayta o'qishi uchun saqlanadi.
+        let kept = crate::plat::keep(&path);
+        app.start_pdf(std::path::Path::new(&kept));
     }
     if clear {
         app.clear_takeoff();
@@ -2174,7 +2234,7 @@ fn export_smeta(app: &mut App, pdf: bool) {
         t("sm_export_name"),
         app.today.format("%Y-%m-%d")
     );
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_file_name(&name)
         .add_filter(if pdf { "PDF" } else { "Excel" }, &[ext])
         .save_file()
@@ -2634,7 +2694,7 @@ fn draw_doc(ui: &mut egui::Ui, lines: &[DocLine], accent: egui::Color32) {
 fn export_docx(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u8; 3]) {
     use crate::docx::Block;
     let name = format!("{file}_{}.docx", app.today.format("%Y-%m-%d"));
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_file_name(&name)
         .add_filter("Word", &["docx"])
         .save_file()
@@ -2675,7 +2735,7 @@ fn export_docx(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [
 /// Hujjatni PDF ga yozadi: tik A4, jadvallar va plitkalar bilan.
 fn export_doc(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [u8; 3]) {
     let name = format!("{file}_{}.pdf", app.today.format("%Y-%m-%d"));
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_file_name(&name)
         .add_filter("PDF", &["pdf"])
         .save_file()
@@ -3288,15 +3348,16 @@ fn catalog_view(ui: &mut egui::Ui, app: &mut App) {
     if template {
         export_price_template(app);
     }
-    if let Some(work) = import {
-        if let Some(path) = rfd::FileDialog::new()
-            .set_title(t("pb_import"))
-            .add_filter(
-                t("import_file_filter"),
-                &["xlsx", "xlsm", "xls", "ods", "csv"],
-            )
-            .pick_file()
-        {
+    if let Some((files, ctx)) = crate::plat::FileDialog::new()
+        .set_title(t("pb_import"))
+        .add_filter(
+            t("import_file_filter"),
+            &["xlsx", "xlsm", "xls", "ods", "csv"],
+        )
+        .pick_ctx(import.map(|w| w.to_string()), "catalog_import", false)
+    {
+        let work = ctx == "true";
+        if let Some(path) = files.into_iter().next() {
             match app.import_catalog(&path, work) {
                 Ok(n) => app.notify(format!("{} {n}", t("pb_imported"))),
                 Err(e) => app.notify(format!("{}: {e}", t("import_failed"))),
@@ -3336,7 +3397,7 @@ fn export_price_template(app: &mut App) {
         t("sm_catalog_template_file"),
         app.today.format("%Y-%m-%d")
     );
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_file_name(&name)
         .add_filter("Excel", &["xlsx"])
         .save_file()

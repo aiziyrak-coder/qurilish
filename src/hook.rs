@@ -150,7 +150,7 @@ pub const MAX_ITEMS: usize = 20;
 ///
 /// Tarmoq ishi shu yerda, chaqiruvchi tomonda esa faqat natija — shuning
 /// uchun bu funksiya fon oqimidan chaqiriladi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send(cfg: &Config, project: &str, items: &[Item]) -> Outcome {
     if !cfg.ready() {
         return Outcome::Off;
@@ -175,7 +175,7 @@ pub fn send(cfg: &Config, project: &str, items: &[Item]) -> Outcome {
 }
 
 /// Tarmoqsiz yig'ilishda yuborish yo'q.
-#[cfg(not(feature = "sync"))]
+#[cfg(not(all(feature = "sync", not(target_arch = "wasm32"))))]
 pub fn send(_cfg: &Config, _project: &str, _items: &[Item]) -> Outcome {
     Outcome::Off
 }

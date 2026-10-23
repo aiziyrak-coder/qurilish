@@ -12,7 +12,7 @@ description = "Construction Intelligence Platform — native desktop client"
 [dependencies]
 eframe = "0.31"
 egui = "0.31"
-rusqlite = { version = "0.40", features = ["bundled", "chrono"] }
+rusqlite = { version = "0.40", features = ["bundled", "chrono", "serialize"] }
 chrono = { version = "0.4", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -23,8 +23,6 @@ calamine = "0.36.1"
 # egui bilan bir xil versiya bo'lishi shart.
 egui_extras = { version = "0.31", features = ["image"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
-# Faqat `llm` xususiyati bilan yig'iladi.
-ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
 # Excel yozish: KS-2, KS-3, M-29 va jadval eksporti uchun.
 rust_xlsxwriter = { version = "0.99.0", default-features = false }
 printpdf = { version = "0.7", default-features = false }
@@ -34,6 +32,32 @@ qrcode = { version = "0.14", default-features = false }
 zip = { version = "8", default-features = false, features = ["deflate"] }
 # Imzo va zanjir xeshi: ilova va server bitta hisobga tayanishi uchun.
 qurai-hash = { path = "hash" }
+# Asinxron fon ishlari: desktopda ip ichida, brauzerda spawn_local.
+futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
+
+# Desktop: tarmoq (`llm`, `sync` xususiyatlari). Brauzerda tarmoq `fetch`
+# orqali — `ureq` kerak emas.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
+
+# Brauzer (WebAssembly) yig'ilishi uchun: tasodifiy son, vaqt va brauzer API.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "1", features = ["v4", "js"] }
+getrandom = { version = "0.3", features = ["wasm_js"] }
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+chrono = { version = "0.4", features = ["serde", "wasmbind"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-time = "1"
+# Excel fayl sanasi brauzerda JS orqali (aks holda SystemTime vahima beradi).
+rust_xlsxwriter = { version = "0.99.0", default-features = false, features = ["wasm"] }
+# Brauzerda SQLite bazasi IndexedDB da saqlanadi.
+sqlite-wasm-vfs = "0.2"
+sqlite-wasm-rs = "0.5"
+# PDF sanasi brauzerda JS orqali olinadi.
+printpdf = { version = "0.7", default-features = false, features = ["js-sys"] }
+web-sys = { version = "0.3", features = ["Window", "Document", "HtmlCanvasElement", "HtmlElement", "Element", "Blob", "BlobPropertyBag", "Url", "HtmlAnchorElement", "Storage", "Request", "RequestInit", "RequestMode", "Headers", "Response", "Location", "Navigator", "console"] }
 
 [features]
 # OpenAI integratsiyasi yig'ilishga kiradi, lekin **ishlamaydi**: u sozlamada
@@ -45,6 +69,11 @@ llm = ["dep:ureq"]
 # Server bilan sinxronizatsiya. Sukut bo'yicha yig'ilishga kiradi, lekin
 # sozlamada manzil kiritilib, kirish qilinmaguncha ishlamaydi.
 sync = ["dep:ureq"]
+
+# printpdf 0.7 brauzer (wasm32) uchun yig'ilmaydi: sana funksiyasida xato.
+# Nusxasi `vendor/printpdf` da, bitta funksiya tuzatilgan (desktopga ta'sir yo'q).
+[patch.crates-io]
+printpdf = { path = "vendor/printpdf" }
 
 [profile.release]
 opt-level = 3

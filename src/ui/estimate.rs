@@ -1120,18 +1120,16 @@ fn header(ui: &mut egui::Ui, app: &mut App) {
                     }
                 }
             });
-        if ui
+        let start = ui
             .button(RichText::new(t("import_estimate")).strong())
             .on_hover_text(t("import_hint"))
-            .clicked()
-        {
-            import_from = rfd::FileDialog::new()
-                .add_filter(
-                    t("import_file_filter"),
-                    &["xlsx", "xlsm", "xls", "xlsb", "ods", "csv", "pdf"],
-                )
-                .pick_file();
-        }
+            .clicked();
+        import_from = crate::plat::FileDialog::new()
+            .add_filter(
+                t("import_file_filter"),
+                &["xlsx", "xlsm", "xls", "xlsb", "ods", "csv", "pdf"],
+            )
+            .pick_file_when(start, "estimate_import");
         if ui.button(t("add_estimate")).clicked() {
             add_estimate = true;
         }

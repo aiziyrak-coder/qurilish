@@ -10,12 +10,12 @@ const AUDIT_SHOWN: i64 = 25;
 
 /// Serverga kirish. Tarmoqsiz yig'ilishda tugma ko'rinmaydi, shuning
 /// uchun bu yerda ham hech narsa qilinmaydi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 fn sync_login(app: &mut App, password: &str) {
     app.sync_login(password);
 }
 
-#[cfg(not(feature = "sync"))]
+#[cfg(not(all(feature = "sync", not(target_arch = "wasm32"))))]
 fn sync_login(_app: &mut App, _password: &str) {}
 
 pub fn show(ui: &mut egui::Ui, app: &mut App) {
@@ -169,16 +169,18 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         card_frame(ui, t("set_group_data"), w, |ui| {
             let path = crate::db::default_db_path();
             field(ui, t("set_db_path"), |ui| {
-                ui.label(
-                    RichText::new(path.display().to_string())
-                        .size(12.0)
-                        .color(theme::text()),
-                );
+                let place = if crate::plat::WEB {
+                    t("local_db_web").to_string()
+                } else {
+                    path.display().to_string()
+                };
+                ui.label(RichText::new(place).size(12.0).color(theme::text()));
             });
             field(ui, "", |ui| {
-                if ui.button(t("set_open_folder")).clicked() {
+                if !crate::plat::WEB && ui.button(t("set_open_folder")).clicked() {
                     if let Some(dir) = path.parent() {
                         // Windows uchun explorer, boshqa tizimlarda xohishga ko'ra.
+                        #[cfg(not(target_arch = "wasm32"))]
                         let _ = std::process::Command::new("explorer").arg(dir).spawn();
                     }
                 }
@@ -250,11 +252,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             );
             ui.add_space(6.0);
 
-            if !cfg!(feature = "sync") {
+            if !cfg!(all(feature = "sync", not(target_arch = "wasm32"))) {
                 ui.label(
-                    RichText::new(t("set_sync_not_built"))
-                        .size(12.0)
-                        .color(theme::warn()),
+                    RichText::new(t(if crate::plat::WEB {
+                        "set_sync_web"
+                    } else {
+                        "set_sync_not_built"
+                    }))
+                    .size(12.0)
+                    .color(theme::warn()),
                 );
                 return;
             }
@@ -763,13 +769,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         } else {
             let pkg = app.export_package();
             let file = format!("qurai-paket-{}.txt", app.today.format("%Y-%m-%d"));
-            if let Some(path) = rfd::FileDialog::new()
+            if let Some(path) = crate::plat::FileDialog::new()
                 .set_title(t("set_package_export"))
                 .set_file_name(&file)
                 .add_filter("QURAi", &["txt"])
                 .save_file()
             {
-                match std::fs::write(&path, crate::package::write(&pkg)) {
+                match crate::plat::write(&path, crate::package::write(&pkg).as_bytes()) {
                     Ok(()) => app.notify(format!(
                         "{} {} · {}",
                         t("set_package_saved"),
@@ -781,15 +787,17 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             }
         }
     }
-    if import_pkg {
-        if app.current.is_none() {
-            app.notify(t("no_object_selected").to_string());
-        } else if let Some(path) = rfd::FileDialog::new()
+    if import_pkg && app.current.is_none() {
+        app.notify(t("no_object_selected").to_string());
+    }
+    {
+        let start = import_pkg && app.current.is_some();
+        if let Some(path) = crate::plat::FileDialog::new()
             .set_title(t("set_package_import"))
             .add_filter("QURAi", &["txt"])
-            .pick_file()
+            .pick_file_when(start, "pkg_import")
         {
-            match std::fs::read_to_string(&path).map_err(|e| e.to_string()) {
+            match crate::plat::read_to_string(&path).map_err(|e| e.to_string()) {
                 Ok(text) => match crate::package::read(&text) {
                     Ok(pkg) => {
                         let (added, existing) = app.import_package(&pkg);
@@ -808,7 +816,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
     if make_backup {
         let name = crate::backup::suggested_name(chrono::Local::now().naive_local());
-        if let Some(dest) = rfd::FileDialog::new()
+        if let Some(dest) = crate::plat::FileDialog::new()
             .set_title(t("set_backup_btn"))
             .set_file_name(&name)
             .add_filter("SQLite", &["db"])

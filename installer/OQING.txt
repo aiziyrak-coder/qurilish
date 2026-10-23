@@ -97,6 +97,35 @@ O'zbekcha va ruscha. Sozlamalar bo'limidan almashtiriladi.
 Yorug' va qorong'i ko'rinish ham bor.
 
 =========================================================================
+BRAUZER VERSIYASI (kompyuter, planshet, telefon)
+=========================================================================
+
+QURAi to'liq brauzerda ham ishlaydi - aynan shu dastur, barcha bo'limlar
+bilan. Ekran tor bo'lsa (telefon) menyu "≡" tugmasi orqali ochiladi,
+jadvallar barmoq bilan yonga suriladi.
+
+Ishga tushirish (server kompyuterida, buyruq satri - cmd):
+  qurai-server.exe --add-user admin "Ism Familiya" admin   (bir marta)
+  set QURAI_BIND=0.0.0.0:8080
+  qurai-server.exe
+
+Shu kompyuterda: http://localhost:8080/app/
+Boshqa qurilmalarda (bir tarmoqda): http://<server-kompyuter-IP>:8080/app/
+(QURAI_BIND bo'lmasa server faqat shu kompyuterdan ochiladi.)
+
+  - Ma'lumot har bir brauzerning O'ZIDA saqlanadi (IndexedDB). Boshqa
+    qurilmaga o'tkazish: Sozlamalar -> "Paketga chiqarish / Paketdan olish"
+    yoki "Nusxa saqlash".
+  - Excel, PDF, Word fayllar yuklab olinadi (Yuklanmalar papkasiga).
+  - PDF loyihani tanlashda kichik oyna chiqadi: "Choose file" -> fayl ->
+    "Ok".
+  - AI so'rovlari server orqali OpenAI ga ketadi (kalit faqat brauzerda
+    saqlanadi, server uni saqlamaydi).
+  - Chrome, Edge, Safari, Firefox ning yangi versiyalari. Birinchi ochilish
+    ~5 MB yuklaydi.
+  - Internetga chiqarilsa HTTPS proksi ortiga qo'yish SHART.
+
+=========================================================================
 SERVER (shart emas)
 =========================================================================
 

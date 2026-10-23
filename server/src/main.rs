@@ -23,7 +23,9 @@
 //! chiqarilganda uni TLS (HTTPS) beruvchi teskari proksi ortiga qo'yish
 //! shart — aks holda parol va seans belgisi tarmoqda ochiq ketadi.
 
+mod ai_proxy;
 mod api;
+mod app_files;
 mod auth;
 #[cfg(test)]
 mod http_tests;
@@ -173,6 +175,8 @@ Rollar: admin, director, pm, foreman, brigadier, supervisor, designer,
 Muhit o'zgaruvchilari:
   QURAI_BIND   tinglash manzili (sukut: 127.0.0.1:8080)
   QURAI_DB     baza fayli (sukut: qurai-server.db)
+  QURAI_WEB_DIR  to'liq ilova fayllari (sukut: server yonidagi web/ yoki dist/web/)
+  QURAI_AI_ENDPOINT  /api/ai uzatadigan yagona manzil (sukut: OpenAI chat/completions)
   QURAI_HTTPS  1 — server HTTPS beruvchi proksi ortida: seans belgisiga
                `Secure` qo'yiladi va u HTTP orqali ketmaydi
   QURAI_TZ     maydoncha vaqt mintaqasi, masalan `+05:00` (sukut: server
@@ -282,11 +286,23 @@ const CSP: &str = concat!(
     "frame-ancestors 'none'; base-uri 'none'"
 );
 
+/// To'liq ilova (`/app`) uchun siyosat: WebAssembly (`wasm-unsafe-eval`)
+/// va AI xizmatiga brauzerdan so'rov (`connect-src https:` — manzil
+/// sozlamada o'zgarishi mumkin). Rasm brauzer xotirasidan (`blob:`).
+const APP_CSP: &str = concat!(
+    "default-src 'self'; img-src 'self' data: blob:; ",
+    "style-src 'self' 'unsafe-inline'; ",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'; ",
+    "connect-src 'self' https:; worker-src 'self' blob:; ",
+    "frame-ancestors 'none'; base-uri 'none'"
+);
+
 async fn security_headers(
     req: axum::extract::Request,
     next: axum::middleware::Next,
 ) -> axum::response::Response {
     use axum::http::HeaderValue;
+    let app = req.uri().path().starts_with("/app");
     let mut resp = next.run(req).await;
     let h = resp.headers_mut();
     h.insert(
@@ -295,7 +311,10 @@ async fn security_headers(
     );
     h.insert("x-frame-options", HeaderValue::from_static("DENY"));
     h.insert("referrer-policy", HeaderValue::from_static("no-referrer"));
-    h.insert("content-security-policy", HeaderValue::from_static(CSP));
+    h.insert(
+        "content-security-policy",
+        HeaderValue::from_static(if app { APP_CSP } else { CSP }),
+    );
     resp
 }
 
@@ -325,6 +344,14 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/o/{project}/chat", get(web::chat_page))
         .route("/o/{project}/chat", post(web::chat_submit))
         .route("/o/{project}/find", get(web::find_page))
+        // ---- To'liq ilova brauzerda (WebAssembly)
+        .route("/app", get(app_files::root))
+        .route("/app/", get(app_files::index))
+        .route("/app/{file}", get(app_files::file))
+        .route(
+            "/api/ai",
+            post(ai_proxy::forward).layer(axum::extract::DefaultBodyLimit::max(ai_proxy::MAX_BODY)),
+        )
         // ---- Desktop ilova bilan aloqa
         .route("/api/health", get(api::health))
         .route("/api/login", post(api::login))

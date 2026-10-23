@@ -13,6 +13,8 @@ rusqlite = { version = "0.40", features = ["bundled", "chrono"] }
 qurai-hash = { path = "../hash" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# AI o'tkazgichi (/api/ai): brauzerdagi ilova so'rovini OpenAI ga uzatadi.
+ureq = { version = "2", default-features = false, features = ["tls"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
 
 [dev-dependencies]

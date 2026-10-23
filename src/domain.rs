@@ -2297,7 +2297,7 @@ impl Attachment {
 
     /// Fayl hali joyidami.
     pub fn exists(&self) -> bool {
-        !self.path.trim().is_empty() && std::path::Path::new(&self.path).exists()
+        !self.path.trim().is_empty() && crate::plat::exists(std::path::Path::new(&self.path))
     }
 
     /// Rasm ko'rinishidagi fayl.

@@ -152,7 +152,7 @@ pub fn write_table(path: &Path, table: &Table, subtitle: &str) -> Result<(), Str
         );
     }
 
-    let file = std::fs::File::create(path).map_err(|e| format!("{e}"))?;
+    let file = crate::plat::create(path).map_err(|e| format!("{e}"))?;
     doc.save(&mut BufWriter::new(file))
         .map_err(|e| format!("{e}"))
 }
@@ -358,7 +358,7 @@ pub fn write_pages(
         draw(&page, index);
     }
 
-    let file = std::fs::File::create(path).map_err(|e| format!("{e}"))?;
+    let file = crate::plat::create(path).map_err(|e| format!("{e}"))?;
     doc.save(&mut BufWriter::new(file))
         .map_err(|e| format!("{e}"))
 }

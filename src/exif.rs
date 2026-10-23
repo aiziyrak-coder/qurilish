@@ -46,7 +46,7 @@ impl Meta {
 /// ish tez bo'lishi kerak — jurnalda o'nlab foto bo'lishi mumkin.
 pub fn read(path: &std::path::Path) -> Option<Meta> {
     use std::io::Read;
-    let mut file = std::fs::File::open(path).ok()?;
+    let mut file = std::io::Cursor::new(crate::plat::read(path).ok()?);
     // 512 KB — telefon rasmidagi EXIF va eskiz uchun yetarli.
     let mut head = vec![0u8; 512 * 1024];
     let read = file.read(&mut head).ok()?;

@@ -487,7 +487,9 @@ fn text_rows(text: &str) -> Vec<Vec<Cell>> {
 fn read_spreadsheet(path: &Path) -> Result<Vec<Vec<Cell>>, String> {
     use calamine::{Data, Reader};
 
-    let mut wb = calamine::open_workbook_auto(path).map_err(|e| e.to_string())?;
+    let bytes = crate::plat::read(path).map_err(|e| e.to_string())?;
+    let mut wb = calamine::open_workbook_auto_from_rs(std::io::Cursor::new(bytes))
+        .map_err(|e| e.to_string())?;
     let sheets = wb.sheet_names().to_vec();
     if sheets.is_empty() {
         return Err(crate::i18n::t("import_no_sheets").to_string());
@@ -543,7 +545,7 @@ fn read_spreadsheet(path: &Path) -> Result<Vec<Vec<Cell>>, String> {
 }
 
 fn read_csv(path: &Path) -> Result<Vec<Vec<Cell>>, String> {
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let bytes = crate::plat::read(path).map_err(|e| e.to_string())?;
     // Smeta eksporti ko'pincha UTF-8 BOM bilan keladi.
     let text = String::from_utf8_lossy(&bytes);
     let text = text.strip_prefix('\u{FEFF}').unwrap_or(&text);

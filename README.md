@@ -64,6 +64,44 @@ Sozlamalarda **zaxira nusxa** olish mumkin: bazaning izchil nusxasi bitta faylga
 yoziladi (`VACUUM INTO`), shuning uchun WAL rejimida ham hech narsa tushib
 qolmaydi. Kod git bilan qaytadi, ma'lumot esa qaytmaydi — nusxani muntazam oling.
 
+## Brauzer versiyasi (web)
+
+Butun ilova WebAssembly'ga yig'iladi va brauzerda ishlaydi — xuddi shu Rust
+kodi, alohida «web nusxa» yo'q. Farqlar bitta joyda — `src/plat.rs`
+(platforma qatlami):
+
+| Narsa | Desktop | Brauzer |
+|---|---|---|
+| Baza | `data/qurai.db` (SQLite) | SQLite, IndexedDB ichida (`sqlite-wasm-vfs` relaxed-idb) |
+| Fon ishi (AI) | ip + `block_on` | `spawn_local`, `fetch` |
+| AI so'rovi | `ureq` | `/api/ai` (server o'tkazgichi), bo'lmasa to'g'ridan-to'g'ri |
+| Fayl saqlash | dialog + disk | yuklab olish (`dl/<nom>` virtual yo'l) |
+| Fayl ochish | dialog | asinxron tanlash, xotiradagi `in/<nom>` |
+| Ilova fayllari (foto, PDF) | diskdagi yo'l | `files.db` (IndexedDB) |
+| Shrift | Segoe UI | ichiga joylangan DejaVu Sans (`assets/fonts`) |
+
+Moslashuvchanlik: ekran 820 px dan tor bo'lsa yon menyu «≡» qatlamiga
+aylanadi, yuqori panel ixchamlashadi, kartochkali ekranlar to'liq enni oladi,
+jadvalli ekranlar kamida 560 px enda chiziladi va barmoq bilan suriladi;
+qalqib chiquvchi oynalar ekran eniga cheklanadi.
+
+Yig'ish (Windows, Git Bash):
+
+```bash
+rustup target add wasm32-unknown-unknown
+pip install ziglang        # SQLite ni wasm ga yig'ish uchun C kompilyatori
+cargo install wasm-bindgen-cli --version <Cargo.lock dagi wasm-bindgen>
+bash tools/wasm/build.sh   # → dist/web/
+```
+
+Server `/app/` da beradi (`QURAI_WEB_DIR`, sukut: exe yonidagi `web/` yoki
+`dist/web/`), ETag bilan — yangi versiya darhol chiqadi; siqilgan `.gz`
+nusxa bo'lsa u beriladi (wasm 12,8 MB → 4,7 MB). O'rnatuvchi `web/` ni server
+yoniga qo'yadi. Ekransiz sinov: `tools/wasm/cdp.py` (headless Chrome).
+
+`vendor/printpdf` — printpdf 0.7 ning nusxasi: brauzer uchun sana
+funksiyasidagi xato tuzatilgan.
+
 ## Umumiy qidiruv
 
 `Ctrl+K` yoki `/` — barcha modullar bo'ylab qidiradi: GPR ishlari, loyiha

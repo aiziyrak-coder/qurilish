@@ -220,7 +220,7 @@ xmlns:dc=\"http://purl.org/dc/elements/1.1/\"><dc:title>{}</dc:title><dc:creator
         esc(title)
     );
 
-    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
+    let file = crate::plat::create(path).map_err(|e| e.to_string())?;
     let mut zip = zip::ZipWriter::new(std::io::BufWriter::new(file));
     let opts = zip::write::SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated);

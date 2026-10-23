@@ -240,18 +240,18 @@ pub fn batches(sizes: &[(usize, usize)]) -> Vec<Vec<usize>> {
 /// matni kam varaqlarga (chizma, kam yozuv) qo'shiladi.
 pub fn spawn_pages(cfg: Config, path: PathBuf, cancel: Arc<AtomicBool>) -> Receiver<PageMsg> {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let pages = match crate::pdfread::pages(&path) {
+    crate::plat::spawn(move || async move {
+        let pages = match crate::pdfread::pages_async(&path).await {
             Ok(p) => p,
             Err(e) => {
                 let _ = tx.send(PageMsg::Failed(e));
                 return;
             }
         };
-        let doc = match lopdf::Document::load(&path) {
+        let doc = match crate::pdfread::load(&path) {
             Ok(d) => d,
             Err(e) => {
-                let _ = tx.send(PageMsg::Failed(e.to_string()));
+                let _ = tx.send(PageMsg::Failed(e));
                 return;
             }
         };
@@ -273,64 +273,63 @@ pub fn spawn_pages(cfg: Config, path: PathBuf, cancel: Arc<AtomicBool>) -> Recei
                 .unwrap_or("")
         };
         let queue = Mutex::new(VecDeque::from(batches(&sizes)));
-        std::thread::scope(|s| {
-            for _ in 0..WORKERS {
-                s.spawn(|| loop {
-                    if cancel.load(Ordering::Relaxed) {
-                        break;
+        futures::future::join_all((0..WORKERS).map(|_| async {
+            loop {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Some(batch) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
+                    break;
+                };
+                let mut text = String::new();
+                for page in &batch {
+                    text.push_str(&format!("=== Лист {page} ===\n{}\n\n", text_of(*page)));
+                }
+                let mut parts = vec![Part::Text(text)];
+                if batch.len() == 1 && text_of(batch[0]).chars().count() < SPARSE_CHARS {
+                    if let Some(data) = crate::aitake::page_pdf(&doc, batch[0] as u32) {
+                        parts.push(Part::Pdf {
+                            name: format!("list-{}.pdf", batch[0]),
+                            data,
+                        });
                     }
-                    let Some(batch) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
-                        break;
-                    };
-                    let mut text = String::new();
-                    for page in &batch {
-                        text.push_str(&format!("=== Лист {page} ===\n{}\n\n", text_of(*page)));
+                }
+                let mut result = llm::extract_async(&cfg, PAGE_SYSTEM, parts.clone()).await;
+                if let Err(e) = &result {
+                    if e.retryable() {
+                        crate::plat::sleep(std::time::Duration::from_secs(3)).await;
+                        result = llm::extract_async(&cfg, PAGE_SYSTEM, parts.clone()).await;
                     }
-                    let mut parts = vec![Part::Text(text)];
-                    if batch.len() == 1 && text_of(batch[0]).chars().count() < SPARSE_CHARS {
-                        if let Some(data) = crate::aitake::page_pdf(&doc, batch[0] as u32) {
-                            parts.push(Part::Pdf {
-                                name: format!("list-{}.pdf", batch[0]),
-                                data,
+                }
+                let mut stop = false;
+                match result {
+                    Ok(a) => {
+                        // Tokenlar guruh varaqlariga teng bo'linadi.
+                        let share = a.usage.total / batch.len().max(1) as u32;
+                        for (page, body) in split_pages(&a.text, &batch) {
+                            let out = body.and_then(|b| parse_page(&b, page)).map(|mut p| {
+                                p.tokens = share;
+                                p
                             });
-                        }
-                    }
-                    let mut result = llm::extract(&cfg, PAGE_SYSTEM, &parts);
-                    if let Err(e) = &result {
-                        if e.retryable() {
-                            std::thread::sleep(std::time::Duration::from_secs(3));
-                            result = llm::extract(&cfg, PAGE_SYSTEM, &parts);
-                        }
-                    }
-                    let mut stop = false;
-                    match result {
-                        Ok(a) => {
-                            // Tokenlar guruh varaqlariga teng bo'linadi.
-                            let share = a.usage.total / batch.len().max(1) as u32;
-                            for (page, body) in split_pages(&a.text, &batch) {
-                                let out = body.and_then(|b| parse_page(&b, page)).map(|mut p| {
-                                    p.tokens = share;
-                                    p
-                                });
-                                if tx.send(PageMsg::Page(page, out)).is_err() {
-                                    stop = true;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            for page in &batch {
-                                if tx.send(PageMsg::Page(*page, Err(e.to_string()))).is_err() {
-                                    stop = true;
-                                }
+                            if tx.send(PageMsg::Page(page, out)).is_err() {
+                                stop = true;
                             }
                         }
                     }
-                    if stop {
-                        break;
+                    Err(e) => {
+                        for page in &batch {
+                            if tx.send(PageMsg::Page(*page, Err(e.to_string()))).is_err() {
+                                stop = true;
+                            }
+                        }
                     }
-                });
+                }
+                if stop {
+                    break;
+                }
             }
-        });
+        }))
+        .await;
         let _ = tx.send(PageMsg::Done);
     });
     rx
@@ -407,8 +406,9 @@ fn strip(body: &str) -> &str {
 /// Savollarni fonda so'raydi.
 pub fn spawn_questions(cfg: Config, context: String) -> crate::app::QuestionsRx {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let out = llm::extract(&cfg, QUESTIONS_SYSTEM, &[Part::Text(context)])
+    crate::plat::spawn(move || async move {
+        let out = llm::extract_async(&cfg, QUESTIONS_SYSTEM, vec![Part::Text(context)])
+            .await
             .map_err(|e| e.to_string())
             .and_then(|a| parse_questions(&a.text).map(|(s, q)| (s, q, a.usage.total)));
         let _ = tx.send(out);
@@ -448,8 +448,9 @@ pub type VerifyRx = Receiver<Result<(Vec<(usize, String, usize)>, u32), String>>
 /// savol mijozga berilmaydi — javobi varaq raqami bilan yoziladi.
 pub fn spawn_verify(cfg: Config, context: String) -> VerifyRx {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let out = llm::extract(&cfg, VERIFY_SYSTEM, &[Part::Text(context)])
+    crate::plat::spawn(move || async move {
+        let out = llm::extract_async(&cfg, VERIFY_SYSTEM, vec![Part::Text(context)])
+            .await
             .map_err(|e| e.to_string())
             .and_then(|a| parse_verify(&a.text).map(|r| (r, a.usage.total)));
         let _ = tx.send(out);
@@ -486,8 +487,9 @@ pub type AnswersRx = Receiver<Result<(Vec<(usize, String, String)>, u32), String
 /// Javobsiz savollarga AI eng tipik variantni tanlaydi.
 pub fn spawn_answers(cfg: Config, context: String) -> AnswersRx {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let out = llm::extract(&cfg, ANSWERS_SYSTEM, &[Part::Text(context)])
+    crate::plat::spawn(move || async move {
+        let out = llm::extract_async(&cfg, ANSWERS_SYSTEM, vec![Part::Text(context)])
+            .await
             .map_err(|e| e.to_string())
             .and_then(|a| parse_answers(&a.text).map(|r| (r, a.usage.total)));
         let _ = tx.send(out);
@@ -703,21 +705,23 @@ pub fn spawn_spec(
     cancel: Arc<AtomicBool>,
 ) -> Receiver<StageMsg> {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let stages = match llm::extract(&cfg, STAGES_SYSTEM, &[Part::Text(context.clone())])
-            .map_err(|e| e.to_string())
-            .and_then(|a| parse_stages(&a.text))
-        {
-            Ok(s) if !s.is_empty() => s,
-            Ok(_) => {
-                let _ = tx.send(StageMsg::Failed(crate::i18n::t("sm_no_stages").to_string()));
-                return;
-            }
-            Err(e) => {
-                let _ = tx.send(StageMsg::Failed(e));
-                return;
-            }
-        };
+    crate::plat::spawn(move || async move {
+        let stages =
+            match llm::extract_async(&cfg, STAGES_SYSTEM, vec![Part::Text(context.clone())])
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|a| parse_stages(&a.text))
+            {
+                Ok(s) if !s.is_empty() => s,
+                Ok(_) => {
+                    let _ = tx.send(StageMsg::Failed(crate::i18n::t("sm_no_stages").to_string()));
+                    return;
+                }
+                Err(e) => {
+                    let _ = tx.send(StageMsg::Failed(e));
+                    return;
+                }
+            };
         let _ = tx.send(StageMsg::Plan(stages.iter().map(|s| s.0.clone()).collect()));
         let all: Vec<String> = stages
             .iter()
@@ -738,7 +742,8 @@ pub fn spawn_spec(
                 all.join("\n"),
                 numbered.join("\n")
             );
-            match llm::extract(&cfg, ALLOCATE_SYSTEM, &[Part::Text(text)])
+            match llm::extract_async(&cfg, ALLOCATE_SYSTEM, vec![Part::Text(text)])
+                .await
                 .map_err(|e| e.to_string())
                 .and_then(|a| parse_allocation(&a.text))
             {
@@ -750,9 +755,7 @@ pub fn spawn_spec(
         let queue = Mutex::new(VecDeque::from(
             stages.into_iter().enumerate().collect::<Vec<_>>(),
         ));
-        std::thread::scope(|s| {
-            for _ in 0..WORKERS {
-                s.spawn(|| loop {
+        futures::future::join_all((0..WORKERS).map(|_| async { loop {
                     if cancel.load(Ordering::Relaxed) {
                         break;
                     }
@@ -775,11 +778,11 @@ pub fn spawn_spec(
                         all.join("\n"),
                         i + 1
                     );
-                    let mut result = llm::extract(&cfg, STAGE_SYSTEM, &[Part::Text(text.clone())]);
+                    let mut result = llm::extract_async(&cfg, STAGE_SYSTEM, vec![Part::Text(text.clone())]).await;
                     if let Err(e) = &result {
                         if e.retryable() {
-                            std::thread::sleep(std::time::Duration::from_secs(3));
-                            result = llm::extract(&cfg, STAGE_SYSTEM, &[Part::Text(text)]);
+                            crate::plat::sleep(std::time::Duration::from_secs(3)).await;
+                            result = llm::extract_async(&cfg, STAGE_SYSTEM, vec![Part::Text(text)]).await;
                         }
                     }
                     let out = result
@@ -788,9 +791,7 @@ pub fn spawn_spec(
                     if tx.send(StageMsg::Stage(i, out)).is_err() {
                         break;
                     }
-                });
-            }
-        });
+                } })).await;
         let _ = tx.send(StageMsg::Done);
     });
     rx
@@ -845,63 +846,64 @@ pub fn spawn_prices(
     cancel: Arc<AtomicBool>,
 ) -> Receiver<PriceMsg> {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
+    crate::plat::spawn(move || async move {
         let batches: Vec<Vec<(bool, String, String)>> =
             items.chunks(PRICE_BATCH).map(|c| c.to_vec()).collect();
         let queue = Mutex::new(VecDeque::from(batches));
-        std::thread::scope(|s| {
-            for _ in 0..WORKERS {
-                s.spawn(|| loop {
-                    if cancel.load(Ordering::Relaxed) {
-                        break;
+        futures::future::join_all((0..WORKERS).map(|_| async {
+            loop {
+                if cancel.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Some(batch) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
+                    break;
+                };
+                let text = batch
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (work, name, unit))| {
+                        format!(
+                            "{i} | {} | {name} | {unit}",
+                            if *work {
+                                "работа"
+                            } else {
+                                "материал"
+                            }
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let text = format!("Позиции (i | вид | название | единица):\n{text}");
+                let mut result =
+                    llm::extract_async(&cfg, PRICES_SYSTEM, vec![Part::Text(text.clone())]).await;
+                if let Err(e) = &result {
+                    if e.retryable() {
+                        crate::plat::sleep(std::time::Duration::from_secs(3)).await;
+                        result =
+                            llm::extract_async(&cfg, PRICES_SYSTEM, vec![Part::Text(text)]).await;
                     }
-                    let Some(batch) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
-                        break;
-                    };
-                    let text = batch
-                        .iter()
-                        .enumerate()
-                        .map(|(i, (work, name, unit))| {
-                            format!(
-                                "{i} | {} | {name} | {unit}",
-                                if *work {
-                                    "работа"
-                                } else {
-                                    "материал"
-                                }
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                        .join("\n");
-                    let text = format!("Позиции (i | вид | название | единица):\n{text}");
-                    let mut result = llm::extract(&cfg, PRICES_SYSTEM, &[Part::Text(text.clone())]);
-                    if let Err(e) = &result {
-                        if e.retryable() {
-                            std::thread::sleep(std::time::Duration::from_secs(3));
-                            result = llm::extract(&cfg, PRICES_SYSTEM, &[Part::Text(text)]);
-                        }
-                    }
-                    let msg = match result
-                        .map_err(|e| e.to_string())
-                        .and_then(|a| parse_prices(&a.text))
-                    {
-                        Ok(list) => PriceMsg::Batch(
-                            list.into_iter()
-                                .filter(|(i, price, _)| *price > 0.0 && *i < batch.len())
-                                .map(|(i, price, note)| {
-                                    let (_, name, unit) = &batch[i];
-                                    (crate::smeta::key(name, unit), price, note)
-                                })
-                                .collect(),
-                        ),
-                        Err(e) => PriceMsg::Failed(e),
-                    };
-                    if tx.send(msg).is_err() {
-                        break;
-                    }
-                });
+                }
+                let msg = match result
+                    .map_err(|e| e.to_string())
+                    .and_then(|a| parse_prices(&a.text))
+                {
+                    Ok(list) => PriceMsg::Batch(
+                        list.into_iter()
+                            .filter(|(i, price, _)| *price > 0.0 && *i < batch.len())
+                            .map(|(i, price, note)| {
+                                let (_, name, unit) = &batch[i];
+                                (crate::smeta::key(name, unit), price, note)
+                            })
+                            .collect(),
+                    ),
+                    Err(e) => PriceMsg::Failed(e),
+                };
+                if tx.send(msg).is_err() {
+                    break;
+                }
             }
-        });
+        }))
+        .await;
         let _ = tx.send(PriceMsg::Done);
     });
     rx
@@ -959,8 +961,9 @@ pub type ReviewRx = Receiver<Result<(String, Vec<Finding>, u32), String>>;
 /// Smetani AI ga tekshirtiradi.
 pub fn spawn_review(cfg: Config, context: String) -> ReviewRx {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let out = llm::extract(&cfg, REVIEW_SYSTEM, &[Part::Text(context)])
+    crate::plat::spawn(move || async move {
+        let out = llm::extract_async(&cfg, REVIEW_SYSTEM, vec![Part::Text(context)])
+            .await
             .map_err(|e| e.to_string())
             .and_then(|a| parse_review(&a.text).map(|(s, f)| (s, f, a.usage.total)));
         let _ = tx.send(out);
@@ -1000,8 +1003,9 @@ pub type ReportRx = Receiver<Result<(Vec<(String, String)>, u32), String>>;
 
 pub fn spawn_report(cfg: Config, context: String) -> ReportRx {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let out = llm::extract(&cfg, REPORT_SYSTEM, &[Part::Text(context)])
+    crate::plat::spawn(move || async move {
+        let out = llm::extract_async(&cfg, REPORT_SYSTEM, vec![Part::Text(context)])
+            .await
             .map_err(|e| e.to_string())
             .and_then(|a| parse_report(&a.text).map(|r| (r, a.usage.total)));
         let _ = tx.send(out);
@@ -1036,8 +1040,9 @@ pub type ConsolidateRx = Receiver<Result<(Vec<(String, String)>, u32), String>>;
 
 pub fn spawn_consolidate(cfg: Config, context: String) -> ConsolidateRx {
     let (tx, rx) = channel();
-    std::thread::spawn(move || {
-        let out = llm::extract(&cfg, CONSOLIDATE_SYSTEM, &[Part::Text(context)])
+    crate::plat::spawn(move || async move {
+        let out = llm::extract_async(&cfg, CONSOLIDATE_SYSTEM, vec![Part::Text(context)])
+            .await
             .map_err(|e| e.to_string())
             .and_then(|a| parse_consolidate(&a.text).map(|r| (r, a.usage.total)));
         let _ = tx.send(out);

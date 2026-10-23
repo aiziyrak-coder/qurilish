@@ -1049,23 +1049,19 @@ impl Smeta {
 /// bitta loyiha soni («Снятие растительного слоя — 3427,6 м³», «Арматура
 /// Ø12 — 147 т») ikki-uch bosqichga tushib qolishi mumkin. Qoida: nomi,
 /// birligi va miqdori **aynan bir xil** qator ikkinchi marta uchrasa —
-/// takror, birinchisi qoladi. Miqdori boshqa qator takror emas: bir xil
-/// material haqiqatan ikki bosqichda ketishi mumkin.
+/// takror deb hisoblash uchun manba va materiallar ham bir xil bo'lishi
+/// kerak. Boshqa varaqdagi bir xil hajm mustaqil ish bo'lishi mumkin.
 pub fn dedupe(smeta: &mut Smeta) -> usize {
-    let mut seen_work: Vec<(String, f64)> = Vec::new();
-    let mut seen_mat: Vec<(String, f64)> = Vec::new();
+    let mut seen_work: Vec<Work> = Vec::new();
+    let mut seen_mat: Vec<(String, f64, Source)> = Vec::new();
     let mut removed = 0;
     for stage in &mut smeta.stages {
         stage.works.retain(|w| {
-            let k = (key(&w.name, &w.unit), w.qty);
-            if seen_work
-                .iter()
-                .any(|s| s.0 == k.0 && (s.1 - k.1).abs() < 1e-9)
-            {
+            if seen_work.iter().any(|s| s == w) {
                 removed += 1 + w.materials.len();
                 return false;
             }
-            seen_work.push(k);
+            seen_work.push(w.clone());
             true
         });
         for w in &mut stage.works {
@@ -1075,10 +1071,10 @@ pub fn dedupe(smeta: &mut Smeta) -> usize {
                 if !matches!(m.source, Source::Project { .. }) {
                     return true;
                 }
-                let k = (key(&m.name, &m.unit), m.qty);
+                let k = (key(&m.name, &m.unit), m.qty, m.source.clone());
                 if seen_mat
                     .iter()
-                    .any(|s| s.0 == k.0 && (s.1 - k.1).abs() < 1e-9)
+                    .any(|s| s.0 == k.0 && (s.1 - k.1).abs() < 1e-9 && s.2 == k.2)
                 {
                     removed += 1;
                     return false;

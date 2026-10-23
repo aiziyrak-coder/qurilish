@@ -429,7 +429,7 @@ pub fn error_for_status(code: u16, body: &str) -> Error {
 ///
 /// Bu — ilovadagi yagona tarmoqqa chiqish nuqtasi. Sozlama o'chiq bo'lsa
 /// funksiya hech narsa qilmaydi va shu bilan ilova to'liq lokal qoladi.
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(target_arch = "wasm32")))]
 pub fn ask(cfg: &Config, history: &[Turn], question: &str, context: &str) -> Result<Answer, Error> {
     let body = build_request(cfg, history, question, context)?;
     let agent = ureq::AgentBuilder::new().timeout(cfg.timeout()).build();
@@ -458,7 +458,7 @@ pub fn ask(cfg: &Config, history: &[Turn], question: &str, context: &str) -> Res
 }
 
 /// Tarmoq qismi yig'ilishga kiritilmagan holat.
-#[cfg(not(feature = "llm"))]
+#[cfg(not(all(feature = "llm", not(target_arch = "wasm32"))))]
 pub fn ask(
     _cfg: &Config,
     _history: &[Turn],
@@ -471,6 +471,7 @@ pub fn ask(
 // ============================================================ Hujjat o'qish
 
 /// Hujjat o'qish so'rovining qismi.
+#[derive(Clone)]
 pub enum Part {
     Text(String),
     /// PDF fayl — model varaqni **ko'rib** o'qiydi.
@@ -550,12 +551,12 @@ pub fn build_extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<Strin
 }
 
 /// Hujjat qismlarini modelga jo'natadi va JSON javobni qaytaradi.
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(target_arch = "wasm32")))]
 pub fn extract(cfg: &Config, system: &str, parts: &[Part]) -> Result<Answer, Error> {
     send_extract(cfg, system, parts, true)
 }
 
-#[cfg(feature = "llm")]
+#[cfg(all(feature = "llm", not(target_arch = "wasm32")))]
 fn send_extract(cfg: &Config, system: &str, parts: &[Part], json: bool) -> Result<Answer, Error> {
     let mut body = build_extract(cfg, system, parts)?;
     if !json {
@@ -603,7 +604,7 @@ fn send_extract(cfg: &Config, system: &str, parts: &[Part], json: bool) -> Resul
     }
 }
 
-#[cfg(not(feature = "llm"))]
+#[cfg(not(all(feature = "llm", not(target_arch = "wasm32"))))]
 pub fn extract(_cfg: &Config, _system: &str, _parts: &[Part]) -> Result<Answer, Error> {
     Err(Error::NotConfigured)
 }
@@ -620,13 +621,125 @@ pub fn spawn(
     context: String,
 ) -> std::sync::mpsc::Receiver<Result<Answer, Error>> {
     let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        let out = ask(&cfg, &history, &question, &context);
+    crate::plat::spawn(move || async move {
+        let out = ask_async(cfg, history, question, context).await;
         // Qabul qiluvchi yopilgan bo'lishi mumkin (ekran almashtirildi) —
         // bu xato emas, shunchaki javob endi kerak emas.
         let _ = tx.send(out);
     });
     rx
+}
+
+// ============================================================ Asinxron
+
+/// Hujjat qismlarini modelga jo'natadi — asinxron. Desktopda so'rov
+/// alohida ipda ketadi (bir nechtasi parallel), brauzerda `fetch` orqali.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn extract_async(cfg: &Config, system: &str, parts: Vec<Part>) -> Result<Answer, Error> {
+    let (c, s) = (cfg.clone(), system.to_string());
+    crate::plat::run_blocking(move || extract(&c, &s, &parts)).await
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn extract_async(cfg: &Config, system: &str, parts: Vec<Part>) -> Result<Answer, Error> {
+    if !cfg.is_ready() {
+        return Err(Error::NotConfigured);
+    }
+    let body = build_extract(cfg, system, &parts)?;
+    let mut attempt = 0;
+    loop {
+        let out = post_web(cfg, &body).await;
+        match &out {
+            Err(Error::RateLimit) | Err(Error::Service(_)) if attempt < 2 => {
+                attempt += 1;
+                crate::plat::sleep(std::time::Duration::from_secs(4 * attempt as u64 + 2)).await;
+            }
+            _ => return out,
+        }
+    }
+}
+
+/// Yordamchi savoli — asinxron.
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn ask_async(
+    cfg: Config,
+    history: Vec<Turn>,
+    question: String,
+    context: String,
+) -> Result<Answer, Error> {
+    crate::plat::run_blocking(move || ask(&cfg, &history, &question, &context)).await
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn ask_async(
+    cfg: Config,
+    history: Vec<Turn>,
+    question: String,
+    context: String,
+) -> Result<Answer, Error> {
+    if !cfg.is_ready() {
+        return Err(Error::NotConfigured);
+    }
+    let body = build_request(&cfg, &history, &question, &context)?;
+    post_web(&cfg, &body).await
+}
+
+/// Brauzerdan so'rov. Avval o'z serverimiz orqali (`/api/ai` — bir xil
+/// manzil, CORS va tarmoq siyosati to'smaydi); server yo'q bo'lsa
+/// (masalan, fayllar oddiy statik serverdan berilgan) — to'g'ridan-to'g'ri.
+/// O'tkazgich faqat sukut manzil uchun: boshqa manzil sozlangan bo'lsa,
+/// so'rov o'sha manzilga ketadi.
+#[cfg(target_arch = "wasm32")]
+async fn post_web(cfg: &Config, body: &str) -> Result<Answer, Error> {
+    let default = cfg.endpoint.trim() == Config::default().endpoint.trim();
+    if default {
+        match post_to(cfg, "/api/ai", body).await {
+            Err(Error::Service(_)) | Err(Error::Transport(_)) => {}
+            Err(Error::BadReply(m)) if m.starts_with("404") || m.starts_with("405") => {}
+            other => return other,
+        }
+    }
+    post_to(cfg, cfg.endpoint.trim(), body).await
+}
+
+/// Bitta `fetch`. Kalit faqat `Authorization` sarlavhasida.
+#[cfg(target_arch = "wasm32")]
+async fn post_to(cfg: &Config, url: &str, body: &str) -> Result<Answer, Error> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+    let js = |e: wasm_bindgen::JsValue| Error::Transport(format!("{e:?}"));
+    let init = web_sys::RequestInit::new();
+    init.set_method("POST");
+    init.set_mode(web_sys::RequestMode::Cors);
+    init.set_body(&wasm_bindgen::JsValue::from_str(body));
+    let headers = web_sys::Headers::new().map_err(js)?;
+    headers
+        .set("Authorization", &format!("Bearer {}", cfg.api_key.trim()))
+        .map_err(js)?;
+    headers
+        .set("Content-Type", "application/json")
+        .map_err(js)?;
+    init.set_headers(&headers);
+    let req = web_sys::Request::new_with_str_and_init(url, &init).map_err(js)?;
+    let window = web_sys::window().ok_or_else(|| Error::Transport("window yo'q".into()))?;
+    let resp: web_sys::Response = JsFuture::from(window.fetch_with_request(&req))
+        .await
+        .map_err(js)?
+        .dyn_into()
+        .map_err(js)?;
+    let text = JsFuture::from(resp.text().map_err(js)?)
+        .await
+        .map_err(js)?
+        .as_string()
+        .unwrap_or_default();
+    if resp.ok() {
+        parse_reply(&text)
+    } else if (resp.status() == 404 || resp.status() == 405) && url.starts_with('/') {
+        // O'tkazgich yo'q — chaqiruvchi to'g'ridan-to'g'ri urinadi.
+        Err(Error::BadReply(format!("{} proxy", resp.status())))
+    } else {
+        Err(error_for_status(resp.status(), &text))
+    }
 }
 
 #[cfg(test)]

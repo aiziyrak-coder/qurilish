@@ -424,10 +424,15 @@ fn cards_tab(ui: &mut egui::Ui, app: &mut App) {
         app.db.del("ppr", id);
         app.reload_modules();
     }
-    if let Some(id) = pick_file {
-        if let Some(path) = rfd::FileDialog::new().pick_file() {
+    if let Some((files, ctx)) = crate::plat::FileDialog::new().pick_ctx(
+        pick_file.map(|id| id.to_string()),
+        "ppr_file",
+        false,
+    ) {
+        let id: i64 = ctx.parse().unwrap_or(0);
+        if let Some(path) = files.into_iter().next() {
             if let Some(d) = app.ppr_docs.iter_mut().find(|x| x.id == id) {
-                d.path = path.to_string_lossy().to_string();
+                d.path = crate::plat::keep(&path);
                 let copy = d.clone();
                 app.db.update_ppr(&copy);
             }

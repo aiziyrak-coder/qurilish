@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <!-- Telefon va planshet: masshtab qurilma eniga teng, foydalanuvchi
+       kattalashtira olmaydi (egui o'zi masshtablaydi). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1f4e9c">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>QURAi</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --bg: #eef2f7;
+      --ink: #1b2533;
+      --muted: #5c6b80;
+      --accent: #1f4e9c;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #12161d;
+        --ink: #e6ebf2;
+        --muted: #93a1b5;
+        --accent: #5b8def;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #12161d;
+      --ink: #e6ebf2;
+      --muted: #93a1b5;
+      --accent: #5b8def;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+      /* Telefonda tortib yangilash va kattalashtirish ilovaga xalaqit beradi. */
+      overscroll-behavior: none;
+      touch-action: none;
+    }
+    canvas#qurai_canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      outline: none;
+    }
+    #qurai_loading {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      z-index: 10;
+      padding: 16px;
+      text-align: center;
+    }
+    .mark {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: var(--accent);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 34px;
+      font-weight: 700;
+      margin: 0 auto 18px;
+    }
+    h1 {
+      font-size: 22px;
+      margin: 0 0 6px;
+      letter-spacing: 0.02em;
+    }
+    #qurai_status {
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 34ch;
+      margin: 0 auto;
+    }
+    .bar {
+      width: min(240px, 70vw);
+      height: 4px;
+      border-radius: 2px;
+      background: color-mix(in srgb, var(--accent) 18%, transparent);
+      margin: 18px auto 0;
+      overflow: hidden;
+    }
+    .bar::after {
+      content: "";
+      display: block;
+      width: 40%;
+      height: 100%;
+      background: var(--accent);
+      animation: slide 1.2s ease-in-out infinite;
+    }
+    @keyframes slide {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(260%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bar::after { animation: none; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="qurai_canvas"></canvas>
+  <div id="qurai_loading">
+    <div>
+      <div class="mark">Q</div>
+      <h1>QURAi</h1>
+      <p id="qurai_status">Qurilish intellektual platformasi yuklanmoqda…</p>
+      <div class="bar" aria-hidden="true"></div>
+    </div>
+  </div>
+  <noscript>QURAi uchun brauzerda JavaScript yoqilgan bo'lishi kerak.</noscript>
+  <script type="module">
+    import init from "./qurai.js";
+    // Sinov uchun: `?dpr=1` — piksel zichligini 1 deb oladi (brauzer
+    // emulyatorida telefon o'lchamini to'g'ri ko'rish uchun).
+    if (new URLSearchParams(location.search).get("dpr") === "1") {
+      Object.defineProperty(window, "devicePixelRatio", { get: () => 1 });
+    }
+    const status = document.getElementById("qurai_status");
+    if (!("indexedDB" in window)) {
+      status.textContent = "Brauzer IndexedDB ni qo'llamaydi — ma'lumot saqlanmaydi. Chrome, Edge, Safari yoki Firefox ning yangi versiyasini oching.";
+    }
+    init({ module_or_path: "./qurai_bg.wasm" }).catch((e) => {
+      console.error(e);
+      status.textContent = "Ilova yuklanmadi: " + e;
+    });
+  </script>
+</body>
+</html>

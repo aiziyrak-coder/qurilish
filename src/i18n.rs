@@ -96,6 +96,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "new_object" => ("+ Yangi obyekt", "+ Новый объект"),
         "new_object_name" => ("Yangi obyekt", "Новый объект"),
+        "local_db_web" => ("brauzer xotirasi (IndexedDB)", "память браузера (IndexedDB)"),
         "local_db" => ("Lokal baza:", "Локальная база:"),
         "cancel" => ("Bekor qilish", "Отмена"),
         "delete" => ("O'chirish", "Удалить"),
@@ -2733,6 +2734,10 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
             "Ilova serversiz ham to'liq ishlaydi. Server qo'shilsa, obyekt ma'lumoti qurilmalar orasida o'zi ko'chadi: maydonchadagi kunlik ijro serverga chiqadi, ofisdagi nusxa uni oladi. Parol saqlanmaydi — faqat seans belgisi.",
             "Приложение полностью работает и без сервера. С сервером данные объекта переносятся между устройствами сами: дневное исполнение с площадки уходит на сервер, копия в офисе его забирает. Пароль не сохраняется — только ключ сессии.",
         ),
+        "set_sync_web" => (
+            "Brauzer versiyasida ma'lumot shu brauzerning o'zida (IndexedDB) saqlanadi. Boshqa qurilmaga o'tkazish uchun «Paketga chiqarish / Paketdan olish» yoki «Nusxa saqlash» dan foydalaning.",
+            "В браузерной версии данные хранятся в самом браузере (IndexedDB). Для переноса на другое устройство используйте «Выгрузить пакет / Загрузить пакет» или «Сохранить копию».",
+        ),
         "set_sync_not_built" => (
             "Bu yig'ilishda tarmoq qismi yo'q (--no-default-features)",
             "В этой сборке нет сетевой части (--no-default-features)",
@@ -3007,6 +3012,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
 
         // ---------- Excel eksporti va hujjatlar ----------
         "export" => ("Eksport", "Экспорт"),
+        "export_excel" => ("Excel ga", "В Excel"),
+        "search_keys_export" => ("Joriy jadvalni Excel ga saqlash (Ctrl+E)", "Сохранить текущую таблицу в Excel (Ctrl+E)"),
         "export_hint" => (
             "Joriy ekran jadvalini saqlash (Ctrl+E). Kengaytma formatni belgilaydi: .xlsx — ish uchun (sonlar son bo'lib chiqadi), .pdf — topshirish uchun.",
             "Сохранить таблицу текущего экрана (Ctrl+E). Формат задаётся расширением: .xlsx — для работы (числа остаются числами), .pdf — для сдачи.",

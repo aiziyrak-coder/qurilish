@@ -159,10 +159,13 @@ pub fn draw(ctx: &Context, app: &mut App) {
     egui::Window::new(t("search_title"))
         .collapsible(false)
         .resizable(false)
-        .anchor(egui::Align2::CENTER_TOP, [0.0, 90.0])
-        .default_width(620.0)
+        .anchor(
+            egui::Align2::CENTER_TOP,
+            [0.0, if super::narrow(ctx) { 60.0 } else { 90.0 }],
+        )
+        .default_width(super::fit_width(ctx, 620.0))
         .show(ctx, |ui| {
-            ui.set_width(600.0);
+            ui.set_width(super::fit_width(ctx, 600.0));
 
             let edit = ui.add(
                 egui::TextEdit::singleline(&mut app.search_query)

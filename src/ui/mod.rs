@@ -52,8 +52,17 @@ pub fn install_fonts(ctx: &Context) {
         r"C:\Windows\Fonts\arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ];
-    for path in candidates {
-        if let Ok(bytes) = std::fs::read(path) {
+    // Brauzerda tizim shriftlari o'qilmaydi: erkin litsenziyali DejaVu Sans
+    // ilova ichida keladi (kirill, lotin, strelka va belgilar bor).
+    // Litsenziyasi: assets/fonts/LICENSE_DEJAVU.txt.
+    #[cfg(target_arch = "wasm32")]
+    let embedded: Option<Vec<u8>> =
+        Some(include_bytes!("../../assets/fonts/DejaVuSans.ttf").to_vec());
+    #[cfg(not(target_arch = "wasm32"))]
+    let embedded: Option<Vec<u8>> = None;
+    let found = embedded.or_else(|| candidates.iter().find_map(|p| std::fs::read(p).ok()));
+    if let Some(bytes) = found {
+        {
             fonts.font_data.insert(
                 "ui".to_owned(),
                 std::sync::Arc::new(egui::FontData::from_owned(bytes)),
@@ -63,7 +72,6 @@ pub fn install_fonts(ctx: &Context) {
                 .entry(FontFamily::Proportional)
                 .or_default()
                 .insert(0, "ui".to_owned());
-            break;
         }
     }
     ctx.set_fonts(fonts);
@@ -151,9 +159,10 @@ pub fn draw(ctx: &Context, app: &mut App) {
     // Til, mavzu yoki masshtab o'zgargan bo'lsa, uslubni qayta quramiz.
     if app.restyle {
         install_theme(ctx);
-        ctx.set_pixels_per_point(app.settings.ui_scale);
+        apply_scale(ctx, app.settings.ui_scale);
         app.restyle = false;
     }
+    crate::plat::set_ctx(ctx);
 
     // Fon oqimidagi sinxronizatsiya natijasi tayyor bo'lsa qo'llanadi.
     app.poll_sync();
@@ -167,52 +176,120 @@ pub fn draw(ctx: &Context, app: &mut App) {
     }
 
     top_bar(ctx, app);
-    side_bar(ctx, app);
+    if narrow(ctx) {
+        // Telefon: menyu yon panel emas — «≡» bilan ochiladigan qatlam.
+        if app.nav_open {
+            nav_drawer(ctx, app);
+        }
+    } else {
+        app.nav_open = false;
+        side_bar(ctx, app);
+    }
 
-    egui::CentralPanel::default().show(ctx, |ui| {
-        // Har ekran o'zini tanishtiradi: nomi va nima uchun kerakligi.
-        screen_header(ui, app);
-        // Rol bu ekranni o'zgartira olmasa — buni yashirmaymiz, ochiq aytamiz.
-        if !app.can_edit(app.screen) {
-            readonly_banner(ui, app);
-        }
-        match app.screen {
-            Screen::Dashboard => dashboard::show(ui, app),
-            Screen::Portfolio => portfolio::show(ui, app),
-            Screen::Notices => notices::show(ui, app),
-            Screen::Director => director::show(ui, app),
-            Screen::Inspections => inspections::show(ui, app),
-            Screen::Contracts => contracts::show(ui, app),
-            Screen::Passport => passport::show(ui, app),
-            Screen::Gantt => gantt::show(ui, app),
-            Screen::Ppr => ppr::show(ui, app),
-            Screen::AiCheck => aicheck::show(ui, app),
-            Screen::Estimate => estimate::show(ui, app),
-            Screen::ExecDocs => execdocs::show(ui, app),
-            Screen::Journal => journal::show(ui, app),
-            Screen::Warehouse => warehouse::show(ui, app),
-            Screen::Materials => materials::show(ui, app),
-            Screen::Requests => requests::show(ui, app),
-            Screen::Purchases => purchases::show(ui, app),
-            Screen::Sales => sales::show(ui, app),
-            Screen::Deals => deals::show(ui, app),
-            Screen::Timesheet => timesheet::show(ui, app),
-            Screen::Quality => quality::show(ui, app),
-            Screen::Safety => safety::show(ui, app),
-            Screen::Machines => machines::show(ui, app),
-            Screen::Analytics => analytics::show(ui, app),
-            Screen::Reports => reports::show(ui, app),
-            Screen::Foreman => foreman::show(ui, app),
-            Screen::TechSupervision => supervision::show(ui, app),
-            Screen::Client => client::show(ui, app),
-            Screen::Copilot => copilot::show(ui, app),
-            Screen::Settings => settings::show(ui, app),
-        }
-    });
+    egui::CentralPanel::default()
+        .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(8))
+        .show(ctx, |ui| {
+            // Ekran kontenti juda tor joyga siqilmasin: telefonda kamida shu
+            // enda chiziladi, ortig'i yonga suriladi (sahifa emas — faqat
+            // ish maydoni).
+            // Kartochkali ekranlar o'zi o'raladi — ular telefon enini to'liq
+            // oladi; jadvalli ekranlar uchun minimal en saqlanadi.
+            let fluid = matches!(
+                app.screen,
+                Screen::Dashboard
+                    | Screen::Notices
+                    | Screen::Copilot
+                    | Screen::Foreman
+                    | Screen::Client
+                    | Screen::Portfolio
+            );
+            let min_w = if fluid { 0.0 } else { MIN_CONTENT_WIDTH };
+            if ui.available_width() < min_w {
+                egui::ScrollArea::horizontal()
+                    .id_salt("narrow_content")
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        ui.set_min_width(min_w);
+                        ui.set_max_width(min_w);
+                        screen_body(ui, app);
+                    });
+            } else {
+                screen_body(ui, app);
+            }
+        });
 
     search::draw(ctx, app);
     dialogs(ctx, app);
     toast(ctx, app);
+}
+
+/// Oyna/qalqib chiquvchi panel eni: ekrandan keng bo'lmasin.
+pub fn fit_width(ctx: &Context, want: f32) -> f32 {
+    want.min(ctx.screen_rect().width() - 40.0).max(200.0)
+}
+
+/// Shundan tor ekran «telefon» hisoblanadi (mantiqiy piksel).
+pub const NARROW: f32 = 820.0;
+
+/// Ekran kontenti shundan tor joyga siqilmaydi: telefonda ish maydoni
+/// yonga suriladi. Ko'p jadvallar shu enda to'liq ko'rinadi.
+pub const MIN_CONTENT_WIDTH: f32 = 560.0;
+
+/// Tor ekranmi (telefon, kichik planshet).
+pub fn narrow(ctx: &Context) -> bool {
+    ctx.screen_rect().width() < NARROW
+}
+
+/// Masshtab: desktopda — piksel o'lchami, brauzerda — qurilma zichligiga
+/// ko'paytiruvchi (telefonda zichlik 2–3, uni bosib ketmaslik kerak).
+pub fn apply_scale(ctx: &Context, scale: f32) {
+    if crate::plat::WEB {
+        ctx.set_zoom_factor(scale);
+    } else {
+        ctx.set_pixels_per_point(scale);
+    }
+}
+
+/// Joriy ekran: sarlavha, faqat-o'qish belgisi va ekranning o'zi.
+fn screen_body(ui: &mut egui::Ui, app: &mut App) {
+    // Har ekran o'zini tanishtiradi: nomi va nima uchun kerakligi.
+    screen_header(ui, app);
+    // Rol bu ekranni o'zgartira olmasa — buni yashirmaymiz, ochiq aytamiz.
+    if !app.can_edit(app.screen) {
+        readonly_banner(ui, app);
+    }
+    match app.screen {
+        Screen::Dashboard => dashboard::show(ui, app),
+        Screen::Portfolio => portfolio::show(ui, app),
+        Screen::Notices => notices::show(ui, app),
+        Screen::Director => director::show(ui, app),
+        Screen::Inspections => inspections::show(ui, app),
+        Screen::Contracts => contracts::show(ui, app),
+        Screen::Passport => passport::show(ui, app),
+        Screen::Gantt => gantt::show(ui, app),
+        Screen::Ppr => ppr::show(ui, app),
+        Screen::AiCheck => aicheck::show(ui, app),
+        Screen::Estimate => estimate::show(ui, app),
+        Screen::ExecDocs => execdocs::show(ui, app),
+        Screen::Journal => journal::show(ui, app),
+        Screen::Warehouse => warehouse::show(ui, app),
+        Screen::Materials => materials::show(ui, app),
+        Screen::Requests => requests::show(ui, app),
+        Screen::Purchases => purchases::show(ui, app),
+        Screen::Sales => sales::show(ui, app),
+        Screen::Deals => deals::show(ui, app),
+        Screen::Timesheet => timesheet::show(ui, app),
+        Screen::Quality => quality::show(ui, app),
+        Screen::Safety => safety::show(ui, app),
+        Screen::Machines => machines::show(ui, app),
+        Screen::Analytics => analytics::show(ui, app),
+        Screen::Reports => reports::show(ui, app),
+        Screen::Foreman => foreman::show(ui, app),
+        Screen::TechSupervision => supervision::show(ui, app),
+        Screen::Client => client::show(ui, app),
+        Screen::Copilot => copilot::show(ui, app),
+        Screen::Settings => settings::show(ui, app),
+    }
 }
 
 /// Joriy ekran jadvalini `.xlsx` ga saqlaydi (umumiy talab).
@@ -226,7 +303,7 @@ pub fn export_current(app: &mut App) {
     };
     let rows = table.rows.len();
     let name = export::file_name(app, app.screen);
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("export"))
         .set_file_name(&name)
         .add_filter("Excel", &["xlsx"])
@@ -331,10 +408,84 @@ fn top_bar(ctx: &Context, app: &mut App) {
             // Oyna kengligiga qarab nima ko'rsatilishini hal qilamiz: tor oynada
             // elementlar bir-birining ustiga chiqib ketmasligi kerak.
             let w = ui.available_width();
-            let wide = w > 1240.0;
+            // Chegaralar o'lchab tanlangan: 1280 px da obyekt holati
+            // qidiruv tugmasi ustiga chiqib qolardi.
+            let wide = w > 1420.0;
             let medium = w > 1000.0;
+            let phone = w < NARROW;
 
             ui.horizontal_centered(|ui| {
+                if phone {
+                    // Menyu tugmasi: uch chiziq (shrift belgisi emas —
+                    // har brauzerda bir xil chiqadi).
+                    let (r, resp) =
+                        ui.allocate_exact_size(egui::vec2(34.0, 34.0), egui::Sense::click());
+                    let p = ui.painter();
+                    let fill = if app.nav_open {
+                        theme::accent().gamma_multiply(0.18)
+                    } else if resp.hovered() {
+                        theme::line()
+                    } else {
+                        Color32::TRANSPARENT
+                    };
+                    p.rect_filled(r, 8.0, fill);
+                    for dy in [-6.0, 0.0, 6.0] {
+                        let y = r.center().y + dy;
+                        p.line_segment(
+                            [
+                                egui::pos2(r.left() + 9.0, y),
+                                egui::pos2(r.right() - 9.0, y),
+                            ],
+                            Stroke::new(2.0_f32, theme::text()),
+                        );
+                    }
+                    if resp.clicked() {
+                        app.nav_open = !app.nav_open;
+                    }
+                    ui.add_space(6.0);
+                    // Logotip faqat belgi bilan; obyekt tanlash qolgan joyni oladi.
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(28.0, 28.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 7.0, theme::accent());
+                    ui.painter().text(
+                        rect.center(),
+                        Align2::CENTER_CENTER,
+                        "Q",
+                        egui::FontId::proportional(17.0),
+                        theme::on_accent(),
+                    );
+                    ui.add_space(6.0);
+                    let current_name = app
+                        .project()
+                        .map(|p| p.name.clone())
+                        .unwrap_or_else(|| t("no_object").into());
+                    let mut pick: Option<i64> = None;
+                    let combo_w = (ui.available_width() - 74.0).max(90.0);
+                    egui::ComboBox::from_id_salt("project_picker_phone")
+                        .selected_text(issues::truncate(
+                            &current_name,
+                            ((combo_w - 30.0) / 8.0).max(6.0) as usize,
+                        ))
+                        .width(combo_w)
+                        .show_ui(ui, |ui| {
+                            for p in &app.projects {
+                                let sel = app.current == Some(p.id);
+                                if ui
+                                    .selectable_label(sel, format!("{} [{}]", p.name, p.code))
+                                    .clicked()
+                                {
+                                    pick = Some(p.id);
+                                }
+                            }
+                        });
+                    if let Some(id) = pick {
+                        app.select_project(id);
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ai_button(ui, app);
+                    });
+                    return;
+                }
                 logo(ui, wide);
                 ui.add_space(if wide { 16.0 } else { 8.0 });
                 // Nozik ajratkich: logotip va ish maydoni bir-biriga
@@ -408,7 +559,7 @@ fn top_bar(ctx: &Context, app: &mut App) {
                     role_picker(ui, app, medium);
                     ui.separator();
                     ai_button(ui, app);
-                    if medium {
+                    if wide {
                         ui.separator();
                         if let Some(p) = app.project() {
                             let c = match p.status {
@@ -462,12 +613,21 @@ fn ai_button(ui: &mut egui::Ui, app: &mut App) {
         return;
     }
 
+    // Panel ekrandan chiqib ketmasin: telefonda tugma o'ng chetda turadi.
+    let panel_w = fit_width(ui.ctx(), 330.0);
+    let screen = ui.ctx().screen_rect();
+    let x = resp
+        .rect
+        .left()
+        .min(screen.right() - panel_w - 24.0)
+        .max(screen.left() + 4.0);
     let area = egui::Area::new(egui::Id::new("ai_panel"))
         .order(egui::Order::Foreground)
-        .fixed_pos(resp.rect.left_bottom())
+        .fixed_pos(egui::pos2(x, resp.rect.bottom()))
         .show(ui.ctx(), |ui| {
             egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.set_min_width(330.0);
+                ui.set_min_width(panel_w);
+                ui.set_max_width(panel_w);
                 ui.label(RichText::new(t("ai_title")).strong());
                 ui.label(
                     RichText::new(t("ai_where"))
@@ -828,6 +988,17 @@ fn screen_header(ui: &mut egui::Ui, app: &mut App) {
         // qator egallab turardi va bir xil tugma ikki xil joyda edi.
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             assistant_button(ui, app);
+            // Jadvalli ekranda eksport tugmasi ko'rinib tursin: brauzer
+            // `Ctrl+E` ni o'zi ushlaydi, telefonda esa klaviatura yo'q.
+            if export::exportable(screen)
+                && app.current.is_some()
+                && ui
+                    .button(t("export_excel"))
+                    .on_hover_text(t("search_keys_export"))
+                    .clicked()
+            {
+                export_current(app);
+            }
         });
     });
     ui.label(
@@ -960,122 +1131,181 @@ fn side_bar(ctx: &Context, app: &mut App) {
                 .stroke(Stroke::new(1.0_f32, theme::line()))
                 .inner_margin(egui::Margin::symmetric(12, 10)),
         )
+        .show(ctx, |ui| nav_contents(ui, app));
+}
+
+/// Telefon menyusi: chapdan chiqadigan qatlam, orqasi xiralashadi.
+/// Bo'lim tanlansa yoki qatlamdan tashqariga bosilsa yopiladi.
+fn nav_drawer(ctx: &Context, app: &mut App) {
+    let screen = ctx.screen_rect();
+    let top = 52.0;
+    let width = (screen.width() * 0.86).min(320.0);
+    let before = app.screen;
+    let before_project = app.current;
+    let drawer = egui::Rect::from_min_size(
+        egui::pos2(screen.left(), top),
+        egui::vec2(width, screen.height() - top),
+    );
+    let mut close = false;
+    // Bitta qatlam: avval xira fon, ustidan menyu — tartib aniq.
+    egui::Area::new(egui::Id::new("nav_drawer"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::pos2(screen.left(), top))
         .show(ctx, |ui| {
-            // Pastki blok o'lchami oldindan ajratiladi: ro'yxat qolgan joyni oladi.
-            let bottom_h = 92.0;
-            let list_h = (ui.available_height() - bottom_h).max(120.0);
-
-            let list = egui::ScrollArea::vertical()
-                .max_height(list_h)
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    // Ro'yxat App da keshlangan: uni har kadrda qayta yig'ish
-                    // o'nlab SQL so'rovni anglatardi.
-                    // Oxirgi marta qaysi modulga surilgani: shu modul
-                    // ochiq turganda ro'yxat boshqa surilmaydi.
-                    let jump_key = egui::Id::new("nav_jumped_to");
-                    let jumped = ui.data(|d| d.get_temp::<Screen>(jump_key));
-
-                    let notice_count = app.notices.len();
-                    let notice_color = match crate::notify::top_severity(&app.notices) {
-                        Some(crate::domain::Severity::Critical) => theme::danger(),
-                        Some(crate::domain::Severity::Major) => theme::warn(),
-                        _ => theme::accent(),
-                    };
-
-                    // Rol tanlangan bo'lsa, uning o'z bo'limlari tepada
-                    // alohida turadi. Qolganlari **yashirilmaydi** —
-                    // yopiq sarlavha ostida qoladi va bir bosishda
-                    // ochiladi: yashirilgan ma'lumot ishonchni yo'qotadi
-                    // va odamlar baribir bir-biridan so'rab oladi.
-                    let own = app.role().screens();
-                    if own.is_empty() {
-                        all_groups(ui, app, notice_count, notice_color, jumped);
-                    } else {
-                        group_title(ui, t("nav_my_work"));
-                        for &screen in own {
-                            nav_row(ui, app, screen, notice_count, notice_color, jumped);
-                        }
-                        ui.add_space(12.0);
-                        egui::CollapsingHeader::new(
-                            RichText::new(t("nav_other"))
-                                .size(10.0)
-                                .color(theme::muted())
-                                .strong(),
-                        )
-                        .id_salt("nav_other")
-                        .default_open(false)
-                        .show(ui, |ui| {
-                            all_groups(ui, app, notice_count, notice_color, jumped);
-                        });
-                    }
-
-                    // Joriy modul belgilanadi: keyingi kadrlarda ro'yxat
-                    // erkin suriladi.
-                    ui.data_mut(|d| d.insert_temp(jump_key, app.screen));
-
-                    // Belgilar izohi — nuqtalar nimani bildirishini aytadi.
-                    ui.add_space(14.0);
-                    ui.separator();
-                    ui.add_space(6.0);
-                    let legend = |ui: &mut egui::Ui, filled: bool, c: Color32, text: &str| {
-                        ui.horizontal(|ui| {
-                            let (r, _) = ui
-                                .allocate_exact_size(egui::vec2(14.0, 12.0), egui::Sense::hover());
-                            if filled {
-                                ui.painter().circle_filled(r.center(), 3.2, c);
-                            } else {
-                                ui.painter().circle_stroke(
-                                    r.center(),
-                                    3.2,
-                                    Stroke::new(1.2_f32, c),
-                                );
-                            }
-                            ui.label(RichText::new(text).size(10.5).color(theme::muted()));
-                        });
-                    };
-                    // Izohda faqat haqiqatda uchraydigan belgilar ko'rsatiladi.
-                    let has = |r: Readiness| {
-                        NAV_GROUPS
-                            .iter()
-                            .flat_map(|(_, s)| s.iter())
-                            .any(|s| s.readiness() == r)
-                    };
-                    if has(Readiness::Storage) {
-                        legend(ui, true, theme::warn(), t("legend_storage"));
-                    }
-                    if has(Readiness::Planned) {
-                        legend(ui, false, theme::muted(), t("legend_planned"));
-                    }
-                    ui.add_space(10.0);
-                });
-            // Sinov ro'yxat haqiqatan erkin surilishini tekshirishi uchun
-            // uning belgisi eslab qolinadi.
-            ui.data_mut(|d| d.insert_temp(egui::Id::new("nav_scroll_id"), list.id));
-
-            ui.add_space(6.0);
-            ui.separator();
-            ui.add_space(6.0);
-            if ui
+            let shade = egui::Rect::from_min_max(egui::pos2(drawer.right(), top), screen.max);
+            let resp = ui.allocate_rect(shade, egui::Sense::click());
+            ui.painter()
+                .rect_filled(shade, 0.0, Color32::from_black_alpha(110));
+            close = resp.clicked();
+            ui.painter().rect_filled(drawer, 0.0, theme::panel());
+            ui.painter().line_segment(
+                [drawer.right_top(), drawer.right_bottom()],
+                Stroke::new(1.0_f32, theme::line()),
+            );
+            let inner = drawer.shrink2(egui::vec2(12.0, 10.0));
+            let mut child = ui.new_child(
+                egui::UiBuilder::new()
+                    .max_rect(inner)
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            child.set_clip_rect(drawer);
+            // Qidiruv va rol tanlash shu yerda: yuqori panelda ularga joy yo'q.
+            if child
                 .add_sized(
-                    [ui.available_width(), 30.0],
-                    egui::Button::new(t("new_object")),
+                    [child.available_width(), 30.0],
+                    egui::Button::new(t("search_button")),
                 )
                 .clicked()
             {
-                new_project(app);
+                app.search_open = true;
+                app.search_query.clear();
+                app.search_focus = true;
+                close = true;
             }
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(format!(
-                    "{} {}",
-                    t("local_db"),
-                    crate::db::default_db_path().display()
-                ))
-                .size(9.5)
-                .color(theme::muted()),
-            );
+            child.add_space(4.0);
+            role_picker(&mut child, app, true);
+            child.add_space(6.0);
+            nav_contents(&mut child, app);
         });
+    if close || app.screen != before || app.current != before_project {
+        app.nav_open = false;
+    }
+}
+
+/// Bo'limlar ro'yxati va pastki blok (yangi obyekt, baza joyi).
+fn nav_contents(ui: &mut egui::Ui, app: &mut App) {
+    // Pastki blok o'lchami oldindan ajratiladi: ro'yxat qolgan joyni oladi.
+    let bottom_h = 92.0;
+    let list_h = (ui.available_height() - bottom_h).max(120.0);
+
+    let list = egui::ScrollArea::vertical()
+        .max_height(list_h)
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            // Ro'yxat App da keshlangan: uni har kadrda qayta yig'ish
+            // o'nlab SQL so'rovni anglatardi.
+            // Oxirgi marta qaysi modulga surilgani: shu modul
+            // ochiq turganda ro'yxat boshqa surilmaydi.
+            let jump_key = egui::Id::new("nav_jumped_to");
+            let jumped = ui.data(|d| d.get_temp::<Screen>(jump_key));
+
+            let notice_count = app.notices.len();
+            let notice_color = match crate::notify::top_severity(&app.notices) {
+                Some(crate::domain::Severity::Critical) => theme::danger(),
+                Some(crate::domain::Severity::Major) => theme::warn(),
+                _ => theme::accent(),
+            };
+
+            // Rol tanlangan bo'lsa, uning o'z bo'limlari tepada
+            // alohida turadi. Qolganlari **yashirilmaydi** —
+            // yopiq sarlavha ostida qoladi va bir bosishda
+            // ochiladi: yashirilgan ma'lumot ishonchni yo'qotadi
+            // va odamlar baribir bir-biridan so'rab oladi.
+            let own = app.role().screens();
+            if own.is_empty() {
+                all_groups(ui, app, notice_count, notice_color, jumped);
+            } else {
+                group_title(ui, t("nav_my_work"));
+                for &screen in own {
+                    nav_row(ui, app, screen, notice_count, notice_color, jumped);
+                }
+                ui.add_space(12.0);
+                egui::CollapsingHeader::new(
+                    RichText::new(t("nav_other"))
+                        .size(10.0)
+                        .color(theme::muted())
+                        .strong(),
+                )
+                .id_salt("nav_other")
+                .default_open(false)
+                .show(ui, |ui| {
+                    all_groups(ui, app, notice_count, notice_color, jumped);
+                });
+            }
+
+            // Joriy modul belgilanadi: keyingi kadrlarda ro'yxat
+            // erkin suriladi.
+            ui.data_mut(|d| d.insert_temp(jump_key, app.screen));
+
+            // Belgilar izohi — nuqtalar nimani bildirishini aytadi.
+            ui.add_space(14.0);
+            ui.separator();
+            ui.add_space(6.0);
+            let legend = |ui: &mut egui::Ui, filled: bool, c: Color32, text: &str| {
+                ui.horizontal(|ui| {
+                    let (r, _) =
+                        ui.allocate_exact_size(egui::vec2(14.0, 12.0), egui::Sense::hover());
+                    if filled {
+                        ui.painter().circle_filled(r.center(), 3.2, c);
+                    } else {
+                        ui.painter()
+                            .circle_stroke(r.center(), 3.2, Stroke::new(1.2_f32, c));
+                    }
+                    ui.label(RichText::new(text).size(10.5).color(theme::muted()));
+                });
+            };
+            // Izohda faqat haqiqatda uchraydigan belgilar ko'rsatiladi.
+            let has = |r: Readiness| {
+                NAV_GROUPS
+                    .iter()
+                    .flat_map(|(_, s)| s.iter())
+                    .any(|s| s.readiness() == r)
+            };
+            if has(Readiness::Storage) {
+                legend(ui, true, theme::warn(), t("legend_storage"));
+            }
+            if has(Readiness::Planned) {
+                legend(ui, false, theme::muted(), t("legend_planned"));
+            }
+            ui.add_space(10.0);
+        });
+    // Sinov ro'yxat haqiqatan erkin surilishini tekshirishi uchun
+    // uning belgisi eslab qolinadi.
+    ui.data_mut(|d| d.insert_temp(egui::Id::new("nav_scroll_id"), list.id));
+
+    ui.add_space(6.0);
+    ui.separator();
+    ui.add_space(6.0);
+    if ui
+        .add_sized(
+            [ui.available_width(), 30.0],
+            egui::Button::new(t("new_object")),
+        )
+        .clicked()
+    {
+        new_project(app);
+    }
+    ui.add_space(4.0);
+    let place = if crate::plat::WEB {
+        t("local_db_web").to_string()
+    } else {
+        crate::db::default_db_path().display().to_string()
+    };
+    ui.label(
+        RichText::new(format!("{} {place}", t("local_db")))
+            .size(10.5)
+            .color(theme::muted()),
+    );
 }
 
 fn new_project(app: &mut App) {
@@ -1451,12 +1681,7 @@ pub fn task_picker(
 
 /// Faylni tizimning standart dasturida ochadi.
 pub fn open_path(path: &str) {
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("explorer").arg(path).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(path).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    crate::plat::open_external(path);
 }
 
 /// Vektorli «bajarildi» belgisi. Glif bilan chizilsa, tizim shriftida
@@ -1801,7 +2026,7 @@ mod screen_tests {
                 app.screen = *s;
                 // Birinchi kadr qizdiradi, keyingi beshtasi o'lchanadi.
                 frame(&ctx, &mut app);
-                let t0 = std::time::Instant::now();
+                let t0 = crate::plat::Instant::now();
                 for _ in 0..5 {
                     frame(&ctx, &mut app);
                 }

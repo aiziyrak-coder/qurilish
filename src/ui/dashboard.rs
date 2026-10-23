@@ -208,12 +208,15 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
                 _ => theme::accent(),
             };
             let resp = ui.horizontal(|ui| {
+                // Telefonda bo'lim nomi tushiriladi — sarlavha va son sig'sin.
+                let narrow = ui.available_width() < 560.0;
                 // Rangli nuqta — jiddiylik darajasi.
                 let (rect, _) = ui.allocate_exact_size(vec2(10.0, 16.0), Sense::hover());
                 ui.painter().circle_filled(rect.center(), 4.0, colour);
 
+                let reserve = if narrow { 130.0 } else { 220.0 };
                 ui.add_sized(
-                    [(ui.available_width() - 220.0).max(160.0), 20.0],
+                    [(ui.available_width() - reserve).max(110.0), 20.0],
                     egui::Label::new(RichText::new(&n.title).size(13.0)).truncate(),
                 );
                 ui.label(
@@ -229,11 +232,13 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
                     if ui.small_button(t("ns_open")).clicked() {
                         goto = Some(n.screen);
                     }
-                    ui.label(
-                        RichText::new(n.source.label())
-                            .size(11.0)
-                            .color(theme::muted()),
-                    );
+                    if !narrow {
+                        ui.label(
+                            RichText::new(n.source.label())
+                                .size(11.0)
+                                .color(theme::muted()),
+                        );
+                    }
                 });
             });
             // Dalil — nima uchun shunday deyilayotgani.
@@ -258,6 +263,22 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
 }
 
 fn header(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
+    // Tor ekranda (telefon) muddat chizig'i nom ostida, to'liq enda —
+    // yonida sig'masdi va sanalar ustma-ust tushardi.
+    if ui.available_width() < 640.0 {
+        ui.label(
+            RichText::new(&p.name)
+                .size(22.0)
+                .strong()
+                .color(theme::text()),
+        );
+        if !p.address.is_empty() {
+            ui.label(RichText::new(&p.address).size(12.5).color(theme::muted()));
+        }
+        ui.add_space(6.0);
+        contract_timeline(ui, app, p, ui.available_width());
+        return;
+    }
     ui.horizontal(|ui| {
         ui.vertical(|ui| {
             ui.label(
@@ -272,17 +293,17 @@ fn header(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
         });
 
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            contract_timeline(ui, app, p);
+            let w = 300.0f32.min(ui.available_width() * 0.5);
+            contract_timeline(ui, app, p, w);
         });
     });
 }
 
-fn contract_timeline(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
+fn contract_timeline(ui: &mut egui::Ui, app: &App, p: &crate::model::Project, w: f32) {
     let total = (p.planned_end - p.start_date).num_days().max(1);
     let elapsed = (app.today - p.start_date).num_days().clamp(0, total);
     let frac = elapsed as f32 / total as f32;
 
-    let w = 300.0f32.min(ui.available_width() * 0.5);
     ui.vertical(|ui| {
         ui.set_width(w);
         // Sanalar chizig'i.

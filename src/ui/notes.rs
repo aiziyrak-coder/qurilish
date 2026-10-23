@@ -292,9 +292,8 @@ fn files_block(ui: &mut egui::Ui, app: &mut App, pid: i64, target: NoteTarget, i
                 (t("ps_before"), PhotoStage::Before),
                 (t("ps_after"), PhotoStage::After),
             ] {
-                if ui.small_button(label).clicked() {
-                    add_files(app, pid, target, id, stage);
-                }
+                let start = ui.small_button(label).clicked();
+                add_files(app, pid, target, id, stage, start);
             }
         }
     });
@@ -385,13 +384,14 @@ fn files_block(ui: &mut egui::Ui, app: &mut App, pid: i64, target: NoteTarget, i
 }
 
 /// Fayl tanlash oynasini ochadi va tanlanganlarni biriktiradi.
-fn add_files(app: &mut App, pid: i64, target: NoteTarget, id: i64, stage: PhotoStage) {
-    let Some(files) = rfd::FileDialog::new()
+fn add_files(app: &mut App, pid: i64, target: NoteTarget, id: i64, stage: PhotoStage, start: bool) {
+    let key = format!("att_{pid}_{target:?}_{id}_{stage:?}");
+    let Some(files) = crate::plat::FileDialog::new()
         .add_filter(
             t("photos"),
             &["jpg", "jpeg", "png", "bmp", "webp", "pdf", "xlsx", "docx"],
         )
-        .pick_files()
+        .pick_files_when(start, &key)
     else {
         return;
     };
@@ -403,7 +403,7 @@ fn add_files(app: &mut App, pid: i64, target: NoteTarget, id: i64, stage: PhotoS
             project_id: pid,
             target,
             target_id: id,
-            path: f.display().to_string(),
+            path: crate::plat::keep(&f),
             stage,
             caption: String::new(),
             author: author.clone(),
@@ -413,16 +413,7 @@ fn add_files(app: &mut App, pid: i64, target: NoteTarget, id: i64, stage: PhotoS
     app.attachments = app.db.attachments(pid);
 }
 
-/// Faylni tizim dasturida ochadi.
+/// Faylni tizim dasturida ochadi (brauzerda — yuklab oladi).
 fn open_file(path: &str) {
-    #[cfg(target_os = "windows")]
-    {
-        // `explorer` yo'lni o'zi tushunadi va nolga teng bo'lmagan kod
-        // qaytarishi mumkin — bu xato emas, shuning uchun natija o'qilmaydi.
-        let _ = std::process::Command::new("explorer").arg(path).spawn();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(path).spawn();
-    }
+    crate::plat::open_external(path);
 }

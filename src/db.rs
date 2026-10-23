@@ -85,6 +85,8 @@ impl Db {
 
     pub fn open(path: &PathBuf) -> SqlResult<Db> {
         let conn = Connection::open(path)?;
+        // Brauzerdagi IndexedDB VFS umumiy xotirani (WAL) qo'llamaydi.
+        #[cfg(not(target_arch = "wasm32"))]
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         // Baza band bo'lsa darhol xato bermay, 5 soniya kutadi.
@@ -2612,7 +2614,7 @@ mod tests {
             app.select_project(pid);
 
             // 1. Bitta harf yozish: pasport ekranidagi yo'l.
-            let start = std::time::Instant::now();
+            let start = crate::plat::Instant::now();
             for i in 0..20 {
                 let mut p = app.project().cloned().unwrap();
                 p.name = format!("Tezlik {i}");
@@ -2625,7 +2627,7 @@ mod tests {
             let per_key = start.elapsed().as_secs_f64() * 1000.0 / 20.0;
 
             // 2. Faqat CPM hisobi (bazasiz).
-            let start = std::time::Instant::now();
+            let start = crate::plat::Instant::now();
             for _ in 0..20 {
                 let _ = crate::cpm::compute(&app.tasks, &app.links, app.origin());
             }
@@ -2633,7 +2635,7 @@ mod tests {
 
             // 3. Faqat bazaga bitta yozuv.
             let p = app.project().cloned().unwrap();
-            let start = std::time::Instant::now();
+            let start = crate::plat::Instant::now();
             for _ in 0..20 {
                 let _ = app.db.update_project(&p);
             }

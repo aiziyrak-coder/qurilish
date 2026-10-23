@@ -301,7 +301,7 @@ pub fn write_ks2(path: &Path, inp: &DocInput, lines: &[Ks2Line]) -> Result<f64, 
             PartyRole::Client,
         ],
     )?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(total)
 }
 
@@ -384,7 +384,7 @@ pub fn write_ks3(
     }
 
     signatures(sh, &st, inp, r, &[PartyRole::Contractor, PartyRole::Client])?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -481,7 +481,7 @@ pub fn write_timesheet(
     sh.write_string_with_format(r, 1, t("col_total"), &st.total)?;
     sh.write_number_with_format(r, 8, total, &st.total_money)?;
     signatures(sh, &st, inp, r + 1, &[PartyRole::Contractor])?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -617,7 +617,7 @@ pub fn write_archive(
         }
     }
 
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -718,7 +718,7 @@ pub fn write_pay_register(
     sh.write_number_with_format(r, 7, total, &st.total_money)?;
 
     signatures(sh, &st, inp, r + 1, &[PartyRole::Contractor])?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -854,7 +854,7 @@ pub fn write_turnover(
     sh.write_number_with_format(r, 11, totals[1] + totals[3] - totals[5], &st.total_money)?;
 
     signatures(sh, &st, inp, r + 1, &[PartyRole::Contractor])?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -937,7 +937,7 @@ pub fn write_m29(
         r,
         &[PartyRole::Contractor, PartyRole::TechSupervision],
     )?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -1038,7 +1038,7 @@ pub fn write_aosr(
             PartyRole::AuthorSupervision,
         ],
     )?;
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 
@@ -1150,7 +1150,7 @@ pub fn write_book(path: &Path, tables: &[Table]) -> Result<(), XlsxError> {
             )?;
         }
     }
-    wb.save(path)?;
+    crate::plat::write(path, &wb.save_to_buffer()?)?;
     Ok(())
 }
 

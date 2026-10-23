@@ -25,6 +25,15 @@ const APP: &[u8] = include_bytes!("../../target/release/qurai.exe");
 const SERVER: &[u8] = include_bytes!("../../target/release/qurai-server.exe");
 const READ_ME: &[u8] = include_bytes!("../OQING.txt");
 const CHECKLIST: &[u8] = include_bytes!("../TEKSHIRUV.txt");
+// Brauzer versiyasi (`tools/wasm/build.sh` → dist/web). Server ularni
+// `/app` manzilida beradi; wasm faqat siqilgan holda (4–5 MB).
+const WEB: [(&str, &[u8]); 5] = [
+    ("index.html", include_bytes!("../../dist/web/index.html")),
+    ("qurai.js", include_bytes!("../../dist/web/qurai.js")),
+    ("qurai_bg.wasm.gz", include_bytes!("../../dist/web/qurai_bg.wasm.gz")),
+    ("manifest.json", include_bytes!("../../dist/web/manifest.json")),
+    ("icon.svg", include_bytes!("../../dist/web/icon.svg")),
+];
 
 const NAME: &str = "QURAi";
 const VERSION: &str = "1.1.0";
@@ -78,6 +87,23 @@ fn run() -> i32 {
         }
         println!("tayyor");
     }
+
+    // Brauzer versiyasi fayllari — server yonidagi `web/` papkasiga.
+    let web = target.join("web");
+    if let Err(e) = std::fs::create_dir_all(&web) {
+        say_error(&format!("web papkasi yaratilmadi: {e}"));
+        return 1;
+    }
+    print!("  web/ (brauzer versiyasi) ... ");
+    let _ = std::io::stdout().flush();
+    for (name, bytes) in WEB {
+        if let Err(e) = write_file(&web.join(name), bytes) {
+            println!("xato");
+            say_error(&format!("web/{name}: {e}"));
+            return 1;
+        }
+    }
+    println!("tayyor");
 
     if let Err(e) = write_file(&target.join("ochirish.cmd"), uninstall_script().as_bytes()) {
         say_error(&format!("ochirish.cmd: {e}"));

@@ -201,15 +201,18 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
 /// Tanilgan matn hech qachon tayyor javob emas: OCR harfni adashtiradi,
 /// shuning uchun natija maydonga qo'yiladi va odam uni tekshiradi.
 /// Mavjud qiymat ustiga yozilmaydi — faqat bo'sh maydon to'ldiriladi.
-fn scan_certificate(app: &mut App, material_id: i64) {
-    let Some(path) = rfd::FileDialog::new()
+fn scan_certificate(app: &mut App, start: Option<i64>) {
+    let Some((files, ctx)) = crate::plat::FileDialog::new()
         .set_title(t("cert_scan"))
         .add_filter(
             t("cert_scan_files"),
             &["pdf", "png", "jpg", "jpeg", "tif", "tiff", "bmp"],
         )
-        .pick_file()
+        .pick_ctx(start.map(|id| id.to_string()), "cert_scan", false)
     else {
+        return;
+    };
+    let (Some(path), Ok(material_id)) = (files.into_iter().next(), ctx.parse::<i64>()) else {
         return;
     };
 
@@ -537,9 +540,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
         app.db.del("material", id);
         app.reload_modules();
     }
-    if let Some(id) = scan_for {
-        scan_certificate(app, id);
-    }
+    scan_certificate(app, scan_for);
 
     // Kartochka jadval ostida ochiladi; o'sha tugma qayta bosilsa yopiladi.
     let mut shown = ui.data(|d| d.get_temp::<i64>(card_key));
@@ -900,7 +901,7 @@ fn write_m29(app: &mut App, lines: &[crate::checks::ConsumptionLine]) {
     };
     let (from, to) = super::doc_period(app);
     let file = format!("M-29-{}.xlsx", to.format("%Y-%m"));
-    let Some(path) = rfd::FileDialog::new()
+    let Some(path) = crate::plat::FileDialog::new()
         .set_title(t("doc_save"))
         .set_file_name(&file)
         .add_filter("Excel", &["xlsx"])
@@ -2138,13 +2139,11 @@ fn prices_tab(ui: &mut egui::Ui, app: &mut App) {
     ui.add_space(6.0);
 
     ui.horizontal_wrapped(|ui| {
-        if ui
+        let start = ui
             .button(t("pb_import"))
             .on_hover_text(t("pb_import_hint"))
-            .clicked()
-        {
-            app.import_prices();
-        }
+            .clicked();
+        app.import_prices(start);
         ui.label(
             RichText::new(format!("{}: {}", t("pb_rows"), app.price_book.len()))
                 .size(12.0)

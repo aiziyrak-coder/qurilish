@@ -551,7 +551,8 @@ pub struct PriceCheck {
 /// vaqt ko'rinib turadi. Bazaga yozishni asosiy ip qiladi: ulanish bitta.
 pub struct PdfJob {
     pub file: String,
-    pub started: std::time::Instant,
+    path: std::path::PathBuf,
+    pub started: crate::plat::Instant,
     rx: std::sync::mpsc::Receiver<Result<crate::takeoff::Takeoff, String>>,
 }
 
@@ -561,7 +562,7 @@ pub struct PdfJob {
 /// tugagach bir yo'la qo'llanadi. O'rtada to'xtatilsa — o'qib ulgurilgan
 /// varaqlar qo'llanadi.
 pub struct PagesJob {
-    pub started: std::time::Instant,
+    pub started: crate::plat::Instant,
     /// O'qiladigan varaqlar; bo'sh — reja hali kelmagan.
     pub plan: Vec<usize>,
     pub done: Vec<(usize, crate::smeta_ai::PageOut)>,
@@ -577,7 +578,7 @@ pub type QuestionsRx =
 
 /// AI narx taklifi — fon ishi (5-bosqich).
 pub struct PriceJob {
-    pub started: std::time::Instant,
+    pub started: crate::plat::Instant,
     pub asked: usize,
     pub got: usize,
     pub failed: usize,
@@ -589,7 +590,7 @@ pub struct PriceJob {
 
 /// Spetsifikatsiyani tuzish — fon ishi (4-bosqich).
 pub struct SpecJob {
-    pub started: std::time::Instant,
+    pub started: crate::plat::Instant,
     pub plan: Vec<String>,
     pub done: Vec<(usize, crate::smeta::Stage)>,
     pub failed: Vec<(usize, String)>,
@@ -942,6 +943,8 @@ pub struct App {
     /// obyekt almashganda qaytadan.
     /// Umumiy qidiruv oynasi (Ctrl+K).
     pub search_open: bool,
+    /// Tor ekranda (telefon) yon menyu ochiqmi.
+    pub nav_open: bool,
     pub search_query: String,
     /// Oyna ochilgan kadrda kursorni maydonga qo'yish kerak.
     pub search_focus: bool,
@@ -1167,6 +1170,7 @@ impl App {
             selected_issue: None,
             selected_element: None,
             search_open: false,
+            nav_open: false,
             search_query: String::new(),
             search_focus: false,
             auto_check_project: false,
@@ -1242,7 +1246,7 @@ impl App {
 
         // Sinxronizatsiya sozlamasi. Parol saqlanmaydi — faqat seans belgisi.
         app.sync = crate::sync::Config {
-            enabled: cfg!(feature = "sync")
+            enabled: cfg!(all(feature = "sync", not(target_arch = "wasm32")))
                 && app.db.get_setting("sync_enabled").as_deref() == Some("1"),
             url: app.db.get_setting("sync_url").unwrap_or_default(),
             login: app.db.get_setting("sync_login").unwrap_or_default(),
@@ -2290,10 +2294,10 @@ impl App {
             return;
         }
         let Some(pid) = self.current else { return };
-        let src = match std::fs::read_to_string(path) {
+        let src = match crate::plat::read_to_string(path) {
             Ok(s) => s,
             // IFC odatda UTF-8, ammo eski fayllar boshqa kodlashda bo'lishi mumkin.
-            Err(_) => match std::fs::read(path) {
+            Err(_) => match crate::plat::read(path) {
                 Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
                 Err(e) => {
                     self.notify(format!("{}: {e}", t("ifc_failed")));
@@ -2388,18 +2392,20 @@ impl App {
             .unwrap_or_default();
         let owned = path.to_path_buf();
         let name = file.clone();
+        self.drop_jobs();
         let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let result = crate::pdfread::pages(&owned)
+        crate::plat::spawn(move || async move {
+            let result = crate::pdfread::pages_async(&owned)
+                .await
                 .map(|pages| crate::takeoff::Takeoff::read(&name, &pages));
             // Qabul qiluvchi yopilgan bo'lsa (ilova yopildi) — e'tiborsiz.
             let _ = tx.send(result);
         });
         self.pdf_note.clear();
-        self.takeoff_path = Some(path.to_path_buf());
         self.pdf_job = Some(PdfJob {
             file,
-            started: std::time::Instant::now(),
+            path: path.to_path_buf(),
+            started: crate::plat::Instant::now(),
             rx,
         });
     }
@@ -2414,7 +2420,17 @@ impl App {
         let secs = job.started.elapsed().as_secs_f64();
         match job.rx.try_recv() {
             Ok(Ok(found)) => {
-                self.pdf_job = None;
+                let path = job.path.clone();
+                self.drop_jobs();
+                // A new document starts a new calculation. Keep the previous
+                // calculation and file path intact until reading succeeds.
+                self.smeta = None;
+                self.smeta_open = None;
+                self.smeta_note.clear();
+                self.price_hints.clear();
+                self.takeoff_prices.clear();
+                self.takeoff_path = Some(path);
+                self.check_tab = CheckTab::Upload;
                 self.pdf_note = format!("{secs:.0} s");
                 self.takeoff = Some(found);
                 self.save_takeoff();
@@ -2646,7 +2662,7 @@ impl App {
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.smeta_note.clear();
         self.price_job = Some(PriceJob {
-            started: std::time::Instant::now(),
+            started: crate::plat::Instant::now(),
             asked: items.len(),
             got: 0,
             failed: 0,
@@ -3031,6 +3047,13 @@ impl App {
 
     /// Fon ishlarini natijasiz tashlaydi.
     fn drop_jobs(&mut self) {
+        self.pdf_job = None;
+        self.questions_rx = None;
+        self.review_rx = None;
+        self.consolidate_rx = None;
+        self.answers_rx = None;
+        self.verify_rx = None;
+        self.report_rx = None;
         if let Some(job) = self.pages_job.take() {
             job.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
         }
@@ -3325,7 +3348,7 @@ impl App {
         let cfg = self.extract_cfg();
         self.smeta_note.clear();
         self.pages_job = Some(PagesJob {
-            started: std::time::Instant::now(),
+            started: crate::plat::Instant::now(),
             plan: Vec::new(),
             done: Vec::new(),
             failed: Vec::new(),
@@ -3963,7 +3986,7 @@ impl App {
         let cancel = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.smeta_note.clear();
         self.spec_job = Some(SpecJob {
-            started: std::time::Instant::now(),
+            started: crate::plat::Instant::now(),
             plan: Vec::new(),
             done: Vec::new(),
             failed: Vec::new(),
@@ -4022,7 +4045,35 @@ impl App {
                 )
             })
             .collect();
+        // Never replace a complete estimate with a partial/cancelled run.
+        // Counts alone are insufficient: duplicate or missing stage indices
+        // must also be rejected.
+        if job.cancel.load(std::sync::atomic::Ordering::Relaxed)
+            || !failed.is_empty()
+            || job.plan.is_empty()
+            || job.done.len() != job.plan.len()
+            || job
+                .done
+                .iter()
+                .enumerate()
+                .any(|(i, (index, _))| i != *index)
+        {
+            self.smeta_note = format!(
+                "{}: {}/{} · {}",
+                t("sm_spec_failed"),
+                job.done.len(),
+                job.plan.len(),
+                failed.join(", ")
+            );
+            return true;
+        }
         if let Some(m) = &mut self.smeta {
+            self.review_rx = None;
+            self.consolidate_rx = None;
+            self.report_rx = None;
+            m.report.clear();
+            m.review.clear();
+            m.review_summary.clear();
             // Eski narx va ustamalar yangi tuzilmada nom bo'yicha saqlanadi.
             let old = std::mem::take(&mut m.stages);
             m.stages = job
@@ -4032,11 +4083,17 @@ impl App {
                     if let Some(o) = old.iter().find(|o| o.name == st.name) {
                         st.markup = o.markup;
                         for w in &mut st.works {
-                            if let Some(ow) = o.works.iter().find(|ow| ow.name == w.name) {
+                            if let Some(ow) = o
+                                .works
+                                .iter()
+                                .find(|ow| ow.name == w.name && ow.unit == w.unit)
+                            {
                                 w.price = ow.price;
                                 for mat in &mut w.materials {
-                                    if let Some(om) =
-                                        ow.materials.iter().find(|om| om.name == mat.name)
+                                    if let Some(om) = ow
+                                        .materials
+                                        .iter()
+                                        .find(|om| om.name == mat.name && om.unit == mat.unit)
                                     {
                                         mat.price = om.price;
                                     }
@@ -4097,6 +4154,11 @@ impl App {
         self.drop_jobs();
         self.takeoff = None;
         self.smeta = None;
+        self.takeoff_path = None;
+        self.takeoff_prices.clear();
+        self.price_hints.clear();
+        self.smeta_open = None;
+        self.pdf_note.clear();
         self.smeta_note.clear();
         self.save_takeoff();
         self.recompute_takeoff();
@@ -4166,7 +4228,7 @@ impl App {
         }
         let Some(pid) = self.current else { return };
 
-        let src = match std::fs::read(path) {
+        let src = match crate::plat::read(path) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
             Err(e) => {
                 self.notify(format!("{}: {e}", t("dxf_failed")));
@@ -4229,7 +4291,7 @@ impl App {
     /// Serverga kiradi va seans belgisini saqlaydi.
     ///
     /// Parol hech qayerda saqlanmaydi: u faqat shu so'rovda ketadi.
-    #[cfg(feature = "sync")]
+    #[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
     pub fn sync_login(&mut self, password: &str) {
         let url = self.sync.url.trim().to_string();
         let login = self.sync.login.trim().to_string();
@@ -4503,7 +4565,7 @@ impl App {
     /// kelmaydi va buni ko'rish mumkin. Bu davlat elektron raqamli imzosi
     /// emas va shunday deb atalmaydi — u kim, qachon va nimani
     /// tasdiqlaganini qayd etadi.
-    #[cfg(feature = "sync")]
+    #[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
     pub fn sync_sign(&mut self, document: &str, text: &str, rejected: &str) {
         if !self.sync.ready() {
             self.sync_status = Some((t("sync_err_config").to_string(), true));
@@ -4526,7 +4588,7 @@ impl App {
     }
 
     /// Tarmoqsiz yig'ilishda masofadan imzolash yo'q.
-    #[cfg(not(feature = "sync"))]
+    #[cfg(not(all(feature = "sync", not(target_arch = "wasm32"))))]
     pub fn sync_sign(&mut self, _document: &str, _text: &str, _rejected: &str) {
         self.sync_status = Some((t("sync_err_config").to_string(), true));
     }
@@ -5109,7 +5171,7 @@ impl App {
             kind.tag(),
             self.today.format("%Y-%m-%d")
         );
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::plat::FileDialog::new()
             .set_title(t("qr_labels"))
             .set_file_name(name)
             .add_filter("PDF", &["pdf"])
@@ -5440,7 +5502,7 @@ impl App {
         let cfg = self.hook.clone();
         let (tx, rx) = std::sync::mpsc::channel();
         let keys: Vec<String> = fresh.iter().map(|i| i.key()).collect();
-        std::thread::spawn(move || {
+        crate::plat::spawn(move || async move {
             let _ = tx.send((crate::hook::send(&cfg, &project, &fresh), keys));
         });
         self.hook_pending = Some(rx);
@@ -5463,18 +5525,17 @@ impl App {
         self.hook_status = Some((outcome.text(), outcome.bad()));
     }
 
-    /// Narx ro'yxatini fayldan yuklaydi (TZ III.15).
-    pub fn import_prices(&mut self) {
-        if !self.writable() {
-            return;
-        }
-        let Some(path) = rfd::FileDialog::new()
+    /// Narx ro'yxatini fayldan yuklaydi (TZ III.15). Har kadrda
+    /// chaqiriladi: `start` — tugma bosildi (brauzerda fayl kech keladi).
+    pub fn import_prices(&mut self, start: bool) {
+        let start = start && self.writable();
+        let Some(path) = crate::plat::FileDialog::new()
             .set_title(t("pb_import"))
             .add_filter(
                 t("import_file_filter"),
                 &["xlsx", "xlsm", "xls", "ods", "csv"],
             )
-            .pick_file()
+            .pick_file_when(start, "import_prices")
         else {
             return;
         };
@@ -6737,6 +6798,9 @@ impl App {
     }
 }
 
+#[cfg(test)]
+mod pipeline_tests;
+
 /// Jonli tekshiruv: haqiqiy loyiha va haqiqiy xizmat bilan butun yo'l.
 ///
 /// Odatdagi sinovlarda ishlamaydi (`#[ignore]`) — tarmoqqa chiqadi va
@@ -6834,7 +6898,7 @@ varaqlar {pages}, jadvalli (PDF yuboriladi) {with_pdf}
         app.set_llm_key(&key);
         app.select_project(pid);
         assert!(app.smeta.is_some(), "smeta yo'q");
-        let t0 = std::time::Instant::now();
+        let t0 = crate::plat::Instant::now();
         app.start_price_hints();
         assert!(app.price_job.is_some(), "{}", app.smeta_note);
         while app.price_job.is_some() {
@@ -6971,7 +7035,7 @@ bo'limlar {}
         let mut app = App::new(crate::db::Db::open(&path).expect("baza"));
         app.set_llm_key(&key);
         app.select_project(pid);
-        let t0 = std::time::Instant::now();
+        let t0 = crate::plat::Instant::now();
         let mut log = String::new();
 
         app.start_pdf(std::path::Path::new(&pdf));

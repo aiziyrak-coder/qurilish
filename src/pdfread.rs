@@ -50,7 +50,7 @@ pub fn main_dir(pieces: &[Piece]) -> u8 {
 /// aralashib ketadi. Spetsifikatsiyani aniq o'qish uchun har parchaning
 /// o'rni kerak — ustun sarlavhaning tagidagi matn sifatida aniqlanadi.
 pub fn pages(path: &Path) -> Result<Vec<Vec<Piece>>, String> {
-    let doc = Document::load(path).map_err(|e| format!("{e}"))?;
+    let doc = load(path)?;
     let pages = doc.get_pages();
     if pages.is_empty() {
         return Err(crate::i18n::t("pdf_no_pages").to_string());
@@ -60,12 +60,19 @@ pub fn pages(path: &Path) -> Result<Vec<Vec<Piece>>, String> {
     // 77 sahifali loyihada ikki daqiqadan ortiq olardi. Hujjat faqat
     // o'qiladi, yozilmaydi — iplar orasida bo'lishish xavfsiz.
     let ids: Vec<lopdf::ObjectId> = pages.into_values().collect();
+    // Brauzerda ip yo'q — sahifalar ketma-ket o'qiladi.
+    #[cfg(target_arch = "wasm32")]
+    let out: Vec<Vec<Piece>> = ids.iter().map(|id| page_pieces(&doc, *id)).collect();
+    #[cfg(not(target_arch = "wasm32"))]
     let workers = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(2)
         .clamp(1, 8);
+    #[cfg(not(target_arch = "wasm32"))]
     let chunk = ids.len().div_ceil(workers).max(1);
+    #[cfg(not(target_arch = "wasm32"))]
     let doc = &doc;
+    #[cfg(not(target_arch = "wasm32"))]
     let out: Vec<Vec<Piece>> = std::thread::scope(|scope| {
         let handles: Vec<_> = ids
             .chunks(chunk)
@@ -87,6 +94,52 @@ pub fn pages(path: &Path) -> Result<Vec<Vec<Piece>>, String> {
         return Err(crate::i18n::t("pdf_no_text").to_string());
     }
     Ok(out)
+}
+
+/// Brauzerdagi o'qish jarayoni: o'qilgan va jami varaqlar (ekranda
+/// «12/77» bo'lib ko'rinadi). Desktopda o'qish parallel va tez — u yerda
+/// hisoblanmaydi.
+pub static DONE: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static TOTAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// `pages` ning asinxron varianti. Brauzerda ip yo'q: varaqlar ketma-ket
+/// o'qiladi va har varaqdan keyin brauzerga navbat beriladi — sahifa
+/// qotmaydi, jarayon ko'rinib turadi. Desktopda `pages` ning o'zi.
+pub async fn pages_async(path: &Path) -> Result<Vec<Vec<Piece>>, String> {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        pages(path)
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        use std::sync::atomic::Ordering;
+        DONE.store(0, Ordering::Relaxed);
+        TOTAL.store(0, Ordering::Relaxed);
+        crate::plat::sleep(std::time::Duration::ZERO).await;
+        let doc = load(path)?;
+        let ids: Vec<lopdf::ObjectId> = doc.get_pages().into_values().collect();
+        if ids.is_empty() {
+            return Err(crate::i18n::t("pdf_no_pages").to_string());
+        }
+        TOTAL.store(ids.len(), Ordering::Relaxed);
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            out.push(page_pieces(&doc, id));
+            DONE.fetch_add(1, Ordering::Relaxed);
+            crate::plat::repaint();
+            crate::plat::sleep(std::time::Duration::ZERO).await;
+        }
+        if out.iter().all(|p| p.is_empty()) {
+            return Err(crate::i18n::t("pdf_no_text").to_string());
+        }
+        Ok(out)
+    }
+}
+
+/// PDF ni ochadi: desktopda diskdan, brauzerda tanlangan fayl xotirasidan.
+pub fn load(path: &Path) -> Result<Document, String> {
+    let bytes = crate::plat::read(path).map_err(|e| format!("{e}"))?;
+    Document::load_mem(&bytes).map_err(|e| format!("{e}"))
 }
 
 /// Bir qatorga tegishli deb hisoblanadigan balandlik farqi, punktda.
@@ -119,7 +172,7 @@ fn char_width(size: f64) -> f64 {
 /// Natija — qatorlar; har qator ustunlar bo'yicha ajratilgan matn.
 /// Matn topilmasa `Err` qaytadi va sabab ochiq aytiladi.
 pub fn table(path: &Path) -> Result<Vec<Vec<String>>, String> {
-    let doc = Document::load(path).map_err(|e| format!("{e}"))?;
+    let doc = load(path)?;
     let mut rows: Vec<Vec<String>> = Vec::new();
     let pages = doc.get_pages();
     if pages.is_empty() {

@@ -503,7 +503,7 @@ pub fn parse_pull(body: &str) -> Result<Pulled, Error> {
 // ================================================================ Tarmoq
 
 /// Kirish: login va parol bilan seans ochadi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn login(url: &str, login: &str, password: &str) -> Result<Session, Error> {
     let cfg = Config {
         url: url.to_string(),
@@ -515,7 +515,7 @@ pub fn login(url: &str, login: &str, password: &str) -> Result<Session, Error> {
 }
 
 /// Paketni serverga yuboradi va uning raqamini qaytaradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn push(cfg: &Config, project: &str, body: &str, rows: i64) -> Result<i64, Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -533,7 +533,7 @@ pub fn push(cfg: &Config, project: &str, body: &str, rows: i64) -> Result<i64, E
 }
 
 /// Serverdan yangi paketlarni oladi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn pull(cfg: &Config, project: &str, since: i64) -> Result<Pulled, Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -545,7 +545,7 @@ pub fn pull(cfg: &Config, project: &str, since: i64) -> Result<Pulled, Error> {
 }
 
 /// Signal ro'yxatini serverga yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_notices(cfg: &Config, project: &str, items: &[NoticeOut]) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -561,7 +561,7 @@ pub fn send_notices(cfg: &Config, project: &str, items: &[NoticeOut]) -> Result<
 }
 
 /// Ishlar ro'yxatini serverga yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_tasks(cfg: &Config, project: &str, items: &[TaskOut]) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -577,7 +577,7 @@ pub fn send_tasks(cfg: &Config, project: &str, items: &[TaskOut]) -> Result<(), 
 }
 
 /// Ishchilar ro'yxatini serverga yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_workers(cfg: &Config, project: &str, items: &[WorkerOut]) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -593,7 +593,7 @@ pub fn send_workers(cfg: &Config, project: &str, items: &[WorkerOut]) -> Result<
 }
 
 /// Obyekt yakunini serverga yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_summary(cfg: &Config, project: &str, items: &[SummaryOut]) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -609,7 +609,7 @@ pub fn send_summary(cfg: &Config, project: &str, items: &[SummaryOut]) -> Result
 }
 
 /// QR yorliqlar ro'yxatini serverga yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_labels(cfg: &Config, project: &str, items: &[LabelOut]) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -625,7 +625,7 @@ pub fn send_labels(cfg: &Config, project: &str, items: &[LabelOut]) -> Result<()
 }
 
 /// Texnika ro'yxatini serverga yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_machines(cfg: &Config, project: &str, items: &[MachineOut]) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -641,7 +641,7 @@ pub fn send_machines(cfg: &Config, project: &str, items: &[MachineOut]) -> Resul
 }
 
 /// Ofisdan xabar yuboradi (TZ VI.32).
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_message(cfg: &Config, project: &str, text: &str) -> Result<(), Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -657,7 +657,7 @@ pub fn send_message(cfg: &Config, project: &str, text: &str) -> Result<(), Error
 }
 
 /// `since` dan keyingi xabarlarni oladi (TZ VI.32).
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn fetch_messages(cfg: &Config, project: &str, since: i64) -> Result<Vec<MessageIn>, Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -671,7 +671,7 @@ pub fn fetch_messages(cfg: &Config, project: &str, since: i64) -> Result<Vec<Mes
 ///
 /// `Ok(Some(eski))` — shu uzunlik uchun serverda **boshqa** uch turibdi,
 /// ya'ni daftar keyinchalik o'zgartirilgan.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn send_chain(
     cfg: &Config,
     project: &str,
@@ -693,7 +693,7 @@ pub fn send_chain(
 }
 
 /// Serverdagi zanjir belgilarini oladi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn fetch_chain(cfg: &Config, project: &str) -> Result<Vec<ChainMark>, Error> {
     if !cfg.ready() {
         return Err(Error::NotConfigured);
@@ -704,7 +704,7 @@ pub fn fetch_chain(cfg: &Config, project: &str) -> Result<Vec<ChainMark>, Error>
 }
 
 /// Hujjatni masofadan imzolaydi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn sign(
     cfg: &Config,
     project: &str,
@@ -726,7 +726,7 @@ pub fn sign(
 }
 
 /// So'rov yuboradi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 fn send(
     cfg: &Config,
     method: &str,
@@ -797,7 +797,7 @@ pub struct Chat {
 ///
 /// Interfeys qotib qolmasligi uchun tarmoq ishi alohida oqimda bajariladi;
 /// natija kanal orqali qaytadi.
-#[cfg(feature = "sync")]
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 pub fn spawn(
     cfg: Config,
     project: String,
@@ -854,7 +854,7 @@ pub fn spawn(
 }
 
 /// Tarmoqsiz yig'ilishda sinxronizatsiya yo'q.
-#[cfg(not(feature = "sync"))]
+#[cfg(not(all(feature = "sync", not(target_arch = "wasm32"))))]
 pub fn spawn(
     _cfg: Config,
     _project: String,
@@ -923,7 +923,7 @@ mod tests {
     /// yig'ilmagan bo'lsa sinov o'tkazib yuboriladi — bu muhit masalasi,
     /// kod xatosi emas. Shu sababli sinov `cargo test` da ham, faqat
     /// desktop yig'ilgan muhitda ham to'g'ri ishlaydi.
-    #[cfg(feature = "sync")]
+    #[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
     #[test]
     fn desktop_and_server_talk_to_each_other() {
         use std::io::Write;
