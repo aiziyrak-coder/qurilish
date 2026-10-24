@@ -91,8 +91,13 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "no_object_selected" => ("Obyekt tanlanmagan", "Объект не выбран"),
         "no_objects_yet" => ("Hozircha obyektlar yo'q", "Объектов пока нет"),
         "create_first_object" => (
-            "Chap paneldagi tugma orqali birinchi obyektni yarating.",
-            "Создайте первый объект кнопкой в левой панели.",
+            "Birinchi obyektni yarating yoki ilovani ko'rib chiqish uchun namuna obyektni oching — uni keyin bir bosishda o'chirish mumkin.",
+            "Создайте первый объект или откройте демонстрационный, чтобы осмотреть программу — его потом можно удалить одним нажатием.",
+        ),
+        "pick_object_hint" => ("Ishlash uchun obyektni tanlang:", "Выберите объект для работы:"),
+        "demo_hint" => (
+            "«Navro'z» TJM va bog'cha: grafik, smeta, ombor, jurnal, sotuv — barcha bo'limlar to'ldirilgan",
+            "ЖК «Навруз» и детский сад: график, смета, склад, журнал, продажи — все разделы заполнены",
         ),
         "new_object" => ("+ Yangi obyekt", "+ Новый объект"),
         "new_object_name" => ("Yangi obyekt", "Новый объект"),

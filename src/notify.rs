@@ -109,6 +109,23 @@ fn rank(s: Severity) -> u8 {
     }
 }
 
+/// Signal sarlavhasi: son va matn. O'zbekcha «2 ish muddati o'tgan»;
+/// ruscha «Работ просрочено: 2» — songa qarab kelishik o'zgarmaydi va
+/// «1 рабочих» kabi xato chiqmaydi.
+fn count_title(n: impl std::fmt::Display, key: &str) -> String {
+    let text = t(key);
+    if crate::i18n::lang() == crate::i18n::Lang::Ru {
+        let mut c = text.chars();
+        let cap = match c.next() {
+            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            None => String::new(),
+        };
+        format!("{cap}: {n}")
+    } else {
+        format!("{n} {text}")
+    }
+}
+
 /// Barcha modullardan bildirishnomalarni yig'adi.
 ///
 /// Obyekt tanlanmagan bo'lsa ro'yxat bo'sh: bildirishnomalar doim aniq
@@ -178,7 +195,7 @@ fn schedule_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
                 Severity::Major
             },
             overdue.len(),
-            format!("{} {}", overdue.len(), t("nt_tasks_overdue")),
+            count_title(overdue.len(), "nt_tasks_overdue"),
             format!(
                 "{}: {} · {} {}",
                 t("nt_worst"),
@@ -212,7 +229,7 @@ fn schedule_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Schedule,
             Severity::Warning,
             not_started.len(),
-            format!("{} {}", not_started.len(), t("nt_tasks_not_started")),
+            count_title(not_started.len(), "nt_tasks_not_started"),
             format!("{} {} {}", t("nt_worst"), worst, t("nt_days")),
             Screen::Gantt,
             worst,
@@ -237,7 +254,7 @@ fn inspection_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Inspection,
             Severity::Major,
             s.overdue,
-            format!("{} {}", s.overdue, t("nt_inspections_overdue")),
+            count_title(s.overdue, "nt_inspections_overdue"),
             format!("{} {} {}", t("nt_worst"), worst, t("nt_days")),
             Screen::Inspections,
             worst,
@@ -249,7 +266,7 @@ fn inspection_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Inspection,
             Severity::Info,
             s.today,
-            format!("{} {}", s.today, t("nt_inspections_today")),
+            count_title(s.today, "nt_inspections_today"),
             t("nt_inspections_today_hint").to_string(),
             Screen::Inspections,
             0,
@@ -271,8 +288,8 @@ fn inspection_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
                 Severity::Major
             },
             s.open_defects,
-            format!("{} {}", s.open_defects, t("nt_inspection_defects")),
-            format!("{} {}", late, t("nt_past_deadline")),
+            count_title(s.open_defects, "nt_inspection_defects"),
+            count_title(late, "nt_past_deadline"),
             Screen::Inspections,
             0,
         ));
@@ -286,7 +303,7 @@ fn inspection_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Inspection,
             Severity::Warning,
             c.due,
-            format!("{} {}", c.due, t("nt_concrete_due")),
+            count_title(c.due, "nt_concrete_due"),
             t("nt_concrete_due_hint").to_string(),
             Screen::Inspections,
             0,
@@ -298,7 +315,7 @@ fn inspection_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Inspection,
             Severity::Critical,
             c.failed,
-            format!("{} {}", c.failed, t("nt_concrete_failed")),
+            count_title(c.failed, "nt_concrete_failed"),
             format!("{}: {:.0} %", t("nt_worst_result"), c.worst_pct),
             Screen::Inspections,
             0,
@@ -312,7 +329,7 @@ fn inspection_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Inspection,
             Severity::Major,
             geo,
-            format!("{} {}", geo, t("nt_geodesy_out")),
+            count_title(geo, "nt_geodesy_out"),
             t("nt_geodesy_hint").to_string(),
             Screen::Inspections,
             0,
@@ -335,7 +352,7 @@ fn quality_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Quality,
             Severity::Critical,
             critical,
-            format!("{} {}", critical, t("nt_critical_issues")),
+            count_title(critical, "nt_critical_issues"),
             t("nt_critical_hint").to_string(),
             Screen::AiCheck,
             0,
@@ -360,7 +377,7 @@ fn quality_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Quality,
             Severity::Major,
             overdue_defects,
-            format!("{} {}", overdue_defects, t("nt_defects_overdue")),
+            count_title(overdue_defects, "nt_defects_overdue"),
             format!("{} {} {}", t("nt_worst"), worst, t("nt_days")),
             Screen::Quality,
             worst,
@@ -382,7 +399,7 @@ fn document_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Documents,
             Severity::Warning,
             waiting,
-            format!("{} {}", waiting, t("nt_docs_waiting")),
+            count_title(waiting, "nt_docs_waiting"),
             t("nt_docs_waiting_hint").to_string(),
             Screen::ExecDocs,
             0,
@@ -399,7 +416,7 @@ fn document_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Documents,
             Severity::Major,
             rejected,
-            format!("{} {}", rejected, t("nt_docs_rejected")),
+            count_title(rejected, "nt_docs_rejected"),
             t("nt_docs_rejected_hint").to_string(),
             Screen::ExecDocs,
             0,
@@ -421,7 +438,7 @@ fn supply_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Supply,
             Severity::Warning,
             pending,
-            format!("{} {}", pending, t("nt_requests_new")),
+            count_title(pending, "nt_requests_new"),
             t("nt_requests_new_hint").to_string(),
             Screen::Requests,
             0,
@@ -448,7 +465,7 @@ fn supply_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
                 Severity::Warning
             },
             late.len(),
-            format!("{} {}", late.len(), t("nt_purchases_late")),
+            count_title(late.len(), "nt_purchases_late"),
             format!("{} {} {}", t("nt_worst"), worst, t("nt_days")),
             Screen::Purchases,
             worst,
@@ -475,7 +492,7 @@ fn stock_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Stock,
             Severity::Warning,
             low.len(),
-            format!("{} {}", low.len(), t("nt_stock_low")),
+            count_title(low.len(), "nt_stock_low"),
             low.iter()
                 .take(3)
                 .map(|(m, avail)| format!("{}: {:.0} {}", m.name, avail, m.unit))
@@ -498,7 +515,7 @@ fn safety_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Safety,
             Severity::Critical,
             expired,
-            format!("{} {}", expired, t("nt_permits_expired")),
+            count_title(expired, "nt_permits_expired"),
             t("nt_permits_expired_hint").to_string(),
             Screen::Safety,
             0,
@@ -514,7 +531,7 @@ fn safety_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Safety,
             Severity::Warning,
             expiring,
-            format!("{} {}", expiring, t("nt_permits_expiring")),
+            count_title(expiring, "nt_permits_expiring"),
             t("nt_permits_expiring_hint").to_string(),
             Screen::Safety,
             0,
@@ -527,7 +544,7 @@ fn safety_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Safety,
             Severity::Major,
             ppe,
-            format!("{} {}", ppe, t("nt_ppe_missing")),
+            count_title(ppe, "nt_ppe_missing"),
             t("nt_ppe_missing_hint").to_string(),
             Screen::Safety,
             0,
@@ -550,7 +567,7 @@ fn machine_notices(app: &App, out: &mut Vec<Notice>) {
             Source::Machines,
             Severity::Warning,
             due.len(),
-            format!("{} {}", due.len(), t("nt_service_due")),
+            count_title(due.len(), "nt_service_due"),
             due.iter()
                 .take(3)
                 .map(|m| m.name.clone())
@@ -602,7 +619,7 @@ fn money_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Client,
             Severity::Warning,
             changes,
-            format!("{} {}", changes, t("nt_changes_pending")),
+            count_title(changes, "nt_changes_pending"),
             t("nt_changes_pending_hint").to_string(),
             Screen::Contracts,
             0,
@@ -619,7 +636,7 @@ fn money_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Client,
             Severity::Warning,
             accepts,
-            format!("{} {}", accepts, t("nt_accept_pending")),
+            count_title(accepts, "nt_accept_pending"),
             t("nt_accept_pending_hint").to_string(),
             Screen::Contracts,
             0,
@@ -636,7 +653,7 @@ fn money_notices(app: &App, today: NaiveDate, out: &mut Vec<Notice>) {
             Source::Client,
             Severity::Major,
             rejected,
-            format!("{} {}", rejected, t("nt_accept_rejected")),
+            count_title(rejected, "nt_accept_rejected"),
             t("nt_accept_rejected_hint").to_string(),
             Screen::Contracts,
             0,

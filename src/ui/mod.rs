@@ -199,6 +199,68 @@ pub fn draw(ctx: &Context, app: &mut App) {
     toast(ctx, app);
 }
 
+/// Obyekt yo'q yoki tanlanmagan holat: tushuntirish va birinchi qadam.
+fn no_object_state(ui: &mut egui::Ui, app: &mut App) {
+    let none_yet = app.projects.is_empty();
+    ui.add_space(40.0);
+    let w = ui.available_width().min(460.0);
+    ui.vertical_centered(|ui| {
+        ui.set_max_width(w);
+        ui.label(
+            RichText::new(if none_yet {
+                t("no_objects_yet")
+            } else {
+                t("no_object_selected")
+            })
+            .size(19.0)
+            .color(theme::text()),
+        );
+        ui.add_space(6.0);
+        ui.add(
+            egui::Label::new(
+                RichText::new(if none_yet {
+                    t("create_first_object")
+                } else {
+                    t("pick_object_hint")
+                })
+                .size(13.0)
+                .color(theme::muted()),
+            )
+            .wrap(),
+        );
+        ui.add_space(14.0);
+        if none_yet {
+            // Tugmalar ustma-ust — har qanday enda markazda turadi.
+            if ui.button(RichText::new(t("new_object")).strong()).clicked() {
+                new_project(app);
+            }
+            ui.add_space(4.0);
+            if ui
+                .button(t("set_create_demo"))
+                .on_hover_text(t("demo_hint"))
+                .clicked()
+            {
+                if let Ok(id) = app.db.seed_demo() {
+                    app.reload_projects();
+                    app.select_project(id);
+                }
+            }
+        } else {
+            // Mavjud obyektlardan birini tanlash — shu yerning o'zida.
+            let list: Vec<(i64, String)> = app
+                .projects
+                .iter()
+                .map(|p| (p.id, format!("{} [{}]", p.name, p.code)))
+                .collect();
+            for (id, name) in list {
+                if ui.button(name).clicked() {
+                    app.select_project(id);
+                }
+            }
+        }
+    });
+}
+
 /// Oyna/qalqib chiquvchi panel eni: ekrandan keng bo'lmasin.
 pub fn fit_width(ctx: &Context, want: f32) -> f32 {
     want.min(ctx.screen_rect().width() - 40.0).max(200.0)
@@ -229,6 +291,13 @@ fn screen_body(ui: &mut egui::Ui, app: &mut App) {
     // Rol bu ekranni o'zgartira olmasa — buni yashirmaymiz, ochiq aytamiz.
     if !app.can_edit(app.screen) {
         readonly_banner(ui, app);
+    }
+    // Obyekt tanlanmagan — obyektga bog'liq har ekranda bir xil, foydali
+    // bo'sh holat: nima qilish kerakligi va bir bosishli tugmalar.
+    // (Sozlamalar va Yordamchi obyektsiz ham ishlaydi.)
+    if app.current.is_none() && !matches!(app.screen, Screen::Settings | Screen::Copilot) {
+        no_object_state(ui, app);
+        return;
     }
     match app.screen {
         Screen::Dashboard => dashboard::show(ui, app),
@@ -432,7 +501,7 @@ fn top_bar(ctx: &Context, app: &mut App) {
                         .map(|p| p.name.clone())
                         .unwrap_or_else(|| t("no_object").into());
                     let mut pick: Option<i64> = None;
-                    let combo_w = (ui.available_width() - 74.0).max(90.0);
+                    let combo_w = (ui.available_width() - 100.0).max(60.0);
                     egui::ComboBox::from_id_salt("project_picker_phone")
                         .selected_text(issues::truncate(
                             &current_name,
@@ -1574,15 +1643,31 @@ pub fn stat_row(ui: &mut egui::Ui, cards: Vec<Stat>) -> Option<usize> {
     }
     // Kartochka kengligi 168 + hoshiya 28 + oraliq 8.
     const SLOT: f32 = 204.0;
-    let per_row = ((ui.available_width() / SLOT).floor() as usize).max(1);
+    let avail = ui.available_width();
+    let per_row = ((avail / SLOT).floor() as usize).max(1);
+    // Tor ekranda (2 tagacha qatorda) kartalar butun enni bo'lishadi —
+    // telefonda yarim ekranli kartalar va bo'sh o'ng tomon qolmasin.
+    let inner = if per_row <= 2 {
+        ((avail - (per_row as f32 - 1.0) * 8.0) / per_row as f32 - 30.0).max(120.0)
+    } else {
+        168.0
+    };
     let mut clicked = None;
     for (chunk_i, chunk) in cards.chunks(per_row).enumerate() {
         ui.horizontal(|ui| {
             for (i, c) in chunk.iter().enumerate() {
                 let hit = if c.link {
-                    stat_card_link(ui, &c.title, c.value.clone(), &c.hint, c.color)
+                    stat_card_w(ui, &c.title, c.value.clone(), &c.hint, c.color, inner, true)
                 } else {
-                    stat_card(ui, &c.title, c.value.clone(), &c.hint, c.color);
+                    stat_card_w(
+                        ui,
+                        &c.title,
+                        c.value.clone(),
+                        &c.hint,
+                        c.color,
+                        inner,
+                        false,
+                    );
                     false
                 };
                 if hit {
@@ -1595,13 +1680,15 @@ pub fn stat_row(ui: &mut egui::Ui, cards: Vec<Stat>) -> Option<usize> {
     clicked
 }
 
-/// Bosiladigan ko'rsatkich kartochkasi — bosilganda `true` qaytaradi.
-pub fn stat_card_link(
+/// Ko'rsatkich kartochkasi berilgan enda; `link` — bosiladigan.
+fn stat_card_w(
     ui: &mut egui::Ui,
     title: &str,
     value: String,
     hint: &str,
     color: Color32,
+    width: f32,
+    link: bool,
 ) -> bool {
     let r = egui::Frame::new()
         .fill(theme::card())
@@ -1609,42 +1696,28 @@ pub fn stat_card_link(
         .corner_radius(8)
         .inner_margin(egui::Margin::symmetric(14, 12))
         .show(ui, |ui| {
-            ui.set_width(168.0);
+            ui.set_width(width);
             ui.vertical(|ui| {
                 ui.label(RichText::new(title).size(12.0).color(theme::muted()));
                 ui.add_space(2.0);
                 ui.label(RichText::new(value).size(20.0).strong().color(color));
                 if !hint.is_empty() {
-                    ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
+                    ui.add(
+                        egui::Label::new(RichText::new(hint).size(11.0).color(theme::muted()))
+                            .wrap(),
+                    );
                 }
             });
         })
-        .response
-        .interact(egui::Sense::click());
+        .response;
+    if !link {
+        return false;
+    }
+    let r = r.interact(egui::Sense::click());
     if r.hovered() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
     }
     r.clicked()
-}
-
-/// Ko'rsatkich kartochkasi.
-pub fn stat_card(ui: &mut egui::Ui, title: &str, value: String, hint: &str, color: Color32) {
-    egui::Frame::new()
-        .fill(theme::card())
-        .stroke(Stroke::new(1.0_f32, theme::line()))
-        .corner_radius(8)
-        .inner_margin(egui::Margin::symmetric(14, 12))
-        .show(ui, |ui| {
-            ui.set_width(168.0);
-            ui.vertical(|ui| {
-                ui.label(RichText::new(title).size(12.0).color(theme::muted()));
-                ui.add_space(2.0);
-                ui.label(RichText::new(value).size(20.0).strong().color(color));
-                if !hint.is_empty() {
-                    ui.label(RichText::new(hint).size(11.0).color(theme::muted()));
-                }
-            });
-        });
 }
 
 /// «Sarlavha — qiymat» ko'rinishidagi maydon.

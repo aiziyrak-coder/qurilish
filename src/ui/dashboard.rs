@@ -214,7 +214,7 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
                 let (rect, _) = ui.allocate_exact_size(vec2(10.0, 16.0), Sense::hover());
                 ui.painter().circle_filled(rect.center(), 4.0, colour);
 
-                let reserve = if narrow { 130.0 } else { 220.0 };
+                let reserve = if narrow { 170.0 } else { 260.0 };
                 // Sarlavha chapga tekislanadi (`add_sized` markazga qo'yardi).
                 let tw = (ui.available_width() - reserve).max(110.0);
                 ui.allocate_ui_with_layout(
@@ -225,15 +225,8 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
                         ui.add(egui::Label::new(RichText::new(&n.title).size(13.0)).truncate());
                     },
                 );
-                ui.label(
-                    RichText::new(if n.days > 0 {
-                        format!("{} {} · {}", n.days, t("days_short"), n.count)
-                    } else {
-                        n.count.to_string()
-                    })
-                    .size(11.5)
-                    .color(theme::muted()),
-                );
+                // O'ng blok: tugma, bo'lim, son — bitta joylashuvda, shuning
+                // uchun bir-biriga yopishmaydi.
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button(t("ns_open")).clicked() {
                         goto = Some(n.screen);
@@ -245,6 +238,15 @@ fn next_steps(ui: &mut egui::Ui, app: &App) -> Option<Screen> {
                                 .color(theme::muted()),
                         );
                     }
+                    ui.label(
+                        RichText::new(if n.days > 0 {
+                            format!("{} {} · {}", n.days, t("days_short"), n.count)
+                        } else {
+                            n.count.to_string()
+                        })
+                        .size(11.5)
+                        .color(theme::muted()),
+                    );
                 });
             });
             // Dalil — nima uchun shunday deyilayotgani.

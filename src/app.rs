@@ -967,7 +967,14 @@ pub struct App {
 
 impl App {
     pub fn new(db: Db) -> App {
-        let settings = Settings::load(&db);
+        let mut settings = Settings::load(&db);
+        // Sinov uchun: `?lang=ru`, `?theme=dark` (desktopda QURAI_LANG/THEME).
+        if let Some(l) = crate::plat::diag("lang") {
+            settings.lang = i18n::Lang::parse(&l);
+        }
+        if let Some(th) = crate::plat::diag("theme") {
+            settings.theme = theme::Theme::parse(&th);
+        }
         settings.apply_globals();
         let mut app = App {
             db,
