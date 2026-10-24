@@ -380,6 +380,52 @@ fn status_color(s: IssueStatus) -> Color32 {
     }
 }
 
+/// Nomuvofiqliklar ro'yxati va tanlangan kartochka.
+///
+/// Keng ekranda yonma-yon: ro'yxat o'z enida yonga suriladi va o'ng
+/// panelni ekrandan chiqarib yubormaydi. Tor ekranda (telefon) —
+/// ustma-ust: avval ro'yxat, ostida kartochka.
+pub fn list_and_detail(ui: &mut egui::Ui, app: &mut App, module: IssueModule) {
+    let h = (ui.available_height() - 12.0).max(180.0);
+    let total = ui.available_width();
+    if total < 760.0 {
+        let list_h = (h * 0.55).max(220.0);
+        egui::ScrollArea::horizontal()
+            .id_salt(("issue_list_x", module as u8))
+            .show(ui, |ui| {
+                if let Some(id) = issue_table(ui, app, module, list_h) {
+                    app.selected_issue = Some(id);
+                }
+            });
+        ui.add_space(8.0);
+        ui.separator();
+        issue_detail(ui, app, (h - list_h).max(300.0));
+        return;
+    }
+    let detail_w = (total * 0.34).clamp(300.0, 440.0);
+    let list_w = (total - detail_w - 16.0).max(260.0);
+    ui.horizontal_top(|ui| {
+        ui.allocate_ui_with_layout(
+            egui::vec2(list_w, h),
+            egui::Layout::top_down(egui::Align::Min),
+            |ui| {
+                ui.set_width(list_w);
+                egui::ScrollArea::horizontal()
+                    .id_salt(("issue_list_x", module as u8))
+                    .show(ui, |ui| {
+                        if let Some(id) = issue_table(ui, app, module, h) {
+                            app.selected_issue = Some(id);
+                        }
+                    });
+            },
+        );
+        ui.vertical(|ui| {
+            ui.set_width(detail_w);
+            issue_detail(ui, app, h - 24.0);
+        });
+    });
+}
+
 /// Tanlangan nomuvofiqlik kartochkasi: tavsif, me'yoriy asos, tavsiya, holat.
 pub fn issue_detail(ui: &mut egui::Ui, app: &mut App, height: f32) {
     let Some(id) = app.selected_issue else {

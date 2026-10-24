@@ -375,7 +375,7 @@ fn gantt(app: &App) -> Table {
             vec![
                 txt(&x.wbs),
                 txt(&x.name),
-                txt(x.section.code()),
+                txt(x.section.label()),
                 txt(&x.responsible),
                 Cell::Date(x.plan_start),
                 Cell::Num(x.duration as f64),
@@ -425,7 +425,7 @@ fn ppr(app: &App) -> Table {
                 txt(d.kind.label()),
                 txt(&d.number),
                 txt(&d.name),
-                txt(d.section.code()),
+                txt(d.section.label()),
                 txt(d
                     .task_id
                     .and_then(|id| app.task(id).map(|t| format!("{} {}", t.wbs, t.name)))
@@ -469,7 +469,7 @@ fn issues(app: &App) -> Table {
                 txt(&i.code),
                 txt(i.severity.label()),
                 txt(i.module.label()),
-                txt(i.section.code()),
+                txt(i.section.label()),
                 txt(&i.title),
                 txt(&i.description),
                 txt(&i.element),
@@ -516,7 +516,7 @@ fn estimate(app: &App) -> Table {
                 Cell::Num(x.pos as f64),
                 txt(&x.code),
                 txt(&x.name),
-                txt(x.section.code()),
+                txt(x.section.label()),
                 txt(&x.unit),
                 Cell::Num(x.qty),
                 Cell::Money(x.price),
@@ -636,7 +636,7 @@ fn materials(app: &App) -> Table {
                 txt(&m.code),
                 txt(&m.name),
                 txt(&m.unit),
-                txt(m.section.code()),
+                txt(m.section.label()),
                 txt(&m.spec),
                 txt(&m.cert_no),
                 odate(m.cert_until),
@@ -788,7 +788,7 @@ fn purchases(app: &App) -> Table {
                 Cell::Date(p.date),
                 txt(&p.supplier),
                 txt(&p.title),
-                txt(p.section.code()),
+                txt(p.section.label()),
                 Cell::Num(p.qty),
                 Cell::Num(p.delivered_qty),
                 Cell::Num(p.remaining()),

@@ -91,8 +91,8 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, project: &crate::model::Project) {
         vec![
             stat(
                 t("cl_progress"),
-                format!("{:.0}%", p.fact_pct),
-                &format!("{} {:.0}%", t("an_plan"), p.plan_pct),
+                format!("{}%", crate::ui::fixed(p.fact_pct, 0)),
+                &format!("{} {}%", t("an_plan"), crate::ui::fixed(p.plan_pct, 0)),
                 if p.fact_pct + 2.0 >= p.plan_pct {
                     theme::ok()
                 } else {
@@ -141,8 +141,8 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, project: &crate::model::Project) {
                 money(project.paid_total),
                 &if project.contract_sum > 0.0 {
                     format!(
-                        "{:.0}% {}",
-                        project.paid_total / project.contract_sum * 100.0,
+                        "{}% {}",
+                        crate::ui::fixed(project.paid_total / project.contract_sum * 100.0, 0),
                         t("cl_of_contract")
                     )
                 } else {
@@ -401,7 +401,7 @@ fn contracts_block(ui: &mut egui::Ui, app: &App) {
                         RichText::new(if st.approved_changes == 0.0 {
                             t("cl_no_change").to_string()
                         } else {
-                            format!("{:+.1}%", st.change_pct())
+                            format!("{}%", crate::ui::signed(st.change_pct(), 1))
                         })
                         .size(12.0)
                         .color(if st.approved_changes > 0.0 {
@@ -570,10 +570,10 @@ fn week_block(ui: &mut egui::Ui, app: &App) {
             ui,
             t("cl_w_progress"),
             format!(
-                "{:.1}% → {:.1}% ({:+.1})",
-                r.progress_start,
-                r.progress_end,
-                r.progress_end - r.progress_start
+                "{}% → {}% ({})",
+                crate::ui::fixed(r.progress_start, 1),
+                crate::ui::fixed(r.progress_end, 1),
+                crate::ui::signed(r.progress_end - r.progress_start, 1)
             ),
             if r.progress_end > r.progress_start {
                 theme::ok()
@@ -699,12 +699,12 @@ fn docs_block(ui: &mut egui::Ui, app: &App) {
     block(ui, t("cl_docs_block"), |ui| {
         ui.label(
             RichText::new(format!(
-                "{}: {} / {} · {}: {:.0}%",
+                "{}: {} / {} · {}: {}%",
                 t("cl_docs_signed"),
                 signed,
                 required.len(),
                 t("in_final_ready"),
-                ready.ready_pct
+                crate::ui::fixed(ready.ready_pct, 0)
             ))
             .size(12.5)
             .color(if ready.ready() {
@@ -965,10 +965,10 @@ fn alert_line(app: &App, a: &crate::checks::ContractAlert) -> (String, Color32) 
     match a {
         A::SumDeviation { contract_id, pct } => (
             format!(
-                "{} — {} {:+.1}%",
+                "{} — {} {}%",
                 contract(*contract_id),
                 t("cl_a_deviation"),
-                pct
+                crate::ui::signed(pct, 1)
             ),
             theme::warn(),
         ),

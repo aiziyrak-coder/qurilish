@@ -588,6 +588,17 @@ pub fn trim_num(v: f64) -> String {
     }
 }
 
+/// «Kun qoldi» ustuni: ish boshlangan bo'lsa manfiy son emas, so'z.
+fn days_left_text(d: i64) -> String {
+    if d < 0 {
+        crate::i18n::t("mat_started").to_string()
+    } else if d == 0 {
+        crate::i18n::t("mat_today").to_string()
+    } else {
+        d.to_string()
+    }
+}
+
 /// Material nomini id bo'yicha topadi — boshqa ekranlar ham ishlatadi.
 pub fn material_label(app: &App, id: i64) -> String {
     app.materials
@@ -882,7 +893,7 @@ fn usage_tab(ui: &mut egui::Ui, app: &mut App) {
                             ui,
                             80.0,
                             RichText::new(if l.norm > 0.0 {
-                                format!("{:+.0}%", l.diff_pct)
+                                format!("{}%", crate::ui::signed(l.diff_pct, 0))
                             } else {
                                 t("dash").to_string()
                             })
@@ -1186,7 +1197,7 @@ fn trace_tab(ui: &mut egui::Ui, app: &mut App) {
             stat(
                 t("kpi_price_change"),
                 match rating.as_ref().filter(|r| r.deliveries > 1) {
-                    Some(r) => format!("{:+.0}%", r.price_change_pct),
+                    Some(r) => format!("{}%", crate::ui::signed(r.price_change_pct, 0)),
                     None => t("dash").to_string(),
                 },
                 &match rating.as_ref().filter(|r| r.last_price > 0.0) {
@@ -1471,7 +1482,7 @@ fn ready_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             90.0,
-                            RichText::new(l.days_left.to_string()).size(12.0).color(
+                            RichText::new(days_left_text(l.days_left)).size(12.0).color(
                                 if l.days_left <= 0 {
                                     theme::danger()
                                 } else if l.days_left <= 3 {
@@ -1920,7 +1931,7 @@ fn kits_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(k.days_left.to_string()).size(12.0).color(
+                                RichText::new(days_left_text(k.days_left)).size(12.0).color(
                                     if k.days_left < 0 {
                                         theme::danger()
                                     } else {
@@ -1931,7 +1942,7 @@ fn kits_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 110.0,
-                                RichText::new(format!("{:.0}%", k.ready_pct))
+                                RichText::new(format!("{}%", crate::ui::fixed(k.ready_pct, 0)))
                                     .size(12.5)
                                     .strong()
                                     .color(if k.complete() {
@@ -1991,11 +2002,11 @@ fn kits_tab(ui: &mut egui::Ui, app: &mut App) {
                     .show(ui, |ui| {
                         ui.label(
                             RichText::new(format!(
-                                "{}, {} · {} {:.0}%",
+                                "{}, {} · {} {}%",
                                 super::issues::truncate(&c.title, 40),
                                 c.unit,
                                 t("mat_maker_spread"),
-                                c.spread_pct
+                                crate::ui::fixed(c.spread_pct, 0)
                             ))
                             .size(12.5)
                             .strong(),
@@ -2024,7 +2035,7 @@ fn kits_tab(ui: &mut egui::Ui, app: &mut App) {
                                         RichText::new(if o.over_pct < 0.01 {
                                             t("mat_maker_best").to_string()
                                         } else {
-                                            format!("+{:.0}%", o.over_pct)
+                                            format!("+{}%", crate::ui::fixed(o.over_pct, 0))
                                         })
                                         .size(12.0)
                                         .color(
@@ -2266,8 +2277,8 @@ fn prices_tab(ui: &mut egui::Ui, app: &mut App) {
                             Some(tr) => {
                                 ui.label(
                                     RichText::new(format!(
-                                        "{:+.1}% / {}",
-                                        tr.per_month,
+                                        "{}% / {}",
+                                        crate::ui::signed(tr.per_month, 1),
                                         t("pb_month")
                                     ))
                                     .size(12.0)

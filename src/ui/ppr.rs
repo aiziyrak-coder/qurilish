@@ -822,19 +822,5 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
     drop(list);
     ui.add_space(8.0);
 
-    let h = (ui.available_height() - 12.0).max(180.0);
-    let detail_w = (ui.available_width() * 0.34).clamp(300.0, 440.0);
-
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width((ui.available_width() - detail_w - 16.0).max(260.0));
-            if let Some(id) = issues::issue_table(ui, app, IssueModule::Ppr, h) {
-                app.selected_issue = Some(id);
-            }
-        });
-        ui.vertical(|ui| {
-            ui.set_width(detail_w);
-            issues::issue_detail(ui, app, h - 24.0);
-        });
-    });
+    issues::list_and_detail(ui, app, IssueModule::Ppr);
 }

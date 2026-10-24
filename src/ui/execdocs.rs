@@ -443,7 +443,7 @@ fn schemes_tab(ui: &mut egui::Ui, app: &mut App) {
                             RichText::new(if s.points == 0 {
                                 t("dash").to_string()
                             } else {
-                                format!("{:.3} {}", s.max_deviation, s.unit)
+                                format!("{} {}", crate::ui::fixed(s.max_deviation, 3), s.unit)
                             })
                             .size(12.0)
                             .color(theme::muted()),
@@ -839,7 +839,11 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
 fn problem_text(p: &crate::checks::DocProblem) -> String {
     use crate::checks::DocProblem as P;
     match p {
-        P::WorkUnfinished { progress } => format!("{} ({:.0}%)", t("dp_unfinished"), progress),
+        P::WorkUnfinished { progress } => format!(
+            "{} ({}%)",
+            t("dp_unfinished"),
+            crate::ui::fixed(progress, 0)
+        ),
         P::NoTask => t("dp_no_task").to_string(),
         P::NoInspection => t("dp_no_inspection").to_string(),
         P::InspectionFailed { number } => format!("{} — {}", t("dp_inspection_failed"), number),

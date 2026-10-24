@@ -134,7 +134,7 @@ fn final_tab(ui: &mut egui::Ui, app: &mut App) {
         vec![
             stat(
                 t("in_final_ready"),
-                format!("{:.0}%", r.ready_pct),
+                format!("{}%", crate::ui::fixed(r.ready_pct, 0)),
                 t("in_final_ready_hint"),
                 if r.ready() {
                     theme::ok()
@@ -313,7 +313,7 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
                 if c.tested == 0 {
                     t("dash").to_string()
                 } else {
-                    format!("{:.0} %", c.avg_pct)
+                    format!("{} %", crate::ui::fixed(c.avg_pct, 0))
                 },
                 &format!(
                     "{} {} · {} {}",

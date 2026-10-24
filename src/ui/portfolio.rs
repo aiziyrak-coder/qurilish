@@ -59,7 +59,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             ),
             stat(
                 t("pf_progress"),
-                format!("{:.1} %", totals.weighted_pct),
+                format!("{} %", crate::ui::fixed(totals.weighted_pct, 1)),
                 t("pf_progress_hint"),
                 theme::text(),
             ),
@@ -73,12 +73,15 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 t("pf_paid"),
                 money(totals.paid_total),
                 &format!(
-                    "{:.0}% {}",
-                    if totals.contract_sum > 0.0 {
-                        totals.paid_total / totals.contract_sum * 100.0
-                    } else {
-                        0.0
-                    },
+                    "{}% {}",
+                    crate::ui::fixed(
+                        if totals.contract_sum > 0.0 {
+                            totals.paid_total / totals.contract_sum * 100.0
+                        } else {
+                            0.0
+                        },
+                        0
+                    ),
                     t("pf_paid_hint")
                 ),
                 theme::ok(),
@@ -156,7 +159,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             80.0,
-                            RichText::new(format!("{:.1}%", p.fact_pct))
+                            RichText::new(format!("{}%", crate::ui::fixed(p.fact_pct, 1)))
                                 .size(12.5)
                                 .strong(),
                         );
@@ -164,7 +167,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 80.0,
-                                RichText::new(format!("{:.1}%", p.plan_pct))
+                                RichText::new(format!("{}%", crate::ui::fixed(p.plan_pct, 1)))
                                     .size(12.0)
                                     .color(theme::muted()),
                             );
@@ -193,7 +196,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             85.0,
-                            RichText::new(format!("{:.0}%", p.paid_pct()))
+                            RichText::new(format!("{}%", crate::ui::fixed(p.paid_pct(), 0)))
                                 .size(12.0)
                                 .color(if p.paid_pct() + 5.0 < p.fact_pct {
                                     // Bajarilish moliyalashtirishdan oldinda.
@@ -220,7 +223,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             85.0,
-                            RichText::new(format!("{:.0}", p.safety_score))
+                            RichText::new(crate::ui::fixed(p.safety_score, 0))
                                 .size(12.0)
                                 .color(if p.safety_score >= 85.0 {
                                     theme::ok()
@@ -235,7 +238,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                                 ui,
                                 80.0,
                                 RichText::new(if p.units_total > 0 {
-                                    format!("{:.0}%", p.sold_pct())
+                                    format!("{}%", crate::ui::fixed(p.sold_pct(), 0))
                                 } else {
                                     t("dash").to_string()
                                 })
@@ -395,11 +398,11 @@ fn central_block(ui: &mut egui::Ui, app: &App) {
                         for sp in crate::checks::split_order(&need, l.total_qty, l.best_price) {
                             ui.label(
                                 RichText::new(format!(
-                                    "{}: {} {} ({:.0}%) = {}",
+                                    "{}: {} {} ({}%) = {}",
                                     name_of(sp.project_id),
                                     super::materials::trim_num(sp.qty),
                                     l.unit,
-                                    sp.share_pct,
+                                    crate::ui::fixed(sp.share_pct, 0),
                                     money(sp.amount)
                                 ))
                                 .size(11.5),
@@ -426,7 +429,7 @@ fn central_block(ui: &mut egui::Ui, app: &App) {
                 super::warehouse::cell_r(
                     ui,
                     100.0,
-                    RichText::new(format!("{:.0}%", l.spread_pct))
+                    RichText::new(format!("{}%", crate::ui::fixed(l.spread_pct, 0)))
                         .size(12.0)
                         .color(if l.worth_central() {
                             theme::warn()

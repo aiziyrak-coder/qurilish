@@ -102,7 +102,11 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
                 t("ct_kpi_paid"),
                 money(d.paid),
                 &if d.planned > 0.0 {
-                    format!("{:.0}% {}", d.paid / d.planned * 100.0, t("ct_of_schedule"))
+                    format!(
+                        "{}% {}",
+                        crate::ui::fixed(d.paid / d.planned * 100.0, 0),
+                        t("ct_of_schedule")
+                    )
                 } else {
                     t("dash").to_string()
                 },
@@ -250,7 +254,7 @@ fn contracts_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                             RichText::new(if st.approved_changes == 0.0 {
                                 t("dash").to_string()
                             } else {
-                                format!("{:+.1}%", st.change_pct())
+                                format!("{}%", crate::ui::signed(st.change_pct(), 1))
                             })
                             .size(12.0)
                             .color(if st.approved_changes > 0.0 {

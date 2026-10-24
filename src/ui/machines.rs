@@ -310,7 +310,7 @@ fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             90.0,
-                            RichText::new(format!("{:.0}", c.hours)).size(12.0),
+                            RichText::new(crate::ui::fixed(c.hours, 0)).size(12.0),
                         );
                         cell_r(
                             ui,
@@ -400,13 +400,13 @@ fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
             for f in &forecast {
                 ui.label(
                     RichText::new(format!(
-                        "· {} — {}: {:.0} {}, {}: {:.0} {}{}",
+                        "· {} — {}: {} {}, {}: {} {}{}",
                         super::issues::truncate(&f.name, 24),
                         t("mch_fc_mtbf"),
-                        f.mtbf_hours,
+                        crate::ui::fixed(f.mtbf_hours, 0),
                         t("col_hours"),
                         t("mch_fc_left"),
-                        f.hours_left,
+                        crate::ui::fixed(f.hours_left, 0),
                         t("col_hours"),
                         f.when
                             .map(|d| format!(" · {}", d.format("%d.%m.%Y")))
@@ -422,11 +422,11 @@ fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
                 // Prognoz nechta ta'mirga tayangani va oxirgi ta'mirdan
                 // beri qancha ishlagani — ishonch darajasi shundan ko'rinadi.
                 .on_hover_text(format!(
-                    "{}: {} · {}: {:.0} {}",
+                    "{}: {} · {}: {} {}",
                     t("mch_fc_based"),
                     f.based_on,
                     t("mch_fc_since"),
-                    f.since_last,
+                    crate::ui::fixed(f.since_last, 0),
                     t("col_hours")
                 ));
                 let _ = f.machine_id;
@@ -648,7 +648,7 @@ fn mech_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             120.0,
-                            RichText::new(format!("{:.0}%", l.usage_pct))
+                            RichText::new(format!("{}%", crate::ui::fixed(l.usage_pct, 0)))
                                 .size(12.5)
                                 .color(if l.usage_pct < crate::checks::PARK_IDLE_PCT {
                                     theme::warn()
@@ -659,7 +659,7 @@ fn mech_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             130.0,
-                            RichText::new(format!("{:.1}", l.hours_per_day))
+                            RichText::new(crate::ui::fixed(l.hours_per_day, 1))
                                 .size(12.0)
                                 .color(theme::muted()),
                         );
@@ -724,10 +724,10 @@ fn mech_text(i: &crate::checks::MechIssue) -> String {
             machine,
             over_hours,
         } => format!(
-            "{} — {} (+{:.0} {})",
+            "{} — {} (+{} {})",
             t("mi_service"),
             machine,
-            over_hours,
+            crate::ui::fixed(over_hours, 0),
             t("col_hours")
         ),
         M::NoOperator { machine } => format!("{} — {}", t("mi_no_operator"), machine),
@@ -742,13 +742,28 @@ fn advice_text(a: &crate::checks::ParkAdvice) -> String {
     use crate::checks::ParkAdvice as A;
     match a {
         A::OwnIdle { name, usage_pct } => {
-            format!("{} — {} ({:.0}%)", t("pa_own_idle"), name, usage_pct)
+            format!(
+                "{} — {} ({}%)",
+                t("pa_own_idle"),
+                name,
+                crate::ui::fixed(usage_pct, 0)
+            )
         }
         A::RentedIdle { name, usage_pct } => {
-            format!("{} — {} ({:.0}%)", t("pa_rented_idle"), name, usage_pct)
+            format!(
+                "{} — {} ({}%)",
+                t("pa_rented_idle"),
+                name,
+                crate::ui::fixed(usage_pct, 0)
+            )
         }
         A::RentedBusy { name, usage_pct } => {
-            format!("{} — {} ({:.0}%)", t("pa_rented_busy"), name, usage_pct)
+            format!(
+                "{} — {} ({}%)",
+                t("pa_rented_busy"),
+                name,
+                crate::ui::fixed(usage_pct, 0)
+            )
         }
     }
 }
@@ -1262,9 +1277,12 @@ fn usage_tab(ui: &mut egui::Ui, app: &mut App) {
                             ui,
                             110.0,
                             // Manfiy nol «-0%» bo'lib chiqmasin.
-                            RichText::new(format!("{:.0}%", l.utilization.max(0.0)))
-                                .size(12.5)
-                                .color(color),
+                            RichText::new(format!(
+                                "{}%",
+                                crate::ui::fixed(l.utilization.max(0.0), 0)
+                            ))
+                            .size(12.5)
+                            .color(color),
                         );
                         bar(ui, 130.0, l.utilization / 100.0, color);
                         cell_r(
@@ -1659,9 +1677,9 @@ fn repairs_tab(ui: &mut egui::Ui, app: &mut App) {
                 ui.add_space(4.0);
                 ui.label(
                     RichText::new(format!(
-                        "{name} — {} ({:.0}% {})",
+                        "{name} — {} ({}% {})",
                         money(s.cost),
-                        s.cost_pct,
+                        crate::ui::fixed(s.cost_pct, 0),
                         t("mch_r_of_price")
                     ))
                     .size(12.0)

@@ -388,8 +388,12 @@ fn kpi_row(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
         vec![
             stat(
                 t("kpi_progress"),
-                format!("{:.1} %", pr.fact_pct),
-                &format!("{} {:.1} %", t("kpi_plan_is"), pr.plan_pct),
+                format!("{} %", crate::ui::fixed(pr.fact_pct, 1)),
+                &format!(
+                    "{} {} %",
+                    t("kpi_plan_is"),
+                    crate::ui::fixed(pr.plan_pct, 1)
+                ),
                 if behind { theme::danger() } else { theme::ok() },
             ),
             stat(
@@ -1154,7 +1158,7 @@ fn today_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) -> Option
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
-                    RichText::new(format!("{:.0}%", task.progress))
+                    RichText::new(format!("{}%", crate::ui::fixed(task.progress, 0)))
                         .size(12.0)
                         .color(theme::text()),
                 );

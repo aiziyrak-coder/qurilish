@@ -230,7 +230,7 @@ fn volumes_tab(ui: &mut egui::Ui, app: &mut App) {
                     RichText::new(format!(
                         "· {} — {} {} {}",
                         super::issues::truncate(&name, 40),
-                        m.section.code(),
+                        m.section.label(),
                         super::materials::trim_num(m.volume),
                         if m.started {
                             t("es_missing_started")
@@ -355,13 +355,13 @@ fn deep_text(i: &crate::checks::DeepIssue) -> String {
             quote,
             pct,
         } => format!(
-            "{} {}: {} / {} ({}{:.0}%)",
+            "{} {}: {} / {} ({}{}%)",
             t("ed_quote_gap"),
             pos,
             money(*estimate),
             money(*quote),
             if *pct > 0.0 { "+" } else { "" },
-            pct
+            crate::ui::fixed(pct, 0)
         ),
     }
 }
@@ -476,7 +476,7 @@ fn chain_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             80.0,
-                            RichText::new(format!("{:.0}%", l.progress))
+                            RichText::new(format!("{}%", crate::ui::fixed(l.progress, 0)))
                                 .size(12.0)
                                 .color(theme::muted()),
                         );
@@ -636,7 +636,7 @@ fn structure_tab(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(6.0);
         ui.horizontal_wrapped(|ui| {
             ui.label(
-                RichText::new(format!("{:.0}%", cov.linked_pct))
+                RichText::new(format!("{}%", crate::ui::fixed(cov.linked_pct, 0)))
                     .size(16.0)
                     .strong()
                     .color(if cov.linked_pct >= 80.0 {
@@ -1080,7 +1080,7 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
                 );
                 if s.total > 0.0 {
                     ui.label(
-                        RichText::new(format!("{:.0}%", sum / s.total * 100.0))
+                        RichText::new(format!("{}%", crate::ui::fixed(sum / s.total * 100.0, 0)))
                             .size(11.0)
                             .color(theme::muted()),
                     );
@@ -1437,21 +1437,7 @@ fn issues_tab(ui: &mut egui::Ui, app: &mut App) {
     drop(list);
     ui.add_space(8.0);
 
-    let h = (ui.available_height() - 12.0).max(180.0);
-    let detail_w = (ui.available_width() * 0.34).clamp(300.0, 440.0);
-
-    ui.horizontal_top(|ui| {
-        ui.vertical(|ui| {
-            ui.set_width((ui.available_width() - detail_w - 16.0).max(260.0));
-            if let Some(id) = issues::issue_table(ui, app, IssueModule::Estimate, h) {
-                app.selected_issue = Some(id);
-            }
-        });
-        ui.vertical(|ui| {
-            ui.set_width(detail_w);
-            issues::issue_detail(ui, app, h - 24.0);
-        });
-    });
+    issues::list_and_detail(ui, app, IssueModule::Estimate);
 }
 
 fn head_l(ui: &mut egui::Ui, w: f32, s: &str) {

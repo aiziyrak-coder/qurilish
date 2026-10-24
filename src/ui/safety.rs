@@ -173,7 +173,7 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
         vec![
             stat(
                 t("kpi_safety_score"),
-                format!("{:.0}", score.score),
+                crate::ui::fixed(score.score, 0),
                 // Ball qanday chiqqani ko'rinsin — sirli son bo'lib qolmasin.
                 &format!(
                     "{} {} · {} {}",
@@ -1269,7 +1269,12 @@ fn analysis_tab(ui: &mut egui::Ui, app: &mut App) {
                                     },
                                 ),
                             );
-                            cell_r(ui, 90.0, RichText::new(format!("{:.0}%", c.pct)).size(12.0));
+                            cell_r(
+                                ui,
+                                90.0,
+                                RichText::new(format!("{}%", crate::ui::fixed(c.pct, 0)))
+                                    .size(12.0),
+                            );
                             ui.end_row();
                         }
                     });

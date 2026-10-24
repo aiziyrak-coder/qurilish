@@ -160,7 +160,7 @@ fn review_tab(ui: &mut egui::Ui, app: &mut App) {
                     ),
                     stat(
                         t("sl_sold_pct"),
-                        format!("{:.0} %", funnel.sold_pct()),
+                        format!("{} %", crate::ui::fixed(funnel.sold_pct(), 0)),
                         t("sl_sold_pct_hint"),
                         theme::ok(),
                     ),

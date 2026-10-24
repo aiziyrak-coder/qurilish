@@ -586,7 +586,11 @@ fn forecast_tab(ui: &mut egui::Ui, app: &mut App) {
             stat(
                 t("an_fc_profit"),
                 money(f.profit_forecast),
-                &format!("{:.1}% {}", f.margin_pct, t("an_fc_margin")),
+                &format!(
+                    "{}% {}",
+                    crate::ui::fixed(f.margin_pct, 1),
+                    t("an_fc_margin")
+                ),
                 if f.profit_forecast >= 0.0 {
                     theme::ok()
                 } else {
@@ -617,7 +621,11 @@ fn forecast_tab(ui: &mut egui::Ui, app: &mut App) {
     ui.label(RichText::new(t("an_fc_how")).size(13.5).strong());
     ui.add_space(4.0);
     for line in [
-        format!("{} — {:.1}%", t("an_fc_how_progress"), f.progress_pct),
+        format!(
+            "{} — {}%",
+            t("an_fc_how_progress"),
+            crate::ui::fixed(f.progress_pct, 1)
+        ),
         format!("{} — {}", t("an_fc_how_cost"), money(f.cost_now)),
         format!("{} — {}", t("an_fc_how_earned"), money(f.earned)),
         t("an_fc_how_rule").to_string(),
@@ -693,7 +701,7 @@ fn productivity_block(ui: &mut egui::Ui, app: &App) {
                 cell_r(
                     ui,
                     120.0,
-                    RichText::new(format!("{:.2}", r.hours_per_unit)).size(12.0),
+                    RichText::new(crate::ui::fixed(r.hours_per_unit, 2)).size(12.0),
                 );
                 cell_r(ui, 140.0, RichText::new(money(r.cost_per_unit)).size(12.0));
                 let diff = if avg > 0.0 {
@@ -1140,43 +1148,43 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
         vec![
             stat(
                 t("an_exec_total"),
-                format!("{:.0}", score.total),
+                crate::ui::fixed(score.total, 0),
                 t("an_exec_total_hint"),
                 colour(score.total),
             ),
             stat(
                 t("an_exec_safety"),
-                format!("{:.0}", score.safety),
+                crate::ui::fixed(score.safety, 0),
                 t("an_exec_weight_25"),
                 colour(score.safety),
             ),
             stat(
                 t("an_exec_quality"),
-                format!("{:.0}", score.quality),
+                crate::ui::fixed(score.quality, 0),
                 t("an_exec_weight_25"),
                 colour(score.quality),
             ),
             stat(
                 t("an_exec_schedule"),
-                format!("{:.0}", score.schedule),
+                crate::ui::fixed(score.schedule, 0),
                 t("an_exec_weight_20"),
                 colour(score.schedule),
             ),
             stat(
                 t("an_exec_money"),
-                format!("{:.0}", score.money),
+                crate::ui::fixed(score.money, 0),
                 t("an_exec_weight_15"),
                 colour(score.money),
             ),
             stat(
                 t("an_exec_supply"),
-                format!("{:.0}", score.supply),
+                crate::ui::fixed(score.supply, 0),
                 t("an_exec_weight_10"),
                 colour(score.supply),
             ),
             stat(
                 t("an_exec_docs"),
-                format!("{:.0}", score.docs),
+                crate::ui::fixed(score.docs, 0),
                 t("an_exec_weight_5"),
                 colour(score.docs),
             ),
@@ -1203,10 +1211,10 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
             ui.add_space(6.0);
             ui.label(
                 RichText::new(format!(
-                    "{}: {:.1}% → {:.1}% · {}: {} · {}: {}",
+                    "{}: {}% → {}% · {}: {} · {}: {}",
                     t("an_w_progress"),
-                    week.progress_start,
-                    week.progress_end,
+                    crate::ui::fixed(week.progress_start, 1),
+                    crate::ui::fixed(week.progress_end, 1),
                     t("an_w_done"),
                     week.tasks_done,
                     t("an_w_started"),
@@ -1298,13 +1306,14 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 100.0,
-                                RichText::new(format!("{:.0}%", c.on_time_pct)).size(12.0),
+                                RichText::new(format!("{}%", crate::ui::fixed(c.on_time_pct, 0)))
+                                    .size(12.0),
                             );
                             cell_r(
                                 ui,
                                 110.0,
                                 RichText::new(if c.avg_delay > 0.0 {
-                                    format!("{:.0} {}", c.avg_delay, t("days"))
+                                    format!("{} {}", crate::ui::fixed(c.avg_delay, 0), t("days"))
                                 } else {
                                     t("dash").to_string()
                                 })
@@ -1314,7 +1323,7 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(format!("{:.0}", c.quality))
+                                RichText::new(crate::ui::fixed(c.quality, 0))
                                     .size(12.5)
                                     .color(colour(c.quality)),
                             );
@@ -1376,7 +1385,8 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 100.0,
-                                RichText::new(format!("{:.0}%", s.complete_pct)).size(12.0),
+                                RichText::new(format!("{}%", crate::ui::fixed(s.complete_pct, 0)))
+                                    .size(12.0),
                             );
                             // Muddat ustunida ulush bilan birga o'rtacha
                             // kechikish ham turadi: 90% yaxshi ko'rinadi,
@@ -1386,13 +1396,13 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                                 100.0,
                                 RichText::new(if s.avg_delay > 0.0 {
                                     format!(
-                                        "{:.0}% · {:.0}{}",
-                                        s.on_time_pct,
-                                        s.avg_delay,
+                                        "{}% · {}{}",
+                                        crate::ui::fixed(s.on_time_pct, 0),
+                                        crate::ui::fixed(s.avg_delay, 0),
                                         t("day_short")
                                     )
                                 } else {
-                                    format!("{:.0}%", s.on_time_pct)
+                                    format!("{}%", crate::ui::fixed(s.on_time_pct, 0))
                                 })
                                 .size(12.0),
                             );
@@ -1413,7 +1423,7 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                                 RichText::new(if s.price_over_pct.abs() < 0.01 {
                                     t("dash").to_string()
                                 } else {
-                                    format!("+{:.0}%", s.price_over_pct)
+                                    format!("+{}%", crate::ui::fixed(s.price_over_pct, 0))
                                 })
                                 .size(12.0)
                                 .color(theme::muted()),
@@ -1421,7 +1431,7 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(format!("{:.0}", s.score()))
+                                RichText::new(crate::ui::fixed(s.score(), 0))
                                     .size(12.5)
                                     .color(colour(s.score())),
                             );
@@ -1442,9 +1452,9 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
             for c in &corr {
                 ui.label(
                     RichText::new(format!(
-                        "{}: r = {:.2} ({} {})",
+                        "{}: r = {} ({} {})",
                         t(c.key),
-                        c.r,
+                        crate::ui::fixed(c.r, 2),
                         c.points,
                         t("an_corr_points")
                     ))
@@ -1484,12 +1494,12 @@ fn cuts_tab(ui: &mut egui::Ui, app: &mut App) {
                 );
                 ui.label(
                     RichText::new(format!(
-                        "{}: {} {} · {}: {:.0} {}",
+                        "{}: {} {} · {}: {} {}",
                         t("an_ch_days"),
                         changes.added_days,
                         t("days"),
                         t("an_ch_decision"),
-                        changes.avg_decision_days,
+                        crate::ui::fixed(changes.avg_decision_days, 0),
                         t("days")
                     ))
                     .size(12.0)

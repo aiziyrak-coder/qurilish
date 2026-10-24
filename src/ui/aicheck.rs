@@ -979,7 +979,7 @@ fn data_tab(ui: &mut egui::Ui, app: &mut App) {
                     lines.push(Muted(t("sm_from_project_note").to_string()));
                     let kg = |v: f64| {
                         if v >= 1000.0 {
-                            format!("{:.1} t", v / 1000.0)
+                            format!("{} t", crate::ui::fixed(v / 1000.0, 1))
                         } else {
                             format!("{} kg", num(v))
                         }
@@ -2718,7 +2718,7 @@ fn export_docx(app: &mut App, lines: &[DocLine], title: &str, file: &str, rgb: [
                     items
                         .iter()
                         .map(|(l, v, txt)| {
-                            vec![l.clone(), format!("{:.0}", v / max * 100.0), txt.clone()]
+                            vec![l.clone(), crate::ui::fixed(v / max * 100.0, 0), txt.clone()]
                         })
                         .collect(),
                 ))
@@ -3127,7 +3127,7 @@ fn offer_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) ->
                         vec![
                             (i + 1).to_string(),
                             p.title.clone(),
-                            format!("{:.0}", p.pct),
+                            crate::ui::fixed(p.pct, 0),
                             money(p.amount),
                         ]
                     })
@@ -3514,11 +3514,11 @@ fn sketch_view(ui: &mut egui::Ui, app: &mut App) {
                 }
                 ui.label(
                     RichText::new(format!(
-                        "{}: {:.1} m² · {}: {:.1} m · {} {}",
+                        "{}: {} m² · {}: {} m · {} {}",
                         t("sm_sketch_area"),
-                        sk.area(),
+                        crate::ui::fixed(sk.area(), 1),
                         t("sm_sketch_perimeter"),
-                        sk.perimeter(),
+                        crate::ui::fixed(sk.perimeter(), 1),
                         sk.points.len(),
                         t("sm_sketch_points")
                     ))
@@ -3768,7 +3768,7 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
     };
     let kg = |v: f64| {
         if v >= 1000.0 {
-            format!("{:.1} t", v / 1000.0)
+            format!("{} t", crate::ui::fixed(v / 1000.0, 1))
         } else {
             format!("{} kg", num(v))
         }
@@ -4071,7 +4071,11 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
                     (
                         st.name.clone(),
                         v,
-                        format!("{} ({:.0}%)", money(v), v / view.total * 100.0),
+                        format!(
+                            "{} ({}%)",
+                            money(v),
+                            crate::ui::fixed(v / view.total * 100.0, 0)
+                        ),
                     )
                 })
                 .collect();
@@ -4175,7 +4179,7 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
             if beton > 0.0 {
                 ratios.push(vec![
                     t("sm_ratio_concrete_m2").into(),
-                    format!("{:.3} m³/m²", beton / area),
+                    format!("{} m³/m²", crate::ui::fixed(beton / area, 3)),
                     t("sm_ratio_concrete_hint").into(),
                 ]);
             }
@@ -4183,7 +4187,7 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
         if beton > 0.0 && rebar > 0.0 {
             ratios.push(vec![
                 t("sm_ratio_rebar").into(),
-                format!("{:.0} kg/m³", rebar / beton),
+                format!("{} kg/m³", crate::ui::fixed(rebar / beton, 0)),
                 t("sm_ratio_rebar_hint").into(),
             ]);
         }
@@ -4191,8 +4195,11 @@ fn report_lines(app: &App, m: &crate::smeta::Smeta, view: &crate::smeta::View) -
             ratios.push(vec![
                 t("sm_ratio_material_share").into(),
                 format!(
-                    "{:.0} %",
-                    view.material_sum / (view.work_sum + view.material_sum).max(1e-9) * 100.0
+                    "{} %",
+                    crate::ui::fixed(
+                        view.material_sum / (view.work_sum + view.material_sum).max(1e-9) * 100.0,
+                        0
+                    )
                 ),
                 t("sm_ratio_material_hint").into(),
             ]);

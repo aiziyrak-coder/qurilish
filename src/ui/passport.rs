@@ -569,8 +569,8 @@ fn finance_fields(ui: &mut egui::Ui, p: &mut crate::model::Project, dirty: &mut 
             ui.add_space(super::field_indent(ui));
             ui.label(
                 RichText::new(format!(
-                    "{:.0} % · {}: {} {}",
-                    frac * 100.0,
+                    "{} % · {}: {} {}",
+                    crate::ui::fixed(f64::from(frac * 100.0), 0),
                     t("finance_remaining"),
                     money((p.contract_sum - p.paid_total).max(0.0)),
                     p.currency
@@ -613,7 +613,11 @@ fn summary_card(ui: &mut egui::Ui, app: &App) {
     row(
         ui,
         t("kpi_progress"),
-        format!("{:.1} % / {:.1} %", pr.fact_pct, pr.plan_pct),
+        format!(
+            "{} % / {} %",
+            crate::ui::fixed(pr.fact_pct, 1),
+            crate::ui::fixed(pr.plan_pct, 1)
+        ),
         if behind { theme::danger() } else { theme::ok() },
     );
     row(
@@ -696,7 +700,7 @@ fn completeness_card(ui: &mut egui::Ui, app: &App, p: &crate::model::Project) {
             },
         );
         ui.label(
-            RichText::new(format!("{:.0} %", pct * 100.0))
+            RichText::new(format!("{} %", crate::ui::fixed(f64::from(pct * 100.0), 0)))
                 .size(12.0)
                 .strong()
                 .color(if pct >= 1.0 {

@@ -159,7 +159,7 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
                 if score.checks == 0 {
                     t("dash").to_string()
                 } else {
-                    format!("{:.0}", score.score)
+                    crate::ui::fixed(score.score, 0)
                 },
                 &if score.checks == 0 {
                     t("kpi_quality_score_hint").to_string()
@@ -512,15 +512,15 @@ fn sections_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(format!("{:.0}", s.score)).size(12.5).color(
-                                    if s.score >= 80.0 {
+                                RichText::new(crate::ui::fixed(s.score, 0))
+                                    .size(12.5)
+                                    .color(if s.score >= 80.0 {
                                         theme::ok()
                                     } else if s.score >= 60.0 {
                                         theme::warn()
                                     } else {
                                         theme::danger()
-                                    },
-                                ),
+                                    }),
                             );
                             ui.end_row();
                         }
@@ -623,10 +623,10 @@ fn sections_tab(ui: &mut egui::Ui, app: &mut App) {
                 };
                 ui.label(
                     RichText::new(format!(
-                        "· {} ← {} ({:.0}%) — {}",
+                        "· {} ← {} ({}%) — {}",
                         super::issues::truncate(&name(b.task_id), 30),
                         super::issues::truncate(&name(b.pred_id), 30),
-                        b.pred_progress,
+                        crate::ui::fixed(b.pred_progress, 0),
                         if b.pred_checked {
                             t("ql_seq_checked")
                         } else {
@@ -670,7 +670,7 @@ fn week_tab(ui: &mut egui::Ui, app: &mut App) {
         vec![
             stat(
                 t("ql_w_score"),
-                format!("{:.0}", w.score),
+                crate::ui::fixed(w.score, 0),
                 t("ql_w_score_hint"),
                 if w.score >= 80.0 {
                     theme::ok()
@@ -994,7 +994,7 @@ fn checklists_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                                     )
                                     .changed();
                                 egui::ComboBox::from_id_salt(("cl_sec", c.id))
-                                    .selected_text(c.section.code())
+                                    .selected_text(c.section.label())
                                     .width(90.0)
                                     .show_ui(ui, |ui| {
                                         for sec in crate::model::Section::ALL {
@@ -1303,8 +1303,8 @@ fn blocks_tab(ui: &mut egui::Ui, app: &mut App) {
                             ui,
                             90.0,
                             RichText::new(format!(
-                                "{:.0}%",
-                                task.map(|x| x.progress).unwrap_or(0.0)
+                                "{}%",
+                                crate::ui::fixed(task.map(|x| x.progress).unwrap_or(0.0), 0)
                             ))
                             .size(12.0)
                             .color(theme::muted()),
@@ -1765,7 +1765,7 @@ fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
                             cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(format!("{:.0}", c.score))
+                                RichText::new(crate::ui::fixed(c.score, 0))
                                     .size(12.5)
                                     .strong()
                                     .color(if c.score >= 85.0 {

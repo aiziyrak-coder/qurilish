@@ -608,10 +608,10 @@ fn attendance_tab(ui: &mut egui::Ui, app: &mut App) {
             Some(f) => {
                 ui.label(
                     RichText::new(format!(
-                        "{} · {} {:.0} m",
+                        "{} · {} {} m",
                         f.center.label(),
                         t("geo_radius"),
-                        f.radius
+                        crate::ui::fixed(f.radius, 0)
                     ))
                     .size(12.0),
                 );
@@ -982,16 +982,16 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
             stat(
                 t("ts_pay_work"),
                 money(pay.work),
-                &format!("{:.0} {}", pay.work_hours, t("col_hours")),
+                &format!("{} {}", crate::ui::fixed(pay.work_hours, 0), t("col_hours")),
                 theme::ok(),
             ),
             stat(
                 t("ts_pay_idle"),
                 money(pay.idle),
                 &format!(
-                    "{:.0}% · {:.0} {}",
-                    pay.idle_pct(),
-                    pay.idle_hours,
+                    "{}% · {} {}",
+                    crate::ui::fixed(pay.idle_pct(), 0),
+                    crate::ui::fixed(pay.idle_hours, 0),
                     t("col_hours")
                 ),
                 if pay.idle_high() {
@@ -1026,13 +1026,13 @@ fn cost_tab(ui: &mut egui::Ui, app: &mut App) {
                 .unwrap_or_else(|| t("ts_idle_no_brigade").to_string());
             ui.label(
                 RichText::new(format!(
-                    "· {} ({} {}) — {:.0}%: {:.0} / {:.0} {} · {}",
+                    "· {} ({} {}) — {}%: {} / {} {} · {}",
                     super::issues::truncate(&name, 26),
                     l.workers,
                     t("ts_obj_workers"),
-                    l.idle_pct,
-                    l.idle_hours,
-                    l.work_hours,
+                    crate::ui::fixed(l.idle_pct, 0),
+                    crate::ui::fixed(l.idle_hours, 0),
+                    crate::ui::fixed(l.work_hours, 0),
                     t("col_hours"),
                     money(l.cost)
                 ))
@@ -1514,12 +1514,12 @@ fn objects_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             120.0,
-                            RichText::new(format!("{:.0}", o.hours)).size(12.0),
+                            RichText::new(crate::ui::fixed(o.hours, 0)).size(12.0),
                         );
                         cell_r(
                             ui,
                             120.0,
-                            RichText::new(format!("{:.0}", o.idle_hours))
+                            RichText::new(crate::ui::fixed(o.idle_hours, 0))
                                 .size(12.0)
                                 .color(if o.idle_hours > 0.0 {
                                     theme::warn()
@@ -1530,7 +1530,7 @@ fn objects_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             130.0,
-                            RichText::new(format!("{:.0}", o.hours_per_worker))
+                            RichText::new(crate::ui::fixed(o.hours_per_worker, 0))
                                 .size(12.0)
                                 .color(theme::muted()),
                         );
@@ -1639,10 +1639,10 @@ fn schedule_text(i: &crate::checks::ScheduleIssue) -> String {
             format!("{} — {}", t("ts_sch_empty"), day.format("%d.%m.%Y"))
         }
         S::OverShift { day, hours } => format!(
-            "{} — {} ({:.0} {})",
+            "{} — {} ({} {})",
             t("ts_sch_over"),
             day.format("%d.%m.%Y"),
-            hours,
+            crate::ui::fixed(hours, 0),
             t("col_hours")
         ),
     }

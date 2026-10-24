@@ -3115,6 +3115,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
 
         // Umumiy o'lchov birliklari
         "an_tasks" => ("Ishlar", "Работ"),
+        "mat_started" => ("boshlangan", "начата"),
+        "mat_today" => ("bugun", "сегодня"),
         "cl_tasks_unit" => ("ta ish", "работ"),
         "cl_section_general" => ("Umumiy", "Общие"),
         "an_issues" => ("Nomuvofiqliklar", "Несоответствий"),

@@ -305,11 +305,11 @@ fn collect(app: &App, query: &str) -> Vec<Hit> {
             kind: t("screen_gantt_short"),
             title: task.name.clone(),
             subtitle: format!(
-                "{} {} · {} · {:.0} %",
+                "{} {} · {} · {} %",
                 t("col_num"),
                 task.wbs,
                 task.section.label(),
-                task.progress
+                crate::ui::fixed(task.progress, 0)
             ),
             color: theme::accent(),
             action: Action::Task(task.id),

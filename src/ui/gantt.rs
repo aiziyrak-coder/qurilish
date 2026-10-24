@@ -241,17 +241,17 @@ fn summary_strip(ui: &mut egui::Ui, app: &mut App) {
         vec![
             stat(
                 t("kpi_plan_today"),
-                format!("{:.1} %", pr.plan_pct),
+                format!("{} %", crate::ui::fixed(pr.plan_pct, 1)),
                 t("kpi_by_durations"),
                 theme::accent(),
             ),
             stat(
                 t("kpi_fact"),
-                format!("{:.1} %", pr.fact_pct),
+                format!("{} %", crate::ui::fixed(pr.fact_pct, 1)),
                 &format!(
-                    "{} {:+.1} {}",
+                    "{} {} {}",
                     t("kpi_deviation"),
-                    pr.fact_pct - pr.plan_pct,
+                    crate::ui::signed(pr.fact_pct - pr.plan_pct, 1),
                     t("kpi_pp")
                 ),
                 fact_color,
@@ -512,7 +512,7 @@ fn chart(ui: &mut egui::Ui, app: &mut App) {
         // Bajarilish: son + mitti polosa.
         text(
             440.0,
-            format!("{:.0}", task.progress),
+            crate::ui::fixed(task.progress, 0),
             if task.progress >= 99.99 {
                 theme::ok()
             } else {
@@ -1073,7 +1073,7 @@ fn hover_text(task: &Task, c: &crate::cpm::Calc, app: &App) -> String {
     let s = origin + Duration::days(c.es);
     let e = origin + Duration::days(c.ef);
     let mut txt = format!(
-        "{}\n{}: {}\n{}: {}\n{}: {} — {} ({} {})\n{}: {:.0}%\n{}: {} {}",
+        "{}\n{}: {}\n{}: {}\n{}: {} — {} ({} {})\n{}: {}%\n{}: {} {}",
         task.name,
         i18n::t("task_section"),
         task.section.label(),
@@ -1089,7 +1089,7 @@ fn hover_text(task: &Task, c: &crate::cpm::Calc, app: &App) -> String {
         task.duration,
         i18n::t("days_short"),
         i18n::t("hover_done"),
-        task.progress,
+        crate::ui::fixed(task.progress, 0),
         i18n::t("hover_slack"),
         c.slack,
         i18n::t("days_short")

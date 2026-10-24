@@ -54,31 +54,31 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         vec![
             stat(
                 t("an_exec_total"),
-                format!("{:.0}", score.total),
+                crate::ui::fixed(score.total, 0),
                 t("an_exec_total_hint"),
                 paint(score.total),
             ),
             stat(
                 t("an_exec_safety"),
-                format!("{:.0}", score.safety),
+                crate::ui::fixed(score.safety, 0),
                 t("an_exec_weight_25"),
                 paint(score.safety),
             ),
             stat(
                 t("an_exec_quality"),
-                format!("{:.0}", score.quality),
+                crate::ui::fixed(score.quality, 0),
                 t("an_exec_weight_25"),
                 paint(score.quality),
             ),
             stat(
                 t("an_exec_schedule"),
-                format!("{:.0}", score.schedule),
+                crate::ui::fixed(score.schedule, 0),
                 t("an_exec_weight_20"),
                 paint(score.schedule),
             ),
             stat(
                 t("an_exec_money"),
-                format!("{:.0}", score.money),
+                crate::ui::fixed(score.money, 0),
                 t("an_exec_weight_15"),
                 paint(score.money),
             ),
@@ -171,13 +171,13 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                             super::warehouse::cell_r(
                                 ui,
                                 130.0,
-                                RichText::new(format!("{:+.1}%", b.gap())).size(12.5).color(
-                                    if b.gap() >= 0.0 {
+                                RichText::new(format!("{}%", crate::ui::signed(b.gap(), 1)))
+                                    .size(12.5)
+                                    .color(if b.gap() >= 0.0 {
                                         theme::ok()
                                     } else {
                                         theme::danger()
-                                    },
-                                ),
+                                    }),
                             );
                             // Hajm noma'lum bo'lsa ustun bo'sh qoladi.
                             let opt = |v: Option<f64>, money_fmt: bool| match v {
@@ -199,12 +199,12 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                             super::warehouse::cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(format!("{:.0}", b.quality)).size(12.0),
+                                RichText::new(crate::ui::fixed(b.quality, 0)).size(12.0),
                             );
                             super::warehouse::cell_r(
                                 ui,
                                 90.0,
-                                RichText::new(format!("{:.0}", b.safety)).size(12.0),
+                                RichText::new(crate::ui::fixed(b.safety, 0)).size(12.0),
                             );
                             ui.end_row();
                         }
@@ -371,8 +371,9 @@ fn cards(app: &App) -> Vec<Card> {
             (
                 t("dr_progress").to_string(),
                 format!(
-                    "{:.1}% / {:.1}%",
-                    app.progress.fact_pct, app.progress.plan_pct
+                    "{}% / {}%",
+                    crate::ui::fixed(app.progress.fact_pct, 1),
+                    crate::ui::fixed(app.progress.plan_pct, 1)
                 ),
                 if app.progress.fact_pct + 0.01 >= app.progress.plan_pct {
                     ok
@@ -520,7 +521,7 @@ fn cards(app: &App) -> Vec<Card> {
         rows: vec![
             (
                 t("dr_score").to_string(),
-                format!("{:.0}", week.score),
+                crate::ui::fixed(week.score, 0),
                 if week.score >= 80.0 {
                     ok
                 } else if week.score >= 60.0 {
@@ -561,7 +562,7 @@ fn cards(app: &App) -> Vec<Card> {
         rows: vec![
             (
                 t("dr_score").to_string(),
-                format!("{:.0}", safety_score.score),
+                crate::ui::fixed(safety_score.score, 0),
                 if safety_score.score >= 80.0 {
                     ok
                 } else if safety_score.score >= 60.0 {
@@ -654,7 +655,7 @@ fn cards(app: &App) -> Vec<Card> {
         rows: vec![
             (
                 t("dr_final_ready").to_string(),
-                format!("{:.0}%", readiness.ready_pct),
+                format!("{}%", crate::ui::fixed(readiness.ready_pct, 0)),
                 if readiness.ready() { ok } else { warn },
             ),
             (

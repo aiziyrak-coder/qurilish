@@ -926,7 +926,9 @@ impl Db {
                 "Smeta — 240 o'rinli bolalar bog'chasi".into()
             },
             currency: "UZS".into(),
-            declared_total: 0.0,
+            // Hujjatdagi yakun pozitsiyalar yig'indisiga teng: aks holda
+            // namuna smeta «6,4 mlrd farq» bilan xato bo'lib ko'rinardi.
+            declared_total: 6_400_940_000.0,
             overhead_pct: 14.0,
             profit_pct: 8.0,
             vat_pct: 12.0,
@@ -1442,8 +1444,43 @@ pub fn fit_floors(text: &str, floors: i64) -> String {
                 j += 1;
             }
             let rest: String = chars[j..].iter().take(7).collect();
-            let is_floor = rest.starts_with("-qavat") || rest.starts_with(" этаж");
+            // «7-9 qavat» / «7-9 этажи»: diapazonning birinchi soni ham qavat.
+            let range_tail: String = {
+                let mut k = j;
+                if k < chars.len() && chars[k] == '-' {
+                    k += 1;
+                    while k < chars.len() && chars[k].is_ascii_digit() {
+                        k += 1;
+                    }
+                }
+                chars[k..].iter().take(7).collect()
+            };
+            let in_range = j < chars.len()
+                && chars[j] == '-'
+                && chars.get(j + 1).is_some_and(|c| c.is_ascii_digit())
+                && (range_tail.starts_with(" qavat") || range_tail.starts_with(" этаж"));
+            let is_floor = rest.starts_with("-qavat") || rest.starts_with(" этаж") || in_range;
             let num: i64 = chars[i..j].iter().collect::<String>().parse().unwrap_or(0);
+            if in_range {
+                // Diapazon («7-9 qavat») qavatlardan oshsa — butun bino:
+                // «1-2 qavat».
+                let mut k = j + 1;
+                while k < chars.len() && chars[k].is_ascii_digit() {
+                    k += 1;
+                }
+                let hi: i64 = chars[j + 1..k]
+                    .iter()
+                    .collect::<String>()
+                    .parse()
+                    .unwrap_or(0);
+                if hi > floors {
+                    out.push_str(&format!("1-{floors}"));
+                } else {
+                    out.extend(&chars[i..k]);
+                }
+                i = k;
+                continue;
+            }
             if is_floor && num > floors {
                 out.push_str(&(((num - 1) % floors) + 1).to_string());
             } else {
@@ -1546,6 +1583,11 @@ mod tests {
         );
         assert_eq!(super::fit_floors("40 ming dona", 2), "40 ming dona");
         assert_eq!(super::fit_floors("7-qavatdan taxta", 9), "7-qavatdan taxta");
+        assert_eq!(
+            super::fit_floors("7-9 qavat, A-G o'qlari", 2),
+            "1-2 qavat, A-G o'qlari"
+        );
+        assert_eq!(super::fit_floors("1-2 qavat", 2), "1-2 qavat");
     }
 
     use super::*;

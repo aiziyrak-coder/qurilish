@@ -468,7 +468,7 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
 
                         // Bo'lim — byudjet nazorati shu kesimda yuritiladi.
                         egui::ComboBox::from_id_salt(("pu_sec", p.id))
-                            .selected_text(RichText::new(p.section.code()).size(11.5))
+                            .selected_text(RichText::new(p.section.label()).size(11.5))
                             .width(90.0)
                             .show_ui(ui, |ui| {
                                 for sec in Section::ALL {
@@ -976,9 +976,9 @@ fn suppliers_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
         for c in cards.iter().filter(|c| !c.issues.is_empty()).take(8) {
             ui.label(
                 RichText::new(format!(
-                    "· {} ({:.0}%) — {}",
+                    "· {} ({}%) — {}",
                     super::issues::truncate(&c.name, 26),
-                    c.share_pct,
+                    crate::ui::fixed(c.share_pct, 0),
                     c.issues
                         .iter()
                         .map(supplier_issue_text)
@@ -1369,7 +1369,7 @@ fn budget_tab(ui: &mut egui::Ui, app: &mut App, pid: i64) {
                             ui,
                             70.0,
                             RichText::new(if l.planned > 0.0 {
-                                format!("{:.0}%", l.used_pct)
+                                format!("{}%", crate::ui::fixed(l.used_pct, 0))
                             } else {
                                 t("dash").to_string()
                             })
@@ -1685,11 +1685,11 @@ fn control_text(i: &crate::checks::SupplyIssue) -> String {
             over,
             pct,
         } => format!(
-            "{} — {} · {} ({:.0}%)",
+            "{} — {} · {} ({}%)",
             t("si_overrun"),
             contract,
             money(*over),
-            pct
+            crate::ui::fixed(pct, 0)
         ),
         S::ContractExpired { contract, days } => {
             format!(
@@ -2009,7 +2009,7 @@ fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             110.0,
-                            RichText::new(format!("{:.0}%", b.on_time_pct))
+                            RichText::new(format!("{}%", crate::ui::fixed(b.on_time_pct, 0)))
                                 .size(12.0)
                                 .color(if b.on_time_pct >= 80.0 {
                                     theme::ok()
@@ -2020,7 +2020,7 @@ fn risks_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             110.0,
-                            RichText::new(format!("{:.0}%", b.with_quotes_pct))
+                            RichText::new(format!("{}%", crate::ui::fixed(b.with_quotes_pct, 0)))
                                 .size(12.0)
                                 .color(if b.with_quotes_pct >= 50.0 {
                                     theme::ok()
@@ -2051,7 +2051,7 @@ fn risk_text(r: &crate::checks::ProcurementRisk) -> (String, String, egui::Color
     use crate::checks::ProcurementRisk as R;
     match r {
         R::SupplierShare { supplier, pct } => (
-            format!("{} — {:.0}%", supplier, pct),
+            format!("{} — {}%", supplier, crate::ui::fixed(pct, 0)),
             t("pu_risk_share").to_string(),
             theme::warn(),
         ),
@@ -2061,12 +2061,12 @@ fn risk_text(r: &crate::checks::ProcurementRisk) -> (String, String, egui::Color
             theme::accent(),
         ),
         R::HighPrice { number, over_pct } => (
-            format!("{number} · +{:.0}%", over_pct),
+            format!("{number} · +{}%", crate::ui::fixed(over_pct, 0)),
             t("pu_risk_high_price").to_string(),
             theme::danger(),
         ),
         R::TooManyUrgent { count, pct } => (
-            format!("{count} · {:.0}%", pct),
+            format!("{count} · {}%", crate::ui::fixed(pct, 0)),
             t("pu_risk_urgent").to_string(),
             theme::warn(),
         ),

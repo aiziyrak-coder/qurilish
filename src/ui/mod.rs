@@ -1034,6 +1034,17 @@ fn screen_header(ui: &mut egui::Ui, app: &mut App) {
 /// ajratgichdan keyin turadi. Raqamlar o'zgarmaydi: faqat ko'rinish tartibi
 /// boshqacha, shuning uchun eski holat ham to'g'ri ochiladi.
 pub fn tab_row(ui: &mut egui::Ui, tab: &mut u8, daily: &[(u8, &str)], rare: &[(u8, &str)]) {
+    // Sinov uchun: `?subtab=N` — ekranning N-bo'limi bir marta ochiladi
+    // (har bo'limni avtomatik aylanib chiqish uchun).
+    let once = egui::Id::new("diag_subtab_done");
+    if !ui.ctx().data(|d| d.get_temp::<bool>(once).unwrap_or(false)) {
+        ui.ctx().data_mut(|d| d.insert_temp(once, true));
+        if let Some(n) = crate::plat::diag("subtab").and_then(|v| v.parse::<usize>().ok()) {
+            if let Some((i, _)) = daily.iter().chain(rare.iter()).nth(n) {
+                *tab = *i;
+            }
+        }
+    }
     ui.horizontal_wrapped(|ui| {
         for (i, label) in daily {
             if ui.selectable_label(*tab == *i, *label).clicked() {
@@ -1763,6 +1774,28 @@ pub fn short_stamp(iso: &str) -> String {
     }
 }
 
+/// Sonni berilgan kasr xonasi bilan yozadi. Manfiy nol («-0») chiqmaydi:
+/// Rust 1.81 dan bo'sh `f64` yig'indisi `-0.0` beradi.
+pub fn fixed(v: impl std::borrow::Borrow<f64>, decimals: usize) -> String {
+    let v = *v.borrow();
+    let s = format!("{:.*}", decimals, v);
+    if s.starts_with('-') && s[1..].chars().all(|c| c == '0' || c == '.') {
+        s[1..].to_string()
+    } else {
+        s
+    }
+}
+
+/// Ishorali son («+1.5», «-2.0»); nol ishorasiz.
+pub fn signed(v: impl std::borrow::Borrow<f64>, decimals: usize) -> String {
+    let s = fixed(v, decimals);
+    if s.starts_with('-') || s.trim_start_matches(['0', '.']).is_empty() {
+        s
+    } else {
+        format!("+{s}")
+    }
+}
+
 pub fn money(v: f64) -> String {
     if !v.is_finite() {
         return t("dash").to_string();
@@ -1784,6 +1817,16 @@ pub fn money(v: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn fixed_never_prints_negative_zero() {
+        let empty: f64 = Vec::<f64>::new().iter().sum();
+        assert_eq!(super::fixed(empty, 0), "0");
+        assert_eq!(super::fixed(-0.04, 1), "0.0");
+        assert_eq!(super::fixed(-2.5, 1), "-2.5");
+        assert_eq!(super::fixed(12.345, 2), "12.35");
+    }
+
     use super::*;
 
     #[test]

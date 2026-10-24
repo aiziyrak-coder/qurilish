@@ -275,7 +275,7 @@ fn today_tasks(ui: &mut egui::Ui, app: &mut App) {
                             cell_l(
                                 ui,
                                 70.0,
-                                RichText::new(task.section.code())
+                                RichText::new(task.section.label())
                                     .size(11.0)
                                     .color(theme::muted()),
                             );
@@ -941,7 +941,7 @@ fn drawings_block(ui: &mut egui::Ui, app: &mut App) {
                 ui.label(
                     RichText::new(format!(
                         "· {} {}",
-                        d.section.code(),
+                        d.section.label(),
                         super::issues::truncate(&d.name, 34)
                     ))
                     .size(12.0),

@@ -425,7 +425,7 @@ fn day_tab(ui: &mut egui::Ui, app: &mut App) {
             stat(
                 t("jr_dr_crew"),
                 d.workers.to_string(),
-                &format!("{:.0} {}", d.hours, t("col_hours")),
+                &format!("{} {}", crate::ui::fixed(d.hours, 0), t("col_hours")),
                 theme::text(),
             ),
             stat(
@@ -816,7 +816,7 @@ fn tomorrow_tab(ui: &mut egui::Ui, app: &mut App) {
                         cell_r(
                             ui,
                             110.0,
-                            RichText::new(format!("{:.0}%", p.kit_ready))
+                            RichText::new(format!("{}%", crate::ui::fixed(p.kit_ready, 0)))
                                 .size(12.5)
                                 .color(if p.missing == 0 {
                                     theme::ok()
