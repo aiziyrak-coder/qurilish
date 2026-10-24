@@ -561,10 +561,30 @@ fn table(ui: &mut egui::Ui, app: &mut App) {
 pub fn trim_num(v: f64) -> String {
     // Manfiy nol «-0» bo'lib chiqmasin.
     let v = if v == 0.0 { 0.0 } else { v };
-    if (v - v.round()).abs() < 1e-6 {
-        format!("{:.0}", v)
+    // Butun qism minglik bo'yicha ajratiladi (pul bilan bir xil):
+    // bitta jadvalda «26800» va «9 712 500» yonma-yon turmasin.
+    let whole = (v - v.round()).abs() < 1e-6;
+    let fixed = if whole {
+        format!("{:.0}", v.abs())
     } else {
-        format!("{v:.2}")
+        format!("{:.2}", v.abs())
+    };
+    let (int, frac) = fixed.split_once('.').unwrap_or((&fixed, ""));
+    let mut out = String::new();
+    for (i, ch) in int.chars().enumerate() {
+        if i > 0 && (int.len() - i) % 3 == 0 {
+            out.push(' ');
+        }
+        out.push(ch);
+    }
+    if !frac.is_empty() {
+        out.push('.');
+        out.push_str(frac);
+    }
+    if v < 0.0 {
+        format!("-{out}")
+    } else {
+        out
     }
 }
 

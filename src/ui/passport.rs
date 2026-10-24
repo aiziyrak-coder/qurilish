@@ -191,12 +191,26 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
     // To'xtatilganda oxirgi haqiqiy bosqich sifatida «qurilish» ko'rsatiladi.
     let cur = steps.iter().position(|s| *s == p.status).unwrap_or(2);
 
-    let w = (ui.available_width() - 190.0).max(80.0);
-    ui.horizontal(|ui| {
-        let (rect, _) = ui.allocate_exact_size(vec2(w.max(420.0), 52.0), Sense::hover());
+    // Tor ekranda «To'xtatilgan» tugmasi bosqichlar ostiga tushadi va
+    // bosqichlar butun enni oladi (avval 420 px majburiy en tugmani
+    // bosqichlar ustiga chiqarib qo'yardi).
+    let narrow = ui.available_width() < 640.0;
+    let w = if narrow {
+        ui.available_width()
+    } else {
+        (ui.available_width() - 190.0).max(80.0).max(420.0)
+    };
+    let layout = if narrow {
+        egui::Layout::top_down(egui::Align::Min)
+    } else {
+        egui::Layout::left_to_right(egui::Align::Center)
+    };
+    ui.with_layout(layout, |ui| {
+        let (rect, _) = ui.allocate_exact_size(vec2(w, 52.0), Sense::hover());
         let painter = ui.painter();
         let n = steps.len();
-        let pad = 70.0;
+        // Chetki yozuvlar («Loyihalash», «Yakunlangan») kesilmasin.
+        let pad = (rect.width() / 8.0).clamp(42.0, 70.0);
         let cy = rect.min.y + 16.0;
         let xs: Vec<f32> = (0..n)
             .map(|i| rect.min.x + pad + (rect.width() - 2.0 * pad) * i as f32 / (n - 1) as f32)
@@ -259,7 +273,9 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
         }
 
         // «To'xtatilgan» — alohida holat tugmasi.
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        // Tor ekranda — oddiy qator (o'ng chetga tekislash `top_down`
+        // ichida qolgan butun balandlikni egallab olardi).
+        let suspend_button = |ui: &mut egui::Ui| {
             let label = RichText::new(ObjectStatus::Suspended.label())
                 .size(12.5)
                 .color(if suspended {
@@ -274,15 +290,24 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
                     theme::danger().gamma_multiply(0.12)
                 })
                 .corner_radius(6);
-            if ui.add(btn).on_hover_text(t("suspend_hint")).clicked() {
-                p.status = if suspended {
-                    ObjectStatus::InProgress
-                } else {
-                    ObjectStatus::Suspended
-                };
-                changed = true;
-            }
-        });
+            ui.add(btn).on_hover_text(t("suspend_hint")).clicked()
+        };
+        let clicked = if narrow {
+            ui.horizontal(|ui| suspend_button(ui)).inner
+        } else {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                suspend_button(ui)
+            })
+            .inner
+        };
+        if clicked {
+            p.status = if suspended {
+                ObjectStatus::InProgress
+            } else {
+                ObjectStatus::Suspended
+            };
+            changed = true;
+        }
     });
     changed
 }
@@ -451,7 +476,7 @@ fn dates_fields(ui: &mut egui::Ui, app: &App, p: &mut crate::model::Project, dir
 
     // Muddat chizig'i: boshlanish — bugun — tugash.
     ui.horizontal(|ui| {
-        ui.add_space(210.0);
+        ui.add_space(super::field_indent(ui));
         let bar_w = (ui.available_width() - 30.0).clamp(120.0, 460.0);
         let (rect, _) = ui.allocate_exact_size(vec2(bar_w, 8.0), Sense::hover());
         let painter = ui.painter();
@@ -529,7 +554,7 @@ fn finance_fields(ui: &mut egui::Ui, p: &mut crate::model::Project, dirty: &mut 
     if p.contract_sum > 0.0 {
         let frac = (p.paid_total / p.contract_sum).clamp(0.0, 1.0) as f32;
         ui.horizontal(|ui| {
-            ui.add_space(210.0);
+            ui.add_space(super::field_indent(ui));
             let bar_w = (ui.available_width() - 30.0).clamp(120.0, 460.0);
             let (rect, _) = ui.allocate_exact_size(vec2(bar_w, 10.0), Sense::hover());
             let painter = ui.painter();
@@ -541,7 +566,7 @@ fn finance_fields(ui: &mut egui::Ui, p: &mut crate::model::Project, dirty: &mut 
             );
         });
         ui.horizontal(|ui| {
-            ui.add_space(210.0);
+            ui.add_space(super::field_indent(ui));
             ui.label(
                 RichText::new(format!(
                     "{:.0} % · {}: {} {}",

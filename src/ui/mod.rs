@@ -188,33 +188,10 @@ pub fn draw(ctx: &Context, app: &mut App) {
     egui::CentralPanel::default()
         .frame(egui::Frame::central_panel(&ctx.style()).inner_margin(8))
         .show(ctx, |ui| {
-            // Ekran kontenti juda tor joyga siqilmasin: telefonda kamida shu
-            // enda chiziladi, ortig'i yonga suriladi (sahifa emas — faqat
-            // ish maydoni).
-            // Kartochkali ekranlar o'zi o'raladi — ular telefon enini to'liq
-            // oladi; jadvalli ekranlar uchun minimal en saqlanadi.
-            let fluid = matches!(
-                app.screen,
-                Screen::Dashboard
-                    | Screen::Notices
-                    | Screen::Copilot
-                    | Screen::Foreman
-                    | Screen::Client
-                    | Screen::Portfolio
-            );
-            let min_w = if fluid { 0.0 } else { MIN_CONTENT_WIDTH };
-            if ui.available_width() < min_w {
-                egui::ScrollArea::horizontal()
-                    .id_salt("narrow_content")
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        ui.set_min_width(min_w);
-                        ui.set_max_width(min_w);
-                        screen_body(ui, app);
-                    });
-            } else {
-                screen_body(ui, app);
-            }
+            // Barcha ekranlar telefon eniga moslashadi: kartochkalar o'raladi,
+            // jadvallar o'z yonga suriladigan maydonida. Avval 560 px chegara
+            // bor edi — u bo'sh holat matnlarini ekrandan chiqarib yuborardi.
+            screen_body(ui, app);
         });
 
     search::draw(ctx, app);
@@ -229,10 +206,6 @@ pub fn fit_width(ctx: &Context, want: f32) -> f32 {
 
 /// Shundan tor ekran «telefon» hisoblanadi (mantiqiy piksel).
 pub const NARROW: f32 = 820.0;
-
-/// Ekran kontenti shundan tor joyga siqilmaydi: telefonda ish maydoni
-/// yonga suriladi. Ko'p jadvallar shu enda to'liq ko'rinadi.
-pub const MIN_CONTENT_WIDTH: f32 = 560.0;
 
 /// Tor ekranmi (telefon, kichik planshet).
 pub fn narrow(ctx: &Context) -> bool {
@@ -971,6 +944,39 @@ fn truncate_nav(s: &str, n: usize) -> String {
 /// soniya ketadi, noto'g'ri ekranda ish qilish esa yarim kunni oladi.
 fn screen_header(ui: &mut egui::Ui, app: &mut App) {
     let screen = app.screen;
+    // Nom va tugmalar bir qatorga sig'masa (telefon) — tugmalar nom
+    // ostidagi qatorga tushadi. Aks holda uzun nom tugmalar ostida qolardi.
+    let title_w = ui.fonts(|f| {
+        f.layout_no_wrap(
+            screen.label().to_string(),
+            egui::FontId::proportional(19.0),
+            Color32::WHITE,
+        )
+        .size()
+        .x
+    }) + 60.0;
+    let buttons_w = if export::exportable(screen) {
+        210.0
+    } else {
+        120.0
+    };
+    let stacked = title_w + buttons_w > ui.available_width();
+
+    let buttons = |ui: &mut egui::Ui, app: &mut App| {
+        assistant_button(ui, app);
+        // Jadvalli ekranda eksport tugmasi ko'rinib tursin: brauzer
+        // `Ctrl+E` ni o'zi ushlaydi, telefonda esa klaviatura yo'q.
+        if export::exportable(screen)
+            && app.current.is_some()
+            && ui
+                .button(t("export_excel"))
+                .on_hover_text(t("search_keys_export"))
+                .clicked()
+        {
+            export_current(app);
+        }
+    };
+
     ui.horizontal(|ui| {
         ui.label(RichText::new(screen.label()).size(19.0).strong());
         let numeral = screen.numeral();
@@ -985,25 +991,37 @@ fn screen_header(ui: &mut egui::Ui, app: &mut App) {
         }
         // Modul yordamchisi shu yerda: ilgari u har ekranda alohida
         // qator egallab turardi va bir xil tugma ikki xil joyda edi.
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            assistant_button(ui, app);
-            // Jadvalli ekranda eksport tugmasi ko'rinib tursin: brauzer
-            // `Ctrl+E` ni o'zi ushlaydi, telefonda esa klaviatura yo'q.
-            if export::exportable(screen)
-                && app.current.is_some()
-                && ui
-                    .button(t("export_excel"))
-                    .on_hover_text(t("search_keys_export"))
-                    .clicked()
-            {
-                export_current(app);
-            }
-        });
+        if !stacked {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                buttons(ui, app);
+            });
+        }
     });
-    ui.label(
-        RichText::new(screen.purpose())
-            .size(12.0)
-            .color(theme::muted()),
+    if stacked {
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                // Chapdan o'ngga: avval eksport, keyin yordamchi.
+                if export::exportable(screen)
+                    && app.current.is_some()
+                    && ui
+                        .button(t("export_excel"))
+                        .on_hover_text(t("search_keys_export"))
+                        .clicked()
+                {
+                    export_current(app);
+                }
+                assistant_button(ui, app);
+            });
+        });
+    }
+    // Izoh har doim ekran eniga o'raladi (telefonda kesilib qolardi).
+    ui.add(
+        egui::Label::new(
+            RichText::new(screen.purpose())
+                .size(12.0)
+                .color(theme::muted()),
+        )
+        .wrap(),
     );
     ui.add_space(8.0);
 }
@@ -1620,13 +1638,36 @@ pub fn stat_card(ui: &mut egui::Ui, title: &str, value: String, hint: &str, colo
 
 /// «Sarlavha — qiymat» ko'rinishidagi maydon.
 pub fn field(ui: &mut egui::Ui, label: &str, add: impl FnOnce(&mut egui::Ui)) {
+    // Tor joyda (telefon) yorliq maydon ustida: aks holda 210 px yorliq
+    // qatorning yarmini olib, maydon ekrandan chiqib ketardi.
+    if ui.available_width() < 520.0 {
+        if !label.is_empty() {
+            ui.label(RichText::new(label).size(12.5).color(theme::muted()));
+        }
+        ui.horizontal_wrapped(|ui| add(ui));
+        ui.add_space(4.0);
+        return;
+    }
     ui.horizontal(|ui| {
         ui.add_sized(
-            [210.0, 22.0],
+            [FIELD_LABEL_W, 22.0],
             egui::Label::new(RichText::new(label).color(theme::muted())),
         );
         add(ui);
     });
+}
+
+/// Forma yorlig'i eni (keng ekranda).
+pub const FIELD_LABEL_W: f32 = 210.0;
+
+/// Maydon ostidagi izoh uchun chekinish: keng ekranda yorliq eni,
+/// tor ekranda yo'q (yorliq maydon ustida turadi).
+pub fn field_indent(ui: &egui::Ui) -> f32 {
+    if ui.available_width() < 520.0 {
+        0.0
+    } else {
+        FIELD_LABEL_W
+    }
 }
 
 /// Kartochka ramkasi. Frame ota-elementning yo'nalishini meros qiladi,

@@ -3115,6 +3115,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
 
         // Umumiy o'lchov birliklari
         "an_tasks" => ("Ishlar", "Работ"),
+        "cl_tasks_unit" => ("ta ish", "работ"),
+        "cl_section_general" => ("Umumiy", "Общие"),
         "an_issues" => ("Nomuvofiqliklar", "Несоответствий"),
         "an_requests" => ("Arizalar", "Заявок"),
         "an_purchases" => ("Xaridlar", "Закупок"),
@@ -5774,7 +5776,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "sf_day_overdue" => ("muddati o'tgan", "просрочено"),
         "sf_day_blocked" => ("ishga qo'yib bo'lmaydi", "не допущены"),
         "sf_day_permits" => ("amaldagi naryad", "действующих нарядов"),
-        "sf_day_machines" => ("ko'riksiz texnika", "техника без осмотра"),
+        "sf_day_machines" => ("smena oldi ko'riksiz texnika", "техника без предсменного осмотра"),
         // XII.11, 18, 22, 25-27, XI.39. Material kartochkasi
         "mc_open" => ("Kartochka", "Карточка"),
         "mc_open_hint" => (
@@ -6686,7 +6688,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_score_permits" => ("ruxsat muddati o'tgan", "просроченных допусков"),
         "kpi_score_ppe" => ("SIZ yo'q", "без СИЗ"),
         "kpi_score_violations" => ("buzilish", "нарушений"),
-        "kpi_score_near_miss" => ("near miss", "near miss"),
+        "kpi_score_near_miss" => ("xavfli holat", "опасных ситуаций"),
         "kpi_score_bad_permits" => ("kamchilikli naryad", "нарядов с замечаниями"),
 
         // Ruxsat turlari (TZ XV.4-5)
@@ -6878,7 +6880,7 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         "kpi_machine_fuel_hint" => ("oxirgi 30 kun", "за 30 дней"),
         "kpi_machine_cost" => ("Texnika xarajati", "Затраты на технику"),
         "kpi_machine_cost_hint" => ("oxirgi 30 kun", "за 30 дней"),
-        "kpi_inspection" => ("Texnik ko'rik o'tgan", "Техосмотр просрочен"),
+        "kpi_inspection" => ("Texnik ko'rik muddati tugagan", "Техосмотр просрочен"),
         "kpi_inspection_hint" => ("tasi yaqinda tugaydi", "истекают скоро"),
 
         // ---------- XIX–XX. Sotuv ----------
@@ -7031,8 +7033,8 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         ),
         "deals_no_units" => ("Avval kvartiralarni yarating", "Сначала создайте квартиры"),
         "deals_no_units_hint" => (
-            "Shartnoma kvartiraga bog'lanadi — «XIX Sotuv» bo'limiga o'ting.",
-            "Договор привязывается к квартире — перейдите в раздел «XIX Продажи».",
+            "Shartnoma kvartiraga bog'lanadi — «Sotuv — shaxmatka» bo'limiga o'ting.",
+            "Договор привязывается к квартире — перейдите в раздел «Продажи — шахматка».",
         ),
 
         // Ko'rsatkichlar

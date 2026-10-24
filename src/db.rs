@@ -1194,6 +1194,60 @@ impl Db {
         Ok(())
     }
 
+    /// Namuna obyekti matnlaridagi qavat raqamini obyekt qavatlariga
+    /// moslaydi: «6-qavat» → 2 qavatli binoda «2-qavat».
+    fn fit_demo_floors(&self, pid: i64, floors: i64) -> SqlResult<()> {
+        const COLUMNS: [(&str, &str); 24] = [
+            ("journal", "text"),
+            ("journal", "remarks"),
+            ("quality_check", "subject"),
+            ("quality_check", "defect"),
+            ("safety_event", "place"),
+            ("safety_event", "description"),
+            ("safety_event", "measure"),
+            ("inspection", "place"),
+            ("inspection", "note"),
+            ("exec_doc", "name"),
+            ("exec_doc", "note"),
+            ("issue", "title"),
+            ("issue", "description"),
+            ("issue", "location"),
+            ("note", "text"),
+            ("message", "text"),
+            ("work_permit", "place"),
+            ("lab_test", "subject"),
+            ("concrete_test", "structure"),
+            ("safety_zone", "place"),
+            ("safety_zone", "name"),
+            ("request", "title"),
+            ("contract_change", "description"),
+            ("work_acceptance", "comment"),
+        ];
+        for (table, col) in COLUMNS {
+            let rows: Vec<(i64, String)> = {
+                let mut st = match self.conn.prepare(&format!(
+                    "SELECT id, {col} FROM {table} WHERE project_id = ?1"
+                )) {
+                    Ok(st) => st,
+                    // Jadval yoki ustun yo'q — o'tkazib yuboriladi.
+                    Err(_) => continue,
+                };
+                let it = st.query_map([pid], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                it.filter_map(Result::ok).collect()
+            };
+            for (id, text) in rows {
+                let fixed = fit_floors(&text, floors);
+                if fixed != text {
+                    self.conn.execute(
+                        &format!("UPDATE {table} SET {col} = ?1 WHERE id = ?2"),
+                        rusqlite::params![fixed, id],
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn seed_second_object(&self, ru: bool, today: NaiveDate) -> SqlResult<i64> {
         let start = today - chrono::Duration::days(210);
         let pid = self.insert_project(&Project {
@@ -1364,9 +1418,44 @@ impl Db {
         self.seed_demo_supply(pid, ru);
         self.seed_demo_history(pid, ru);
         self.seed_second_details(pid, ru, today)?;
+        // Umumiy namuna matnlari ko'p qavatli uy uchun yozilgan; bu obyekt
+        // 2 qavatli — «6-qavat» kabi raqamlar unga moslanadi.
+        self.fit_demo_floors(pid, 2)?;
 
         Ok(pid)
     }
+}
+
+/// Matndagi «N-qavat» / «N этаж(а)» raqamini `floors` ichiga keltiradi.
+/// Raqam qavatlardan oshmasa — o'zgarmaydi.
+pub fn fit_floors(text: &str, floors: i64) -> String {
+    if floors <= 0 {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len());
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i].is_ascii_digit() && (i == 0 || !chars[i - 1].is_ascii_digit()) {
+            let mut j = i;
+            while j < chars.len() && chars[j].is_ascii_digit() {
+                j += 1;
+            }
+            let rest: String = chars[j..].iter().take(7).collect();
+            let is_floor = rest.starts_with("-qavat") || rest.starts_with(" этаж");
+            let num: i64 = chars[i..j].iter().collect::<String>().parse().unwrap_or(0);
+            if is_floor && num > floors {
+                out.push_str(&(((num - 1) % floors) + 1).to_string());
+            } else {
+                out.extend(&chars[i..j]);
+            }
+            i = j;
+            continue;
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
 }
 
 /// Namoyish ishining tavsifi:
@@ -1440,6 +1529,25 @@ fn parse_date(s: &str) -> NaiveDate {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn demo_floor_numbers_fit_the_building() {
+        assert_eq!(
+            super::fit_floors("6-qavat ustunlari", 2),
+            "2-qavat ustunlari"
+        );
+        assert_eq!(
+            super::fit_floors("Армирование колонн 9 этажа", 2),
+            "Армирование колонн 1 этажа"
+        );
+        assert_eq!(
+            super::fit_floors("2-qavat oralig'i, 12-xonadon", 2),
+            "2-qavat oralig'i, 12-xonadon"
+        );
+        assert_eq!(super::fit_floors("40 ming dona", 2), "40 ming dona");
+        assert_eq!(super::fit_floors("7-qavatdan taxta", 9), "7-qavatdan taxta");
+    }
+
     use super::*;
     use crate::checks;
     use crate::domain::{IssueModule, QualityResult, Severity};

@@ -1097,16 +1097,29 @@ fn required_panel(ui: &mut egui::Ui, app: &App, w: f32) -> Option<(i64, ExecDocK
                                     .color(theme::section_color(r.section.color())),
                             ),
                         );
-                        ui.vertical(|ui| {
-                            ui.label(
-                                RichText::new(super::issues::truncate(&r.task_name, 24)).size(12.0),
-                            );
-                            ui.label(
-                                RichText::new(r.kind.label())
-                                    .size(10.5)
-                                    .color(theme::muted()),
-                            );
-                        });
+                        // Matn ustuni tugma uchun joy qoldiradi: aks holda
+                        // «Yaratish» ish nomi ustiga chiqib qolardi.
+                        let tw = (ui.available_width() - 84.0).max(80.0);
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(tw, 34.0),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_width(tw);
+                                ui.spacing_mut().item_spacing.y = 1.0;
+                                ui.add(
+                                    egui::Label::new(RichText::new(&r.task_name).size(12.0))
+                                        .truncate(),
+                                );
+                                ui.add(
+                                    egui::Label::new(
+                                        RichText::new(r.kind.label())
+                                            .size(10.5)
+                                            .color(theme::muted()),
+                                    )
+                                    .truncate(),
+                                );
+                            },
+                        );
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             // Hujjat allaqachon bor — uni ro'yxatdan imzolash kerak.
                             if !r.exists

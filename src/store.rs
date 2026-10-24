@@ -8933,7 +8933,8 @@ impl Db {
             } else {
                 "9-qavat ustunlari opalubkasi"
             },
-            by_wbs("7"),
+            // Past qavatli obyektda ustunlar «Karkas va devorlar» ishida.
+            by_wbs(if low_rise { "3" } else { "7" }),
             None,
             QualityResult::Conditional,
             if ru {

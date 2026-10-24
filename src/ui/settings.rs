@@ -31,8 +31,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut removed_user: Option<i64> = None;
 
     egui::ScrollArea::vertical().show(ui, |ui| {
-        ui.heading(t("settings_title"));
-        ui.add_space(10.0);
+        // Sarlavha ekran tepasida bor — bu yerda takrorlanmaydi.
 
         // Sozlamalar — forma, shuning uchun u ataylab bitta ustunda
         // qoladi: keng formada ko'z chapdan o'ngga uzoq yuguradi va
@@ -52,7 +51,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 }
             });
             ui.horizontal(|ui| {
-                ui.add_space(210.0);
+                ui.add_space(super::field_indent(ui));
                 ui.label(
                     RichText::new(t("set_language_hint"))
                         .size(11.0)
@@ -87,7 +86,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 }
             });
             ui.horizontal(|ui| {
-                ui.add_space(210.0);
+                ui.add_space(super::field_indent(ui));
                 ui.label(
                     RichText::new(t("set_scale_hint"))
                         .size(11.0)
@@ -114,7 +113,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.add_space(210.0);
+                ui.add_space(super::field_indent(ui));
                 if ui
                     .checkbox(&mut app.settings.show_weekends, t("set_show_weekends"))
                     .changed()
@@ -123,7 +122,7 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                 }
             });
             ui.horizontal(|ui| {
-                ui.add_space(210.0);
+                ui.add_space(super::field_indent(ui));
                 ui.label(
                     RichText::new(t("set_show_weekends_hint"))
                         .size(11.0)

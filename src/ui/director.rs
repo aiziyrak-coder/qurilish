@@ -183,7 +183,16 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
                             let opt = |v: Option<f64>, money_fmt: bool| match v {
                                 None => RichText::new(t("dash")).color(theme::muted()),
                                 Some(x) if money_fmt => RichText::new(money(x)).size(12.0),
-                                Some(x) => RichText::new(format!("{x:.1}")).size(12.0),
+                                // Kichik qiymat «0.0» bo'lib yo'qolmasin: kasr
+                                // xonalari qiymatga qarab.
+                                Some(x) => RichText::new(if x.abs() >= 10.0 {
+                                    format!("{x:.1}")
+                                } else if x.abs() >= 0.1 {
+                                    format!("{x:.2}")
+                                } else {
+                                    format!("{x:.3}")
+                                })
+                                .size(12.0),
                             };
                             super::warehouse::cell_r(ui, 140.0, opt(b.cost_per_volume, true));
                             super::warehouse::cell_r(ui, 130.0, opt(b.hours_per_volume, false));
@@ -211,11 +220,19 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
             for chunk in cards.chunks(columns) {
                 ui.horizontal_top(|ui| {
                     for c in chunk {
-                        ui.allocate_ui(egui::vec2(card_w, 0.0), |ui| {
-                            if card(ui, c) {
-                                go = Some(c.screen);
-                            }
-                        });
+                        // Karta ichi yuqoridan pastga: `allocate_ui` ota
+                        // qatorning gorizontal joylashuvini meros olib,
+                        // karta qatorlarini bir qatorga tizib yuborardi.
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(card_w, 0.0),
+                            egui::Layout::top_down(egui::Align::Min),
+                            |ui| {
+                                ui.set_width(card_w);
+                                if card(ui, c) {
+                                    go = Some(c.screen);
+                                }
+                            },
+                        );
                     }
                 });
                 ui.add_space(10.0);
@@ -290,15 +307,40 @@ fn card(ui: &mut egui::Ui, c: &Card) -> bool {
                 });
             });
             ui.add_space(6.0);
+            // Har qator: chapda nom (qisqartiriladi), o'ngda qiymat — qat'iy
+            // enli ikki katak. Avval nom markazlangan va qiymat ustiga
+            // chiqib qolardi.
             for (label, value, colour) in &c.rows {
                 ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [(ui.available_width() - 110.0).max(60.0), 18.0],
-                        egui::Label::new(RichText::new(label).size(11.5).color(theme::muted())),
+                    let total = ui.available_width();
+                    let value_w = 120.0_f32.min(total * 0.45);
+                    let label_w = (total - value_w - 8.0).max(40.0);
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(label_w, 18.0),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.set_min_width(label_w);
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(label).size(11.5).color(theme::muted()),
+                                )
+                                .truncate(),
+                            );
+                        },
                     );
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(value).size(12.5).strong().color(*colour));
-                    });
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(value_w, 18.0),
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            ui.set_min_width(value_w);
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(value).size(12.5).strong().color(*colour),
+                                )
+                                .truncate(),
+                            );
+                        },
+                    );
                 });
             }
         });

@@ -63,16 +63,25 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     });
     ui.add_space(8.0);
 
-    let wide = ui.available_width() > 1100.0;
+    let wide = ui.available_width() > 900.0;
     let list_w = if wide { 300.0 } else { ui.available_width() };
+    // Keng ekranda ro'yxat chapda, hisobot o'ngda. Tor ekranda ro'yxat
+    // tepada (balandligi cheklangan), hisobot pastda — avval hisobot
+    // ro'yxatning o'ng tomoniga, ko'rinmaydigan joyga chizilardi.
+    let layout = if wide {
+        egui::Layout::left_to_right(egui::Align::Min)
+    } else {
+        egui::Layout::top_down(egui::Align::Min)
+    };
 
-    ui.horizontal_top(|ui| {
+    ui.with_layout(layout, |ui| {
         // ---- Hisobotlar ro'yxati
         ui.vertical(|ui| {
             ui.set_width(list_w);
             egui::ScrollArea::vertical()
                 .id_salt("rp_list")
-                .auto_shrink([false, false])
+                .max_height(if wide { f32::INFINITY } else { 220.0 })
+                .auto_shrink([false, !wide])
                 .show(ui, |ui| {
                     for (i, k) in Kind::ALL.iter().enumerate() {
                         let selected = kind == *k;
@@ -94,6 +103,11 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
 
         if wide {
             ui.separator();
+        } else {
+            // Tor ekranda ro'yxat va hisobot orasida aniq chegara.
+            ui.add_space(6.0);
+            ui.separator();
+            ui.add_space(4.0);
         }
 
         // ---- Tanlangan hisobot

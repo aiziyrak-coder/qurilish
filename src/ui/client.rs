@@ -192,9 +192,14 @@ fn sections_block(ui: &mut egui::Ui, app: &App) {
             };
 
             ui.horizontal(|ui| {
+                let name = if s == Section::None {
+                    t("cl_section_general")
+                } else {
+                    s.label()
+                };
                 ui.add_sized(
                     [70.0, 18.0],
-                    egui::Label::new(RichText::new(s.label()).size(12.0)),
+                    egui::Label::new(RichText::new(name).size(12.0)),
                 );
                 bar(ui, pct, 320.0);
                 ui.label(
@@ -203,7 +208,7 @@ fn sections_block(ui: &mut egui::Ui, app: &App) {
                         .color(theme::muted()),
                 );
                 ui.label(
-                    RichText::new(format!("{} {}", tasks.len(), t("an_tasks").to_lowercase()))
+                    RichText::new(format!("{} {}", tasks.len(), t("cl_tasks_unit")))
                         .size(11.0)
                         .color(theme::muted()),
                 );

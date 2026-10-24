@@ -76,7 +76,13 @@ fn kpi_row(ui: &mut egui::Ui, app: &App) {
                 t("ct_kpi_sum"),
                 money(base + approved),
                 &if base > 0.0 {
-                    format!("{:+.1}% {}", approved / base * 100.0, t("ct_from_base"))
+                    // Nol «-0.0%» bo'lib chiqmasin.
+                    let pct = approved / base * 100.0;
+                    if pct.abs() < 0.05 {
+                        format!("0.0% {}", t("ct_from_base"))
+                    } else {
+                        format!("{pct:+.1}% {}", t("ct_from_base"))
+                    }
                 } else {
                     t("ct_no_contracts").to_string()
                 },
