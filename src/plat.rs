@@ -232,6 +232,11 @@ impl FileDialog {
         Some((files, ctx))
     }
 
+    /// Brauzerda fayl oynasini faqat foydalanuvchi bosishi ochadi, egui
+    /// kadri esa bosishdan keyin chiziladi. Shuning uchun sahifaga kichik
+    /// HTML panel chiqariladi («Faylni tanlash» tugmasi): uni bosish
+    /// haqiqiy bosish bo'lib, oyna darhol ochiladi. Tanlangach panel
+    /// yo'qoladi, fayl keyingi kadrda keladi.
     #[cfg(target_arch = "wasm32")]
     pub fn pick_ctx(
         self,
@@ -240,30 +245,17 @@ impl FileDialog {
         many: bool,
     ) -> Option<(Vec<PathBuf>, String)> {
         if let Some(ctx) = start {
-            let mut d = rfd::AsyncFileDialog::new();
-            for (n, e) in &self.filters {
-                let e: Vec<&str> = e.iter().map(String::as_str).collect();
-                d = d.add_filter(n, &e);
-            }
-            let key = key.to_string();
-            wasm_bindgen_futures::spawn_local(async move {
-                let files = if many {
-                    d.pick_files().await.unwrap_or_default()
-                } else {
-                    d.pick_file().await.into_iter().collect()
-                };
-                let mut paths = Vec::new();
-                for f in files {
-                    let path = PathBuf::from(format!("in/{}", f.file_name()));
-                    let bytes = f.read().await;
-                    web::INBOX.with(|m| m.borrow_mut().insert(path.clone(), bytes));
-                    paths.push(path);
-                }
-                if !paths.is_empty() {
-                    web::READY.with(|m| m.borrow_mut().insert(key, (paths, ctx)));
-                    repaint();
-                }
-            });
+            let accept: Vec<String> = self
+                .filters
+                .iter()
+                .flat_map(|(_, e)| e.iter().map(|x| format!(".{}", x.to_lowercase())))
+                .collect();
+            let title = if self.title.is_empty() {
+                crate::i18n::t("pick_file_title").to_string()
+            } else {
+                self.title.clone()
+            };
+            web::show_picker(key.to_string(), ctx, title, accept.join(","), many);
         }
         web::READY.with(|m| m.borrow_mut().remove(key))
     }
@@ -580,6 +572,117 @@ mod web {
             }
             f(s.as_ref().expect("ochildi")).map_err(io::Error::other)
         })
+    }
+
+    /// Fayl tanlash paneli (HTML): sarlavha, «Faylni tanlash» va «Bekor».
+    pub fn show_picker(key: String, ctx: String, title: String, accept: String, many: bool) {
+        use wasm_bindgen::closure::Closure;
+        use wasm_bindgen::JsCast;
+        let Some(doc) = web_sys::window().and_then(|w| w.document()) else {
+            return;
+        };
+        let Some(body) = doc.body() else { return };
+        if let Some(old) = doc.get_element_by_id("qurai_picker") {
+            old.remove();
+        }
+        let Ok(panel) = doc.create_element("div") else {
+            return;
+        };
+        panel.set_id("qurai_picker");
+        let _ = panel.set_attribute(
+            "style",
+            "position:fixed;inset:0;z-index:50;display:grid;place-items:center;\
+             background:rgba(0,0,0,.35);font-family:system-ui,'Segoe UI',sans-serif",
+        );
+        let card = "<div style=\"background:#fff;color:#1b2533;border-radius:12px;padding:20px 22px;\
+             width:min(380px,calc(100vw - 32px));box-shadow:0 8px 30px rgba(0,0,0,.25)\">\
+             <div data-part=\"title\" style=\"font-size:16px;font-weight:600;margin-bottom:6px\"></div>\
+             <div data-part=\"hint\" style=\"font-size:13px;color:#5c6b80;margin-bottom:14px\"></div>\
+             <div style=\"display:flex;gap:8px;justify-content:flex-end\">\
+             <button data-act=\"cancel\" style=\"padding:8px 14px;border-radius:8px;border:1px solid #cdd5e0;\
+             background:#fff;font-size:14px;cursor:pointer\"></button>\
+             <button data-act=\"pick\" style=\"padding:8px 14px;border-radius:8px;border:0;background:#1f4e9c;\
+             color:#fff;font-size:14px;font-weight:600;cursor:pointer\"></button></div>\
+             </div>";
+        panel.set_inner_html(card);
+        // Matnlar `textContent` bilan — HTML sifatida talqin qilinmaydi.
+        let set = |sel: &str, text: &str| {
+            if let Ok(Some(el)) = panel.query_selector(sel) {
+                el.set_text_content(Some(text));
+            }
+        };
+        set("[data-part=title]", &title);
+        set("[data-part=hint]", crate::i18n::t("pick_file_hint"));
+        set("button[data-act=cancel]", crate::i18n::t("cancel"));
+        set("button[data-act=pick]", crate::i18n::t("pick_file_button"));
+        // Fayl maydoni alohida yaratiladi (HTML matni ichidan qidirish
+        // brauzerlarda turlicha ishlaydi).
+        let input: web_sys::HtmlInputElement = match doc
+            .create_element("input")
+            .ok()
+            .and_then(|e| e.dyn_into().ok())
+        {
+            Some(i) => i,
+            None => {
+                web_sys::console::error_1(&"QURAi: fayl maydoni yaratilmadi".into());
+                return;
+            }
+        };
+        input.set_type("file");
+        let _ = input.set_attribute("style", "display:none");
+        let _ = panel.append_child(&input);
+        input.set_accept(&accept);
+        input.set_multiple(many);
+
+        // «Faylni tanlash» — haqiqiy bosish ichida oyna ochiladi.
+        if let Ok(Some(btn)) = panel.query_selector("button[data-act=pick]") {
+            let inp = input.clone();
+            let on = Closure::<dyn FnMut()>::new(move || inp.click());
+            let _ = btn.add_event_listener_with_callback("click", on.as_ref().unchecked_ref());
+            on.forget();
+        }
+        if let Ok(Some(btn)) = panel.query_selector("button[data-act=cancel]") {
+            let p = panel.clone();
+            let on = Closure::<dyn FnMut()>::new(move || p.remove());
+            let _ = btn.add_event_listener_with_callback("click", on.as_ref().unchecked_ref());
+            on.forget();
+        }
+        // Fayl tanlandi — o'qiladi, panel yopiladi.
+        {
+            let inp = input.clone();
+            let p = panel.clone();
+            let on = Closure::<dyn FnMut()>::new(move || {
+                let Some(list) = inp.files() else { return };
+                let files: Vec<web_sys::File> =
+                    (0..list.length()).filter_map(|i| list.get(i)).collect();
+                p.remove();
+                if files.is_empty() {
+                    return;
+                }
+                let key = key.clone();
+                let ctx = ctx.clone();
+                wasm_bindgen_futures::spawn_local(async move {
+                    let mut paths = Vec::new();
+                    for f in files {
+                        let Ok(buf) = wasm_bindgen_futures::JsFuture::from(f.array_buffer()).await
+                        else {
+                            continue;
+                        };
+                        let bytes = js_sys::Uint8Array::new(&buf).to_vec();
+                        let path = PathBuf::from(format!("in/{}", f.name()));
+                        INBOX.with(|m| m.borrow_mut().insert(path.clone(), bytes));
+                        paths.push(path);
+                    }
+                    if !paths.is_empty() {
+                        READY.with(|m| m.borrow_mut().insert(key, (paths, ctx)));
+                        super::repaint();
+                    }
+                });
+            });
+            let _ = input.add_event_listener_with_callback("change", on.as_ref().unchecked_ref());
+            on.forget();
+        }
+        let _ = body.append_child(&panel);
     }
 
     pub fn store_put(path: &Path, bytes: &[u8]) -> io::Result<()> {

@@ -35,6 +35,7 @@ mod notify;
 mod ocr;
 mod package;
 mod pdf;
+mod pdfops;
 mod pdfread;
 mod photocheck;
 mod plat;

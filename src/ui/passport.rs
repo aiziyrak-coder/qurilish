@@ -200,12 +200,10 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
     } else {
         (ui.available_width() - 190.0).max(80.0).max(420.0)
     };
-    let layout = if narrow {
-        egui::Layout::top_down(egui::Align::Min)
-    } else {
-        egui::Layout::left_to_right(egui::Align::Center)
-    };
-    ui.with_layout(layout, |ui| {
+    // `with_layout` bo'sh balandlikni to'liq egallaydi (kartochkalar
+    // ekran ostiga surilardi) — shuning uchun gorizontal holatda
+    // `horizontal`, vertikalda `vertical` ishlatiladi.
+    let body = |ui: &mut egui::Ui| {
         let (rect, _) = ui.allocate_exact_size(vec2(w, 52.0), Sense::hover());
         let painter = ui.painter();
         let n = steps.len();
@@ -292,23 +290,28 @@ fn status_pipeline(ui: &mut egui::Ui, p: &mut crate::model::Project) -> bool {
                 .corner_radius(6);
             ui.add(btn).on_hover_text(t("suspend_hint")).clicked()
         };
-        let clicked = if narrow {
+        if narrow {
             ui.horizontal(|ui| suspend_button(ui)).inner
         } else {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 suspend_button(ui)
             })
             .inner
-        };
-        if clicked {
-            p.status = if suspended {
-                ObjectStatus::InProgress
-            } else {
-                ObjectStatus::Suspended
-            };
-            changed = true;
         }
-    });
+    };
+    let clicked = if narrow {
+        ui.vertical(body).inner
+    } else {
+        ui.horizontal(body).inner
+    };
+    if clicked {
+        p.status = if suspended {
+            ObjectStatus::InProgress
+        } else {
+            ObjectStatus::Suspended
+        };
+        changed = true;
+    }
     changed
 }
 

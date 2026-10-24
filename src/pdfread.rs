@@ -10,7 +10,6 @@
 //! qilinmaydi. Shuning uchun matni yo'q PDF uchun dastur taxmin qilmaydi,
 //! ochiq aytadi.
 
-use lopdf::content::Content;
 use lopdf::{Document, Object};
 use std::path::Path;
 
@@ -458,9 +457,9 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
     let Ok(data) = doc.get_page_content(page_id) else {
         return out;
     };
-    let Ok(content) = Content::decode(&data) else {
-        return out;
-    };
+    // Faqat matn buyruqlari — chiziq va to'ldirishlar tahlil qilinmaydi
+    // (77 varaqli loyihada 114 s → bir necha soniya, `pdfops`).
+    let operations = crate::pdfops::text_ops(&data);
 
     // Shrift kodlashi: matn baytlari shu bo'yicha o'giriladi.
     let decoders = font_decoders(doc, page_id);
@@ -481,7 +480,7 @@ fn page_pieces(doc: &Document, page_id: lopdf::ObjectId) -> Vec<Piece> {
     // Har parcha yo'nalishi bilan yig'iladi: (parcha, dx, dy).
     let mut raw: Vec<(Piece, f64, f64)> = Vec::new();
 
-    for op in &content.operations {
+    for op in &operations {
         let nums = |i: usize| -> f64 {
             op.operands
                 .get(i)
@@ -801,5 +800,74 @@ mod tests {
             "ustunlar ajralmadi: {rows:?}"
         );
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Haqiqiy PDF ni bitta ipda o'qish vaqti (brauzer bilan solishtirish).
+    /// `QURAI_LIVE_PDF`.
+    #[test]
+    #[ignore]
+    fn single_thread_timing() {
+        let Ok(path) = std::env::var("QURAI_LIVE_PDF") else {
+            return;
+        };
+        let doc = load(Path::new(&path)).expect("pdf");
+        let ids: Vec<lopdf::ObjectId> = doc.get_pages().into_values().collect();
+        // Yangi (tez) usul.
+        let t0 = std::time::Instant::now();
+        let fast: Vec<Vec<Piece>> = ids.iter().map(|id| page_pieces(&doc, *id)).collect();
+        let t_fast = t0.elapsed();
+        // Eski usul: lopdf to'liq tahlil, keyin faqat matn buyruqlari.
+        let t1 = std::time::Instant::now();
+        let mut same_ops = 0usize;
+        let mut diff_ops = 0usize;
+        for id in &ids {
+            let data = doc.get_page_content(*id).unwrap_or_default();
+            let ours = crate::pdfops::text_ops(&data);
+            let theirs: Vec<String> = lopdf::content::Content::decode(&data)
+                .map(|c| c.operations)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|o| {
+                    matches!(
+                        o.operator.as_str(),
+                        "q" | "Q"
+                            | "cm"
+                            | "BT"
+                            | "ET"
+                            | "Tf"
+                            | "TL"
+                            | "Td"
+                            | "TD"
+                            | "Tm"
+                            | "T*"
+                            | "Tj"
+                            | "'"
+                            | "\""
+                            | "TJ"
+                    )
+                })
+                .map(|o| format!("{} {:?}", o.operator, o.operands))
+                .collect();
+            let ours: Vec<String> = ours
+                .into_iter()
+                .map(|o| format!("{} {:?}", o.operator, o.operands))
+                .collect();
+            if ours == theirs {
+                same_ops += 1;
+            } else {
+                diff_ops += 1;
+            }
+        }
+        let t_old = t1.elapsed();
+        let pieces: usize = fast.iter().map(|p| p.len()).sum();
+        std::fs::write(
+            std::env::temp_dir().join("qurai_pdf_timing.txt"),
+            format!(
+                "fast {t_fast:?} · old+compare {t_old:?} · pages same {same_ops} / diff {diff_ops} · pieces {pieces}
+"
+            ),
+        )
+        .unwrap();
+        assert_eq!(diff_ops, 0);
     }
 }

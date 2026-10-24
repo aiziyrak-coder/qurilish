@@ -84,12 +84,38 @@ pub fn file_name(app: &App, screen: Screen) -> String {
     let name = table_of(app, screen)
         .map(|t| t.name)
         .unwrap_or_else(|| t("export").to_string());
-    let safe: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect();
-    let safe = safe.trim_matches('-').to_lowercase();
-    format!("qurai-{safe}-{}.xlsx", app.today.format("%Y-%m-%d"))
+    safe_file_name(app, &name, "xlsx")
+}
+
+/// Fayl nomi: `qurai-<obyekt kodi>-<nom>.<kengaytma>`. Harf va raqamdan
+/// boshqa belgilar bitta tirega aylanadi («---» yoki «-—-» qolmaydi);
+/// sana nomda bo'lmasa — bugungi sana qo'shiladi.
+pub fn safe_file_name(app: &App, name: &str, ext: &str) -> String {
+    let mut out = String::new();
+    for c in name.chars() {
+        if c.is_alphanumeric() {
+            out.extend(c.to_lowercase());
+        } else if !out.ends_with('-') {
+            out.push('-');
+        }
+    }
+    let base = out.trim_matches('-').to_string();
+    let code = app
+        .project()
+        .map(|p| p.code.to_lowercase())
+        .unwrap_or_default();
+    let has_date = base.chars().filter(|c| c.is_ascii_digit()).count() >= 6;
+    let date = if has_date {
+        String::new()
+    } else {
+        format!("-{}", app.today.format("%Y-%m-%d"))
+    };
+    let code = if code.is_empty() {
+        String::new()
+    } else {
+        format!("{code}-")
+    };
+    format!("qurai-{code}{base}{date}.{ext}")
 }
 
 /// «Hisobotlar» ekranida tanlangan hisobot.

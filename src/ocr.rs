@@ -48,12 +48,23 @@ pub fn tesseract() -> Option<PathBuf> {
     if crate::plat::WEB {
         return None;
     }
-    CANDIDATES.iter().find_map(|c| runnable(c))
+    // Natija bir marta topiladi: sozlamalar ekrani har kadrda so'raydi,
+    // har safar dasturni ishga tushirish ekranni sekinlashtirardi.
+    static FOUND: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    FOUND
+        .get_or_init(|| CANDIDATES.iter().find_map(|c| runnable(c)))
+        .clone()
 }
 
 /// PDF ni rasmga aylantiruvchi topilgan yo'l yoki `None`.
 pub fn pdf_to_image() -> Option<PathBuf> {
-    PDF_TO_IMAGE.iter().find_map(|c| runnable(c))
+    if crate::plat::WEB {
+        return None;
+    }
+    static FOUND: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    FOUND
+        .get_or_init(|| PDF_TO_IMAGE.iter().find_map(|c| runnable(c)))
+        .clone()
 }
 
 /// Dastur ishga tushadimi: `--version` bilan tekshiriladi.

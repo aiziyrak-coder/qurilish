@@ -1290,6 +1290,58 @@ impl Db {
             notes: String::new(),
         })?;
 
+        // Ishtirokchilar: birinchi obyektdagi kabi oltita rol. Aks holda
+        // pasportda «Ishtirokchilar 0» va to'ldirilganlik 67 % chiqardi.
+        let parties: [(PartyRole, &str, &str, &str); 6] = [
+            (
+                PartyRole::Client,
+                "Zangiota tumani hokimligi",
+                "Ergashev B.T.",
+                "+998 90 000-10-01",
+            ),
+            (
+                PartyRole::Contractor,
+                "MChJ «Mega Qurilish»",
+                "Rahimov O.S.",
+                "+998 90 000-10-02",
+            ),
+            (
+                PartyRole::Subcontractor,
+                "XK «Elektromontaj-S»",
+                "Niyozov D.X.",
+                "+998 90 000-10-03",
+            ),
+            (
+                PartyRole::Designer,
+                "LI «Toshkentboshplanloyiha»",
+                "Saidova M.I.",
+                "+998 90 000-10-04",
+            ),
+            (
+                PartyRole::TechSupervision,
+                "MChJ «StroyKontrol»",
+                "Sobirov R.X.",
+                "+998 90 000-10-05",
+            ),
+            (
+                PartyRole::AuthorSupervision,
+                "LI «Toshkentboshplanloyiha»",
+                "Saidova M.I.",
+                "+998 90 000-10-04",
+            ),
+        ];
+        for (role, name, person, phone) in parties {
+            self.insert_party(&Party {
+                id: 0,
+                project_id: pid,
+                role,
+                name: name.into(),
+                person: person.into(),
+                phone: phone.into(),
+                email: String::new(),
+            })?;
+        }
+
         let plan: [SecondTaskDef; 8] = [
             (
                 "1",

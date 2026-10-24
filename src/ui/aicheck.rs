@@ -572,7 +572,31 @@ fn upload_tab(ui: &mut egui::Ui, app: &mut App) {
         Some(m) if !m.digest.is_empty() => {
             (m.digest.len(), m.facts.len(), m.tokens, m.model.clone())
         }
-        _ => return,
+        _ => {
+            // AI hali o'qimagan (kalit yo'q) — dastur o'zi topganini
+            // ko'rsatadi: aks holda «Fayl o'qildi» dan keyin bo'shliq qolardi.
+            if let Some(tk) = &app.takeoff {
+                if app.pdf_job.is_none() {
+                    ui.add_space(10.0);
+                    ui.horizontal_wrapped(|ui| {
+                        kpi(ui, t("sm_pdf_pages"), &tk.pages.to_string(), &tk.file);
+                        kpi(
+                            ui,
+                            t("tk_tables"),
+                            &tk.tables.len().to_string(),
+                            t("tk_tables_hint"),
+                        );
+                        kpi(
+                            ui,
+                            t("sm_materials"),
+                            &app.cost_rows.len().to_string(),
+                            t("sm_rule_materials_hint"),
+                        );
+                    });
+                }
+            }
+            return;
+        }
     };
     let (pages_total, tables_total) = app
         .takeoff

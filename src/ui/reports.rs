@@ -241,18 +241,7 @@ fn cell_text(c: &crate::docgen::Cell) -> String {
 
 /// Fayl nomi: hisobot nomi, obyekt kodi va sana.
 fn file_name(app: &App, table: &crate::docgen::Table, ext: &str) -> String {
-    let base: String = table
-        .name
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect();
-    let base = base.trim_matches('-').to_lowercase();
-    let code = app
-        .project()
-        .map(|p| p.code.clone())
-        .unwrap_or_default()
-        .to_lowercase();
-    format!("qurai-{code}-{base}.{ext}")
+    super::export::safe_file_name(app, &table.name, ext)
 }
 
 /// Bitta hisobotni saqlaydi.

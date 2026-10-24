@@ -32,18 +32,7 @@ import websocket
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 PORT = 9333
 
-HOOK = """
-window.__dl = [];
-HTMLAnchorElement.prototype.click = function () {
-  const a = this;
-  const rec = { name: a.download };
-  window.__dl.push(rec);
-  fetch(a.href).then(r => r.arrayBuffer()).then(b => {
-    rec.size = b.byteLength;
-    rec.head = Array.from(new Uint8Array(b).slice(0, 4));
-  });
-};
-"""
+HOOK = ""
 
 
 class Cdp:
@@ -70,7 +59,7 @@ class Cdp:
         if m == "Runtime.exceptionThrown":
             d = msg["params"]["exceptionDetails"]
             self.errors.append("exception: " + str(d.get("exception", {}).get("description", d.get("text")))[:300])
-        elif m == "Runtime.consoleAPICalled" and msg["params"].get("type") in ("error", "assert"):
+        elif m == "Runtime.consoleAPICalled":
             args = msg["params"].get("args", [])
             self.errors.append("console: " + " ".join(str(a.get("value", a.get("description", ""))) for a in args)[:300])
 
@@ -121,7 +110,10 @@ def main():
         cdp = Cdp(page["webSocketDebuggerUrl"])
         cdp.call("Page.enable")
         cdp.call("Runtime.enable")
-        cdp.call("Page.addScriptToEvaluateOnNewDocument", source=HOOK)
+        # Haqiqiy yuklab olish: fayllar chiqish papkasining downloads/ ichiga.
+        dl_dir = os.path.abspath(os.path.join(out, "downloads"))
+        os.makedirs(dl_dir, exist_ok=True)
+        cdp.call("Browser.setDownloadBehavior", behavior="allow", downloadPath=dl_dir)
         for step in scenario:
             if "viewport" in step:
                 w, h, d = step["viewport"]
@@ -150,6 +142,29 @@ def main():
                     time.sleep(0.03)
                 cdp.mouse("mouseReleased", x2, y2, button="left", clickCount=1)
                 time.sleep(0.4)
+            elif "open_with_file" in step:
+                # Sahifani ochadi va u o'zi ochgan fayl tanlash oynasiga fayl beradi.
+                url, path = step["open_with_file"]
+                cdp.call("Page.setInterceptFileChooserDialog", enabled=True)
+                cdp.call("Page.navigate", url=url)
+                deadline = time.time() + 30
+                node = None
+                cdp.ws.settimeout(1)
+                while time.time() < deadline and node is None:
+                    try:
+                        msg = json.loads(cdp.ws.recv())
+                    except Exception:
+                        continue
+                    cdp.note(msg)
+                    if msg.get("method") == "Page.fileChooserOpened":
+                        node = msg["params"].get("backendNodeId")
+                cdp.ws.settimeout(120)
+                if node is None:
+                    print("open_with_file: oyna ochilmadi")
+                else:
+                    cdp.call("DOM.setFileInputFiles", files=[path], backendNodeId=node)
+                    print("open_with_file", path)
+                cdp.call("Page.setInterceptFileChooserDialog", enabled=False)
             elif "upload" in step:
                 # Fayl tanlash oynasi ushlanadi va fayl beriladi.
                 x, y, path = step["upload"]
@@ -191,12 +206,10 @@ def main():
                 r = cdp.call("Runtime.evaluate", expression=step["eval"], returnByValue=True, awaitPromise=True)
                 print("eval", json.dumps(r.get("result", {}).get("value"), ensure_ascii=False))
         # Konsoldagi xatolar.
-        r = cdp.call(
-            "Runtime.evaluate",
-            expression="JSON.stringify(window.__dl)",
-            returnByValue=True,
-        )
-        print("downloads", r.get("result", {}).get("value"))
+        time.sleep(1)
+        for f in sorted(os.listdir(dl_dir)):
+            data = open(os.path.join(dl_dir, f), "rb").read()
+            print("download", f, len(data), data[:4])
         for e in cdp.errors:
             print("ERROR", e)
     finally:

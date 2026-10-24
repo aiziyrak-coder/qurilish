@@ -3116,6 +3116,21 @@ fn lookup(key: &str) -> Option<(&'static str, &'static str)> {
         // Umumiy o'lchov birliklari
         "an_tasks" => ("Ishlar", "Работ"),
         "mat_started" => ("boshlangan", "начата"),
+        "sm_pdf_pages" => ("Loyiha varaqlari", "Листов в проекте"),
+        "sm_rule_materials_hint" => (
+            "jadvallardan dastur o'zi yig'di — AI siz",
+            "собрано программой из таблиц — без AI",
+        ),
+        "pick_file_title" => ("Faylni tanlang", "Выберите файл"),
+        "pick_file_hint" => (
+            "Fayl shu qurilmadan tanlanadi va faqat shu brauzerda ishlanadi.",
+            "Файл выбирается с этого устройства и обрабатывается только в этом браузере.",
+        ),
+        "pick_file_button" => ("Faylni tanlash", "Выбрать файл"),
+        "set_desktop_only" => (
+            "Bu imkoniyat faqat desktop dasturida (QURAi.exe) ishlaydi — brauzer tashqi manzilga o'zi xabar yubora olmaydi.",
+            "Эта возможность работает только в настольной программе (QURAi.exe) — браузер не может сам отправлять сообщения на внешний адрес.",
+        ),
         "mat_today" => ("bugun", "сегодня"),
         "cl_tasks_unit" => ("ta ish", "работ"),
         "cl_section_general" => ("Umumiy", "Общие"),

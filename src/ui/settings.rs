@@ -27,6 +27,19 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
     let mut export_pkg = false;
     let mut llm_changed = false;
     let mut import_pkg = false;
+    // Sinov uchun: `?action=backup` / `?action=package` — amal bir marta.
+    {
+        let once = egui::Id::new("diag_action_done");
+        if !ui.ctx().data(|d| d.get_temp::<bool>(once).unwrap_or(false)) {
+            ui.ctx().data_mut(|d| d.insert_temp(once, true));
+            match crate::plat::diag("action").as_deref() {
+                Some("backup") => make_backup = true,
+                Some("package") => export_pkg = true,
+                Some("import") => import_pkg = true,
+                _ => {}
+            }
+        }
+    }
     let mut edited_user: Option<crate::roles::User> = None;
     let mut removed_user: Option<i64> = None;
 
@@ -342,61 +355,82 @@ pub fn show(ui: &mut egui::Ui, app: &mut App) {
         ui.add_space(12.0);
 
         // ---- Tashqi xabar (push) ----
-        card_frame(ui, t("set_group_hook"), w, |ui| {
-            ui.label(
-                RichText::new(t("set_hook_note"))
-                    .size(11.5)
-                    .color(theme::muted()),
-            );
-            ui.add_space(6.0);
-            let mut changed = false;
-            field(ui, t("set_hook_on"), |ui| {
-                changed |= ui
-                    .checkbox(&mut app.hook.on, t("set_hook_on_hint"))
-                    .changed();
+        // Brauzerda tashqi manzilga yuborish yo'q (faqat desktop dasturi).
+        if crate::plat::WEB {
+            card_frame(ui, t("set_group_hook"), w, |ui| {
+                ui.label(
+                    RichText::new(t("set_desktop_only"))
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
             });
-            field(ui, t("set_hook_url"), |ui| {
-                changed |= ui
-                    .add_sized(
-                        [320.0, 24.0],
-                        egui::TextEdit::singleline(&mut app.hook.url).hint_text("https://..."),
-                    )
-                    .changed();
-            });
-            field(ui, t("set_hook_token"), |ui| {
-                changed |= ui
-                    .add_sized(
-                        [320.0, 24.0],
-                        egui::TextEdit::singleline(&mut app.hook.token).password(true),
-                    )
-                    .on_hover_text(t("set_hook_token_hint"))
-                    .changed();
-            });
-            field(ui, "", |ui| {
-                if ui
-                    .add_enabled(app.hook.ready(), egui::Button::new(t("set_hook_send")))
-                    .on_hover_text(t("set_hook_send_hint"))
-                    .clicked()
-                {
-                    app.send_hook();
+            ui.add_space(12.0);
+        }
+        if !crate::plat::WEB {
+            card_frame(ui, t("set_group_hook"), w, |ui| {
+                ui.label(
+                    RichText::new(t("set_hook_note"))
+                        .size(11.5)
+                        .color(theme::muted()),
+                );
+                ui.add_space(6.0);
+                let mut changed = false;
+                field(ui, t("set_hook_on"), |ui| {
+                    changed |= ui
+                        .checkbox(&mut app.hook.on, t("set_hook_on_hint"))
+                        .changed();
+                });
+                field(ui, t("set_hook_url"), |ui| {
+                    changed |= ui
+                        .add_sized(
+                            [320.0, 24.0],
+                            egui::TextEdit::singleline(&mut app.hook.url).hint_text("https://..."),
+                        )
+                        .changed();
+                });
+                field(ui, t("set_hook_token"), |ui| {
+                    changed |= ui
+                        .add_sized(
+                            [320.0, 24.0],
+                            egui::TextEdit::singleline(&mut app.hook.token).password(true),
+                        )
+                        .on_hover_text(t("set_hook_token_hint"))
+                        .changed();
+                });
+                field(ui, "", |ui| {
+                    if ui
+                        .add_enabled(app.hook.ready(), egui::Button::new(t("set_hook_send")))
+                        .on_hover_text(t("set_hook_send_hint"))
+                        .clicked()
+                    {
+                        app.send_hook();
+                    }
+                });
+                if let Some((message, bad)) = &app.hook_status {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(message).size(11.5).color(if *bad {
+                        theme::danger()
+                    } else {
+                        theme::ok()
+                    }));
+                }
+                if changed {
+                    app.save_hook();
                 }
             });
-            if let Some((message, bad)) = &app.hook_status {
-                ui.add_space(4.0);
-                ui.label(RichText::new(message).size(11.5).color(if *bad {
-                    theme::danger()
-                } else {
-                    theme::ok()
-                }));
-            }
-            if changed {
-                app.save_hook();
-            }
-        });
-        ui.add_space(12.0);
+            ui.add_space(12.0);
+        }
 
         // ---- Matnni tanish (OCR) ----
         card_frame(ui, t("set_group_ocr"), w, |ui| {
+            if crate::plat::WEB {
+                ui.label(
+                    RichText::new(crate::ocr::status())
+                        .size(12.0)
+                        .color(theme::muted()),
+                );
+                return;
+            }
             ui.label(
                 RichText::new(t("set_ocr_note"))
                     .size(11.5)
